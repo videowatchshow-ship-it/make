@@ -1,0 +1,24 @@
+# deploy/.htaccess — 각 서브도메인 웹루트에 그대로 복사
+# (Apache 2.4 mod_rewrite / mod_headers 활성 가정)
+
+Options -Indexes
+DirectoryIndex admin.php
+
+# HTTPS 강제 (Let's Encrypt 발급 후)
+RewriteEngine On
+RewriteCond %{HTTPS} !=on
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# 민감 파일 접근 차단
+<FilesMatch "^(config\.php|schema\.sql|.*\.log|\.env)$">
+  Require all denied
+</FilesMatch>
+
+# 보안 헤더 (mod_headers 필요)
+<IfModule mod_headers.c>
+  Header always set Strict-Transport-Security "max-age=63072000; includeSubDomains"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "DENY"
+  Header always set Referrer-Policy "no-referrer"
+  Header always set Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self';"
+</IfModule>
