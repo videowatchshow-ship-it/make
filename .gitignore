@@ -1,0 +1,6 @@
+node_modules/
+profiles/
+credentials_data.json
+.env
+*.log
+dist/

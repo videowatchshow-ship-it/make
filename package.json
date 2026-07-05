@@ -1,0 +1,72 @@
+{
+  "name": "youtube-account-manager",
+  "version": "2.0.0",
+  "description": "YouTube 계정 관리 및 자동 로그인 도구",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "auto-login": "node puppeteer-login.js"
+  },
+  "keywords": [
+    "youtube",
+    "account",
+    "manager",
+    "totp",
+    "2fa",
+    "automation"
+  ],
+  "author": "Your Company",
+  "license": "Commercial",
+  "dependencies": {
+    "xlsx": "^0.18.5",
+    "otplib": "^12.0.1",
+    "hi-base32": "^0.5.1",
+    "puppeteer": "^22.0.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "electron-store": "^8.1.0"
+  },
+  "optionalDependencies": {
+    "puppeteer-extra-plugin-recaptcha": "^3.6.8"
+  },
+  "devDependencies": {
+    "electron": "^29.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.yourcompany.youtube-account-manager",
+    "productName": "YouTube Account Manager Pro",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!**/{.git,node_modules,dist,profiles}/*"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "icon.icns"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "icon.ico"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility"
+    }
+  }
+}
