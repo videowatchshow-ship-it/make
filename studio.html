@@ -78,9 +78,11 @@
     <h2>소스 추가</h2>
     <div class="addbar">
       <button id="addCam">🎥 카메라</button>
+      <button id="addScreen">🖥️ 화면공유</button>
       <button id="addImg">🖼️ 이미지</button>
       <button id="addText">🅣 텍스트</button>
       <button id="addWeb">🌐 웹 URL</button>
+      <button id="fillBtn">⤢ 채우기</button>
     </div>
     <h2>레이어 (위 = 앞)</h2>
     <div class="layers" id="layers"></div>
@@ -189,6 +191,28 @@ function applyCanvasSize(){
 }
 window.addEventListener('resize', applyCanvasSize);
 
+/* 캔버스 크기 변경 시(방향/해상도) 레이어 재배치 */
+function refitLayers(oldD, newD){
+  const sx = newD.w/oldD.w, sy = newD.h/oldD.h, s = Math.min(sx,sy);
+  for(const L of state.layers){
+    if(L.fill){ L.x = newD.w/2; L.y = newD.h/2; coverFit(L, newD); }
+    else { L.x *= sx; L.y *= sy; L.w *= s; L.h *= s; }
+  }
+}
+/* 소스를 캔버스 전체에 cover(비율 유지, 넘치면 크롭) */
+function coverFit(L, d){
+  const ar = L.aspect || (16/9);
+  if(d.w/d.h > ar){ L.w = d.w; L.h = d.w/ar; }
+  else { L.h = d.h; L.w = d.h*ar; }
+}
+/* 선택 레이어를 캔버스에 맞춰 채우기 */
+function fillSelected(){
+  const L = sel(); if(!L) return;
+  const d = canvasDims(); L.x = d.w/2; L.y = d.h/2;
+  if(L.aspect) coverFit(L, d); else { L.w = d.w; L.h = d.h; }
+  syncProps();
+}
+
 /* ── 레이어 생성 ── */
 function addLayer(type, data){
   const {w:cw,h:ch} = canvasDims();
@@ -206,29 +230,47 @@ function addLayer(type, data){
   return base;
 }
 
-/* 카메라 */
-document.getElementById('addCam').onclick = async () => {
+/* 카메라 / 화면공유 공통 (비디오 소스 → cover) */
+async function addVideoSource(kind){
   try{
-    const stream = await navigator.mediaDevices.getUserMedia({video:true, audio:false});
+    const stream = kind==='screen'
+      ? await navigator.mediaDevices.getDisplayMedia({video:true, audio:false})
+      : await navigator.mediaDevices.getUserMedia({video:true, audio:false});
     const v = document.createElement('video');
     v.srcObject = stream; v.muted = true; v.playsInline = true; await v.play();
-    const {w:cw,h:ch} = canvasDims();
-    addLayer('camera', {name:'카메라', video:v, stream, w:cw, h:ch, x:cw/2, y:ch/2});
-  }catch(e){ alert('카메라 접근 실패: '+e.message); }
-};
+    const ar = (v.videoWidth && v.videoHeight) ? v.videoWidth/v.videoHeight : 16/9;
+    const L = addLayer(kind==='screen'?'screen':'camera',
+      {name: kind==='screen'?'화면공유':'카메라', video:v, stream, aspect:ar, fill:true});
+    coverFit(L, canvasDims());
+    // 화면공유 중단(브라우저 '공유 중지') 시 레이어 자동 제거
+    stream.getVideoTracks()[0].addEventListener('ended', ()=>{
+      state.layers = state.layers.filter(x=>x.id!==L.id);
+      if(state.selId===L.id){ state.selId=null; showProps(); }
+      normalizeZ(); renderLayers();
+    });
+  }catch(e){ if(e.name!=='NotAllowedError') alert((kind==='screen'?'화면공유':'카메라')+' 실패: '+e.message); }
+}
+document.getElementById('addCam').onclick = () => addVideoSource('camera');
+document.getElementById('addScreen').onclick = () => addVideoSource('screen');
+document.getElementById('fillBtn').onclick = fillSelected;
 
 /* 이미지 */
 const imgFile = document.getElementById('imgFile');
 document.getElementById('addImg').onclick = () => imgFile.click();
 imgFile.onchange = () => {
   const f = imgFile.files[0]; if(!f) return;
-  const img = new Image();
-  img.onload = () => {
-    const {w:cw} = canvasDims();
-    const scale = (cw*0.4)/img.width;
-    addLayer('image', {name:f.name, img, w:img.width*scale, h:img.height*scale});
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const {w:cw} = canvasDims();
+      const scale = (cw*0.4)/img.width;
+      addLayer('image', {name:f.name, img, src:reader.result, aspect:img.width/img.height,
+        w:img.width*scale, h:img.height*scale});
+    };
+    img.src = reader.result;
   };
-  img.src = URL.createObjectURL(f);
+  reader.readAsDataURL(f);
   imgFile.value = '';
 };
 
@@ -259,7 +301,7 @@ function draw(){
     ctx.translate(L.x, L.y);
     ctx.rotate(L.rot * Math.PI/180);
     const hw = L.w/2, hh = L.h/2;
-    if(L.type==='camera' && L.video.readyState>=2){
+    if((L.type==='camera'||L.type==='screen') && L.video.readyState>=2){
       ctx.drawImage(L.video, -hw,-hh, L.w, L.h);
     } else if(L.type==='image' && L.img.complete){
       ctx.drawImage(L.img, -hw,-hh, L.w, L.h);
@@ -330,16 +372,20 @@ function sel(){ return state.layers.find(l=>l.id===state.selId); }
 
 /* ── 방향/해상도 ── */
 document.getElementById('orient').addEventListener('click', e=>{
-  const b=e.target.closest('button'); if(!b)return;
+  const b=e.target.closest('button'); if(!b || b.dataset.o===state.orient) return;
+  const old=canvasDims();
   [...e.currentTarget.children].forEach(x=>x.classList.remove('on'));
-  b.classList.add('on'); state.orient=b.dataset.o; applyCanvasSize();
+  b.classList.add('on'); state.orient=b.dataset.o;
+  applyCanvasSize(); refitLayers(old, canvasDims());
 });
 document.getElementById('resSel').onchange = e=>{
-  state.res = Math.min(...e.target.value.split('x').map(Number)); applyCanvasSize();
+  const old=canvasDims();
+  state.res = Math.min(...e.target.value.split('x').map(Number));
+  applyCanvasSize(); refitLayers(old, canvasDims());
 };
 
 /* ── 레이어 목록 ── */
-const ICON={camera:'🎥',image:'🖼️',text:'🅣',web:'🌐'};
+const ICON={camera:'🎥',screen:'🖥️',image:'🖼️',text:'🅣',web:'🌐'};
 function renderLayers(){
   const box=document.getElementById('layers'); box.innerHTML='';
   [...state.layers].sort((a,b)=>b.z-a.z).forEach(L=>{
@@ -435,9 +481,50 @@ function setLive(v){
   b.classList.toggle('primary',!v); b.classList.toggle('stop',v);
 }
 
+/* ── 씬 저장/복원 (localStorage) ── 카메라·화면공유 스트림은 저장 불가, 재추가 필요 ── */
+function saveScene(){
+  try{
+    const data = { orient:state.orient, res:state.res,
+      layers: state.layers
+        .filter(L=>L.type!=='camera'&&L.type!=='screen')
+        .map(L=>{
+          const b={type:L.type,name:L.name,x:L.x,y:L.y,w:L.w,h:L.h,rot:L.rot,z:L.z,aspect:L.aspect};
+          if(L.type==='image') b.src=L.src;
+          if(L.type==='text'){ b.text=L.text; b.font=L.font; b.color=L.color; }
+          if(L.type==='web') b.url=L.url;
+          return b;
+        }) };
+    localStorage.setItem('prisent.scene', JSON.stringify(data));
+    const w=document.getElementById('whip'); if(w) localStorage.setItem('prisent.whip', w.value);
+  }catch(_){ /* quota 등 무시 */ }
+}
+function restoreScene(){
+  let data; try{ data=JSON.parse(localStorage.getItem('prisent.scene')||'null'); }catch(_){ return; }
+  const w=document.getElementById('whip');
+  if(w){ const s=localStorage.getItem('prisent.whip'); if(s) w.value=s; }
+  if(!data) return;
+  state.orient=data.orient||'landscape'; state.res=data.res||1080;
+  document.querySelectorAll('#orient button').forEach(x=>x.classList.toggle('on', x.dataset.o===state.orient));
+  const resMap={720:'1280x720',1080:'1920x1080',1440:'2560x1440'};
+  if(resMap[state.res]) document.getElementById('resSel').value=resMap[state.res];
+  applyCanvasSize();
+  for(const b of (data.layers||[])){
+    if(b.type==='image'){ const img=new Image(); img.src=b.src; state.layers.push({...b,id:nextId++,img}); }
+    else if(b.type==='text'){ state.layers.push({...b,id:nextId++}); }
+    else if(b.type==='web'){
+      const iframe=document.createElement('iframe');
+      iframe.src=b.url; iframe.style.cssText='position:absolute;border:0;background:transparent';
+      ovl.appendChild(iframe); state.layers.push({...b,id:nextId++,iframe});
+    }
+  }
+  normalizeZ(); renderLayers();
+}
+
 /* ── init ── */
+restoreScene();
 applyCanvasSize();
 requestAnimationFrame(draw);
+setInterval(saveScene, 2500);
 </script>
 </body>
 </html>
