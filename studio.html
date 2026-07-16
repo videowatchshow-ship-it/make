@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PRISENT Studio — 씬 컴포저</title>
+<style>
+  :root{
+    --bg:#0d0f14; --panel:#161a22; --panel2:#1e2430; --line:#2a3141;
+    --txt:#e6e9ef; --muted:#8b93a4; --accent:#0066ff; --accent2:#00d9ff;
+    --danger:#ff5c5c; --ok:#00c48c;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Malgun Gothic",sans-serif}
+  .app{display:flex;height:100vh;overflow:hidden}
+  /* ── left: sources ── */
+  .side{width:280px;flex:0 0 280px;background:var(--panel);border-right:1px solid var(--line);
+    display:flex;flex-direction:column}
+  .side h2{font-size:13px;letter-spacing:.04em;color:var(--muted);text-transform:uppercase;
+    margin:0;padding:14px 16px 8px}
+  .addbar{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 12px 12px}
+  .addbar button{background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+    padding:10px 8px;border-radius:10px;font-size:13px;cursor:pointer;transition:.12s}
+  .addbar button:hover{border-color:var(--accent);color:#fff}
+  .layers{flex:1;overflow:auto;padding:4px 8px 12px}
+  .layer{display:flex;align-items:center;gap:8px;background:var(--panel2);
+    border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:6px 4px;cursor:pointer}
+  .layer.sel{border-color:var(--accent2);box-shadow:0 0 0 1px var(--accent2) inset}
+  .layer .ico{width:26px;height:26px;display:grid;place-items:center;border-radius:7px;
+    background:#0b0e14;font-size:14px}
+  .layer .nm{flex:1;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .layer .mini{border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 4px}
+  .layer .mini:hover{color:#fff}
+  /* ── center: canvas ── */
+  .stage{flex:1;display:flex;flex-direction:column;min-width:0}
+  .toolbar{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);
+    background:var(--panel)}
+  .seg{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .seg button{background:transparent;border:none;color:var(--muted);padding:8px 14px;cursor:pointer;font-size:13px}
+  .seg button.on{background:var(--accent);color:#fff}
+  .spacer{flex:1}
+  .live-dot{width:8px;height:8px;border-radius:50%;background:#555}
+  .live-dot.on{background:var(--danger);box-shadow:0 0 8px var(--danger);animation:pulse 1.2s infinite}
+  @keyframes pulse{50%{opacity:.4}}
+  .btn{border:1px solid var(--line);background:var(--panel2);color:var(--txt);padding:9px 16px;
+    border-radius:10px;font-size:13px;cursor:pointer}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .btn.stop{background:var(--danger);border-color:var(--danger);color:#fff}
+  .canvas-wrap{flex:1;display:grid;place-items:center;overflow:hidden;padding:18px;
+    background:radial-gradient(circle at 50% 40%,#12151d,#0a0c11)}
+  .frame{position:relative;box-shadow:0 10px 40px rgba(0,0,0,.6);background:#000;outline:1px solid var(--line)}
+  #view{display:block;width:100%;height:100%}
+  .overlay{position:absolute;inset:0;pointer-events:none}
+  .handle-box{position:absolute;border:1.5px solid var(--accent2);pointer-events:none}
+  .grip{position:absolute;width:12px;height:12px;background:#fff;border:1.5px solid var(--accent);
+    border-radius:50%;pointer-events:auto;cursor:nwse-resize}
+  .grip.rot{background:var(--accent2);cursor:grab;border-radius:50%}
+  .hit{position:absolute;pointer-events:auto;cursor:move}
+  /* ── right: properties ── */
+  .props{width:260px;flex:0 0 260px;background:var(--panel);border-left:1px solid var(--line);
+    padding:14px 16px;overflow:auto}
+  .props h2{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:0 0 10px}
+  .field{margin:10px 0}
+  .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+  .field input,.field textarea,.field select{width:100%;background:var(--panel2);border:1px solid var(--line);
+    color:var(--txt);border-radius:8px;padding:8px;font-size:13px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .empty{color:var(--muted);font-size:13px;line-height:1.6;margin-top:20px}
+  .note{font-size:11px;color:var(--muted);line-height:1.5;margin-top:6px}
+  input[type=file]{display:none}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- SOURCES -->
+  <aside class="side">
+    <h2>소스 추가</h2>
+    <div class="addbar">
+      <button id="addCam">🎥 카메라</button>
+      <button id="addImg">🖼️ 이미지</button>
+      <button id="addText">🅣 텍스트</button>
+      <button id="addWeb">🌐 웹 URL</button>
+    </div>
+    <h2>레이어 (위 = 앞)</h2>
+    <div class="layers" id="layers"></div>
+    <input type="file" id="imgFile" accept="image/*">
+  </aside>
+
+  <!-- CANVAS -->
+  <main class="stage">
+    <div class="toolbar">
+      <div class="seg" id="orient">
+        <button data-o="landscape" class="on">가로 16:9</button>
+        <button data-o="portrait">세로 9:16</button>
+      </div>
+      <select id="resSel" class="btn" style="padding:8px">
+        <option value="1920x1080">1080p</option>
+        <option value="1280x720">720p</option>
+        <option value="2560x1440">1440p</option>
+      </select>
+      <div class="spacer"></div>
+      <span class="live-dot" id="dot"></span>
+      <span id="liveTxt" style="font-size:12px;color:var(--muted)">오프라인</span>
+      <button class="btn primary" id="goLive">🔴 방송 시작</button>
+    </div>
+    <div class="canvas-wrap">
+      <div class="frame" id="frame">
+        <canvas id="view"></canvas>
+        <div class="overlay" id="ovl"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- PROPERTIES -->
+  <aside class="props" id="props">
+    <h2>속성</h2>
+    <div class="empty" id="propsEmpty">레이어를 선택하면<br>위치·크기·회전을 조정합니다.</div>
+    <div id="propsBody" style="display:none">
+      <div class="field"><label>이름</label><input id="pName"></div>
+      <div class="row2">
+        <div class="field"><label>X</label><input id="pX" type="number"></div>
+        <div class="field"><label>Y</label><input id="pY" type="number"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>너비</label><input id="pW" type="number"></div>
+        <div class="field"><label>높이</label><input id="pH" type="number"></div>
+      </div>
+      <div class="field"><label>회전 (°)</label><input id="pR" type="number" step="1"></div>
+      <div id="textProps" style="display:none">
+        <div class="field"><label>텍스트</label><textarea id="pText" rows="2"></textarea></div>
+        <div class="row2">
+          <div class="field"><label>크기(px)</label><input id="pFont" type="number" value="72"></div>
+          <div class="field"><label>색</label><input id="pColor" type="color" value="#ffffff"></div>
+        </div>
+      </div>
+      <div id="webProps" style="display:none">
+        <div class="field"><label>웹 URL</label><input id="pUrl" placeholder="https://…"></div>
+        <div class="note">⚠️ 외부 URL은 CORS 때문에 브라우저 캔버스에 직접 합성이 안 됩니다.
+          프리뷰 오버레이로만 표시되고, 실제 송출 합성은 (a)서버 headless 렌더 또는 (b)네이티브 앱 WebView 캡처가 필요합니다.</div>
+      </div>
+      <button class="btn" id="pFront" style="width:100%;margin-top:6px">맨 앞으로</button>
+      <button class="btn stop" id="pDel" style="width:100%;margin-top:8px">삭제</button>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
+    <h2>송출 (릴레이)</h2>
+    <div class="field"><label>WHIP 엔드포인트</label>
+      <input id="whip" placeholder="http://34.101.223.165:8889/tak/whip"></div>
+    <div class="note">방송 시작 시 이 캔버스가 MediaMTX WHIP로 송출됩니다. 서버가 나머지 대상으로 fan-out.</div>
+  </aside>
+</div>
+
+<script>
+/* ══════════════ PRISENT Studio — 씬 컴포저 ══════════════
+   OBS/PRISM 동등 구현: 캔버스=씬, 레이어=소스, transform=화면조정.
+   - 방향: 가로 1920x1080 / 세로 1080x1920 토글
+   - 소스: 카메라(getUserMedia) / 이미지 / 텍스트 / 웹URL(프리뷰 오버레이)
+   - 출력: canvas.captureStream + 마이크 → WHIP publish
+*/
+const cv = document.getElementById('view');
+const ctx = cv.getContext('2d');
+const frame = document.getElementById('frame');
+const ovl = document.getElementById('ovl');
+
+const state = {
+  orient: 'landscape',
+  res: 1080,            // 짧은 변 기준 (1080p)
+  layers: [],           // {id,type,name,x,y,w,h,rot,z, ...typeData}
+  selId: null,
+  live: false,
+};
+let nextId = 1;
+
+/* ── 캔버스 크기 (방향 + 해상도) ── */
+function canvasDims(){
+  const short = state.res;
+  const long = Math.round(short * 16 / 9);
+  return state.orient === 'landscape' ? {w:long,h:short} : {w:short,h:long};
+}
+function applyCanvasSize(){
+  const {w,h} = canvasDims();
+  cv.width = w; cv.height = h;
+  // 프리뷰 프레임을 화면에 맞게 스케일
+  const wrap = frame.parentElement.getBoundingClientRect();
+  const maxW = wrap.width - 36, maxH = wrap.height - 36;
+  const scale = Math.min(maxW / w, maxH / h);
+  frame.style.width = (w*scale)+'px';
+  frame.style.height = (h*scale)+'px';
+}
+window.addEventListener('resize', applyCanvasSize);
+
+/* ── 레이어 생성 ── */
+function addLayer(type, data){
+  const {w:cw,h:ch} = canvasDims();
+  const base = {
+    id: nextId++, type,
+    name: data.name || type,
+    x: cw*0.5, y: ch*0.5,           // 중심 좌표
+    w: data.w || cw*0.4, h: data.h || ch*0.3,
+    rot: 0, z: state.layers.length,
+    ...data,
+  };
+  state.layers.push(base);
+  select(base.id);
+  renderLayers();
+  return base;
+}
+
+/* 카메라 */
+document.getElementById('addCam').onclick = async () => {
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({video:true, audio:false});
+    const v = document.createElement('video');
+    v.srcObject = stream; v.muted = true; v.playsInline = true; await v.play();
+    const {w:cw,h:ch} = canvasDims();
+    addLayer('camera', {name:'카메라', video:v, stream, w:cw, h:ch, x:cw/2, y:ch/2});
+  }catch(e){ alert('카메라 접근 실패: '+e.message); }
+};
+
+/* 이미지 */
+const imgFile = document.getElementById('imgFile');
+document.getElementById('addImg').onclick = () => imgFile.click();
+imgFile.onchange = () => {
+  const f = imgFile.files[0]; if(!f) return;
+  const img = new Image();
+  img.onload = () => {
+    const {w:cw} = canvasDims();
+    const scale = (cw*0.4)/img.width;
+    addLayer('image', {name:f.name, img, w:img.width*scale, h:img.height*scale});
+  };
+  img.src = URL.createObjectURL(f);
+  imgFile.value = '';
+};
+
+/* 텍스트 */
+document.getElementById('addText').onclick = () => {
+  addLayer('text', {name:'텍스트', text:'SENT LIVE', font:72, color:'#ffffff', w:600, h:120});
+};
+
+/* 웹 URL */
+document.getElementById('addWeb').onclick = () => {
+  const url = prompt('웹 URL (후원 알림/위젯 등):', 'https://');
+  if(!url || url==='https://') return;
+  const {w:cw,h:ch} = canvasDims();
+  const iframe = document.createElement('iframe');
+  iframe.src = url; iframe.style.cssText = 'position:absolute;border:0;background:transparent';
+  ovl.appendChild(iframe);
+  addLayer('web', {name:'웹: '+url.replace(/^https?:\/\//,'').slice(0,20), url, iframe, w:cw*0.5, h:ch*0.4});
+};
+
+/* ── 렌더 루프 ── */
+function draw(){
+  const {w:cw,h:ch} = canvasDims();
+  ctx.clearRect(0,0,cw,ch);
+  ctx.fillStyle = '#000'; ctx.fillRect(0,0,cw,ch);
+  const ordered = [...state.layers].sort((a,b)=>a.z-b.z);
+  for(const L of ordered){
+    ctx.save();
+    ctx.translate(L.x, L.y);
+    ctx.rotate(L.rot * Math.PI/180);
+    const hw = L.w/2, hh = L.h/2;
+    if(L.type==='camera' && L.video.readyState>=2){
+      ctx.drawImage(L.video, -hw,-hh, L.w, L.h);
+    } else if(L.type==='image' && L.img.complete){
+      ctx.drawImage(L.img, -hw,-hh, L.w, L.h);
+    } else if(L.type==='text'){
+      ctx.font = `700 ${L.font}px -apple-system,"Malgun Gothic",sans-serif`;
+      ctx.fillStyle = L.color; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.shadowColor='rgba(0,0,0,.5)'; ctx.shadowBlur=8;
+      ctx.fillText(L.text, 0, 0);
+    } else if(L.type==='web'){
+      // 캔버스엔 자리표시(합성 불가), 실제 위젯은 프리뷰 오버레이 iframe로 표시
+      ctx.fillStyle='rgba(0,217,255,.08)'; ctx.fillRect(-hw,-hh,L.w,L.h);
+      ctx.strokeStyle='rgba(0,217,255,.5)'; ctx.setLineDash([8,6]); ctx.strokeRect(-hw,-hh,L.w,L.h);
+      ctx.setLineDash([]);
+    }
+    ctx.restore();
+    if(L.type==='web' && L.iframe){ positionIframe(L); }
+  }
+  drawHandles();
+  requestAnimationFrame(draw);
+}
+function positionIframe(L){
+  const s = frame.getBoundingClientRect().width / canvasDims().w;
+  L.iframe.style.left = ((L.x-L.w/2)*s)+'px';
+  L.iframe.style.top  = ((L.y-L.h/2)*s)+'px';
+  L.iframe.style.width = (L.w*s)+'px';
+  L.iframe.style.height= (L.h*s)+'px';
+  L.iframe.style.transform = `rotate(${L.rot}deg)`;
+}
+
+/* ── 선택 핸들 (드래그/리사이즈/회전) ── */
+const box = document.createElement('div'); box.className='handle-box';
+const gripR = document.createElement('div'); gripR.className='grip'; // resize
+const gripT = document.createElement('div'); gripT.className='grip rot'; // rotate
+const hit = document.createElement('div'); hit.className='hit'; // move
+ovl.append(hit, box, gripR, gripT);
+[box,gripR,gripT,hit].forEach(el=>el.style.display='none');
+
+function drawHandles(){
+  const L = state.layers.find(l=>l.id===state.selId);
+  const show = !!L;
+  [box,gripR,gripT,hit].forEach(el=>el.style.display = show?'block':'none');
+  if(!L) return;
+  const s = frame.getBoundingClientRect().width / canvasDims().w;
+  const px=L.x*s, py=L.y*s, pw=L.w*s, ph=L.h*s;
+  const t = `translate(${px}px,${py}px) rotate(${L.rot}deg)`;
+  box.style.cssText = `position:absolute;left:0;top:0;width:${pw}px;height:${ph}px;transform:${t} translate(${-pw/2}px,${-ph/2}px);transform-origin:top left;border:1.5px solid var(--accent2);pointer-events:none`;
+  hit.style.cssText = box.style.cssText.replace('pointer-events:none','pointer-events:auto;cursor:move');
+  gripR.style.cssText = `position:absolute;left:0;top:0;transform:${t} translate(${pw/2-6}px,${ph/2-6}px);pointer-events:auto`;
+  gripT.style.cssText = `position:absolute;left:0;top:0;transform:${t} translate(-6px,${-ph/2-28}px);pointer-events:auto`;
+}
+
+let drag=null;
+function pt(e){ const r=frame.getBoundingClientRect(); const s=r.width/canvasDims().w;
+  return {x:(e.clientX-r.left)/s, y:(e.clientY-r.top)/s}; }
+hit.addEventListener('pointerdown', e=>{ const L=sel(); if(!L)return; const p=pt(e);
+  drag={mode:'move',ox:p.x-L.x,oy:p.y-L.y}; e.target.setPointerCapture(e.pointerId); });
+gripR.addEventListener('pointerdown', e=>{ drag={mode:'size'}; e.target.setPointerCapture(e.pointerId); e.stopPropagation(); });
+gripT.addEventListener('pointerdown', e=>{ drag={mode:'rot'}; e.target.setPointerCapture(e.pointerId); e.stopPropagation(); });
+window.addEventListener('pointermove', e=>{
+  const L=sel(); if(!L||!drag) return; const p=pt(e);
+  if(drag.mode==='move'){ L.x=p.x-drag.ox; L.y=p.y-drag.oy; }
+  else if(drag.mode==='size'){ L.w=Math.max(20,Math.abs(p.x-L.x)*2); L.h=Math.max(20,Math.abs(p.y-L.y)*2); }
+  else if(drag.mode==='rot'){ L.rot=Math.atan2(p.y-L.y,p.x-L.x)*180/Math.PI+90; }
+  syncProps();
+});
+window.addEventListener('pointerup', ()=>drag=null);
+function sel(){ return state.layers.find(l=>l.id===state.selId); }
+
+/* ── 방향/해상도 ── */
+document.getElementById('orient').addEventListener('click', e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  [...e.currentTarget.children].forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); state.orient=b.dataset.o; applyCanvasSize();
+});
+document.getElementById('resSel').onchange = e=>{
+  state.res = Math.min(...e.target.value.split('x').map(Number)); applyCanvasSize();
+};
+
+/* ── 레이어 목록 ── */
+const ICON={camera:'🎥',image:'🖼️',text:'🅣',web:'🌐'};
+function renderLayers(){
+  const box=document.getElementById('layers'); box.innerHTML='';
+  [...state.layers].sort((a,b)=>b.z-a.z).forEach(L=>{
+    const el=document.createElement('div');
+    el.className='layer'+(L.id===state.selId?' sel':'');
+    el.innerHTML=`<div class="ico">${ICON[L.type]||'▪'}</div>
+      <div class="nm">${L.name}</div>
+      <button class="mini" data-up>▲</button><button class="mini" data-dn>▼</button>`;
+    el.onclick=ev=>{ if(ev.target.dataset.up!==undefined){bump(L,1);ev.stopPropagation();return;}
+      if(ev.target.dataset.dn!==undefined){bump(L,-1);ev.stopPropagation();return;} select(L.id); };
+    box.appendChild(el);
+  });
+}
+function bump(L,dir){ L.z+=dir*1.5; normalizeZ(); renderLayers(); }
+function normalizeZ(){ [...state.layers].sort((a,b)=>a.z-b.z).forEach((l,i)=>l.z=i); }
+
+/* ── 선택/속성 ── */
+function select(id){ state.selId=id; renderLayers(); showProps(); }
+function showProps(){
+  const L=sel();
+  document.getElementById('propsEmpty').style.display=L?'none':'block';
+  document.getElementById('propsBody').style.display=L?'block':'none';
+  if(!L)return;
+  document.getElementById('textProps').style.display=L.type==='text'?'block':'none';
+  document.getElementById('webProps').style.display=L.type==='web'?'block':'none';
+  syncProps();
+}
+function syncProps(){
+  const L=sel(); if(!L)return;
+  pName.value=L.name; pX.value=Math.round(L.x); pY.value=Math.round(L.y);
+  pW.value=Math.round(L.w); pH.value=Math.round(L.h); pR.value=Math.round(L.rot);
+  if(L.type==='text'){ pText.value=L.text; pFont.value=L.font; pColor.value=L.color; }
+  if(L.type==='web'){ pUrl.value=L.url; }
+}
+['pX','pY','pW','pH','pR'].forEach(id=>{
+  document.getElementById(id).oninput=e=>{ const L=sel(); if(!L)return;
+    const map={pX:'x',pY:'y',pW:'w',pH:'h',pR:'rot'}; L[map[id]]=Number(e.target.value)||0; };
+});
+pName.oninput=e=>{ const L=sel(); if(L){L.name=e.target.value; renderLayers();} };
+pText.oninput=e=>{ const L=sel(); if(L)L.text=e.target.value; };
+pFont.oninput=e=>{ const L=sel(); if(L)L.font=Number(e.target.value)||72; };
+pColor.oninput=e=>{ const L=sel(); if(L)L.color=e.target.value; };
+pUrl.oninput=e=>{ const L=sel(); if(L&&L.iframe){L.url=e.target.value; L.iframe.src=e.target.value;} };
+document.getElementById('pFront').onclick=()=>{ const L=sel(); if(L){L.z=1e6; normalizeZ(); renderLayers();} };
+document.getElementById('pDel').onclick=()=>{
+  const L=sel(); if(!L)return;
+  if(L.stream) L.stream.getTracks().forEach(t=>t.stop());
+  if(L.iframe) L.iframe.remove();
+  state.layers=state.layers.filter(l=>l.id!==L.id); state.selId=null;
+  normalizeZ(); renderLayers(); showProps();
+};
+
+/* ── 방송 (captureStream + 마이크 → WHIP) ── */
+let pc=null, outStream=null;
+document.getElementById('goLive').onclick = async function(){
+  if(state.live){ stopLive(); return; }
+  const whip=document.getElementById('whip').value.trim();
+  if(!whip){ alert('WHIP 엔드포인트를 입력하세요.'); return; }
+  try{
+    const canvasStream = cv.captureStream(30);
+    let audio=null;
+    try{ audio=await navigator.mediaDevices.getUserMedia({audio:true}); }catch(_){}
+    outStream = new MediaStream([
+      ...canvasStream.getVideoTracks(),
+      ...(audio?audio.getAudioTracks():[]),
+    ]);
+    await whipPublish(whip, outStream);
+    setLive(true);
+  }catch(e){ alert('송출 실패: '+e.message); }
+};
+async function whipPublish(url, stream){
+  pc = new RTCPeerConnection();
+  stream.getTracks().forEach(t=>pc.addTrack(t, stream));
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  const res = await fetch(url, {method:'POST',
+    headers:{'Content-Type':'application/sdp'}, body:offer.sdp});
+  if(!res.ok) throw new Error('WHIP '+res.status);
+  const answer = await res.text();
+  await pc.setRemoteDescription({type:'answer', sdp:answer});
+}
+function stopLive(){
+  if(pc){pc.close();pc=null;}
+  if(outStream){outStream.getTracks().forEach(t=>{ if(t.kind==='audio')t.stop(); });}
+  setLive(false);
+}
+function setLive(v){
+  state.live=v;
+  document.getElementById('dot').classList.toggle('on',v);
+  document.getElementById('liveTxt').textContent=v?'● LIVE':'오프라인';
+  const b=document.getElementById('goLive');
+  b.textContent=v?'⏹ 방송 종료':'🔴 방송 시작';
+  b.classList.toggle('primary',!v); b.classList.toggle('stop',v);
+}
+
+/* ── init ── */
+applyCanvasSize();
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>
