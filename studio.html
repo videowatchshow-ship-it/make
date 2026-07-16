@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>PRISENT Studio — 씬 컴포저</title>
+<title>센트빔 CENTBEAM — 라이브 스튜디오</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230066ff'/%3E%3Cpath d='M28 70 L50 26 L72 70 Z' fill='none' stroke='%2300d9ff' stroke-width='7' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
   :root{
     --bg:#0d0f14; --panel:#161a22; --panel2:#1e2430; --line:#2a3141;
@@ -17,8 +18,12 @@
   /* ── left: sources ── */
   .side{width:280px;flex:0 0 280px;background:var(--panel);border-right:1px solid var(--line);
     display:flex;flex-direction:column}
+  .brand{display:flex;align-items:center;gap:9px;padding:14px 16px 6px}
+  .brand-mark{font-size:20px;color:var(--accent2);line-height:1}
+  .brand-name{font-size:16px;font-weight:800;letter-spacing:.01em;color:#fff;display:flex;align-items:baseline;gap:6px}
+  .brand-name b{font-size:10px;font-weight:700;letter-spacing:.14em;color:var(--muted)}
   .side h2{font-size:13px;letter-spacing:.04em;color:var(--muted);text-transform:uppercase;
-    margin:0;padding:14px 16px 8px}
+    margin:0;padding:10px 16px 8px}
   .addbar{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 12px 12px}
   .addbar button{background:var(--panel2);border:1px solid var(--line);color:var(--txt);
     padding:10px 8px;border-radius:10px;font-size:13px;cursor:pointer;transition:.12s}
@@ -75,6 +80,10 @@
 <div class="app">
   <!-- SOURCES -->
   <aside class="side">
+    <div class="brand">
+      <span class="brand-mark">◭</span>
+      <span class="brand-name">센트빔<b>CENTBEAM</b></span>
+    </div>
     <h2>소스 추가</h2>
     <div class="addbar">
       <button id="addCam">🎥 카메라</button>
