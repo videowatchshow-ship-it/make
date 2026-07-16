@@ -189,6 +189,8 @@
       <button id="addImg">🖼️ 이미지</button>
       <button id="addText">🅣 텍스트</button>
       <button id="addWeb">🌐 웹 URL</button>
+      <button id="addSolid">🟦 단색</button>
+      <button id="addClock">🕐 시계</button>
       <button id="fillBtn">⤢ 채우기</button>
     </div>
     <h2>레이어 (위 = 앞)</h2>
@@ -252,11 +254,28 @@
         <div class="field"><label>흐림 <span id="pBlurVal">0px</span></label><input id="pBlur" type="range" min="0" max="20" value="0"></div>
       </details>
       <div id="textProps" style="display:none">
-        <div class="field"><label>텍스트</label><textarea id="pText" rows="2"></textarea></div>
+        <div class="field"><label>텍스트 (줄바꿈 지원)</label><textarea id="pText" rows="2"></textarea></div>
         <div class="row2">
           <div class="field"><label>크기(px)</label><input id="pFont" type="number" value="72"></div>
           <div class="field"><label>색</label><input id="pColor" type="color" value="#ffffff"></div>
         </div>
+        <div class="row2">
+          <div class="field"><label>정렬</label><select id="pAlign">
+            <option value="left">좌</option><option value="center" selected>중앙</option><option value="right">우</option></select></div>
+          <div class="field"><label>굵기</label><select id="pWeight">
+            <option value="400">보통</option><option value="700" selected>굵게</option><option value="900">매우굵게</option></select></div>
+        </div>
+      </div>
+      <div id="solidProps" style="display:none">
+        <div class="field"><label>단색 색상</label><input id="pSolidColor" type="color" value="#0066ff"></div>
+      </div>
+      <div id="clockProps" style="display:none">
+        <div class="row2">
+          <div class="field"><label>형식</label><select id="pClockFmt">
+            <option value="time">시간</option><option value="date">날짜</option><option value="datetime">날짜+시간</option></select></div>
+          <div class="field"><label>색</label><input id="pClockColor" type="color" value="#ffffff"></div>
+        </div>
+        <div class="field"><label>크기(px)</label><input id="pClockFont" type="number" value="72"></div>
       </div>
       <div id="webProps" style="display:none">
         <div class="field"><label>웹 URL</label><input id="pUrl" placeholder="https://…"></div>
@@ -493,7 +512,14 @@ imgFile.onchange = () => {
 
 /* 텍스트 */
 document.getElementById('addText').onclick = () => {
-  addLayer('text', {name:'텍스트', text:'SENT LIVE', font:72, color:'#ffffff', w:600, h:120});
+  addLayer('text', {name:'텍스트', text:'SENT LIVE', font:72, color:'#ffffff', align:'center', weight:700, w:600, h:120});
+};
+document.getElementById('addSolid').onclick = () => {
+  const {w:cw,h:ch}=canvasDims();
+  addLayer('solid', {name:'단색', color:'#0066ff', w:cw*0.4, h:ch*0.3});
+};
+document.getElementById('addClock').onclick = () => {
+  addLayer('clock', {name:'시계', color:'#ffffff', font:72, fmt:'time', w:640, h:120});
 };
 
 /* 웹 URL */
@@ -535,10 +561,23 @@ function draw(){
     } else if(L.type==='image' && L.img.complete){
       ctx.drawImage(L.img, -hw,-hh, L.w, L.h);
     } else if(L.type==='text'){
-      ctx.font = `700 ${L.font}px -apple-system,"Malgun Gothic",sans-serif`;
-      ctx.fillStyle = L.color; ctx.textAlign='center'; ctx.textBaseline='middle';
+      const weight=L.weight||700, align=L.align||'center';
+      ctx.font = `${weight} ${L.font}px -apple-system,"Malgun Gothic",sans-serif`;
+      ctx.fillStyle = L.color; ctx.textAlign=align; ctx.textBaseline='middle';
       ctx.shadowColor='rgba(0,0,0,.5)'; ctx.shadowBlur=8;
-      ctx.fillText(L.text, 0, 0);
+      const lines=String(L.text).split('\n'), lh=L.font*1.2;
+      const tx = align==='left' ? -L.w/2 : align==='right' ? L.w/2 : 0;
+      const y0 = -(lines.length-1)*lh/2;
+      lines.forEach((ln,i)=>ctx.fillText(ln, tx, y0+i*lh));
+    } else if(L.type==='solid'){
+      ctx.fillStyle=L.color||'#0066ff'; ctx.fillRect(-hw,-hh,L.w,L.h);
+    } else if(L.type==='clock'){
+      const d=new Date();
+      const s=(L.fmt==='date')?d.toLocaleDateString():(L.fmt==='datetime')?d.toLocaleString():d.toLocaleTimeString();
+      ctx.font=`700 ${L.font||72}px -apple-system,"Malgun Gothic",monospace`;
+      ctx.fillStyle=L.color||'#ffffff'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.shadowColor='rgba(0,0,0,.5)'; ctx.shadowBlur=8;
+      ctx.fillText(s,0,0);
     } else if(L.type==='web'){
       // 캔버스엔 자리표시(합성 불가), 실제 위젯은 프리뷰 오버레이 iframe로 표시
       ctx.fillStyle='rgba(0,217,255,.08)'; ctx.fillRect(-hw,-hh,L.w,L.h);
@@ -618,7 +657,7 @@ document.getElementById('resSel').onchange = e=>{
 };
 
 /* ── 레이어 목록 ── */
-const ICON={camera:'🎥',screen:'🖥️',image:'🖼️',text:'🅣',web:'🌐'};
+const ICON={camera:'🎥',screen:'🖥️',image:'🖼️',text:'🅣',web:'🌐',solid:'🟦',clock:'🕐'};
 function renderLayers(){
   const box=document.getElementById('layers'); box.innerHTML='';
   [...state.layers].sort((a,b)=>b.z-a.z).forEach(L=>{
@@ -644,6 +683,8 @@ function showProps(){
   if(!L)return;
   document.getElementById('textProps').style.display=L.type==='text'?'block':'none';
   document.getElementById('webProps').style.display=L.type==='web'?'block':'none';
+  document.getElementById('solidProps').style.display=L.type==='solid'?'block':'none';
+  document.getElementById('clockProps').style.display=L.type==='clock'?'block':'none';
   syncProps();
 }
 function syncProps(){
@@ -660,8 +701,11 @@ function syncProps(){
   pCon.value=Math.round(con*100); pConVal.textContent=Math.round(con*100)+'%';
   pSat.value=Math.round(sat*100); pSatVal.textContent=Math.round(sat*100)+'%';
   pBlur.value=blur; pBlurVal.textContent=blur+'px';
-  if(L.type==='text'){ pText.value=L.text; pFont.value=L.font; pColor.value=L.color; }
+  if(L.type==='text'){ pText.value=L.text; pFont.value=L.font; pColor.value=L.color;
+    pAlign.value=L.align||'center'; pWeight.value=String(L.weight||700); }
   if(L.type==='web'){ pUrl.value=L.url; }
+  if(L.type==='solid'){ pSolidColor.value=L.color||'#0066ff'; }
+  if(L.type==='clock'){ pClockFmt.value=L.fmt||'time'; pClockColor.value=L.color||'#ffffff'; pClockFont.value=L.font||72; }
 }
 ['pX','pY','pW','pH','pR'].forEach(id=>{
   document.getElementById(id).oninput=e=>{ const L=sel(); if(!L)return;
@@ -681,6 +725,12 @@ pText.oninput=e=>{ const L=sel(); if(L)L.text=e.target.value; };
 pFont.oninput=e=>{ const L=sel(); if(L)L.font=Number(e.target.value)||72; };
 pColor.oninput=e=>{ const L=sel(); if(L)L.color=e.target.value; };
 pUrl.oninput=e=>{ const L=sel(); if(L&&L.iframe){L.url=e.target.value; L.iframe.src=e.target.value;} };
+pAlign.onchange=e=>{ const L=sel(); if(L)L.align=e.target.value; };
+pWeight.onchange=e=>{ const L=sel(); if(L)L.weight=Number(e.target.value); };
+pSolidColor.oninput=e=>{ const L=sel(); if(L)L.color=e.target.value; };
+pClockFmt.onchange=e=>{ const L=sel(); if(L)L.fmt=e.target.value; };
+pClockColor.oninput=e=>{ const L=sel(); if(L)L.color=e.target.value; };
+pClockFont.oninput=e=>{ const L=sel(); if(L)L.font=Number(e.target.value)||72; };
 document.getElementById('pFront').onclick=()=>{ const L=sel(); if(L){L.z=1e6; normalizeZ(); renderLayers();} };
 document.getElementById('pBack').onclick=()=>{ const L=sel(); if(L){L.z=-1e6; normalizeZ(); renderLayers();} };
 document.getElementById('pDup').onclick=()=>{
@@ -884,8 +934,10 @@ function sceneData(){
           opacity:L.opacity,flipH:L.flipH,flipV:L.flipV,br:L.br,con:L.con,sat:L.sat,blur:L.blur,
           locked:L.locked,hidden:L.hidden};
         if(L.type==='image') b.src=L.src;
-        if(L.type==='text'){ b.text=L.text; b.font=L.font; b.color=L.color; }
+        if(L.type==='text'){ b.text=L.text; b.font=L.font; b.color=L.color; b.align=L.align; b.weight=L.weight; }
         if(L.type==='web') b.url=L.url;
+        if(L.type==='solid') b.color=L.color;
+        if(L.type==='clock'){ b.color=L.color; b.font=L.font; b.fmt=L.fmt; }
         return b;
       }) };
 }
@@ -909,7 +961,7 @@ function restoreScene(){
   applyCanvasSize();
   for(const b of (data.layers||[])){
     if(b.type==='image'){ const img=new Image(); img.src=b.src; state.layers.push({...b,id:nextId++,img}); }
-    else if(b.type==='text'){ state.layers.push({...b,id:nextId++}); }
+    else if(b.type==='text'||b.type==='solid'||b.type==='clock'){ state.layers.push({...b,id:nextId++}); }
     else if(b.type==='web'){
       const iframe=document.createElement('iframe');
       iframe.src=b.url; iframe.style.cssText='position:absolute;border:0;background:transparent';
