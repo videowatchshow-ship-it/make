@@ -1,0 +1,15 @@
+{
+  "name": "센트빔 CENTBEAM",
+  "short_name": "센트빔",
+  "description": "하나의 방송을 모든 곳으로 — 멀티스트리밍 스튜디오",
+  "start_url": "./studio.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0d0f14",
+  "theme_color": "#0066ff",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
