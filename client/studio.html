@@ -103,6 +103,14 @@
   .mix-add{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
   .mix-add .btn{min-height:0;padding:9px}
 
+  /* 토스트 */
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);
+    background:var(--panel2);border:1px solid var(--line);color:var(--txt);padding:10px 16px;
+    border-radius:10px;font-size:13px;z-index:80;opacity:0;pointer-events:none;transition:.2s;
+    box-shadow:0 8px 30px rgba(0,0,0,.5);max-width:80vw}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.ok{border-color:var(--ok)} .toast.warn{border-color:var(--warning)} .toast.err{border-color:var(--danger)}
+
   /* 모바일 전용 요소는 데스크톱에서 숨김 */
   .mobilebar,.drawer-backdrop{display:none}
 
@@ -232,6 +240,18 @@
     <h2>송출 (릴레이)</h2>
     <div class="field"><label>WHIP 엔드포인트</label>
       <input id="whip" placeholder="https://studio.centsolution.com/whip/tak/whip"></div>
+    <div class="row2">
+      <div class="field"><label>FPS</label>
+        <select id="fpsSel"><option value="30">30</option><option value="60">60</option></select></div>
+      <div class="field"><label>비디오 비트레이트</label>
+        <select id="vbrSel">
+          <option value="2500">2.5 Mbps</option>
+          <option value="4500" selected>4.5 Mbps</option>
+          <option value="6000">6 Mbps</option>
+          <option value="9000">9 Mbps</option>
+        </select></div>
+    </div>
+    <div class="note" id="sendStat">송출 대기</div>
     <div class="note">방송 시작 시 이 캔버스가 MediaMTX WHIP로 송출됩니다. 서버가 아래 대상으로 fan-out.</div>
 
     <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
@@ -270,6 +290,7 @@
     <button data-drawer="props">⚙️<span>속성</span></button>
     <button id="mGoLive" class="m-live">🔴<span>방송</span></button>
   </nav>
+  <div id="toast" class="toast"></div>
 </div>
 
 <script>
@@ -586,42 +607,112 @@ document.getElementById('pDel').onclick=()=>{
 };
 
 /* ── 방송 (captureStream + 마이크 → WHIP) ── */
-let pc=null, outStream=null, tempMicStream=null;
+let pc=null, outStream=null, tempMicStream=null, currentWhip='';
+let statsTimer=null, liveTimer=null, liveStart=0, reconnecting=false, reconnectTries=0;
+let lastBytes=0, lastStatsTs=0;
+
+function toast(msg,type){
+  const el=document.getElementById('toast');
+  el.className='toast show '+(type||''); el.textContent=msg;
+  clearTimeout(el._t); el._t=setTimeout(()=>{el.className='toast';},2600);
+}
+
 document.getElementById('goLive').onclick = async function(){
-  if(state.live){ stopLive(); return; }
-  const whip=document.getElementById('whip').value.trim();
-  if(!whip){ alert('WHIP 엔드포인트를 입력하세요.'); return; }
-  try{
-    const canvasStream = cv.captureStream(30);
-    let audioTracks=[];
-    if(mixer.dest && mixer.sources.length){
-      if(mixer.ctx.state==='suspended') await mixer.ctx.resume();
-      audioTracks = mixer.dest.stream.getAudioTracks();      // 믹서 출력
-    } else {
-      try{ tempMicStream=await navigator.mediaDevices.getUserMedia({audio:true});
-        audioTracks=tempMicStream.getAudioTracks(); }catch(_){}   // 믹서 비었으면 임시 마이크
-    }
-    outStream = new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks]);
-    await whipPublish(whip, outStream);
-    setLive(true);
-  }catch(e){ alert('송출 실패: '+e.message); }
+  if(state.live){ stopLive(); toast('방송 종료'); return; }
+  currentWhip=document.getElementById('whip').value.trim();
+  if(!currentWhip){ toast('WHIP 엔드포인트를 입력하세요','warn'); return; }
+  try{ await startPublish(); setLive(true); startTimers(); toast('방송 시작','ok'); }
+  catch(e){ toast('송출 실패: '+e.message,'err'); }
 };
+
+async function startPublish(){
+  const fps=Number(document.getElementById('fpsSel').value)||30;
+  const canvasStream = cv.captureStream(fps);
+  let audioTracks=[];
+  if(mixer.dest && mixer.sources.length){
+    if(mixer.ctx.state==='suspended') await mixer.ctx.resume();
+    audioTracks = mixer.dest.stream.getAudioTracks();
+  } else if(tempMicStream){ audioTracks=tempMicStream.getAudioTracks(); }
+  else { try{ tempMicStream=await navigator.mediaDevices.getUserMedia({audio:true});
+    audioTracks=tempMicStream.getAudioTracks(); }catch(_){} }
+  outStream = new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks]);
+  await whipPublish(currentWhip, outStream);
+  await applyEncoding();
+}
+
 async function whipPublish(url, stream){
+  if(pc){ try{pc.close();}catch(_){} }
   pc = new RTCPeerConnection();
   stream.getTracks().forEach(t=>pc.addTrack(t, stream));
+  pc.onconnectionstatechange=()=>{
+    if(state.live && (pc.connectionState==='failed'||pc.connectionState==='disconnected')) scheduleReconnect();
+  };
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
-  const res = await fetch(url, {method:'POST',
-    headers:{'Content-Type':'application/sdp'}, body:offer.sdp});
+  const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/sdp'}, body:offer.sdp});
   if(!res.ok) throw new Error('WHIP '+res.status);
-  const answer = await res.text();
-  await pc.setRemoteDescription({type:'answer', sdp:answer});
+  await pc.setRemoteDescription({type:'answer', sdp:await res.text()});
 }
+
+async function applyEncoding(){
+  const vbr=Number(document.getElementById('vbrSel').value)||4500;
+  const fps=Number(document.getElementById('fpsSel').value)||30;
+  const sender=pc && pc.getSenders().find(s=>s.track && s.track.kind==='video');
+  if(!sender) return;
+  const params=sender.getParameters();
+  if(!params.encodings || !params.encodings.length) params.encodings=[{}];
+  params.encodings[0].maxBitrate=vbr*1000;
+  params.encodings[0].maxFramerate=fps;
+  try{ await sender.setParameters(params); }catch(_){}
+}
+document.getElementById('vbrSel').onchange=()=>{ if(state.live) applyEncoding(); };
+document.getElementById('fpsSel').onchange=()=>{ if(state.live) applyEncoding(); };
+
+function scheduleReconnect(){
+  if(reconnecting || !state.live) return;
+  reconnecting=true;
+  const attempt=async(delay)=>{
+    if(!state.live){ reconnecting=false; return; }
+    toast('연결 끊김 — 재연결 시도('+(reconnectTries+1)+')','warn');
+    try{ await whipPublish(currentWhip, outStream); await applyEncoding();
+      reconnecting=false; reconnectTries=0; toast('재연결 성공','ok'); }
+    catch(e){ reconnectTries++;
+      if(reconnectTries>=5){ reconnecting=false; toast('재연결 실패 — 방송 종료','err'); stopLive(); return; }
+      setTimeout(()=>attempt(Math.min(delay*2,16000)), delay); }
+  };
+  attempt(1000);
+}
+
+function startTimers(){
+  liveStart=performance.now(); lastBytes=0; lastStatsTs=0;
+  liveTimer=setInterval(()=>{
+    if(!state.live) return;
+    const s=Math.floor((performance.now()-liveStart)/1000);
+    document.getElementById('liveTxt').textContent='● LIVE '+String((s/60)|0).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
+  },1000);
+  statsTimer=setInterval(pollStats,1000);
+}
+function stopTimers(){ clearInterval(liveTimer); clearInterval(statsTimer); liveTimer=statsTimer=null; }
+async function pollStats(){
+  if(!pc) return;
+  try{ const stats=await pc.getStats();
+    stats.forEach(r=>{
+      if(r.type==='outbound-rtp' && (r.kind==='video'||r.mediaType==='video')){
+        if(lastStatsTs){ const kbps=Math.round((r.bytesSent-lastBytes)*8/(r.timestamp-lastStatsTs));
+          document.getElementById('sendStat').textContent='송출 '+kbps+' kbps'; }
+        lastBytes=r.bytesSent; lastStatsTs=r.timestamp;
+      }
+    });
+  }catch(_){}
+}
+
 function stopLive(){
   if(pc){pc.close();pc=null;}
   if(tempMicStream){ tempMicStream.getTracks().forEach(t=>t.stop()); tempMicStream=null; }
-  // 믹서 소유 트랙(mixer.dest)은 재사용하므로 stop 하지 않음
+  stopTimers(); reconnecting=false; reconnectTries=0;
+  document.getElementById('sendStat').textContent='송출 대기';
   setLive(false);
+  // 믹서 소유 트랙(mixer.dest)은 재사용하므로 stop 하지 않음
 }
 function setLive(v){
   state.live=v;
