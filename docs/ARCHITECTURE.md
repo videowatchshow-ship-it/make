@@ -113,7 +113,7 @@ flowchart TD
 | 프레임워크 | (현재) Vanilla | 로드맵상 Next.js 16.2.10로 이관 검토 |
 | 미디어 암호화 | WebRTC DTLS-SRTP | RFC 8826/8827 강제 — 송출 구간 기본 암호화 |
 
-> 검증: `next@16.2.10`, `next-auth@4.24.14`, `mediamtx v1.19.2`, WHIP=RFC 9725(Bearer MUST), OAuth BCP=RFC 9700 — 모두 2026-07-16 npm/IETF 실측.
+> 검증: `next@16.2.10`, `next-auth@4.24.14`, `express@5.2.1`, `mediamtx v1.19.2`, Node 22 LTS(Node 20은 2026 EOL), WHIP=RFC 9725(Bearer MUST), OAuth BCP=RFC 9700 — 모두 2026-07-16 npm/GitHub/IETF 실측.
 
 ---
 

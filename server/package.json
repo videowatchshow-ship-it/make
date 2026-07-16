@@ -5,5 +5,5 @@
   "description": "CENTBEAM relay API (destinations CRUD + health). Media fan-out via MediaMTX + fanout.sh.",
   "main": "server.js",
   "scripts": { "start": "node server.js" },
-  "dependencies": { "express": "^4.19.2" }
+  "dependencies": { "express": "^5.2.1" }
 }

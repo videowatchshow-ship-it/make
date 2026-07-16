@@ -75,7 +75,7 @@ node server.js                    # API :3000
 | 파트 | 스택 |
 |--|--|
 | 클라이언트 | Vanilla JS + Canvas 2D + WebRTC(WHIP) + `getUserMedia`/`getDisplayMedia`. 의존성 0, 단일 HTML. |
-| 서버 | Node 20 + Express, MediaMTX v1.19.2, FFmpeg, PM2, Caddy(HTTPS) |
+| 서버 | Node 22 (LTS) + Express 5, MediaMTX v1.19.2, FFmpeg, PM2, Caddy(HTTPS) |
 | 배포 | GCP(자카르타), 서브도메인 = Cent Solution 하위 |
 
 버전 근거·검증은 [docs/ARCHITECTURE.md §기술 결정](docs/ARCHITECTURE.md) 참고 (2026-07 실측).
