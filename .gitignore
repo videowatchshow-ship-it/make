@@ -4,3 +4,7 @@ credentials_data.json
 .env
 *.log
 dist/
+
+# CENTBEAM: 실 대상/키는 커밋 금지 (예시만 커밋)
+server/data/destinations.json
+server/data/*.log

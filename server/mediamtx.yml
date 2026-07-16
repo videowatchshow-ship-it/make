@@ -1,0 +1,15 @@
+# CENTBEAM relay — MediaMTX 설정
+logLevel: info
+rtmp: yes
+rtmpAddress: :1935
+hls: yes
+hlsAddress: :8888
+webrtc: yes
+webrtcAddress: :8889     # WHIP 인제스트: http://<host>:8889/<avatar>/whip
+srt: no
+
+paths:
+  all_others:
+    runOnReady: /opt/centbeam/server/fanout.sh $MTX_PATH
+    runOnReadyRestart: yes
+    runOnNotReady: pkill -f "fanout-$MTX_PATH" || true

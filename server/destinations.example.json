@@ -1,0 +1,6 @@
+{
+  "avatar1": [
+    {"platform":"youtube","name":"YouTube 메인","rtmpUrl":"rtmp://a.rtmp.youtube.com/live2","streamKey":"PUT_KEY_HERE","locked":false},
+    {"platform":"custom","name":"자체 사이트","rtmpUrl":"rtmp://your-ingest.example.com/live","streamKey":"PUT_KEY_HERE","locked":true}
+  ]
+}
