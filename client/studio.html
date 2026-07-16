@@ -75,6 +75,20 @@
   .note{font-size:11px;color:var(--muted);line-height:1.5;margin-top:6px}
   input[type=file]{display:none}
 
+  /* 대상 채널 목록 */
+  .dest{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:10px;padding:8px 10px;margin:6px 0}
+  .dest .badge{font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px;background:#0b0e14;color:var(--accent2);white-space:nowrap}
+  .dest .dname{flex:1;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dest .dkey{font-size:11px;color:var(--muted);font-family:monospace}
+  .dest .lock{color:var(--accent2);font-size:13px}
+  .dest .rm{border:none;background:transparent;color:var(--danger);cursor:pointer;font-size:15px;padding:2px 4px}
+  .dest.locked{border-color:var(--accent2)}
+  .dest-add{margin-top:8px}
+  .dest-add input{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+    border-radius:8px;padding:8px;font-size:13px;margin-top:6px}
+  .warn{color:var(--warning)}
+
   /* 모바일 전용 요소는 데스크톱에서 숨김 */
   .mobilebar,.drawer-backdrop{display:none}
 
@@ -204,7 +218,18 @@
     <h2>송출 (릴레이)</h2>
     <div class="field"><label>WHIP 엔드포인트</label>
       <input id="whip" placeholder="https://studio.centsolution.com/whip/tak/whip"></div>
-    <div class="note">방송 시작 시 이 캔버스가 MediaMTX WHIP로 송출됩니다. 서버가 나머지 대상으로 fan-out.</div>
+    <div class="note">방송 시작 시 이 캔버스가 MediaMTX WHIP로 송출됩니다. 서버가 아래 대상으로 fan-out.</div>
+
+    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
+    <h2>대상 채널 (fan-out)</h2>
+    <div id="destList"></div>
+    <div class="dest-add">
+      <select id="platSel" class="field"></select>
+      <input id="destServer" placeholder="서버 URL (세션별 플랫폼)" style="display:none">
+      <input id="destKey" placeholder="스트림 키">
+      <button class="btn" id="destAdd" style="width:100%;margin-top:6px">＋ 대상 추가</button>
+    </div>
+    <div class="note" id="platHint"></div>
   </aside>
 
   <!-- 모바일 전용: 하단 탭바 + 드로어 백드롭 -->
@@ -236,6 +261,33 @@ const state = {
   live: false,
 };
 let nextId = 1;
+
+/* ── 플랫폼 프리셋 (ingest URL은 2026-07 공식 문서 교차검증) ── */
+const PLATFORMS=[
+    {id:"twitch",name:"Twitch",protocol:"rtmp",ingestUrl:"rtmp://{region}.contribute.live-video.net/app",session:false,needsApproval:false},
+    {id:"youtube-live",name:"YouTube",protocol:"rtmps",ingestUrl:"rtmps://a.rtmps.youtube.com/live2",session:false,needsApproval:false},
+    {id:"facebook-live",name:"Facebook",protocol:"rtmps",ingestUrl:"rtmps://live-api-s.facebook.com:443/rtmp/",session:false,needsApproval:false},
+    {id:"kick",name:"Kick",protocol:"rtmps",ingestUrl:"rtmps://{unique-subdomain}.global-contribute.live-video.net:443/app",session:false,needsApproval:false},
+    {id:"tiktok-live",name:"TikTok",protocol:"per-session",ingestUrl:"",session:true,needsApproval:true},
+    {id:"trovo",name:"Trovo",protocol:"rtmp",ingestUrl:"rtmp://livepush.trovo.live/live",session:false,needsApproval:true},
+    {id:"rumble",name:"Rumble",protocol:"rtmp",ingestUrl:"",session:true,needsApproval:true},
+    {id:"x",name:"X (Twitter)",protocol:"per-session",ingestUrl:"",session:true,needsApproval:true},
+    {id:"instagram-live",name:"Instagram",protocol:"per-session",ingestUrl:"",session:true,needsApproval:true},
+    {id:"vimeo",name:"Vimeo",protocol:"rtmps",ingestUrl:"rtmps://rtmp-global.cloud.vimeo.com/live",session:false,needsApproval:false},
+    {id:"dailymotion",name:"Dailymotion",protocol:"rtmp",ingestUrl:"rtmp://publish.dailymotion.com/publish-dm",session:false,needsApproval:true},
+    {id:"restream-io",name:"Restream.io",protocol:"rtmp",ingestUrl:"rtmp://live.restream.io/live",session:false,needsApproval:false},
+    {id:"amazon-ivs",name:"Amazon IVS",protocol:"rtmps",ingestUrl:"rtmps://<channel-id>.global-contribute.live-video.net:443/app",session:false,needsApproval:false},
+    {id:"dlive",name:"DLive",protocol:"rtmp",ingestUrl:"",session:true,needsApproval:false},
+    {id:"bilibili-live",name:"Bilibili",protocol:"rtmp",ingestUrl:"rtmp://live-push.bilivideo.com/live-bvc/",session:false,needsApproval:true},
+    {id:"soop",name:"SOOP (AfreecaTV)",protocol:"rtmp",ingestUrl:"rtmp://stream.sooplive.co.kr/app",session:false,needsApproval:false},
+    {id:"chzzk",name:"CHZZK (Naver)",protocol:"rtmp",ingestUrl:"rtmp://global-rtmp.lip2.navercorp.com:8080/relay",session:false,needsApproval:false},
+    {id:"kakaotv",name:"KakaoTV",protocol:"rtmp",ingestUrl:"rtmp://rtmp.play.kakao.com/kakaotv",session:false,needsApproval:false},
+    {id:"custom",name:"커스텀 RTMP",protocol:"rtmp",ingestUrl:"",session:true,needsApproval:false}
+];
+/* videowatch(우리 사이트) — 강제 고정, 삭제 불가 */
+const MANDATORY={id:'videowatch',platform:'videowatch',name:'videowatch',
+  rtmpUrl:'rtmp://34.104.233.35:1935',streamKey:'',locked:true};
+state.destinations=[];
 
 /* ── 캔버스 크기 (방향 + 해상도) ── */
 function canvasDims(){
@@ -608,8 +660,63 @@ function restoreScene(){
   normalizeZ(); renderLayers();
 }
 
+/* ── 대상 채널 관리 ── */
+const DKEY='centbeam.destinations';
+const platById=id=>PLATFORMS.find(p=>p.id===id);
+function seedMandatory(){
+  if(!state.destinations.some(d=>d.id==='videowatch')) state.destinations.unshift({...MANDATORY});
+}
+function saveDest(){ try{ localStorage.setItem(DKEY, JSON.stringify(state.destinations)); }catch(_){} }
+function loadDest(){
+  try{ const s=JSON.parse(localStorage.getItem(DKEY)||'null'); if(Array.isArray(s)) state.destinations=s; }catch(_){}
+  seedMandatory();
+}
+function maskKey(k){ if(!k) return '(키 미입력)'; return k.length<=6?'••••':k.slice(0,3)+'••••'+k.slice(-2); }
+function renderDest(){
+  const box=document.getElementById('destList'); if(!box) return;
+  box.innerHTML='';
+  state.destinations.forEach((d,i)=>{
+    const el=document.createElement('div');
+    el.className='dest'+(d.locked?' locked':'');
+    el.innerHTML=`<span class="badge">${d.platform}</span>
+      <span class="dname">${d.locked?'<span class="lock">🔒</span> ':''}${d.name}</span>
+      <span class="dkey">${maskKey(d.streamKey)}</span>`;
+    if(!d.locked){
+      const rm=document.createElement('button'); rm.className='rm'; rm.textContent='✕'; rm.title='삭제';
+      rm.onclick=()=>{ state.destinations.splice(i,1); saveDest(); renderDest(); };
+      el.appendChild(rm);
+    }
+    box.appendChild(el);
+  });
+}
+function initDestinations(){
+  const sel=document.getElementById('platSel');
+  sel.innerHTML=PLATFORMS.map(p=>`<option value="${p.id}">${p.name}${p.needsApproval?' ⚠승인':''}${p.session?' ·세션별':''}</option>`).join('');
+  const server=document.getElementById('destServer'), hint=document.getElementById('platHint');
+  function refresh(){
+    const p=platById(sel.value);
+    server.style.display=p.session?'block':'none';
+    let h=p.session?'세션별: 플랫폼에서 발급한 서버 URL을 직접 입력':`ingest: ${p.ingestUrl}`;
+    if(p.needsApproval) h+=' · ⚠ 승인/자격 필요';
+    hint.innerHTML=`<span class="${p.needsApproval?'warn':''}">${h}</span>`;
+  }
+  sel.onchange=refresh; refresh();
+  document.getElementById('destAdd').onclick=()=>{
+    const p=platById(sel.value);
+    const key=document.getElementById('destKey').value.trim();
+    const base=p.session?document.getElementById('destServer').value.trim():p.ingestUrl;
+    if(!base){ alert('서버 URL을 입력하세요.'); return; }
+    if(!key){ alert('스트림 키를 입력하세요.'); return; }
+    state.destinations.push({id:'d'+nextId++, platform:p.id, name:p.name, rtmpUrl:base, streamKey:key, locked:false});
+    document.getElementById('destKey').value=''; document.getElementById('destServer').value='';
+    saveDest(); renderDest();
+  };
+  loadDest(); renderDest();
+}
+
 /* ── init ── */
 restoreScene();
+initDestinations();
 applyCanvasSize();
 requestAnimationFrame(draw);
 setInterval(saveScene, 2500);

@@ -1,0 +1,208 @@
+{
+  "_note": "CENTBEAM 플랫폼 프리셋. ingest URL은 2026-07 공식 문서 교차검증(워크플로 wboz9h5dp). session=true 는 세션마다 서버 URL이 바뀌어 직접 입력 필요.",
+  "mandatory": {
+    "id": "videowatch",
+    "name": "videowatch (우리 사이트)",
+    "platform": "custom",
+    "rtmpUrl": "rtmp://34.104.233.35:1935",
+    "keyByAvatar": {
+      "tak": "tak_k7m3qx9f2p",
+      "deni": "deny_h8w2vt5j6r",
+      "jay": "jay_b3n9lc4k8d",
+      "ottugi": "ddoki_q5t7yr2m1s"
+    },
+    "locked": true
+  },
+  "platforms": [
+    {
+      "id": "twitch",
+      "name": "Twitch",
+      "protocol": "rtmp",
+      "ingestUrl": "rtmp://{region}.contribute.live-video.net/app",
+      "keyType": "per-user",
+      "needsApproval": false,
+      "session": false,
+      "confidence": "high"
+    },
+    {
+      "id": "youtube-live",
+      "name": "YouTube",
+      "protocol": "rtmps",
+      "ingestUrl": "rtmps://a.rtmps.youtube.com/live2",
+      "keyType": "per-user",
+      "needsApproval": false,
+      "session": false,
+      "confidence": "high"
+    },
+    {
+      "id": "facebook-live",
+      "name": "Facebook",
+      "protocol": "rtmps",
+      "ingestUrl": "rtmps://live-api-s.facebook.com:443/rtmp/",
+      "keyType": "per-user",
+      "needsApproval": false,
+      "session": false,
+      "confidence": "high"
+    },
+    {
+      "id": "kick",
+      "name": "Kick",
+      "protocol": "rtmps",
+      "ingestUrl": "rtmps://{unique-subdomain}.global-contribute.live-video.net:443/app",
+      "keyType": "per-user",
+      "needsApproval": false,
+      "session": false,
+      "confidence": "high"
+    },
+    {
+      "id": "tiktok-live",
+      "name": "TikTok",
+      "protocol": "per-session",
+      "ingestUrl": "",
+      "keyType": "per-session",
+      "needsApproval": true,
+      "session": true,
+      "confidence": "high"
+    },
+    {
+      "id": "trovo",
+      "name": "Trovo",
+      "protocol": "rtmp",
+      "ingestUrl": "rtmp://livepush.trovo.live/live",
+      "keyType": "per-user",
+      "needsApproval": true,
+      "session": false,
+      "confidence": "high"
+    },
+    {
+      "id": "rumble",
+      "name": "Rumble",
+      "protocol": "rtmp",
+      "ingestUrl": "",
+      "keyType": "per-session",
+      "needsApproval": true,
+      "session": true,
+      "confidence": "high"
+    },
+    {
+      "id": "x",
+      "name": "X (Twitter)",
+      "protocol": "per-session",
+      "ingestUrl": "",
+      "keyType": "per-user",
+      "needsApproval": true,
+      "session": true,
+      "confidence": "high"
+    },
+    {
+      "id": "instagram-live",
+      "name": "Instagram",
+      "protocol": "per-session",
+      "ingestUrl": "",
+      "keyType": "per-session",
+      "needsApproval": true,
+      "session": true,
+      "confidence": "high"
+    },
+    {
+      "id": "vimeo",
+      "name": "Vimeo",
+      "protocol": "rtmps",
+      "ingestUrl": "rtmps://rtmp-global.cloud.vimeo.com/live",
+      "keyType": "per-session",
+      "needsApproval": false,
+      "session": false,
+      "confidence": "high"
+    },
+    {
+      "id": "dailymotion",
+      "name": "Dailymotion",
+      "protocol": "rtmp",
+      "ingestUrl": "rtmp://publish.dailymotion.com/publish-dm",
+      "keyType": "per-session",
+      "needsApproval": true,
+      "session": false,
+      "confidence": "medium"
+    },
+    {
+      "id": "restream-io",
+      "name": "Restream.io",
+      "protocol": "rtmp",
+      "ingestUrl": "rtmp://live.restream.io/live",
+      "keyType": "per-user",
+      "needsApproval": false,
+      "session": false,
+      "confidence": "high"
+    },
+    {
+      "id": "amazon-ivs",
+      "name": "Amazon IVS",
+      "protocol": "rtmps",
+      "ingestUrl": "rtmps://<channel-id>.global-contribute.live-video.net:443/app",
+      "keyType": "per-user",
+      "needsApproval": false,
+      "session": false,
+      "confidence": "high"
+    },
+    {
+      "id": "dlive",
+      "name": "DLive",
+      "protocol": "rtmp",
+      "ingestUrl": "",
+      "keyType": "none",
+      "needsApproval": false,
+      "session": true,
+      "confidence": "high"
+    },
+    {
+      "id": "bilibili-live",
+      "name": "Bilibili",
+      "protocol": "rtmp",
+      "ingestUrl": "rtmp://live-push.bilivideo.com/live-bvc/",
+      "keyType": "per-user",
+      "needsApproval": true,
+      "session": false,
+      "confidence": "high"
+    },
+    {
+      "id": "soop",
+      "name": "SOOP (AfreecaTV)",
+      "protocol": "rtmp",
+      "ingestUrl": "rtmp://stream.sooplive.co.kr/app",
+      "keyType": "per-user",
+      "needsApproval": false,
+      "session": false,
+      "confidence": "high"
+    },
+    {
+      "id": "chzzk",
+      "name": "CHZZK (Naver)",
+      "protocol": "rtmp",
+      "ingestUrl": "rtmp://global-rtmp.lip2.navercorp.com:8080/relay",
+      "keyType": "per-user",
+      "needsApproval": false,
+      "session": false,
+      "confidence": "high"
+    },
+    {
+      "id": "kakaotv",
+      "name": "KakaoTV",
+      "protocol": "rtmp",
+      "ingestUrl": "rtmp://rtmp.play.kakao.com/kakaotv",
+      "keyType": "per-user",
+      "needsApproval": false,
+      "session": false,
+      "confidence": "high"
+    },
+    {
+      "id": "custom",
+      "name": "커스텀 RTMP",
+      "protocol": "rtmp",
+      "ingestUrl": "",
+      "keyType": "per-user",
+      "needsApproval": false,
+      "session": true,
+      "confidence": "high"
+    }
+  ]
+}
