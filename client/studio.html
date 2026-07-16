@@ -89,6 +89,14 @@
     border-radius:8px;padding:8px;font-size:13px;margin-top:6px}
   .warn{color:var(--warning)}
 
+  /* 시각 조정 */
+  .field input[type=range]{width:100%;accent-color:var(--accent)}
+  .chk{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);cursor:pointer;margin:8px 0}
+  details.fx{margin:8px 0;border:1px solid var(--line);border-radius:8px;padding:2px 8px}
+  details.fx summary{font-size:12px;color:var(--muted);cursor:pointer;padding:6px 0}
+  .bg-pick{display:flex;align-items:center;gap:3px;font-size:14px;cursor:pointer}
+  .bg-pick input[type=color]{width:26px;height:26px;border:1px solid var(--line);border-radius:6px;background:none;cursor:pointer;padding:0}
+
   /* 오디오 믹서 */
   .mix-row{display:flex;align-items:center;gap:8px;margin:7px 0}
   .mlabel{font-size:12px;width:60px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -193,6 +201,7 @@
         <option value="1280x720">720p</option>
         <option value="2560x1440">1440p</option>
       </select>
+      <label class="bg-pick" title="캔버스 배경색">🎨<input type="color" id="bgColor" value="#000000"></label>
       <div class="spacer"></div>
       <span class="live-dot" id="dot"></span>
       <span id="liveTxt" style="font-size:12px;color:var(--muted)">오프라인</span>
@@ -221,6 +230,20 @@
         <div class="field"><label>높이</label><input id="pH" type="number"></div>
       </div>
       <div class="field"><label>회전 (°)</label><input id="pR" type="number" step="1"></div>
+      <div class="field"><label>불투명도 <span id="pOpVal">100%</span></label>
+        <input id="pOpacity" type="range" min="0" max="100" value="100"></div>
+      <div class="row2">
+        <button class="btn" id="pFlipH">↔ 좌우</button>
+        <button class="btn" id="pFlipV">↕ 상하</button>
+      </div>
+      <label class="chk"><input type="checkbox" id="pAspect"> 비율 고정 리사이즈</label>
+      <details class="fx">
+        <summary>색보정 · 흐림</summary>
+        <div class="field"><label>밝기 <span id="pBrVal">100%</span></label><input id="pBr" type="range" min="0" max="200" value="100"></div>
+        <div class="field"><label>대비 <span id="pConVal">100%</span></label><input id="pCon" type="range" min="0" max="200" value="100"></div>
+        <div class="field"><label>채도 <span id="pSatVal">100%</span></label><input id="pSat" type="range" min="0" max="200" value="100"></div>
+        <div class="field"><label>흐림 <span id="pBlurVal">0px</span></label><input id="pBlur" type="range" min="0" max="20" value="0"></div>
+      </details>
       <div id="textProps" style="display:none">
         <div class="field"><label>텍스트</label><textarea id="pText" rows="2"></textarea></div>
         <div class="row2">
@@ -311,6 +334,8 @@ const state = {
   layers: [],           // {id,type,name,x,y,w,h,rot,z, ...typeData}
   selId: null,
   live: false,
+  bgColor: '#000000',   // 캔버스 배경
+  aspectLock: false,    // 비율 고정 리사이즈
 };
 let nextId = 1;
 
@@ -459,15 +484,26 @@ document.getElementById('addWeb').onclick = () => {
 };
 
 /* ── 렌더 루프 ── */
+function layerFilter(L){
+  const p=[];
+  if(L.br!=null && L.br!==1) p.push('brightness('+L.br+')');
+  if(L.con!=null && L.con!==1) p.push('contrast('+L.con+')');
+  if(L.sat!=null && L.sat!==1) p.push('saturate('+L.sat+')');
+  if(L.blur) p.push('blur('+L.blur+'px)');
+  return p.join(' ');
+}
 function draw(){
   const {w:cw,h:ch} = canvasDims();
   ctx.clearRect(0,0,cw,ch);
-  ctx.fillStyle = '#000'; ctx.fillRect(0,0,cw,ch);
+  ctx.fillStyle = state.bgColor || '#000'; ctx.fillRect(0,0,cw,ch);
   const ordered = [...state.layers].sort((a,b)=>a.z-b.z);
   for(const L of ordered){
     ctx.save();
     ctx.translate(L.x, L.y);
     ctx.rotate(L.rot * Math.PI/180);
+    ctx.globalAlpha = (L.opacity!=null) ? L.opacity : 1;
+    const flt = layerFilter(L); if(flt) ctx.filter = flt;
+    if(L.flipH||L.flipV) ctx.scale(L.flipH?-1:1, L.flipV?-1:1);
     const hw = L.w/2, hh = L.h/2;
     if((L.type==='camera'||L.type==='screen') && L.video.readyState>=2){
       ctx.drawImage(L.video, -hw,-hh, L.w, L.h);
@@ -531,7 +567,11 @@ gripT.addEventListener('pointerdown', e=>{ drag={mode:'rot'}; e.target.setPointe
 window.addEventListener('pointermove', e=>{
   const L=sel(); if(!L||!drag) return; const p=pt(e);
   if(drag.mode==='move'){ L.x=p.x-drag.ox; L.y=p.y-drag.oy; }
-  else if(drag.mode==='size'){ L.w=Math.max(20,Math.abs(p.x-L.x)*2); L.h=Math.max(20,Math.abs(p.y-L.y)*2); }
+  else if(drag.mode==='size'){
+    let nw=Math.max(20,Math.abs(p.x-L.x)*2), nh=Math.max(20,Math.abs(p.y-L.y)*2);
+    if(state.aspectLock){ const r=(L.aspect || (L.w/L.h) || 1); nh=nw/r; }
+    L.w=nw; L.h=nh;
+  }
   else if(drag.mode==='rot'){ L.rot=Math.atan2(p.y-L.y,p.x-L.x)*180/Math.PI+90; }
   syncProps();
 });
@@ -585,6 +625,14 @@ function syncProps(){
   const L=sel(); if(!L)return;
   pName.value=L.name; pX.value=Math.round(L.x); pY.value=Math.round(L.y);
   pW.value=Math.round(L.w); pH.value=Math.round(L.h); pR.value=Math.round(L.rot);
+  const op=(L.opacity!=null?L.opacity:1); pOpacity.value=Math.round(op*100); pOpVal.textContent=Math.round(op*100)+'%';
+  pFlipH.classList.toggle('primary', !!L.flipH); pFlipV.classList.toggle('primary', !!L.flipV);
+  pAspect.checked=!!state.aspectLock;
+  const br=L.br!=null?L.br:1, con=L.con!=null?L.con:1, sat=L.sat!=null?L.sat:1, blur=L.blur||0;
+  pBr.value=Math.round(br*100); pBrVal.textContent=Math.round(br*100)+'%';
+  pCon.value=Math.round(con*100); pConVal.textContent=Math.round(con*100)+'%';
+  pSat.value=Math.round(sat*100); pSatVal.textContent=Math.round(sat*100)+'%';
+  pBlur.value=blur; pBlurVal.textContent=blur+'px';
   if(L.type==='text'){ pText.value=L.text; pFont.value=L.font; pColor.value=L.color; }
   if(L.type==='web'){ pUrl.value=L.url; }
 }
@@ -593,6 +641,15 @@ function syncProps(){
     const map={pX:'x',pY:'y',pW:'w',pH:'h',pR:'rot'}; L[map[id]]=Number(e.target.value)||0; };
 });
 pName.oninput=e=>{ const L=sel(); if(L){L.name=e.target.value; renderLayers();} };
+pOpacity.oninput=e=>{ const L=sel(); if(!L)return; L.opacity=e.target.value/100; pOpVal.textContent=e.target.value+'%'; };
+pFlipH.onclick=()=>{ const L=sel(); if(!L)return; L.flipH=!L.flipH; pFlipH.classList.toggle('primary',L.flipH); };
+pFlipV.onclick=()=>{ const L=sel(); if(!L)return; L.flipV=!L.flipV; pFlipV.classList.toggle('primary',L.flipV); };
+pAspect.onchange=e=>{ state.aspectLock=e.target.checked; };
+pBr.oninput=e=>{ const L=sel(); if(!L)return; L.br=e.target.value/100; pBrVal.textContent=e.target.value+'%'; };
+pCon.oninput=e=>{ const L=sel(); if(!L)return; L.con=e.target.value/100; pConVal.textContent=e.target.value+'%'; };
+pSat.oninput=e=>{ const L=sel(); if(!L)return; L.sat=e.target.value/100; pSatVal.textContent=e.target.value+'%'; };
+pBlur.oninput=e=>{ const L=sel(); if(!L)return; L.blur=Number(e.target.value); pBlurVal.textContent=e.target.value+'px'; };
+document.getElementById('bgColor').oninput=e=>{ state.bgColor=e.target.value; };
 pText.oninput=e=>{ const L=sel(); if(L)L.text=e.target.value; };
 pFont.oninput=e=>{ const L=sel(); if(L)L.font=Number(e.target.value)||72; };
 pColor.oninput=e=>{ const L=sel(); if(L)L.color=e.target.value; };
@@ -750,11 +807,12 @@ document.getElementById('mGoLive').onclick=()=>document.getElementById('goLive')
 /* ── 씬 저장/복원 (localStorage) ── 카메라·화면공유 스트림은 저장 불가, 재추가 필요 ── */
 function saveScene(){
   try{
-    const data = { orient:state.orient, res:state.res,
+    const data = { orient:state.orient, res:state.res, bg:state.bgColor,
       layers: state.layers
         .filter(L=>L.type!=='camera'&&L.type!=='screen')
         .map(L=>{
-          const b={type:L.type,name:L.name,x:L.x,y:L.y,w:L.w,h:L.h,rot:L.rot,z:L.z,aspect:L.aspect};
+          const b={type:L.type,name:L.name,x:L.x,y:L.y,w:L.w,h:L.h,rot:L.rot,z:L.z,aspect:L.aspect,
+            opacity:L.opacity,flipH:L.flipH,flipV:L.flipV,br:L.br,con:L.con,sat:L.sat,blur:L.blur};
           if(L.type==='image') b.src=L.src;
           if(L.type==='text'){ b.text=L.text; b.font=L.font; b.color=L.color; }
           if(L.type==='web') b.url=L.url;
@@ -770,6 +828,8 @@ function restoreScene(){
   if(w){ const s=localStorage.getItem('prisent.whip'); if(s) w.value=s; }
   if(!data) return;
   state.orient=data.orient||'landscape'; state.res=data.res||1080;
+  state.bgColor=data.bg||'#000000';
+  const bgc=document.getElementById('bgColor'); if(bgc) bgc.value=state.bgColor;
   document.querySelectorAll('#orient button').forEach(x=>x.classList.toggle('on', x.dataset.o===state.orient));
   const resMap={720:'1280x720',1080:'1920x1080',1440:'2560x1440'};
   if(resMap[state.res]) document.getElementById('resSel').value=resMap[state.res];
