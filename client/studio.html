@@ -263,7 +263,15 @@
         <div class="note">⚠️ 외부 URL은 CORS 때문에 브라우저 캔버스에 직접 합성이 안 됩니다.
           프리뷰 오버레이로만 표시되고, 실제 송출 합성은 (a)서버 headless 렌더 또는 (b)네이티브 앱 WebView 캡처가 필요합니다.</div>
       </div>
-      <button class="btn" id="pFront" style="width:100%;margin-top:6px">맨 앞으로</button>
+      <div class="row2" style="margin-top:6px">
+        <button class="btn" id="pFront">맨 앞으로</button>
+        <button class="btn" id="pBack">맨 뒤로</button>
+      </div>
+      <div class="row2" style="margin-top:6px">
+        <button class="btn" id="pDup">복제</button>
+        <button class="btn" id="pLock">🔓 잠금</button>
+      </div>
+      <button class="btn" id="pHide" style="width:100%;margin-top:6px">👁 숨김</button>
       <button class="btn stop" id="pDel" style="width:100%;margin-top:8px">삭제</button>
     </div>
     <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
@@ -311,6 +319,15 @@
     </div>
     <input type="file" id="bgmFile" accept="audio/*">
     <div class="note">방송 시 이 믹서 출력이 송출됩니다. 마이크가 없으면 무음으로 송출.</div>
+
+    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
+    <h2>씬</h2>
+    <div class="row2">
+      <button class="btn" id="sceneExport">내보내기</button>
+      <button class="btn" id="sceneImport">가져오기</button>
+    </div>
+    <button class="btn stop" id="sceneReset" style="width:100%;margin-top:6px">씬 초기화</button>
+    <input type="file" id="sceneFile" accept="application/json">
   </aside>
 
   <!-- 모바일 전용: 하단 탭바 + 드로어 백드롭 -->
@@ -505,6 +522,7 @@ function draw(){
   ctx.fillStyle = state.bgColor || '#000'; ctx.fillRect(0,0,cw,ch);
   const ordered = [...state.layers].sort((a,b)=>a.z-b.z);
   for(const L of ordered){
+    if(L.hidden) continue;
     ctx.save();
     ctx.translate(L.x, L.y);
     ctx.rotate(L.rot * Math.PI/180);
@@ -572,7 +590,7 @@ hit.addEventListener('pointerdown', e=>{ const L=sel(); if(!L)return; const p=pt
 gripR.addEventListener('pointerdown', e=>{ drag={mode:'size'}; e.target.setPointerCapture(e.pointerId); e.stopPropagation(); });
 gripT.addEventListener('pointerdown', e=>{ drag={mode:'rot'}; e.target.setPointerCapture(e.pointerId); e.stopPropagation(); });
 window.addEventListener('pointermove', e=>{
-  const L=sel(); if(!L||!drag) return; const p=pt(e);
+  const L=sel(); if(!L||!drag||L.locked) return; const p=pt(e);
   if(drag.mode==='move'){ L.x=p.x-drag.ox; L.y=p.y-drag.oy; }
   else if(drag.mode==='size'){
     let nw=Math.max(20,Math.abs(p.x-L.x)*2), nh=Math.max(20,Math.abs(p.y-L.y)*2);
@@ -635,6 +653,8 @@ function syncProps(){
   const op=(L.opacity!=null?L.opacity:1); pOpacity.value=Math.round(op*100); pOpVal.textContent=Math.round(op*100)+'%';
   pFlipH.classList.toggle('primary', !!L.flipH); pFlipV.classList.toggle('primary', !!L.flipV);
   pAspect.checked=!!state.aspectLock;
+  pLock.textContent=(L.locked?'🔒':'🔓')+' 잠금';
+  pHide.textContent=(L.hidden?'🚫':'👁')+' 숨김';
   const br=L.br!=null?L.br:1, con=L.con!=null?L.con:1, sat=L.sat!=null?L.sat:1, blur=L.blur||0;
   pBr.value=Math.round(br*100); pBrVal.textContent=Math.round(br*100)+'%';
   pCon.value=Math.round(con*100); pConVal.textContent=Math.round(con*100)+'%';
@@ -662,6 +682,49 @@ pFont.oninput=e=>{ const L=sel(); if(L)L.font=Number(e.target.value)||72; };
 pColor.oninput=e=>{ const L=sel(); if(L)L.color=e.target.value; };
 pUrl.oninput=e=>{ const L=sel(); if(L&&L.iframe){L.url=e.target.value; L.iframe.src=e.target.value;} };
 document.getElementById('pFront').onclick=()=>{ const L=sel(); if(L){L.z=1e6; normalizeZ(); renderLayers();} };
+document.getElementById('pBack').onclick=()=>{ const L=sel(); if(L){L.z=-1e6; normalizeZ(); renderLayers();} };
+document.getElementById('pDup').onclick=()=>{
+  const L=sel(); if(!L)return;
+  if(L.type==='camera'||L.type==='screen'){ toast('카메라/화면은 복제 불가','warn'); return; }
+  const c={...L, id:nextId++, x:L.x+40, y:L.y+40, z:state.layers.length, locked:false};
+  if(L.type==='web'){ const ifr=document.createElement('iframe'); ifr.src=L.url;
+    ifr.style.cssText='position:absolute;border:0;background:transparent'; ovl.appendChild(ifr); c.iframe=ifr; }
+  state.layers.push(c); select(c.id); renderLayers();
+};
+document.getElementById('pLock').onclick=()=>{ const L=sel(); if(!L)return; L.locked=!L.locked;
+  document.getElementById('pLock').textContent=(L.locked?'🔒':'🔓')+' 잠금'; };
+document.getElementById('pHide').onclick=()=>{ const L=sel(); if(!L)return; L.hidden=!L.hidden;
+  document.getElementById('pHide').textContent=(L.hidden?'🚫':'👁')+' 숨김'; };
+/* 키보드 미세이동 (화살표, Shift=10px) */
+window.addEventListener('keydown', e=>{
+  const t=document.activeElement; if(t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+  const L=sel(); if(!L||L.locked) return;
+  const step=e.shiftKey?10:1; let hit=true;
+  if(e.key==='ArrowLeft')L.x-=step; else if(e.key==='ArrowRight')L.x+=step;
+  else if(e.key==='ArrowUp')L.y-=step; else if(e.key==='ArrowDown')L.y+=step; else hit=false;
+  if(hit){ e.preventDefault(); syncProps(); }
+});
+/* 씬 내보내기/가져오기/초기화 */
+document.getElementById('sceneExport').onclick=()=>{
+  const blob=new Blob([JSON.stringify(sceneData(),null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='centbeam-scene.json'; a.click(); URL.revokeObjectURL(a.href);
+};
+const sceneFile=document.getElementById('sceneFile');
+document.getElementById('sceneImport').onclick=()=>sceneFile.click();
+sceneFile.onchange=()=>{ const f=sceneFile.files[0]; if(!f)return;
+  const r=new FileReader(); r.onload=()=>{ try{
+    JSON.parse(r.result); localStorage.setItem('prisent.scene', r.result); location.reload();
+  }catch(_){ toast('가져오기 실패: 잘못된 파일','err'); } };
+  r.readAsText(f); sceneFile.value=''; };
+document.getElementById('sceneReset').onclick=()=>{
+  if(!confirm('씬을 초기화할까요? (대상·오디오는 유지)')) return;
+  state.layers.forEach(L=>{ if(L.stream)L.stream.getTracks().forEach(t=>t.stop()); if(L.iframe)L.iframe.remove(); });
+  state.layers=[]; state.selId=null; state.bgColor='#000000';
+  document.getElementById('bgColor').value='#000000';
+  localStorage.removeItem('prisent.scene');
+  normalizeZ(); renderLayers(); showProps();
+};
 document.getElementById('pDel').onclick=()=>{
   const L=sel(); if(!L)return;
   if(L.stream) L.stream.getTracks().forEach(t=>t.stop());
@@ -812,20 +875,23 @@ backdrop.onclick=closeDrawers;
 document.getElementById('mGoLive').onclick=()=>document.getElementById('goLive').click();
 
 /* ── 씬 저장/복원 (localStorage) ── 카메라·화면공유 스트림은 저장 불가, 재추가 필요 ── */
+function sceneData(){
+  return { orient:state.orient, res:state.res, bg:state.bgColor,
+    layers: state.layers
+      .filter(L=>L.type!=='camera'&&L.type!=='screen')
+      .map(L=>{
+        const b={type:L.type,name:L.name,x:L.x,y:L.y,w:L.w,h:L.h,rot:L.rot,z:L.z,aspect:L.aspect,
+          opacity:L.opacity,flipH:L.flipH,flipV:L.flipV,br:L.br,con:L.con,sat:L.sat,blur:L.blur,
+          locked:L.locked,hidden:L.hidden};
+        if(L.type==='image') b.src=L.src;
+        if(L.type==='text'){ b.text=L.text; b.font=L.font; b.color=L.color; }
+        if(L.type==='web') b.url=L.url;
+        return b;
+      }) };
+}
 function saveScene(){
   try{
-    const data = { orient:state.orient, res:state.res, bg:state.bgColor,
-      layers: state.layers
-        .filter(L=>L.type!=='camera'&&L.type!=='screen')
-        .map(L=>{
-          const b={type:L.type,name:L.name,x:L.x,y:L.y,w:L.w,h:L.h,rot:L.rot,z:L.z,aspect:L.aspect,
-            opacity:L.opacity,flipH:L.flipH,flipV:L.flipV,br:L.br,con:L.con,sat:L.sat,blur:L.blur};
-          if(L.type==='image') b.src=L.src;
-          if(L.type==='text'){ b.text=L.text; b.font=L.font; b.color=L.color; }
-          if(L.type==='web') b.url=L.url;
-          return b;
-        }) };
-    localStorage.setItem('prisent.scene', JSON.stringify(data));
+    localStorage.setItem('prisent.scene', JSON.stringify(sceneData()));
     const w=document.getElementById('whip'); if(w) localStorage.setItem('prisent.whip', w.value);
   }catch(_){ /* quota 등 무시 */ }
 }
