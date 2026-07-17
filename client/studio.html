@@ -292,6 +292,8 @@
         <option value="custom">커스텀…</option>
       </select>
       <label class="bg-pick" title="캔버스 배경색">🎨<input type="color" id="bgColor" value="#000000"></label>
+      <button class="btn" id="bgImgBtn" title="캔버스 배경 이미지" style="padding:4px 8px">🏞</button>
+      <input type="file" id="bgImgFile" accept="image/*" style="display:none">
       <button class="btn" id="gSafe" title="세이프존 가이드">🎯</button>
       <button class="btn" id="gGrid" title="그리드 오버레이">▦</button>
       <button class="btn" id="gRuler" title="눈금자">📏</button>
@@ -395,6 +397,8 @@
           <div class="field"><label>테두리 색</label><input id="pBorderColor" type="color" value="#ffffff"></div>
         </div>
         <div class="field"><label><input type="checkbox" id="pShadow"> 그림자 효과</label></div>
+        <div class="field"><label>화이트밸런스 <span id="pWbVal">0</span></label><input id="pWb" type="range" min="-100" max="100" value="0"></div>
+        <div class="field"><label>모자이크 <span id="pMosaicVal">0</span></label><input id="pMosaic" type="range" min="0" max="40" value="0"></div>
       </div>
       <div id="chromaProps" style="display:none">
         <div class="field"><label><input type="checkbox" id="pChromaOn"> 크로마키 (배경 제거)</label></div>
@@ -882,11 +886,19 @@ function chromaCanvas(src, sw, sh, key, thr){
   _ckCtx.putImageData(img,0,0);
   return _ckCanvas;
 }
+const _mzCanvas=document.createElement('canvas'); const _mzCtx=_mzCanvas.getContext('2d');
+function mosaicCanvas(src, w, h, block){
+  const bw=Math.max(1,Math.round(w/block)), bh=Math.max(1,Math.round(h/block));
+  _mzCanvas.width=bw; _mzCanvas.height=bh; _mzCtx.imageSmoothingEnabled=false;
+  _mzCtx.clearRect(0,0,bw,bh); try{ _mzCtx.drawImage(src,0,0,bw,bh); }catch(_){ return src; }
+  return _mzCanvas;
+}
 function drawKeyed(L, src, natW, natH, hw, hh){
-  if(L.chroma && L.chroma.on){
-    const c=chromaCanvas(src, natW, natH, hexToRgb(L.chroma.color||'#00ff00'), L.chroma.thr||120);
-    ctx.drawImage(c, -hw,-hh, L.w, L.h);
-  } else ctx.drawImage(src, -hw,-hh, L.w, L.h);
+  let source=src;
+  if(L.chroma && L.chroma.on){ source=chromaCanvas(src, natW, natH, hexToRgb(L.chroma.color||'#00ff00'), L.chroma.thr||120); }
+  if(L.mosaic>0){ const mz=mosaicCanvas(source, L.w, L.h, L.mosaic); const prev=ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled=false; ctx.drawImage(mz, -hw,-hh, L.w, L.h); ctx.imageSmoothingEnabled=prev; return; }
+  ctx.drawImage(source, -hw,-hh, L.w, L.h);
 }
 /* ── 렌더 루프 ── */
 const FILTER_PRESETS={
@@ -899,6 +911,7 @@ const FILTER_PRESETS={
 function layerFilter(L){
   const p=[];
   if(L.preset && FILTER_PRESETS[L.preset]) p.push(FILTER_PRESETS[L.preset]);
+  if(L.wb){ const w=L.wb/100; if(w>0) p.push('sepia('+(w*0.45).toFixed(3)+') saturate('+(1+w*0.2).toFixed(3)+')'); else p.push('hue-rotate('+(-w*20).toFixed(1)+'deg) saturate('+(1-w*0.1).toFixed(3)+')'); }
   if(L.br!=null && L.br!==1) p.push('brightness('+L.br+')');
   if(L.con!=null && L.con!==1) p.push('contrast('+L.con+')');
   if(L.sat!=null && L.sat!==1) p.push('saturate('+L.sat+')');
@@ -917,6 +930,11 @@ function draw(){
   const {w:cw,h:ch} = canvasDims();
   ctx.clearRect(0,0,cw,ch);
   ctx.fillStyle = state.bgColor || '#000'; ctx.fillRect(0,0,cw,ch);
+  if(state.bgImage && state.bgImage.complete && state.bgImage.naturalWidth){   // 캔버스 배경 이미지(cover)
+    const iw=state.bgImage.naturalWidth, ih=state.bgImage.naturalHeight, ar=iw/ih, car=cw/ch;
+    let dw,dh; if(car>ar){ dw=cw; dh=cw/ar; } else { dh=ch; dw=ch*ar; }
+    ctx.drawImage(state.bgImage,(cw-dw)/2,(ch-dh)/2,dw,dh);
+  }
   const ordered = [...state.layers].sort((a,b)=>a.z-b.z);
   for(const L of ordered){
     if(L.hidden) continue;
@@ -1322,7 +1340,7 @@ function syncProps(){
   if(L.type==='lower3'){ pL3Title.value=L.title||''; pL3Sub.value=L.sub||''; pL3Color.value=L.color||'#ffffff'; pL3Bg.value=L.bg||'#0066ff'; pL3Font.value=L.font||48; }
   if(L.type==='countdown'){ pCdMins.value=L.mins!=null?L.mins:5; pCdColor.value=L.color||'#ffffff'; pCdFont.value=L.font||120; }
   if(L.type==='gauge'){ pGaugeLabel.value=L.label!=null?L.label:''; pGaugePct.value=L.pct!=null?L.pct:60; pGaugeColor.value=L.color||'#00c48c'; pGaugeBg.value=L.bg||'#1e2430'; }
-  if(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video'||L.type==='solid'){ pPreset.value=L.preset||'none'; pBlend.value=L.blend||'normal'; pCornerR.value=L.cornerR||0; pCornerRVal.textContent=L.cornerR||0; pBorderW.value=L.borderW||0; pBorderWVal.textContent=L.borderW||0; pBorderColor.value=L.borderColor||'#ffffff'; pShadow.checked=!!L.shadow; }
+  if(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video'||L.type==='solid'){ pPreset.value=L.preset||'none'; pBlend.value=L.blend||'normal'; pCornerR.value=L.cornerR||0; pCornerRVal.textContent=L.cornerR||0; pBorderW.value=L.borderW||0; pBorderWVal.textContent=L.borderW||0; pBorderColor.value=L.borderColor||'#ffffff'; pShadow.checked=!!L.shadow; pWb.value=L.wb||0; pWbVal.textContent=L.wb||0; pMosaic.value=L.mosaic||0; pMosaicVal.textContent=L.mosaic||0; }
   if(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video'){ const c=L.chroma||{}; pChromaOn.checked=!!c.on; pChromaColor.value=c.color||'#00ff00'; pChromaThr.value=c.thr||120; pChromaThrVal.textContent=c.thr||120; }
   if(L.type==='nowplaying'){ pNpBg.value=L.bg||'#0f1420'; pNpAccent.value=L.accent||'#00d9ff'; }
   if(L.type==='emote'){ pEmoteEmojis.value=L.emojis||'👍❤️😂🎉'; pEmoteCount.value=L.count||8; pEmoteSize.value=L.size||48; }
@@ -1352,6 +1370,12 @@ pCon.oninput=e=>{ const L=sel(); if(!L)return; L.con=e.target.value/100; pConVal
 pSat.oninput=e=>{ const L=sel(); if(!L)return; L.sat=e.target.value/100; pSatVal.textContent=e.target.value+'%'; };
 pBlur.oninput=e=>{ const L=sel(); if(!L)return; L.blur=Number(e.target.value); pBlurVal.textContent=e.target.value+'px'; };
 document.getElementById('bgColor').oninput=e=>{ state.bgColor=e.target.value; };
+document.getElementById('bgImgBtn').onclick=()=>document.getElementById('bgImgFile').click();
+document.getElementById('bgImgFile').onchange=e=>{ const f=e.target.files[0]; if(!f)return;
+  const r=new FileReader(); r.onload=()=>{ const img=new Image(); img.onload=()=>{ state.bgImage=img; state.bgImageSrc=r.result; toast('배경 이미지 설정','ok'); }; img.src=r.result; };
+  r.readAsDataURL(f); e.target.value=''; };
+pWb.oninput=e=>{const L=sel();if(L){L.wb=+e.target.value;pWbVal.textContent=e.target.value;}};
+pMosaic.oninput=e=>{const L=sel();if(L){L.mosaic=+e.target.value;pMosaicVal.textContent=e.target.value;}};
 pText.oninput=e=>{ const L=sel(); if(L)L.text=e.target.value; };
 pFont.oninput=e=>{ const L=sel(); if(L)L.font=Number(e.target.value)||72; };
 pColor.oninput=e=>{ const L=sel(); if(L)L.color=e.target.value; };
@@ -1806,7 +1830,7 @@ document.getElementById('mGoLive').onclick=()=>document.getElementById('goLive')
 
 /* ── 씬 저장/복원 (localStorage) ── 카메라·화면공유 스트림은 저장 불가, 재추가 필요 ── */
 function sceneData(){
-  return { orient:state.orient, res:state.res, ar:state.ar, bg:state.bgColor,
+  return { orient:state.orient, res:state.res, ar:state.ar, bg:state.bgColor, bgImg:state.bgImageSrc||null,
     layers: state.layers
       .filter(L=>L.type!=='camera'&&L.type!=='screen')
       .map(L=>{
@@ -1817,6 +1841,7 @@ function sceneData(){
         if(L.chroma) b.chroma=L.chroma;
         if(L.preset) b.preset=L.preset; if(L.blend) b.blend=L.blend; if(L.cornerR) b.cornerR=L.cornerR;
         if(L.borderW) b.borderW=L.borderW; if(L.borderColor) b.borderColor=L.borderColor; if(L.shadow) b.shadow=L.shadow;
+        if(L.wb) b.wb=L.wb; if(L.mosaic) b.mosaic=L.mosaic;
         if(L.type==='text'){ b.text=L.text; b.font=L.font; b.color=L.color; b.align=L.align; b.weight=L.weight; b.fontFamily=L.fontFamily; b.anim=L.anim; b.stroke=L.stroke; b.strokeW=L.strokeW; }
         if(L.type==='web') b.url=L.url;
         if(L.type==='solid') b.color=L.color;
@@ -1851,6 +1876,7 @@ function restoreScene(){
   state.orient=data.orient||'landscape'; state.res=data.res||1080;
   state.ar=data.ar||16/9;
   state.bgColor=data.bg||'#000000';
+  if(data.bgImg){ const img=new Image(); img.onload=()=>{ state.bgImage=img; }; img.src=data.bgImg; state.bgImageSrc=data.bgImg; } else { state.bgImage=null; state.bgImageSrc=null; }
   const bgc=document.getElementById('bgColor'); if(bgc) bgc.value=state.bgColor;
   document.querySelectorAll('#orient button').forEach(x=>x.classList.toggle('on', x.dataset.o===state.orient));
   const resMap={720:'720',1080:'1080',1440:'1440'};
@@ -1889,6 +1915,7 @@ function applySnapshot(j){
   });
   state.orient=data.orient||'landscape'; state.res=data.res||1080; state.ar=data.ar||16/9;
   state.bgColor=data.bg||'#000000';
+  if(data.bgImg){ const img=new Image(); img.onload=()=>{ state.bgImage=img; }; img.src=data.bgImg; state.bgImageSrc=data.bgImg; } else { state.bgImage=null; state.bgImageSrc=null; }
   const bgc=document.getElementById('bgColor'); if(bgc) bgc.value=state.bgColor;
   document.querySelectorAll('#orient button').forEach(x=>x.classList.toggle('on', x.dataset.o===state.orient));
   document.getElementById('resSel').value=({720:'720',1080:'1080',1440:'1440'})[state.res]||'custom';
