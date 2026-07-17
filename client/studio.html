@@ -495,8 +495,13 @@
     </div>
 
     <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
-    <h2>씬</h2>
+    <h2>씬 <span style="font-weight:400;color:var(--muted);font-size:11px">(숫자키 1-9 전환)</span></h2>
+    <div id="sceneTabs" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px"></div>
     <div class="row2">
+      <button class="btn" id="sceneAdd" style="flex:1">＋ 새 씬</button>
+      <label class="field" style="flex:0 0 auto;font-size:12px;color:var(--muted)"><input type="checkbox" id="sceneTrans" checked> 전환효과</label>
+    </div>
+    <div class="row2" style="margin-top:6px">
       <button class="btn" id="sceneExport">내보내기</button>
       <button class="btn" id="sceneImport">가져오기</button>
     </div>
@@ -1467,6 +1472,7 @@ function saveScene(){
     localStorage.setItem('prisent.scene', JSON.stringify(sceneData()));
     const w=document.getElementById('whip'); if(w) localStorage.setItem('prisent.whip', w.value);
     pushHistory();
+    if(scenes.length){ captureActive(); saveScenes(); }
   }catch(_){ /* quota 등 무시 */ }
 }
 function restoreScene(){
@@ -1539,6 +1545,52 @@ window.addEventListener('keydown', e=>{
 });
 document.getElementById('undoBtn').onclick=undo;
 document.getElementById('redoBtn').onclick=redo;
+
+/* ── 다중 씬 + 트랜지션 ── */
+const SCKEY='centbeam.scenes';
+let scenes=[], activeScene=0;
+function loadScenes(){
+  try{ const s=JSON.parse(localStorage.getItem(SCKEY)||'null'); if(s&&Array.isArray(s.list)&&s.list.length){ scenes=s.list; activeScene=Math.min(s.active||0, s.list.length-1); return true; } }catch(_){}
+  scenes=[{name:'씬 1', data:snapshotJSON()||'{"layers":[]}'}]; activeScene=0; return false;
+}
+function saveScenes(){ try{ localStorage.setItem(SCKEY, JSON.stringify({list:scenes,active:activeScene})); }catch(_){} }
+function captureActive(){ if(scenes[activeScene]){ const j=snapshotJSON(); if(j) scenes[activeScene].data=j; } }
+function renderSceneTabs(){
+  const box=document.getElementById('sceneTabs'); if(!box) return; box.innerHTML='';
+  scenes.forEach((sc,i)=>{
+    const b=document.createElement('button'); b.className='btn'+(i===activeScene?' primary':'');
+    b.style.cssText='padding:4px 8px;font-size:12px'; b.textContent=(i+1)+'. '+sc.name;
+    b.title='클릭 전환 · 더블클릭 이름변경';
+    b.onclick=()=>switchScene(i);
+    b.ondblclick=()=>{ const n=prompt('씬 이름:', sc.name); if(n){ sc.name=n; saveScenes(); renderSceneTabs(); } };
+    box.appendChild(b);
+    if(scenes.length>1){ const x=document.createElement('button'); x.className='btn'; x.style.cssText='padding:4px 5px;font-size:11px;color:var(--muted)'; x.textContent='✕'; x.title='씬 삭제';
+      x.onclick=e=>{ e.stopPropagation(); if(!confirm('이 씬을 삭제할까요?'))return; scenes.splice(i,1); if(activeScene>=scenes.length)activeScene=scenes.length-1; applySnapshot(scenes[activeScene].data); saveScenes(); renderSceneTabs(); };
+      box.appendChild(x); }
+  });
+}
+function switchScene(i){
+  if(i===activeScene || !scenes[i]) return;
+  captureActive();
+  const doSwitch=()=>{ activeScene=i; applySnapshot(scenes[i].data); saveScenes(); renderSceneTabs(); };
+  const trans=document.getElementById('sceneTrans');
+  if(trans && trans.checked){
+    const f=document.getElementById('frame'); f.style.transition='opacity .25s'; f.style.opacity='0';
+    setTimeout(()=>{ doSwitch(); f.style.opacity='1'; setTimeout(()=>{ f.style.transition=''; },260); },250);
+  } else doSwitch();
+}
+function addScene(){
+  captureActive();
+  const base={orient:state.orient,res:state.res,ar:state.ar,bg:state.bgColor,layers:[]};
+  scenes.push({name:'씬 '+(scenes.length+1), data:JSON.stringify(base)});
+  switchScene(scenes.length-1);
+}
+document.getElementById('sceneAdd').onclick=addScene;
+window.addEventListener('keydown', e=>{
+  if(e.ctrlKey||e.metaKey||e.altKey) return;
+  const tag=(e.target.tagName||'').toLowerCase(); if(tag==='input'||tag==='textarea'||tag==='select') return;
+  const n=parseInt(e.key,10); if(n>=1&&n<=9&&scenes[n-1]) switchScene(n-1);
+});
 
 /* ── 대상 채널 관리 ── */
 const DKEY='centbeam.destinations';
@@ -1778,6 +1830,8 @@ if('serviceWorker' in navigator && location.protocol!=='file:'){
 }
 restoreScene();
 pushHistory();          // 초기 스냅샷(되돌리기 기준점)
+if(loadScenes()){ applySnapshot(scenes[activeScene].data); }  // 저장된 다중 씬 복원
+renderSceneTabs();
 initDestinations();
 initMixer();
 applyCanvasSize();
