@@ -212,10 +212,16 @@
         <button data-o="landscape" class="on">가로 16:9</button>
         <button data-o="portrait">세로 9:16</button>
       </div>
+      <select id="arSel" class="btn" style="padding:8px" title="화면비">
+        <option value="1.7778">16:9</option>
+        <option value="1.25">4:5</option>
+        <option value="1">1:1</option>
+      </select>
       <select id="resSel" class="btn" style="padding:8px">
-        <option value="1920x1080">1080p</option>
-        <option value="1280x720">720p</option>
-        <option value="2560x1440">1440p</option>
+        <option value="1080">1080p</option>
+        <option value="720">720p</option>
+        <option value="1440">1440p</option>
+        <option value="custom">커스텀…</option>
       </select>
       <label class="bg-pick" title="캔버스 배경색">🎨<input type="color" id="bgColor" value="#000000"></label>
       <button class="btn" id="gSafe" title="세이프존 가이드">🎯</button>
@@ -457,6 +463,7 @@ const ovl = document.getElementById('ovl');
 const state = {
   orient: 'landscape',
   res: 1080,            // 짧은 변 기준 (1080p)
+  ar: 16/9,             // 긴변/짧은변 화면비 (16:9=1.778, 4:5=1.25, 1:1=1)
   layers: [],           // {id,type,name,x,y,w,h,rot,z, ...typeData}
   selId: null,
   live: false,
@@ -495,7 +502,7 @@ state.destinations=[];
 /* ── 캔버스 크기 (방향 + 해상도) ── */
 function canvasDims(){
   const short = state.res;
-  const long = Math.round(short * 16 / 9);
+  const long = Math.round(short * (state.ar||16/9));
   return state.orient === 'landscape' ? {w:long,h:short} : {w:short,h:long};
 }
 function applyCanvasSize(){
@@ -892,7 +899,16 @@ document.getElementById('orient').addEventListener('click', e=>{
 });
 document.getElementById('resSel').onchange = e=>{
   const old=canvasDims();
-  state.res = Math.min(...e.target.value.split('x').map(Number));
+  if(e.target.value==='custom'){
+    const v=parseInt(prompt('짧은 변 해상도(px):', state.res),10);
+    if(!v || v<240 || v>2160){ e.target.value=String(state.res); toast('240~2160 사이 값','warn'); return; }
+    state.res=v;
+  } else state.res = Number(e.target.value);
+  applyCanvasSize(); refitLayers(old, canvasDims());
+};
+document.getElementById('arSel').onchange = e=>{
+  const old=canvasDims();
+  state.ar = Number(e.target.value)||16/9;
   applyCanvasSize(); refitLayers(old, canvasDims());
 };
 
@@ -1294,7 +1310,7 @@ document.getElementById('mGoLive').onclick=()=>document.getElementById('goLive')
 
 /* ── 씬 저장/복원 (localStorage) ── 카메라·화면공유 스트림은 저장 불가, 재추가 필요 ── */
 function sceneData(){
-  return { orient:state.orient, res:state.res, bg:state.bgColor,
+  return { orient:state.orient, res:state.res, ar:state.ar, bg:state.bgColor,
     layers: state.layers
       .filter(L=>L.type!=='camera'&&L.type!=='screen')
       .map(L=>{
@@ -1327,11 +1343,13 @@ function restoreScene(){
   if(w){ const s=localStorage.getItem('prisent.whip'); if(s) w.value=s; }
   if(!data) return;
   state.orient=data.orient||'landscape'; state.res=data.res||1080;
+  state.ar=data.ar||16/9;
   state.bgColor=data.bg||'#000000';
   const bgc=document.getElementById('bgColor'); if(bgc) bgc.value=state.bgColor;
   document.querySelectorAll('#orient button').forEach(x=>x.classList.toggle('on', x.dataset.o===state.orient));
-  const resMap={720:'1280x720',1080:'1920x1080',1440:'2560x1440'};
-  if(resMap[state.res]) document.getElementById('resSel').value=resMap[state.res];
+  const resMap={720:'720',1080:'1080',1440:'1440'};
+  document.getElementById('resSel').value=resMap[state.res]||'custom';
+  const arSel=document.getElementById('arSel'); if(arSel){ const near=[...arSel.options].find(o=>Math.abs(Number(o.value)-state.ar)<0.01); arSel.value=near?near.value:'1.7778'; }
   applyCanvasSize();
   for(const b of (data.layers||[])){
     if(b.type==='image'){ const img=new Image(); img.src=b.src; state.layers.push({...b,id:nextId++,img}); }
@@ -1484,7 +1502,12 @@ function meterLoop(){
   if(mixer.ctx){
     for(const s of mixer.sources){ if(s.meterEl) s.meterEl.style.width=Math.min(100,rmsLevel(s.an)*300)+'%'; }
     const mm=document.getElementById('masterMeter');
-    if(mm) mm.style.width=Math.min(100,rmsLevel(mixer.masterAn)*300)+'%';
+    const ml=rmsLevel(mixer.masterAn);
+    if(mm){ mm.style.width=Math.min(100,ml*300)+'%'; mm.style.background=ml>0.9?'#ff3b3b':''; }
+    // 피크/클리핑 경고 (3초 스로틀)
+    const peak=new Uint8Array(mixer.masterAn.fftSize); mixer.masterAn.getByteTimeDomainData(peak);
+    let clip=false; for(const v of peak){ if(v>=254||v<=1){ clip=true; break; } }
+    if(clip && (!mixer._lastClip || performance.now()-mixer._lastClip>3000)){ mixer._lastClip=performance.now(); toast('⚠️ 오디오 클리핑 — 마스터 볼륨을 낮추세요','warn'); }
     drawWave();
   }
   requestAnimationFrame(meterLoop);
