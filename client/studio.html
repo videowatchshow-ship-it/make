@@ -518,7 +518,9 @@
     <label class="field" style="font-size:12px;color:var(--muted)"><input type="checkbox" id="alertSndChk" checked> 방송 시작/종료 알림음</label>
     <div class="note" id="sendStat">송출 대기</div>
     <div class="note" id="connStat">연결: —</div>
+    <div class="note" id="fpsStat">렌더: — fps</div>
     <div class="note" id="dropStat" style="display:none">드롭 프레임: 0</div>
+    <label class="field" style="font-size:12px;color:var(--muted)"><input type="checkbox" id="lowPowerChk"> 🔋 저전력 모드(15fps)</label>
     <div class="note">방송 시작 시 이 캔버스가 MediaMTX WHIP로 송출됩니다. 서버가 아래 대상으로 fan-out.</div>
     <div class="row2">
       <button class="btn" id="snapBtn">📸 스냅샷</button>
@@ -848,7 +850,15 @@ function layerFilter(L){
   if(L.blur) p.push('blur('+L.blur+'px)');
   return p.join(' ');
 }
+let _lastDraw=0, _frames=0, _fpsTs=0, renderFps=0;
 function draw(){
+  requestAnimationFrame(draw);
+  const now=(typeof performance!=='undefined'?performance.now():0);
+  const target=state.lowPower?15:(Number((document.getElementById('fpsSel')||{}).value)||30);
+  if(_lastDraw && (now-_lastDraw) < (1000/target - 1)) return;   // 목표 FPS 제한(저전력)
+  if(document.hidden && !state.live){ _lastDraw=now; return; }    // 백그라운드 탭 절전(방송 중 아니면 스킵)
+  _lastDraw=now;
+  _frames++; if(now-_fpsTs>=1000){ renderFps=_frames; _frames=0; _fpsTs=now; updateFpsStat(); }
   const {w:cw,h:ch} = canvasDims();
   ctx.clearRect(0,0,cw,ch);
   ctx.fillStyle = state.bgColor || '#000'; ctx.fillRect(0,0,cw,ch);
@@ -1055,7 +1065,6 @@ function draw(){
     ctx.restore();
   }
   drawHandles();
-  requestAnimationFrame(draw);
 }
 const guides = { safe:false, grid:false, ruler:false, snap:false, brb:false };
 function drawGuides(cw,ch){
@@ -1600,8 +1609,22 @@ function startTimers(){
     document.getElementById('liveTxt').textContent='● LIVE '+String((s/60)|0).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
   },1000);
   statsTimer=setInterval(pollStats,1000);
+  startWatchdog();
 }
-function stopTimers(){ clearInterval(liveTimer); clearInterval(statsTimer); liveTimer=statsTimer=null; }
+function stopTimers(){ clearInterval(liveTimer); clearInterval(statsTimer); liveTimer=statsTimer=null; stopWatchdog(); }
+function updateFpsStat(){ const el=document.getElementById('fpsStat'); if(!el) return;
+  const target=state.lowPower?15:(Number((document.getElementById('fpsSel')||{}).value)||30);
+  el.textContent='렌더: '+renderFps+' fps'; el.style.color = renderFps < target*0.7 ? 'var(--danger)' : ''; }
+document.getElementById('lowPowerChk').onchange=e=>{ state.lowPower=e.target.checked; toast(e.target.checked?'저전력 모드 (15fps)':'일반 모드','ok'); };
+/* 워치독: 방송 중 송출 바이트가 멈추면(프리즈) 자동 재연결 */
+let _wdBytes=0, _wdStall=0, wdTimer=null;
+function startWatchdog(){ stopWatchdog(); _wdBytes=lastBytes; _wdStall=0;
+  wdTimer=setInterval(()=>{ if(!state.live){ return; }
+    if(lastBytes<=_wdBytes){ _wdStall++; if(_wdStall>=5 && !reconnecting){ toast('송출 정지 감지 — 자동 복구','warn'); scheduleReconnect(); _wdStall=0; } }
+    else { _wdStall=0; }
+    _wdBytes=lastBytes;
+  }, 2000); }
+function stopWatchdog(){ if(wdTimer){ clearInterval(wdTimer); wdTimer=null; } }
 const CONN_LABEL={connecting:'연결 중…',connected:'🟢 연결됨',disconnected:'🟠 끊김',failed:'🔴 실패',closed:'연결 종료',new:'준비'};
 function updateConnStat(s){ const el=document.getElementById('connStat'); if(el) el.textContent='연결: '+(CONN_LABEL[s]||s||'—'); }
 async function pollStats(){
