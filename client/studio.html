@@ -336,6 +336,13 @@
           <div class="field"><label>트랙색</label><input id="pGaugeBg" type="color" value="#1e2430"></div>
         </div>
       </div>
+      <div id="chromaProps" style="display:none">
+        <div class="field"><label><input type="checkbox" id="pChromaOn"> 크로마키 (배경 제거)</label></div>
+        <div class="row2">
+          <div class="field"><label>키 색상</label><input id="pChromaColor" type="color" value="#00ff00"></div>
+          <div class="field"><label>강도 <span id="pChromaThrVal">120</span></label><input id="pChromaThr" type="range" min="20" max="255" value="120"></div>
+        </div>
+      </div>
       <div id="chatProps" style="display:none">
         <div class="field"><label>채팅 내용 (이름: 메시지)</label><textarea id="pChatLines" rows="5" style="width:100%"></textarea></div>
         <div class="row2">
@@ -707,6 +714,27 @@ document.getElementById('addWeb').onclick = () => {
   addLayer('web', {name:'웹: '+url.replace(/^https?:\/\//,'').slice(0,20), url, iframe, w:cw*0.5, h:ch*0.4});
 };
 
+/* ── 크로마키 (그린스크린 제거) ── */
+const _ckCanvas=document.createElement('canvas');
+const _ckCtx=_ckCanvas.getContext('2d',{willReadFrequently:true});
+function hexToRgb(h){ h=(h||'#00ff00').replace('#',''); return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]; }
+function chromaCanvas(src, sw, sh, key, thr){
+  const maxW=640, scale=Math.min(1, maxW/(sw||maxW));
+  const w=Math.max(1,Math.round((sw||maxW)*scale)), h=Math.max(1,Math.round((sh||360)*scale));
+  _ckCanvas.width=w; _ckCanvas.height=h;
+  _ckCtx.clearRect(0,0,w,h); _ckCtx.drawImage(src,0,0,w,h);
+  let img; try{ img=_ckCtx.getImageData(0,0,w,h); }catch(_){ return src; } // CORS 오염 시 원본
+  const d=img.data, kr=key[0],kg=key[1],kb=key[2], t=thr*thr;
+  for(let i=0;i<d.length;i+=4){ const dr=d[i]-kr, dg=d[i+1]-kg, db=d[i+2]-kb; if(dr*dr+dg*dg+db*db<t) d[i+3]=0; }
+  _ckCtx.putImageData(img,0,0);
+  return _ckCanvas;
+}
+function drawKeyed(L, src, natW, natH, hw, hh){
+  if(L.chroma && L.chroma.on){
+    const c=chromaCanvas(src, natW, natH, hexToRgb(L.chroma.color||'#00ff00'), L.chroma.thr||120);
+    ctx.drawImage(c, -hw,-hh, L.w, L.h);
+  } else ctx.drawImage(src, -hw,-hh, L.w, L.h);
+}
 /* ── 렌더 루프 ── */
 function layerFilter(L){
   const p=[];
@@ -731,9 +759,9 @@ function draw(){
     if(L.flipH||L.flipV) ctx.scale(L.flipH?-1:1, L.flipV?-1:1);
     const hw = L.w/2, hh = L.h/2;
     if((L.type==='camera'||L.type==='screen') && L.video.readyState>=2){
-      ctx.drawImage(L.video, -hw,-hh, L.w, L.h);
+      drawKeyed(L, L.video, L.video.videoWidth, L.video.videoHeight, hw, hh);
     } else if(L.type==='image' && L.img.complete){
-      ctx.drawImage(L.img, -hw,-hh, L.w, L.h);
+      drawKeyed(L, L.img, L.img.naturalWidth, L.img.naturalHeight, hw, hh);
     } else if(L.type==='text'){
       const weight=L.weight||700, align=L.align||'center';
       ctx.font = `${weight} ${L.font}px -apple-system,"Malgun Gothic",sans-serif`;
@@ -772,7 +800,7 @@ function draw(){
       ctx.shadowColor='rgba(0,0,0,.5)'; ctx.shadowBlur=8;
       ctx.fillText(mm+':'+ss, 0, 0);
     } else if(L.type==='video'){
-      if(L.video && L.video.readyState>=2){ ctx.drawImage(L.video, -hw,-hh, L.w, L.h); }
+      if(L.video && L.video.readyState>=2){ drawKeyed(L, L.video, L.video.videoWidth, L.video.videoHeight, hw, hh); }
     } else if(L.type==='gauge'){
       const pct=Math.max(0,Math.min(100,(L.pct!=null?L.pct:0)));
       const barH=Math.max(8,Math.min(L.h*0.4,40));
@@ -988,6 +1016,7 @@ function showProps(){
   document.getElementById('cdProps').style.display=L.type==='countdown'?'block':'none';
   document.getElementById('cameraProps').style.display=L.type==='camera'?'block':'none';
   document.getElementById('gaugeProps').style.display=L.type==='gauge'?'block':'none';
+  document.getElementById('chromaProps').style.display=(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video')?'block':'none';
   document.getElementById('chatProps').style.display=L.type==='chat'?'block':'none';
   document.getElementById('stickerProps').style.display=L.type==='sticker'?'block':'none';
   document.getElementById('frameProps').style.display=L.type==='frame'?'block':'none';
@@ -1015,6 +1044,7 @@ function syncProps(){
   if(L.type==='lower3'){ pL3Title.value=L.title||''; pL3Sub.value=L.sub||''; pL3Color.value=L.color||'#ffffff'; pL3Bg.value=L.bg||'#0066ff'; pL3Font.value=L.font||48; }
   if(L.type==='countdown'){ pCdMins.value=L.mins!=null?L.mins:5; pCdColor.value=L.color||'#ffffff'; pCdFont.value=L.font||120; }
   if(L.type==='gauge'){ pGaugeLabel.value=L.label!=null?L.label:''; pGaugePct.value=L.pct!=null?L.pct:60; pGaugeColor.value=L.color||'#00c48c'; pGaugeBg.value=L.bg||'#1e2430'; }
+  if(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video'){ const c=L.chroma||{}; pChromaOn.checked=!!c.on; pChromaColor.value=c.color||'#00ff00'; pChromaThr.value=c.thr||120; pChromaThrVal.textContent=c.thr||120; }
   if(L.type==='chat'){ pChatLines.value=L.lines||''; pChatBg.value=L.bg||'#161a22'; pChatColor.value=L.color||'#e6e9ef'; pChatFont.value=L.font||30; }
   if(L.type==='sticker'){ pStickerEmoji.value=L.emoji||'🔥'; }
   if(L.type==='frame'){ pFrameColor.value=L.color; pFrameThick.value=L.thick; pFrameRadius.value=L.radius; }
@@ -1066,6 +1096,10 @@ pGaugeLabel.oninput=e=>{ const L=sel(); if(L)L.label=e.target.value; };
 pGaugePct.oninput=e=>{ const L=sel(); if(L)L.pct=Math.max(0,Math.min(100,Number(e.target.value)||0)); };
 pGaugeColor.oninput=e=>{ const L=sel(); if(L)L.color=e.target.value; };
 pGaugeBg.oninput=e=>{ const L=sel(); if(L)L.bg=e.target.value; };
+function ensureChroma(L){ if(!L.chroma) L.chroma={on:false,color:'#00ff00',thr:120}; return L.chroma; }
+pChromaOn.onchange=e=>{const L=sel();if(L){ensureChroma(L).on=e.target.checked;}};
+pChromaColor.oninput=e=>{const L=sel();if(L){ensureChroma(L).color=e.target.value;}};
+pChromaThr.oninput=e=>{const L=sel();if(L){ensureChroma(L).thr=+e.target.value;pChromaThrVal.textContent=e.target.value;}};
 pChatLines.oninput=e=>{const L=sel();if(L){L.lines=e.target.value;renderLayers();}};
 pChatBg.oninput=e=>{const L=sel();if(L){L.bg=e.target.value;renderLayers();}};
 pChatColor.oninput=e=>{const L=sel();if(L){L.color=e.target.value;renderLayers();}};
@@ -1380,6 +1414,7 @@ function sceneData(){
           opacity:L.opacity,flipH:L.flipH,flipV:L.flipV,br:L.br,con:L.con,sat:L.sat,blur:L.blur,
           locked:L.locked,hidden:L.hidden};
         if(L.type==='image') b.src=L.src;
+        if(L.chroma) b.chroma=L.chroma;
         if(L.type==='text'){ b.text=L.text; b.font=L.font; b.color=L.color; b.align=L.align; b.weight=L.weight; }
         if(L.type==='web') b.url=L.url;
         if(L.type==='solid') b.color=L.color;
