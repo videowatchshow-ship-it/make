@@ -509,6 +509,13 @@
         <button class="btn" id="pAlnCY" style="padding:3px 7px">세로중앙</button>
         <button class="btn" id="pAlnB" style="padding:3px 7px">하</button>
       </div>
+      <div class="row2" style="margin-top:6px;flex-wrap:wrap;gap:4px">
+        <span style="font:12px -apple-system,'Malgun Gothic',sans-serif;opacity:.7">다중(Ctrl+클릭)</span>
+        <button class="btn" id="pGroup" style="padding:3px 7px">🔗 그룹</button>
+        <button class="btn" id="pUngroup" style="padding:3px 7px">해제</button>
+        <button class="btn" id="pDistX" style="padding:3px 7px">↔균등</button>
+        <button class="btn" id="pDistY" style="padding:3px 7px">↕균등</button>
+      </div>
       <div class="row2" style="margin-top:6px">
         <button class="btn" id="pFront">맨 앞으로</button>
         <button class="btn" id="pBack">맨 뒤로</button>
@@ -672,6 +679,7 @@ const state = {
   ar: 16/9,             // 긴변/짧은변 화면비 (16:9=1.778, 4:5=1.25, 1:1=1)
   layers: [],           // {id,type,name,x,y,w,h,rot,z, ...typeData}
   selId: null,
+  multiSel: [],         // 다중 선택된 레이어 id (primary selId 외 추가)
   live: false,
   bgColor: '#000000',   // 캔버스 배경
   aspectLock: false,    // 비율 고정 리사이즈
@@ -1240,8 +1248,10 @@ window.addEventListener('pointermove', e=>{
     syncProps(); return;
   }
   if(!drag) return;
-  if(drag.mode==='move'){ L.x=p.x-drag.ox; L.y=p.y-drag.oy;
-    if(guides.snap){ const d=canvasDims(), step=Math.round(d.w/12); L.x=Math.round(L.x/step)*step; L.y=Math.round(L.y/step)*step; } }
+  if(drag.mode==='move'){ const nx=p.x-drag.ox, ny=p.y-drag.oy; let dx=nx-L.x, dy=ny-L.y; L.x=nx; L.y=ny;
+    if(guides.snap){ const d=canvasDims(), step=Math.round(d.w/12); L.x=Math.round(L.x/step)*step; L.y=Math.round(L.y/step)*step; dx=L.x-(nx-dx); dy=L.y-(ny-dy); }
+    // 그룹 함께 이동
+    if(L.groupId){ for(const g of state.layers){ if(g!==L && g.groupId===L.groupId){ g.x+=dx; g.y+=dy; } } } }
   else if(drag.mode==='size'){
     let nw=Math.max(20,Math.abs(p.x-L.x)*2), nh=Math.max(20,Math.abs(p.y-L.y)*2);
     if(state.aspectLock){ const r=(L.aspect || (L.w/L.h) || 1); nh=nw/r; }
@@ -1285,12 +1295,15 @@ function renderLayers(){
   const box=document.getElementById('layers'); box.innerHTML='';
   [...state.layers].sort((a,b)=>b.z-a.z).forEach(L=>{
     const el=document.createElement('div');
-    el.className='layer'+(L.id===state.selId?' sel':'');
+    const isMulti=state.multiSel.indexOf(L.id)>=0;
+    el.className='layer'+(L.id===state.selId?' sel':'')+(isMulti?' multi':'');
+    if(isMulti && L.id!==state.selId) el.style.boxShadow='0 0 0 1px var(--accent) inset';
     el.innerHTML=`<div class="ico">${ICON[L.type]||'▪'}</div>
-      <div class="nm">${L.name}</div>
+      <div class="nm">${L.name}${L.groupId?' 🔗':''}</div>
       <button class="mini" data-up>▲</button><button class="mini" data-dn>▼</button>`;
     el.onclick=ev=>{ if(ev.target.dataset.up!==undefined){bump(L,1);ev.stopPropagation();return;}
-      if(ev.target.dataset.dn!==undefined){bump(L,-1);ev.stopPropagation();return;} select(L.id); };
+      if(ev.target.dataset.dn!==undefined){bump(L,-1);ev.stopPropagation();return;}
+      if(ev.ctrlKey||ev.metaKey||ev.shiftKey){ toggleMulti(L.id); } else select(L.id); };
     box.appendChild(el);
   });
 }
@@ -1298,7 +1311,36 @@ function bump(L,dir){ L.z+=dir*1.5; normalizeZ(); renderLayers(); }
 function normalizeZ(){ [...state.layers].sort((a,b)=>a.z-b.z).forEach((l,i)=>l.z=i); }
 
 /* ── 선택/속성 ── */
-function select(id){ state.selId=id; renderLayers(); showProps(); }
+function select(id){ state.selId=id; state.multiSel=[]; renderLayers(); showProps(); }
+function toggleMulti(id){
+  if(state.selId==null){ select(id); return; }
+  const i=state.multiSel.indexOf(id);
+  if(i>=0) state.multiSel.splice(i,1); else if(id!==state.selId) state.multiSel.push(id);
+  renderLayers();
+}
+function selectedIds(){ const s=new Set(state.multiSel); if(state.selId!=null) s.add(state.selId); return [...s]; }
+/* 그룹화: 선택 레이어에 공통 groupId 부여 (드래그 시 함께 이동) */
+function groupSelected(){
+  const ids=selectedIds(); if(ids.length<2){ toast('2개 이상 선택하세요 (Ctrl+클릭)','warn'); return; }
+  const gid='g'+nextId++;
+  state.layers.forEach(l=>{ if(ids.includes(l.id)) l.groupId=gid; });
+  toast(ids.length+'개 레이어 그룹화','ok'); renderLayers();
+}
+function ungroupSelected(){
+  const ids=selectedIds(); let n=0;
+  state.layers.forEach(l=>{ if(ids.includes(l.id) && l.groupId){ delete l.groupId; n++; } });
+  toast(n?'그룹 해제':'그룹 없음', n?'ok':'warn'); renderLayers();
+}
+/* 균등 배분: 선택 레이어를 가로 또는 세로로 균등 간격 */
+function distributeSelected(axis){
+  const ids=selectedIds(); if(ids.length<3){ toast('3개 이상 선택하세요','warn'); return; }
+  const ls=state.layers.filter(l=>ids.includes(l.id)).sort((a,b)=> axis==='x'? a.x-b.x : a.y-b.y);
+  const first=ls[0], last=ls[ls.length-1];
+  const span=(axis==='x'? last.x-first.x : last.y-first.y);
+  const step=span/(ls.length-1);
+  ls.forEach((l,i)=>{ if(axis==='x') l.x=first.x+step*i; else l.y=first.y+step*i; });
+  toast('균등 배분('+(axis==='x'?'가로':'세로')+')','ok'); syncProps();
+}
 function showProps(){
   const L=sel();
   document.getElementById('propsEmpty').style.display=L?'none':'block';
@@ -1524,6 +1566,10 @@ document.getElementById('recBtn').onclick = function(){
     toast('녹화 실패: ' + e.message,'err');
   }
 };
+document.getElementById('pGroup').onclick=groupSelected;
+document.getElementById('pUngroup').onclick=ungroupSelected;
+document.getElementById('pDistX').onclick=()=>distributeSelected('x');
+document.getElementById('pDistY').onclick=()=>distributeSelected('y');
 document.getElementById('pFront').onclick=()=>{ const L=sel(); if(L){L.z=1e6; normalizeZ(); renderLayers();} };
 document.getElementById('pBack').onclick=()=>{ const L=sel(); if(L){L.z=-1e6; normalizeZ(); renderLayers();} };
 document.getElementById('pDup').onclick=()=>{
@@ -1847,7 +1893,7 @@ function sceneData(){
       .map(L=>{
         const b={type:L.type,name:L.name,x:L.x,y:L.y,w:L.w,h:L.h,rot:L.rot,z:L.z,aspect:L.aspect,
           opacity:L.opacity,flipH:L.flipH,flipV:L.flipV,br:L.br,con:L.con,sat:L.sat,blur:L.blur,
-          locked:L.locked,hidden:L.hidden};
+          locked:L.locked,hidden:L.hidden,groupId:L.groupId};
         if(L.type==='image') b.src=L.src;
         if(L.chroma) b.chroma=L.chroma;
         if(L.preset) b.preset=L.preset; if(L.blend) b.blend=L.blend; if(L.cornerR) b.cornerR=L.cornerR;
