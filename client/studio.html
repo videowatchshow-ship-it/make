@@ -232,6 +232,15 @@
   <div style="font:13px -apple-system,sans-serif;color:#6b7688">라이브 스튜디오 로딩 중…</div>
 </div>
 <div id="offlineBar">⚠️ 오프라인 상태입니다 — 네트워크 연결을 확인하세요. (방송은 연결 복구 시 자동 재연결)</div>
+<div id="confirmModal" style="position:fixed;inset:0;z-index:9994;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6)">
+  <div style="background:#141a24;border:1px solid #2a3446;border-radius:14px;padding:22px;max-width:340px;text-align:center;font-family:-apple-system,'Malgun Gothic',sans-serif;color:#e6e9ef">
+    <div id="confirmMsg" style="font-size:15px;line-height:1.6;margin-bottom:18px"></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" id="confirmCancel" style="flex:1;padding:10px">취소</button>
+      <button class="btn primary" id="confirmOk" style="flex:1;padding:10px">확인</button>
+    </div>
+  </div>
+</div>
 <div id="loadingOv" style="position:fixed;inset:0;z-index:9995;display:none;align-items:center;justify-content:center;background:rgba(5,7,12,.55)">
   <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
     <div style="width:44px;height:44px;border:4px solid rgba(0,217,255,.25);border-top-color:#00d9ff;border-radius:50%;animation:cbspin .8s linear infinite"></div>
@@ -1941,8 +1950,8 @@ sceneFile.onchange=()=>{ const f=sceneFile.files[0]; if(!f)return;
     JSON.parse(r.result); localStorage.setItem('prisent.scene', r.result); location.reload();
   }catch(_){ toast('가져오기 실패: 잘못된 파일','err'); } };
   r.readAsText(f); sceneFile.value=''; };
-document.getElementById('sceneReset').onclick=()=>{
-  if(!confirm('씬을 초기화할까요? (대상·오디오는 유지)')) return;
+document.getElementById('sceneReset').onclick=async()=>{
+  if(!await cbConfirm('씬을 초기화할까요? (대상·오디오는 유지)')) return;
   state.layers.forEach(L=>{ if(L.stream)L.stream.getTracks().forEach(t=>t.stop()); if(L.iframe)L.iframe.remove(); });
   state.layers=[]; state.selId=null; state.bgColor='#000000';
   document.getElementById('bgColor').value='#000000';
@@ -1970,7 +1979,7 @@ function toast(msg,type){
 
 document.getElementById('goLive').onclick = async function(){
   haptic(30);
-  if(state.live){ if(!confirm('방송을 종료할까요?')) return; stopLive(); toast('방송 종료'); return; }
+  if(state.live){ if(!await cbConfirm('방송을 종료할까요?')) return; stopLive(); toast('방송 종료'); return; }
   currentWhip=document.getElementById('whip').value.trim();
   if(!currentWhip){ toast('WHIP 엔드포인트를 입력하세요','warn'); return; }
   await runCountdown();
@@ -2110,7 +2119,7 @@ document.getElementById('randPathBtn').onclick=()=>{
   w.value = m ? (m[1]+rnd+m[2]) : ((cur.replace(/\/+$/,'')||'https://studio.xn--9d0bw2fjtyymch7de9d.info/whip')+'/'+rnd+'/whip');
   toast('랜덤 스트림 경로 생성 — 서버 대상 경로도 동일하게 맞추세요','ok');
 };
-document.getElementById('whipToken').oninput=e=>{ try{ localStorage.setItem('centbeam.whipToken', e.target.value); }catch(_){} };
+document.getElementById('whipToken').oninput=e=>{ try{ localStorage.setItem('centbeam.whipToken', obf(e.target.value)); }catch(_){} };
 
 function scheduleReconnect(){
   if(reconnecting || !state.live) return;
@@ -2300,7 +2309,7 @@ function restoreScene(){
   let data; try{ data=JSON.parse(localStorage.getItem('prisent.scene')||'null'); }catch(_){ return; }
   const w=document.getElementById('whip');
   if(w){ const s=localStorage.getItem('prisent.whip'); if(s) w.value=s; }
-  const wt=document.getElementById('whipToken'); if(wt){ const tk=localStorage.getItem('centbeam.whipToken'); if(tk) wt.value=tk; }
+  const wt=document.getElementById('whipToken'); if(wt){ const tk=localStorage.getItem('centbeam.whipToken'); if(tk) wt.value=deobf(tk); }
   if(!data) return;
   state.orient=data.orient||'landscape'; state.res=data.res||1080;
   state.ar=data.ar||16/9;
@@ -2397,7 +2406,7 @@ function renderSceneTabs(){
     b.ondblclick=()=>{ const n=prompt('씬 이름:', sc.name); if(n){ sc.name=n; saveScenes(); renderSceneTabs(); } };
     box.appendChild(b);
     if(scenes.length>1){ const x=document.createElement('button'); x.className='btn'; x.style.cssText='padding:4px 5px;font-size:11px;color:var(--muted)'; x.textContent='✕'; x.title='씬 삭제';
-      x.onclick=e=>{ e.stopPropagation(); if(!confirm('이 씬을 삭제할까요?'))return; scenes.splice(i,1); if(activeScene>=scenes.length)activeScene=scenes.length-1; applySnapshot(scenes[activeScene].data); saveScenes(); renderSceneTabs(); };
+      x.onclick=async e=>{ e.stopPropagation(); if(!await cbConfirm('이 씬을 삭제할까요?'))return; scenes.splice(i,1); if(activeScene>=scenes.length)activeScene=scenes.length-1; applySnapshot(scenes[activeScene].data); saveScenes(); renderSceneTabs(); };
       box.appendChild(x); }
   });
 }
@@ -2444,8 +2453,8 @@ const TEMPLATES={
     addLayer('nowplaying',{name:'BGM정보',bg:'#0f1420',color:'#e6e9ef',accent:'#00d9ff',font:26,w:d.w*0.35,h:72,x:d.w/2,y:d.h*0.85});
     toast('시작대기 템플릿 적용','ok'); },
 };
-document.getElementById('tmplSel').onchange=e=>{ const k=e.target.value; e.target.value=''; if(!k||!TEMPLATES[k])return;
-  if(state.layers.length && !confirm('현재 씬에 템플릿 레이어를 추가할까요?')) return;
+document.getElementById('tmplSel').onchange=async e=>{ const k=e.target.value; e.target.value=''; if(!k||!TEMPLATES[k])return;
+  if(state.layers.length && !await cbConfirm('현재 씬에 템플릿 레이어를 추가할까요?')) return;
   TEMPLATES[k](); };
 window.addEventListener('keydown', e=>{
   if(e.ctrlKey||e.metaKey||e.altKey) return;
@@ -2459,9 +2468,12 @@ const platById=id=>PLATFORMS.find(p=>p.id===id);
 function seedMandatory(){
   if(!state.destinations.some(d=>d.id==='videowatch')) state.destinations.unshift({...MANDATORY});
 }
-function saveDest(){ try{ localStorage.setItem(DKEY, JSON.stringify(state.destinations)); }catch(_){} }
+/* 스트림키 평문 저장 금지 (334) — base64 난독화(암호화 아님. 브라우저는 진짜 시크릿 저장소가 없음) */
+function obf(s){ try{ return 'b64:'+btoa(unescape(encodeURIComponent(s))); }catch(_){ return s; } }
+function deobf(s){ try{ return s && s.startsWith('b64:') ? decodeURIComponent(escape(atob(s.slice(4)))) : s; }catch(_){ return s; } }
+function saveDest(){ try{ localStorage.setItem(DKEY, obf(JSON.stringify(state.destinations))); }catch(_){} }
 function loadDest(){
-  try{ const s=JSON.parse(localStorage.getItem(DKEY)||'null'); if(Array.isArray(s)) state.destinations=s; }catch(_){}
+  try{ const raw=localStorage.getItem(DKEY); const s=raw?JSON.parse(deobf(raw)):null; if(Array.isArray(s)) state.destinations=s; }catch(_){}
   seedMandatory();
 }
 function maskKey(k){ if(!k) return '(키 미입력)'; return k.length<=6?'••••':k.slice(0,3)+'••••'+k.slice(-2); }
@@ -2735,6 +2747,16 @@ document.getElementById('helpClose').onclick=()=>{ document.getElementById('help
 document.getElementById('helpModal').onclick=e=>{ if(e.target.id==='helpModal') e.currentTarget.style.display='none'; };
 /* 햅틱 피드백 */
 function haptic(ms){ try{ if(navigator.vibrate) navigator.vibrate(ms||10); }catch(_){} }
+/* 일관된 확인/취소 다이얼로그 (272) — Promise 반환 */
+function cbConfirm(msg){
+  return new Promise(res=>{
+    const m=document.getElementById('confirmModal'); document.getElementById('confirmMsg').textContent=msg; m.style.display='flex';
+    const done=v=>{ m.style.display='none'; ok.onclick=null; cancel.onclick=null; res(v); };
+    const ok=document.getElementById('confirmOk'), cancel=document.getElementById('confirmCancel');
+    ok.onclick=()=>done(true); cancel.onclick=()=>done(false);
+    m.onclick=e=>{ if(e.target.id==='confirmModal') done(false); };
+  });
+}
 document.getElementById('fsBtn').onclick=()=>{ const d=document.documentElement;
   if(!document.fullscreenElement){ (d.requestFullscreen||d.webkitRequestFullscreen||(()=>{})).call(d); }
   else{ (document.exitFullscreen||document.webkitExitFullscreen||(()=>{})).call(document); } };
