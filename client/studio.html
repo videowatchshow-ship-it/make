@@ -670,6 +670,14 @@
       <button class="btn" id="sceneAdd" style="flex:1">＋ 새 씬</button>
       <label class="field" style="flex:0 0 auto;font-size:12px;color:var(--muted)"><input type="checkbox" id="sceneTrans" checked> 전환효과</label>
     </div>
+    <div class="field" style="margin-top:6px"><label>템플릿 갤러리</label>
+      <select id="tmplSel">
+        <option value="">템플릿 선택…</option>
+        <option value="chat">저스트 채팅 (카메라+채팅+로워서드)</option>
+        <option value="game">게임방송 (화면+웹캠+게이지+채팅)</option>
+        <option value="talk">인터뷰 (제목+시계+로워서드)</option>
+        <option value="brb">시작 대기 (BRB+카운트다운+BGM정보)</option>
+      </select></div>
     <div class="row2" style="margin-top:6px">
       <button class="btn" id="sceneExport">내보내기</button>
       <button class="btn" id="sceneImport">가져오기</button>
@@ -2121,12 +2129,17 @@ function loadScenes(){
   scenes=[{name:'씬 1', data:snapshotJSON()||'{"layers":[]}'}]; activeScene=0; return false;
 }
 function saveScenes(){ try{ localStorage.setItem(SCKEY, JSON.stringify({list:scenes,active:activeScene})); }catch(_){} }
-function captureActive(){ if(scenes[activeScene]){ const j=snapshotJSON(); if(j) scenes[activeScene].data=j; } }
+const _thumbCv=document.createElement('canvas');
+function captureThumb(){ try{ _thumbCv.width=96; _thumbCv.height=54; const g=_thumbCv.getContext('2d');
+  g.drawImage(cv,0,0,96,54); return _thumbCv.toDataURL('image/jpeg',0.5); }catch(_){ return null; } }
+function captureActive(){ if(scenes[activeScene]){ const j=snapshotJSON(); if(j) scenes[activeScene].data=j; const th=captureThumb(); if(th) scenes[activeScene].thumb=th; } }
 function renderSceneTabs(){
   const box=document.getElementById('sceneTabs'); if(!box) return; box.innerHTML='';
   scenes.forEach((sc,i)=>{
     const b=document.createElement('button'); b.className='btn'+(i===activeScene?' primary':'');
-    b.style.cssText='padding:4px 8px;font-size:12px'; b.textContent=(i+1)+'. '+sc.name;
+    b.style.cssText='padding:4px 8px;font-size:12px;display:flex;align-items:center;gap:6px';
+    if(sc.thumb){ b.innerHTML='<img src="'+sc.thumb+'" style="width:32px;height:18px;border-radius:3px;object-fit:cover" alt="">'; }
+    b.append(document.createTextNode((i+1)+'. '+sc.name));
     b.title='클릭 전환 · 더블클릭 이름변경';
     b.onclick=()=>switchScene(i);
     b.ondblclick=()=>{ const n=prompt('씬 이름:', sc.name); if(n){ sc.name=n; saveScenes(); renderSceneTabs(); } };
@@ -2153,6 +2166,35 @@ function addScene(){
   switchScene(scenes.length-1);
 }
 document.getElementById('sceneAdd').onclick=addScene;
+/* ── 템플릿 갤러리 (223) ── */
+const TEMPLATES={
+  chat(){ const d=canvasDims();
+    addLayer('solid',{name:'배경',color:'#0f1220',w:d.w,h:d.h,x:d.w/2,y:d.h/2});
+    addLayer('lower3',{name:'로워서드',title:'센트',sub:'LIVE',w:d.w*0.5,h:120,x:d.w*0.32,y:d.h*0.82});
+    addLayer('chat',{name:'채팅',lines:'센트: 안녕하세요\ntak: 방송 잘봐요',bg:'#161a22',color:'#e6e9ef',font:30,w:d.w*0.28,h:d.h*0.5,x:d.w*0.82,y:d.h*0.5});
+    toast('저스트채팅 템플릿 적용 — 카메라를 추가하세요','ok'); },
+  game(){ const d=canvasDims();
+    addLayer('solid',{name:'배경',color:'#05070c',w:d.w,h:d.h,x:d.w/2,y:d.h/2});
+    addLayer('frame',{name:'화면 프레임',color:'#00d9ff',thick:8,radius:16,w:d.w*0.72,h:d.h*0.72,x:d.w*0.4,y:d.h*0.42});
+    addLayer('gauge',{name:'목표',label:'구독 목표',pct:60,color:'#00c48c',bg:'#1e2430',w:d.w*0.4,h:80,x:d.w*0.4,y:d.h*0.93});
+    addLayer('chat',{name:'채팅',lines:'센트: gg\ntak: 나이스',bg:'#161a22',color:'#e6e9ef',font:26,w:d.w*0.24,h:d.h*0.6,x:d.w*0.85,y:d.h*0.4});
+    toast('게임방송 템플릿 적용 — 화면공유/웹캠을 추가하세요','ok'); },
+  talk(){ const d=canvasDims();
+    addLayer('solid',{name:'배경',color:'#101828',w:d.w,h:d.h,x:d.w/2,y:d.h/2});
+    addLayer('text',{name:'제목',text:'센트빔 토크쇼',font:Math.round(d.h*0.08),color:'#ffffff',w:d.w*0.7,h:d.h*0.15,x:d.w/2,y:d.h*0.18,stroke:'#00d9ff',strokeW:4});
+    addLayer('clock',{name:'시계',fmt:'time',color:'#00d9ff',font:Math.round(d.h*0.05),w:260,h:80,x:d.w*0.85,y:d.h*0.1});
+    addLayer('lower3',{name:'게스트',title:'게스트',sub:'인터뷰',w:d.w*0.5,h:120,x:d.w*0.3,y:d.h*0.85});
+    toast('인터뷰 템플릿 적용','ok'); },
+  brb(){ const d=canvasDims();
+    addLayer('solid',{name:'배경',color:'#0a0d14',w:d.w,h:d.h,x:d.w/2,y:d.h/2});
+    addLayer('text',{name:'안내',text:'잠시 후 시작합니다',font:Math.round(d.h*0.07),color:'#00d9ff',w:d.w*0.8,h:d.h*0.15,x:d.w/2,y:d.h*0.38,anim:'fade'});
+    addLayer('countdown',{name:'카운트다운',mins:5,color:'#ffffff',font:Math.round(d.h*0.1),w:d.w*0.5,h:d.h*0.2,x:d.w/2,y:d.h*0.6});
+    addLayer('nowplaying',{name:'BGM정보',bg:'#0f1420',color:'#e6e9ef',accent:'#00d9ff',font:26,w:d.w*0.35,h:72,x:d.w/2,y:d.h*0.85});
+    toast('시작대기 템플릿 적용','ok'); },
+};
+document.getElementById('tmplSel').onchange=e=>{ const k=e.target.value; e.target.value=''; if(!k||!TEMPLATES[k])return;
+  if(state.layers.length && !confirm('현재 씬에 템플릿 레이어를 추가할까요?')) return;
+  TEMPLATES[k](); };
 window.addEventListener('keydown', e=>{
   if(e.ctrlKey||e.metaKey||e.altKey) return;
   const tag=(e.target.tagName||'').toLowerCase(); if(tag==='input'||tag==='textarea'||tag==='select') return;
