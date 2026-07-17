@@ -29,8 +29,13 @@
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Malgun Gothic",sans-serif}
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Malgun Gothic",sans-serif;
+    overscroll-behavior:none;-webkit-overflow-scrolling:touch}   /* 스크롤 바운스 억제 */
   .app{display:flex;height:100vh;overflow:hidden}
+  button:disabled,select:disabled,input:disabled{opacity:.42;cursor:not-allowed;filter:grayscale(.3)}  /* disabled 스타일 */
+  #offlineBar{position:fixed;left:0;right:0;bottom:0;z-index:9997;display:none;
+    background:var(--danger);color:#fff;text-align:center;padding:8px;font-size:13px}
+  #offlineBar.show{display:block}
   /* ── left: sources ── */
   .side{width:280px;flex:0 0 280px;background:var(--panel);border-right:1px solid var(--line);
     display:flex;flex-direction:column}
@@ -189,6 +194,7 @@
   <div style="font:700 26px -apple-system,'Malgun Gothic',sans-serif;color:#e6e9ef;letter-spacing:2px">센트빔 <span style="color:#00d9ff">CENTBEAM</span></div>
   <div style="font:13px -apple-system,sans-serif;color:#6b7688">라이브 스튜디오 로딩 중…</div>
 </div>
+<div id="offlineBar">⚠️ 오프라인 상태입니다 — 네트워크 연결을 확인하세요. (방송은 연결 복구 시 자동 재연결)</div>
 <div id="aboutModal" style="position:fixed;inset:0;z-index:9998;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6)">
   <div style="background:#121722;border:1px solid #26304a;border-radius:14px;padding:24px;max-width:340px;text-align:center;font-family:-apple-system,'Malgun Gothic',sans-serif;color:#e6e9ef">
     <div style="font-size:44px;color:#00d9ff">◭</div>
@@ -1953,6 +1959,17 @@ document.getElementById('installBtn').onclick=async()=>{ if(!deferredPrompt) ret
 window.addEventListener('appinstalled', ()=>{ document.getElementById('installBtn').style.display='none'; toast('홈화면에 설치됨','ok'); });
 function hideSplash(){ const s=document.getElementById('splash'); if(!s) return; s.style.opacity='0'; setTimeout(()=>s.remove(),600); }
 window.addEventListener('load', ()=>setTimeout(hideSplash, 400)); setTimeout(hideSplash, 2500);
+/* 오프라인 안내 배너 */
+function updateOnline(){ const bar=document.getElementById('offlineBar'); if(bar) bar.classList.toggle('show', !navigator.onLine); }
+window.addEventListener('online', ()=>{ updateOnline(); toast('온라인 복구','ok'); });
+window.addEventListener('offline', ()=>{ updateOnline(); toast('오프라인 상태','warn'); });
+updateOnline();
+/* PWA 단축아이콘(shortcuts) 액션 처리 */
+(function handleShortcut(){
+  const a=new URLSearchParams(location.search).get('action');
+  if(a==='camera'){ setTimeout(()=>{ const b=document.getElementById('addCam'); if(b) b.click(); }, 600); }
+  else if(a==='live'){ setTimeout(()=>{ const w=document.getElementById('whip'); if(w) w.focus(); toast('WHIP 입력 후 방송 시작','ok'); }, 600); }
+})();
 
 /* ── init ── */
 if('serviceWorker' in navigator && location.protocol!=='file:'){
