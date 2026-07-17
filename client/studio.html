@@ -445,6 +445,14 @@
           <option value="9000">9 Mbps</option>
         </select></div>
     </div>
+    <div class="field"><label>오디오 비트레이트 (Opus)</label>
+      <select id="abrSel">
+        <option value="64">64 kbps</option>
+        <option value="96">96 kbps</option>
+        <option value="128" selected>128 kbps</option>
+        <option value="192">192 kbps</option>
+        <option value="256">256 kbps</option>
+      </select></div>
     <div class="note" id="sendStat">송출 대기</div>
     <div class="note" id="connStat">연결: —</div>
     <div class="note" id="dropStat" style="display:none">드롭 프레임: 0</div>
@@ -1013,6 +1021,7 @@ function sel(){ return state.layers.find(l=>l.id===state.selId); }
 /* ── 방향/해상도 ── */
 document.getElementById('orient').addEventListener('click', e=>{
   const b=e.target.closest('button'); if(!b || b.dataset.o===state.orient) return;
+  if(state.live){ toast('방송 중에는 방향을 바꿀 수 없습니다','warn'); return; }  // 방송 중 방향 잠금
   const old=canvasDims();
   [...e.currentTarget.children].forEach(x=>x.classList.remove('on'));
   b.classList.add('on'); state.orient=b.dataset.o;
@@ -1344,10 +1353,31 @@ async function whipPublish(url, stream){
     if(state.live && (pc.connectionState==='failed'||pc.connectionState==='disconnected')) scheduleReconnect();
   };
   const offer = await pc.createOffer();
+  offer.sdp = setOpusBitrate(offer.sdp, Number(document.getElementById('abrSel').value)||128);
   await pc.setLocalDescription(offer);
   const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/sdp'}, body:offer.sdp});
   if(!res.ok) throw new Error('WHIP '+res.status);
   await pc.setRemoteDescription({type:'answer', sdp:await res.text()});
+}
+/* Opus 오디오 비트레이트를 SDP fmtp에 주입 (maxaveragebitrate, bps) */
+function setOpusBitrate(sdp, kbps){
+  try{
+    const bps=kbps*1000;
+    const pt=(sdp.match(/a=rtpmap:(\d+)\s+opus\/48000/i)||[])[1];
+    if(!pt) return sdp;
+    const lines=sdp.split(/\r?\n/); let done=false;
+    for(let i=0;i<lines.length;i++){
+      if(lines[i].startsWith('a=fmtp:'+pt)){
+        let v=lines[i];
+        v=v.replace(/;?\s*maxaveragebitrate=\d+/g,'').replace(/;?\s*stereo=\d/g,'');
+        lines[i]=v+';maxaveragebitrate='+bps+';stereo=1'; done=true; break;
+      }
+    }
+    if(!done){ // fmtp 라인이 없으면 rtpmap 뒤에 추가
+      for(let i=0;i<lines.length;i++){ if(lines[i].startsWith('a=rtpmap:'+pt)){ lines.splice(i+1,0,'a=fmtp:'+pt+' maxaveragebitrate='+bps+';stereo=1'); break; } }
+    }
+    return lines.join('\r\n');
+  }catch(_){ return sdp; }
 }
 
 async function applyEncoding(){
@@ -1437,6 +1467,12 @@ function setLive(v){
   b.classList.toggle('primary',!v); b.classList.toggle('stop',v);
   const mb=document.getElementById('mGoLive');
   if(mb){ mb.classList.toggle('live',v); mb.querySelector('span').textContent=v?'종료':'방송'; }
+  // 방향 토글 버튼 잠금 표시 + 화면 방향 잠금(베스트에포트)
+  document.querySelectorAll('#orient button').forEach(x=>{ x.style.opacity=v?'.5':''; x.style.cursor=v?'not-allowed':''; });
+  try{
+    if(v && screen.orientation && screen.orientation.lock){ screen.orientation.lock(state.orient==='portrait'?'portrait':'landscape').catch(()=>{}); }
+    else if(!v && screen.orientation && screen.orientation.unlock){ screen.orientation.unlock(); }
+  }catch(_){}
 }
 
 /* ── 모바일 하단 탭바: 드로어 토글 ── */
