@@ -747,6 +747,7 @@ async function addVideoSource(kind){
       {name: kind==='screen'?'화면공유':'카메라', video:v, stream, aspect:ar, fill:true,
        facing: kind==='screen'?null:'user'});
     coverFit(L, canvasDims());
+    if(kind!=='screen' && L.facing==='user'){ L.flipH=true; }  // 전면 카메라 셀피 미러링
     // 화면공유 중단(브라우저 '공유 중지') 시 레이어 자동 제거
     stream.getVideoTracks()[0].addEventListener('ended', ()=>{
       state.layers = state.layers.filter(x=>x.id!==L.id);
@@ -1333,7 +1334,8 @@ pCdColor.oninput=e=>{ const L=sel(); if(L)L.color=e.target.value; };
 pCdFont.oninput=e=>{ const L=sel(); if(L)L.font=Number(e.target.value)||120; };
 document.getElementById('pCdStart').onclick=()=>{ const L=sel(); if(L)L.endAt=Date.now()+(L.mins||0)*60000; };
 document.getElementById('pCamFlip').onclick=()=>{ const L=sel(); if(!L||L.type!=='camera')return;
-  L.facing=(L.facing==='environment')?'user':'environment'; reacquireCamera(L,{facingMode:{ideal:L.facing}}); };
+  L.facing=(L.facing==='environment')?'user':'environment'; L.flipH=(L.facing==='user'); // 전면=미러
+  reacquireCamera(L,{facingMode:{ideal:L.facing}}); syncProps(); };
 document.getElementById('pCamDevice').onchange=e=>{ const L=sel(); if(!L||L.type!=='camera'||!e.target.value)return;
   reacquireCamera(L,{deviceId:{exact:e.target.value}}); };
 pGaugeLabel.oninput=e=>{ const L=sel(); if(L)L.label=e.target.value; };
@@ -1708,7 +1710,16 @@ function setLive(v){
     if(v && screen.orientation && screen.orientation.lock){ screen.orientation.lock(state.orient==='portrait'?'portrait':'landscape').catch(()=>{}); }
     else if(!v && screen.orientation && screen.orientation.unlock){ screen.orientation.unlock(); }
   }catch(_){}
+  if(v) requestWakeLock(); else releaseWakeLock();   // 방송 중 화면 꺼짐 방지
 }
+/* ── Wake Lock (방송 중 화면 꺼짐 방지) ── */
+let _wakeLock=null;
+async function requestWakeLock(){
+  try{ if('wakeLock' in navigator){ _wakeLock=await navigator.wakeLock.request('screen');
+    _wakeLock.addEventListener&&_wakeLock.addEventListener('release',()=>{ _wakeLock=null; }); } }catch(_){}
+}
+function releaseWakeLock(){ try{ if(_wakeLock){ _wakeLock.release(); _wakeLock=null; } }catch(_){} }
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden && state.live && !_wakeLock) requestWakeLock(); });
 
 /* ── 모바일 하단 탭바: 드로어 토글 ── */
 const drawers={ side:document.querySelector('.side'), props:document.querySelector('.props') };
@@ -2127,9 +2138,16 @@ const APP_VERSION='1.0.0';
 function applyTheme(t){ if(t==='dark') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme',t); }
 function applyAccent(c){ document.documentElement.style.setProperty('--accent2',c); document.documentElement.style.setProperty('--accent',c); }
 (function initTheme(){
-  const t=localStorage.getItem('centbeam.theme')||'dark'; const a=localStorage.getItem('centbeam.accent');
+  const stored=localStorage.getItem('centbeam.theme');
+  // 저장값 없으면 시스템 테마 연동(prefers-color-scheme)
+  const sysLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+  const t = stored || (sysLight?'light':'dark');
+  const a=localStorage.getItem('centbeam.accent');
   applyTheme(t); document.getElementById('themeSel').value=t;
   if(a){ applyAccent(a); document.getElementById('accentPick').value=a; }
+  // 사용자가 명시 설정 전까지 시스템 변경 따라감
+  if(!stored && window.matchMedia){ window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', ev=>{
+    if(localStorage.getItem('centbeam.theme')) return; const nt=ev.matches?'light':'dark'; applyTheme(nt); document.getElementById('themeSel').value=nt; }); }
 })();
 document.getElementById('themeSel').onchange=e=>{ applyTheme(e.target.value); localStorage.setItem('centbeam.theme',e.target.value); };
 document.getElementById('accentPick').oninput=e=>{ applyAccent(e.target.value); localStorage.setItem('centbeam.accent',e.target.value); };
