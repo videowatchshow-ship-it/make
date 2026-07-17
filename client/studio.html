@@ -37,6 +37,7 @@
   .ctxItem{display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--txt);
     padding:9px 12px;font-size:14px;cursor:pointer;border-radius:6px}
   .ctxItem:hover{background:var(--panel2)}
+  .app.immersive .side, .app.immersive .props{display:none}   /* 몰입 모드 */
   #offlineBar{position:fixed;left:0;right:0;bottom:0;z-index:9997;display:none;
     background:var(--danger);color:#fff;text-align:center;padding:8px;font-size:13px}
   #offlineBar.show{display:block}
@@ -310,6 +311,7 @@
       <button class="btn" id="gRuler" title="눈금자">📏</button>
       <button class="btn" id="gSnap" title="그리드 스냅">🧲</button>
       <button class="btn" id="gBrb" title="자리비움 화면(BRB)">☕</button>
+      <button class="btn" id="gImmersive" title="몰입 모드(패널 숨김)">⛶↔</button>
       <div class="spacer"></div>
       <span class="live-dot" id="dot"></span>
       <span id="liveTxt" style="font-size:12px;color:var(--muted)">오프라인</span>
@@ -1540,6 +1542,13 @@ pAlnCY.onclick=()=>{const L=sel();if(!L)return;const d=canvasDims();L.y=d.h/2;re
 [['gSafe','safe'],['gGrid','grid'],['gRuler','ruler'],['gSnap','snap'],['gBrb','brb']].forEach(([id,k])=>{
   document.getElementById(id).onclick=e=>{ guides[k]=!guides[k]; e.currentTarget.classList.toggle('primary',guides[k]); };
 });
+/* 몰입 모드 (패널 숨김) */
+document.getElementById('gImmersive').onclick=e=>{ const app=document.querySelector('.app'); app.classList.toggle('immersive');
+  e.currentTarget.classList.toggle('primary', app.classList.contains('immersive')); setTimeout(applyCanvasSize,50); };
+/* 더블탭 → 캔버스 맞춤 (306) */
+let _lastTap=0;
+hit.addEventListener('pointerup', e=>{ const nowT=(typeof performance!=='undefined'?performance.now():0);
+  if(nowT-_lastTap<300){ fillSelected(); haptic(15); _lastTap=0; } else _lastTap=nowT; });
 /* 뮤트 핫키(M) — 첫 마이크 토글 */
 window.addEventListener('keydown',e=>{
   if(e.key!=='m'&&e.key!=='M') return;
