@@ -404,6 +404,12 @@
       <div id="cameraProps" style="display:none">
         <button class="btn" id="pCamFlip" style="width:100%">🔄 전/후면 전환</button>
         <div class="field"><label>카메라 장치</label><select id="pCamDevice"></select></div>
+        <div class="row2" style="margin-top:6px">
+          <button class="btn" id="pCamFocus" title="자동초점 재설정">🎯 초점</button>
+          <button class="btn" id="pCamTorch" title="플래시(지원 기기)">🔦 플래시</button>
+        </div>
+        <div class="field"><label>노출 <span id="pCamExpVal">자동</span></label><input id="pCamExp" type="range" min="0" max="100" value="50"></div>
+        <div class="note">탭 초점·노출·플래시는 기기/브라우저 지원 시에만 동작합니다.</div>
       </div>
       <div id="gaugeProps" style="display:none">
         <div class="field"><label>라벨</label><input id="pGaugeLabel" placeholder="목표"></div>
@@ -642,6 +648,7 @@
       <button class="btn" id="snapBtn">📸 스냅샷</button>
       <button class="btn" id="recBtn">⏺ 녹화 시작</button>
     </div>
+    <button class="btn" id="pipBtn" style="width:100%;margin-top:6px">🗔 PiP (백그라운드 미니 화면)</button>
 
     <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
     <h2>대상 채널 (fan-out)</h2>
@@ -1744,6 +1751,34 @@ document.getElementById('snapBtn').onclick = () => {
     toast('스냅샷 저장됨','ok');
   }, 'image/png');
 };
+/* Picture-in-Picture — 캔버스를 백그라운드 미니 화면으로 (317) */
+let _pipVideo=null;
+document.getElementById('pipBtn').onclick = async () => {
+  try{
+    if(document.pictureInPictureElement){ await document.exitPictureInPicture(); return; }
+    if(!_pipVideo){ _pipVideo=document.createElement('video'); _pipVideo.muted=true; _pipVideo.playsInline=true;
+      _pipVideo.srcObject=cv.captureStream(30); document.body.appendChild(_pipVideo); _pipVideo.style.cssText='position:fixed;left:-9999px;width:2px;height:2px'; }
+    await _pipVideo.play();
+    if(_pipVideo.requestPictureInPicture){ await _pipVideo.requestPictureInPicture(); toast('PiP 켜짐 — 앱을 나가도 미니 화면 유지','ok'); }
+    else toast('이 브라우저는 PiP 미지원','warn');
+  }catch(e){ toast('PiP 실패: '+e.message,'err'); }
+};
+/* 카메라 탭 초점·노출·플래시 (312) — applyConstraints (기기 지원 시) */
+function camTrack(){ const L=sel(); return (L&&L.stream)?L.stream.getVideoTracks()[0]:null; }
+document.getElementById('pCamFocus').onclick=async()=>{ const t=camTrack(); if(!t) return;
+  try{ const caps=t.getCapabilities?t.getCapabilities():{};
+    if(caps.focusMode && caps.focusMode.includes('continuous')){ await t.applyConstraints({advanced:[{focusMode:'continuous'}]}); toast('자동초점 재설정','ok'); }
+    else toast('이 카메라는 초점 제어 미지원','warn'); }catch(e){ toast('초점 실패: '+e.message,'warn'); } };
+document.getElementById('pCamTorch').onclick=async e=>{ const t=camTrack(); if(!t) return;
+  try{ const caps=t.getCapabilities?t.getCapabilities():{};
+    if(caps.torch){ const on=!e.currentTarget.classList.contains('primary'); await t.applyConstraints({advanced:[{torch:on}]}); e.currentTarget.classList.toggle('primary',on); toast(on?'플래시 켜짐':'플래시 꺼짐'); }
+    else toast('이 기기는 플래시 미지원','warn'); }catch(err){ toast('플래시 실패','warn'); } };
+document.getElementById('pCamExp').oninput=async e=>{ const t=camTrack(); if(!t) return;
+  try{ const caps=t.getCapabilities?t.getCapabilities():{};
+    if(caps.exposureMode && caps.exposureCompensation){ const c=caps.exposureCompensation;
+      const v=c.min+(c.max-c.min)*(+e.target.value)/100; await t.applyConstraints({advanced:[{exposureMode:'manual',exposureCompensation:v}]});
+      document.getElementById('pCamExpVal').textContent=v.toFixed(1); }
+    else document.getElementById('pCamExpVal').textContent='미지원'; }catch(_){ document.getElementById('pCamExpVal').textContent='미지원'; } };
 /* 로컬 녹화 */
 let mediaRec=null, recChunks=[];
 document.getElementById('recBtn').onclick = function(){
