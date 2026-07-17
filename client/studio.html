@@ -241,6 +241,7 @@
       <button id="addEmote">💗 이모지플로팅</button>
       <button id="addPoll">📊 투표</button>
       <button id="addDonors">★ 후원목록</button>
+      <button id="addNowPlaying">🎧 BGM정보</button>
       <button id="fillBtn">⤢ 채우기</button>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between">
@@ -367,6 +368,13 @@
           <div class="field"><label>키 색상</label><input id="pChromaColor" type="color" value="#00ff00"></div>
           <div class="field"><label>강도 <span id="pChromaThrVal">120</span></label><input id="pChromaThr" type="range" min="20" max="255" value="120"></div>
         </div>
+      </div>
+      <div id="nowplayingProps" style="display:none">
+        <div class="row2">
+          <div class="field"><label>박스색</label><input id="pNpBg" type="color" value="#0f1420"></div>
+          <div class="field"><label>강조색</label><input id="pNpAccent" type="color" value="#00d9ff"></div>
+        </div>
+        <div class="note">재생 중인 BGM 이름을 자동 표시합니다.</div>
       </div>
       <div id="emoteProps" style="display:none">
         <div class="field"><label>이모지 (여러 개)</label><input id="pEmoteEmojis" type="text" value="👍❤️😂🎉"></div>
@@ -507,6 +515,7 @@
         <option value="VP9">VP9</option>
         <option value="AV1">AV1</option>
       </select></div>
+    <label class="field" style="font-size:12px;color:var(--muted)"><input type="checkbox" id="alertSndChk" checked> 방송 시작/종료 알림음</label>
     <div class="note" id="sendStat">송출 대기</div>
     <div class="note" id="connStat">연결: —</div>
     <div class="note" id="dropStat" style="display:none">드롭 프레임: 0</div>
@@ -796,6 +805,7 @@ document.getElementById('addFrame').onclick = () => { addLayer('frame',{name:'�
 document.getElementById('addEmote').onclick = () => { addLayer('emote',{name:'이모지플로팅',emojis:'👍❤️😂🎉',count:8,size:48,w:300,h:400}); };
 document.getElementById('addPoll').onclick = () => { addLayer('poll',{name:'투표',question:'다음 방송 주제는?',options:'게임:45\n토크:30\n노래:25',bg:'#161a22',color:'#e6e9ef',accent:'#00d9ff',font:26,w:520,h:320}); };
 document.getElementById('addDonors').onclick = () => { addLayer('donors',{name:'후원목록',title:'최근 후원',lines:'센트 5,000원\ntak 3,000원\ndeni 1,000원',bg:'#141a24',color:'#e6e9ef',accent:'#ffc04d',font:26,w:420,h:320}); };
+document.getElementById('addNowPlaying').onclick = () => { addLayer('nowplaying',{name:'BGM정보',bg:'#0f1420',color:'#e6e9ef',accent:'#00d9ff',font:26,w:420,h:72}); };
 
 /* 웹 URL */
 document.getElementById('addWeb').onclick = () => {
@@ -998,6 +1008,20 @@ function draw(){
         ctx.fillText(`${o.name}  ${Math.round(frac*100)}%`, -hw+pad+8, py+barH/2);
         ctx.textBaseline='top'; py+=barH+fs*0.5;
       });
+    } else if(L.type==='nowplaying'){
+      const bgm=(typeof mixer!=='undefined'&&mixer.sources)?mixer.sources.find(s=>s.kind==='bgm'&&!s.muted):null;
+      const label=bgm?bgm.label:'재생 중 아님';
+      const r=Math.min(L.h/2,20);
+      ctx.fillStyle=L.bg||'#0f1420'; ctx.globalAlpha*=0.92; ctx.beginPath(); ctx.roundRect(-hw,-hh,L.w,L.h,r); ctx.fill(); ctx.globalAlpha=1;
+      const fs=L.font||26, cyc=-hh+L.h/2;
+      // 이퀄라이저 바 애니메이션
+      const now=(typeof performance!=='undefined'?performance.now():0)/1000;
+      const bx=-hw+fs*0.8;
+      for(let i=0;i<4;i++){ const bh=bgm?(fs*(0.4+0.5*Math.abs(Math.sin(now*4+i)))):(fs*0.3); ctx.fillStyle=L.accent||'#00d9ff'; ctx.fillRect(bx+i*(fs*0.28), cyc+fs*0.5-bh, fs*0.18, bh); }
+      ctx.fillStyle=L.color||'#e6e9ef'; ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.font=`600 ${fs}px -apple-system,"Malgun Gothic",sans-serif`;
+      ctx.save(); ctx.beginPath(); ctx.rect(bx+fs*1.6,-hh,L.w-fs*2.6,L.h); ctx.clip();
+      ctx.fillText('♪ '+label, bx+fs*1.5, cyc); ctx.restore();
     } else if(L.type==='donors'){
       ctx.fillStyle=L.bg||'#141a24'; ctx.globalAlpha*=0.9; ctx.beginPath(); ctx.roundRect(-hw,-hh,L.w,L.h,14); ctx.fill(); ctx.globalAlpha=1;
       ctx.save(); ctx.beginPath(); ctx.roundRect(-hw,-hh,L.w,L.h,14); ctx.clip();
@@ -1153,7 +1177,7 @@ document.getElementById('arSel').onchange = e=>{
 };
 
 /* ── 레이어 목록 ── */
-const ICON={camera:'🎥',screen:'🖥️',image:'🖼️',text:'🅣',web:'🌐',solid:'🟦',clock:'🕐',lower3:'▬',countdown:'⏱',video:'🎞️',gauge:'📊',chat:'💬',sticker:'⭐',frame:'🖼',emote:'💗',poll:'📊',donors:'★'};
+const ICON={camera:'🎥',screen:'🖥️',image:'🖼️',text:'🅣',web:'🌐',solid:'🟦',clock:'🕐',lower3:'▬',countdown:'⏱',video:'🎞️',gauge:'📊',chat:'💬',sticker:'⭐',frame:'🖼',emote:'💗',poll:'📊',donors:'★',nowplaying:'🎧'};
 function renderLayers(){
   const box=document.getElementById('layers'); box.innerHTML='';
   [...state.layers].sort((a,b)=>b.z-a.z).forEach(L=>{
@@ -1186,6 +1210,7 @@ function showProps(){
   document.getElementById('cameraProps').style.display=L.type==='camera'?'block':'none';
   document.getElementById('gaugeProps').style.display=L.type==='gauge'?'block':'none';
   document.getElementById('chromaProps').style.display=(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video')?'block':'none';
+  document.getElementById('nowplayingProps').style.display=L.type==='nowplaying'?'block':'none';
   document.getElementById('emoteProps').style.display=L.type==='emote'?'block':'none';
   document.getElementById('pollProps').style.display=L.type==='poll'?'block':'none';
   document.getElementById('donorsProps').style.display=L.type==='donors'?'block':'none';
@@ -1220,6 +1245,7 @@ function syncProps(){
   if(L.type==='countdown'){ pCdMins.value=L.mins!=null?L.mins:5; pCdColor.value=L.color||'#ffffff'; pCdFont.value=L.font||120; }
   if(L.type==='gauge'){ pGaugeLabel.value=L.label!=null?L.label:''; pGaugePct.value=L.pct!=null?L.pct:60; pGaugeColor.value=L.color||'#00c48c'; pGaugeBg.value=L.bg||'#1e2430'; }
   if(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video'){ const c=L.chroma||{}; pChromaOn.checked=!!c.on; pChromaColor.value=c.color||'#00ff00'; pChromaThr.value=c.thr||120; pChromaThrVal.textContent=c.thr||120; }
+  if(L.type==='nowplaying'){ pNpBg.value=L.bg||'#0f1420'; pNpAccent.value=L.accent||'#00d9ff'; }
   if(L.type==='emote'){ pEmoteEmojis.value=L.emojis||'👍❤️😂🎉'; pEmoteCount.value=L.count||8; pEmoteSize.value=L.size||48; }
   if(L.type==='poll'){ pPollQ.value=L.question||''; pPollOpts.value=L.options||''; pPollBg.value=L.bg||'#161a22'; pPollAccent.value=L.accent||'#00d9ff'; }
   if(L.type==='donors'){ pDonorsTitle.value=L.title||'최근 후원'; pDonorsLines.value=L.lines||''; pDonorsBg.value=L.bg||'#141a24'; pDonorsAccent.value=L.accent||'#ffc04d'; }
@@ -1282,6 +1308,8 @@ function ensureChroma(L){ if(!L.chroma) L.chroma={on:false,color:'#00ff00',thr:1
 pChromaOn.onchange=e=>{const L=sel();if(L){ensureChroma(L).on=e.target.checked;}};
 pChromaColor.oninput=e=>{const L=sel();if(L){ensureChroma(L).color=e.target.value;}};
 pChromaThr.oninput=e=>{const L=sel();if(L){ensureChroma(L).thr=+e.target.value;pChromaThrVal.textContent=e.target.value;}};
+pNpBg.oninput=e=>{const L=sel();if(L)L.bg=e.target.value;};
+pNpAccent.oninput=e=>{const L=sel();if(L)L.accent=e.target.value;};
 pEmoteEmojis.oninput=e=>{const L=sel();if(L)L.emojis=e.target.value;};
 pEmoteCount.oninput=e=>{const L=sel();if(L)L.count=Math.max(1,Math.min(16,+e.target.value||8));};
 pEmoteSize.oninput=e=>{const L=sel();if(L)L.size=+e.target.value||48;};
@@ -1442,9 +1470,20 @@ document.getElementById('goLive').onclick = async function(){
   currentWhip=document.getElementById('whip').value.trim();
   if(!currentWhip){ toast('WHIP 엔드포인트를 입력하세요','warn'); return; }
   await runCountdown();
-  try{ await startPublish(); setLive(true); startTimers(); toast('방송 시작','ok'); }
+  try{ await startPublish(); setLive(true); startTimers(); alertSound('start'); toast('방송 시작','ok'); }
   catch(e){ toast('송출 실패: '+e.message,'err'); }
 };
+/* 알림 사운드 (WebAudio 비프) */
+function alertSound(kind){
+  try{ if(!document.getElementById('alertSndChk').checked) return;
+    ensureMixer(); const c=mixer.ctx, t=c.currentTime;
+    const notes = kind==='stop' ? [660,440] : [440,660,880];
+    notes.forEach((f,i)=>{ const o=c.createOscillator(), g=c.createGain();
+      o.type='sine'; o.frequency.value=f; o.connect(g); g.connect(c.destination);
+      const s=t+i*0.12; g.gain.setValueAtTime(0.0001,s); g.gain.linearRampToValueAtTime(0.25,s+0.02); g.gain.linearRampToValueAtTime(0.0001,s+0.11);
+      o.start(s); o.stop(s+0.12); });
+  }catch(_){}
+}
 function runCountdown(){
   return new Promise(res=>{
     const ov=document.getElementById('ovl');
@@ -1585,6 +1624,7 @@ async function pollStats(){
 const statPeak={framesEncoded:0,framesSent:0};
 
 function stopLive(){
+  if(state.live) alertSound('stop');
   // 방송 요약 통계
   if(state.live && liveStart){
     const secs=Math.floor((performance.now()-liveStart)/1000);
@@ -1659,6 +1699,7 @@ function sceneData(){
         if(L.type==='lower3'){ b.title=L.title; b.sub=L.sub; b.color=L.color; b.bg=L.bg; b.font=L.font; }
         if(L.type==='countdown'){ b.color=L.color; b.font=L.font; b.mins=L.mins; b.endAt=L.endAt; }
         if(L.type==='gauge'){ b.label=L.label; b.pct=L.pct; b.color=L.color; b.bg=L.bg; }
+        if(L.type==='nowplaying'){ b.bg=L.bg; b.color=L.color; b.accent=L.accent; b.font=L.font; }
         if(L.type==='emote'){ b.emojis=L.emojis; b.count=L.count; b.size=L.size; }
         if(L.type==='poll'){ b.question=L.question; b.options=L.options; b.bg=L.bg; b.color=L.color; b.accent=L.accent; b.font=L.font; }
         if(L.type==='donors'){ b.title=L.title; b.lines=L.lines; b.bg=L.bg; b.color=L.color; b.accent=L.accent; b.font=L.font; }
@@ -1692,7 +1733,7 @@ function restoreScene(){
   applyCanvasSize();
   for(const b of (data.layers||[])){
     if(b.type==='image'){ const img=new Image(); img.src=b.src; state.layers.push({...b,id:nextId++,img}); }
-    else if(b.type==='text'||b.type==='solid'||b.type==='clock'||b.type==='lower3'||b.type==='countdown'||b.type==='gauge'||b.type==='chat'||b.type==='sticker'||b.type==='frame'||b.type==='emote'||b.type==='poll'||b.type==='donors'){ state.layers.push({...b,id:nextId++}); }
+    else if(b.type==='text'||b.type==='solid'||b.type==='clock'||b.type==='lower3'||b.type==='countdown'||b.type==='gauge'||b.type==='chat'||b.type==='sticker'||b.type==='frame'||b.type==='emote'||b.type==='poll'||b.type==='donors'||b.type==='nowplaying'){ state.layers.push({...b,id:nextId++}); }
     else if(b.type==='web'){
       const iframe=document.createElement('iframe');
       iframe.src=b.url; iframe.style.cssText='position:absolute;border:0;background:transparent';
@@ -1729,7 +1770,7 @@ function applySnapshot(j){
   applyCanvasSize();
   for(const b of (data.layers||[])){
     if(b.type==='image'){ const img=new Image(); img.src=b.src; state.layers.push({...b,id:nextId++,img}); }
-    else if(['text','solid','clock','lower3','countdown','gauge','chat','sticker','frame','emote','poll','donors'].includes(b.type)){ state.layers.push({...b,id:nextId++}); }
+    else if(['text','solid','clock','lower3','countdown','gauge','chat','sticker','frame','emote','poll','donors','nowplaying'].includes(b.type)){ state.layers.push({...b,id:nextId++}); }
     else if(b.type==='web'){ const iframe=document.createElement('iframe'); iframe.src=b.url; iframe.style.cssText='position:absolute;border:0;background:transparent'; ovl.appendChild(iframe); state.layers.push({...b,id:nextId++,iframe}); }
   }
   normalizeZ(); renderLayers(); histLock=false;
