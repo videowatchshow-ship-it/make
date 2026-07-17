@@ -417,6 +417,8 @@
         </select></div>
     </div>
     <div class="note" id="sendStat">송출 대기</div>
+    <div class="note" id="connStat">연결: —</div>
+    <div class="note" id="dropStat" style="display:none">드롭 프레임: 0</div>
     <div class="note">방송 시작 시 이 캔버스가 MediaMTX WHIP로 송출됩니다. 서버가 아래 대상으로 fan-out.</div>
     <div class="row2">
       <button class="btn" id="snapBtn">📸 스냅샷</button>
@@ -1240,6 +1242,7 @@ async function whipPublish(url, stream){
   pc = new RTCPeerConnection();
   stream.getTracks().forEach(t=>pc.addTrack(t, stream));
   pc.onconnectionstatechange=()=>{
+    updateConnStat(pc.connectionState);
     if(state.live && (pc.connectionState==='failed'||pc.connectionState==='disconnected')) scheduleReconnect();
   };
   const offer = await pc.createOffer();
@@ -1288,6 +1291,8 @@ function startTimers(){
   statsTimer=setInterval(pollStats,1000);
 }
 function stopTimers(){ clearInterval(liveTimer); clearInterval(statsTimer); liveTimer=statsTimer=null; }
+const CONN_LABEL={connecting:'연결 중…',connected:'🟢 연결됨',disconnected:'🟠 끊김',failed:'🔴 실패',closed:'연결 종료',new:'준비'};
+function updateConnStat(s){ const el=document.getElementById('connStat'); if(el) el.textContent='연결: '+(CONN_LABEL[s]||s||'—'); }
 async function pollStats(){
   if(!pc) return;
   try{ const stats=await pc.getStats();
@@ -1296,16 +1301,32 @@ async function pollStats(){
         if(lastStatsTs){ const kbps=Math.round((r.bytesSent-lastBytes)*8/(r.timestamp-lastStatsTs));
           document.getElementById('sendStat').textContent='송출 '+kbps+' kbps'; }
         lastBytes=r.bytesSent; lastStatsTs=r.timestamp;
+        if(r.framesEncoded!=null) statPeak.framesEncoded=r.framesEncoded;
+        if(r.framesSent!=null) statPeak.framesSent=r.framesSent;
+        const dropped=(r.framesEncoded!=null&&r.framesSent!=null)?Math.max(0,r.framesEncoded-r.framesSent):0;
+        const ds=document.getElementById('dropStat');
+        if(ds){ ds.style.display='block'; ds.textContent='드롭 프레임: '+dropped; ds.style.color=dropped>30?'var(--danger)':''; }
       }
     });
   }catch(_){}
 }
+const statPeak={framesEncoded:0,framesSent:0};
 
 function stopLive(){
+  // 방송 요약 통계
+  if(state.live && liveStart){
+    const secs=Math.floor((performance.now()-liveStart)/1000);
+    const mm=String((secs/60)|0).padStart(2,'0'), ss=String(secs%60).padStart(2,'0');
+    const mb=(lastBytes/1048576).toFixed(1);
+    toast(`방송 요약 — 시간 ${mm}:${ss} · 송출 ${mb}MB · 드롭 ${Math.max(0,statPeak.framesEncoded-statPeak.framesSent)}`,'ok');
+  }
   if(pc){pc.close();pc=null;}
   if(tempMicStream){ tempMicStream.getTracks().forEach(t=>t.stop()); tempMicStream=null; }
   stopTimers(); reconnecting=false; reconnectTries=0;
   document.getElementById('sendStat').textContent='송출 대기';
+  updateConnStat('closed');
+  const ds=document.getElementById('dropStat'); if(ds) ds.style.display='none';
+  statPeak.framesEncoded=0; statPeak.framesSent=0;
   setLive(false);
   // 믹서 소유 트랙(mixer.dest)은 재사용하므로 stop 하지 않음
 }
@@ -1414,10 +1435,19 @@ function renderDest(){
   box.innerHTML='';
   state.destinations.forEach((d,i)=>{
     const el=document.createElement('div');
-    el.className='dest'+(d.locked?' locked':'');
+    const off=d.enabled===false;
+    el.className='dest'+(d.locked?' locked':'')+(off?' off':'');
+    if(off) el.style.opacity='.45';
     el.innerHTML=`<span class="badge">${d.platform}</span>
       <span class="dname">${d.locked?'<span class="lock">🔒</span> ':''}${d.name}</span>
       <span class="dkey">${maskKey(d.streamKey)}</span>`;
+    // on/off 토글 (videowatch 강제 대상은 항상 on)
+    const tg=document.createElement('button'); tg.className='dtoggle';
+    tg.textContent=off?'⭘':'⏻'; tg.title=off?'대상 켜기':'대상 끄기';
+    tg.style.cssText='background:transparent;border:none;cursor:pointer;font-size:15px;color:'+(off?'var(--muted)':'var(--ok)');
+    if(d.locked){ tg.disabled=true; tg.style.opacity='.5'; tg.title='필수 대상(항상 송출)'; }
+    tg.onclick=()=>{ if(d.locked) return; d.enabled=off; saveDest(); renderDest(); };
+    el.appendChild(tg);
     if(!d.locked){
       const rm=document.createElement('button'); rm.className='rm'; rm.textContent='✕'; rm.title='삭제';
       rm.onclick=()=>{ state.destinations.splice(i,1); saveDest(); renderDest(); };

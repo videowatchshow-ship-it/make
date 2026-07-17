@@ -10,7 +10,10 @@ jq -c --arg p "$PATH_NAME" '.[$p][]?' "$DEST" 2>/dev/null | while read -r ROW; d
   URL=$(echo "$ROW" | jq -r '.rtmpUrl')
   KEY=$(echo "$ROW" | jq -r '.streamKey')
   TAG=$(echo "$ROW" | jq -r '.name' | tr -c 'A-Za-z0-9_-' '_')
+  ENABLED=$(echo "$ROW" | jq -r '.enabled')
   case "$KEY" in ""|*PUT_KEY_HERE*) continue;; esac
+  # enabled:false 대상은 건너뜀 (UI 토글 off). 미지정(null)/true 는 송출.
+  case "$ENABLED" in false) echo "[$(date -Is)] skip ${TAG} (disabled)" >> "$LOG"; continue;; esac
   FULL="${URL%/}/${KEY}"
   echo "[$(date -Is)] fanout ${TAG} -> ${URL}" >> "$LOG"
   exec -a "fanout-${PATH_NAME}-${TAG}" ffmpeg -re -i "$SRC" -c copy -f flv "$FULL" >>"$LOG" 2>&1 &
