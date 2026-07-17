@@ -615,6 +615,12 @@
         <option value="AV1">AV1</option>
       </select></div>
     <label class="field" style="font-size:12px;color:var(--muted)"><input type="checkbox" id="alertSndChk" checked> 방송 시작/종료 알림음</label>
+    <label class="field" style="font-size:12px;color:var(--muted)"><input type="checkbox" id="voiceOnlyChk"> 🎙 음성 전용 모드(영상 미송출)</label>
+    <div class="row2" style="margin-top:4px">
+      <input type="datetime-local" id="schedAt" class="btn" style="flex:1;padding:6px;font-size:12px">
+      <button class="btn" id="schedBtn" style="padding:6px 10px">⏰ 예약</button>
+    </div>
+    <div class="note" id="schedStat" style="display:none"></div>
     <div class="note" id="sendStat">송출 대기</div>
     <div class="note" id="connStat">연결: —</div>
     <div class="note" id="fpsStat">렌더: — fps</div>
@@ -1817,6 +1823,22 @@ document.getElementById('goLive').onclick = async function(){
   catch(e){ toast('송출 실패: '+e.message,'err'); }
   finally{ hideLoading(); }
 };
+/* ── 방송 예약 스케줄 (181) ── */
+let _schedTimer=null, _schedCountdown=null;
+document.getElementById('schedBtn').onclick=()=>{
+  const v=document.getElementById('schedAt').value; const stat=document.getElementById('schedStat');
+  if(_schedTimer){ clearTimeout(_schedTimer); clearInterval(_schedCountdown); _schedTimer=null; stat.style.display='none'; document.getElementById('schedBtn').textContent='⏰ 예약'; return; }
+  if(!v){ toast('예약 시각을 선택하세요','warn'); return; }
+  const target=new Date(v).getTime(); const now=Date.now();
+  if(target<=now){ toast('미래 시각을 선택하세요','warn'); return; }
+  stat.style.display='block'; document.getElementById('schedBtn').textContent='취소';
+  const tick=()=>{ const left=Math.max(0,Math.round((target-Date.now())/1000));
+    stat.textContent='⏰ 예약: '+Math.floor(left/60)+'분 '+(left%60)+'초 후 방송 시작'; };
+  tick(); _schedCountdown=setInterval(tick,1000);
+  _schedTimer=setTimeout(()=>{ clearInterval(_schedCountdown); stat.style.display='none'; document.getElementById('schedBtn').textContent='⏰ 예약';
+    if(!state.live) document.getElementById('goLive').click(); }, target-now);
+  toast('방송 예약됨','ok');
+};
 /* 알림 사운드 (WebAudio 비프) */
 function alertSound(kind){
   try{ if(!document.getElementById('alertSndChk').checked) return;
@@ -1849,9 +1871,10 @@ async function startPublish(){
   } else if(tempMicStream){ audioTracks=tempMicStream.getAudioTracks(); }
   else { try{ tempMicStream=await navigator.mediaDevices.getUserMedia({audio:true});
     audioTracks=tempMicStream.getAudioTracks(); }catch(_){} }
-  outStream = new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks]);
+  const voiceOnly=document.getElementById('voiceOnlyChk').checked;
+  outStream = voiceOnly ? new MediaStream(audioTracks) : new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks]);
   await whipPublish(currentWhip, outStream);
-  await applyEncoding();
+  if(!voiceOnly) await applyEncoding();
 }
 
 async function whipPublish(url, stream){
@@ -1986,7 +2009,8 @@ async function pollStats(){
         if(r.framesSent!=null) statPeak.framesSent=r.framesSent;
         const dropped=(r.framesEncoded!=null&&r.framesSent!=null)?Math.max(0,r.framesEncoded-r.framesSent):0;
         const ds=document.getElementById('dropStat');
-        if(ds){ ds.style.display='block'; ds.textContent='드롭 프레임: '+dropped; ds.style.color=dropped>30?'var(--danger)':''; }
+        const retx=(r.retransmittedPacketsSent||0), nack=(r.nackCount||0);
+        if(ds){ ds.style.display='block'; ds.textContent='드롭 '+dropped+' · 재전송 '+retx+' · NACK '+nack; ds.style.color=(dropped>30||nack>50)?'var(--danger)':''; }
       }
     });
   }catch(_){}
