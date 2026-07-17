@@ -323,6 +323,22 @@
           <div class="field"><label>굵기</label><select id="pWeight">
             <option value="400">보통</option><option value="700" selected>굵게</option><option value="900">매우굵게</option></select></div>
         </div>
+        <div class="row2">
+          <div class="field"><label>글꼴</label><select id="pFontFamily">
+            <option value="-apple-system,'Malgun Gothic',sans-serif">시스템</option>
+            <option value="'Malgun Gothic','Apple SD Gothic Neo',sans-serif">고딕</option>
+            <option value="'Nanum Myeongjo',serif">명조/세리프</option>
+            <option value="'Georgia',serif">Georgia</option>
+            <option value="'Courier New',monospace">모노스페이스</option>
+            <option value="'Impact','Haettenschweiler',sans-serif">임팩트</option>
+          </select></div>
+          <div class="field"><label>애니메이션</label><select id="pTextAnim">
+            <option value="none">없음</option><option value="fade">페이드</option><option value="blink">깜빡임</option><option value="type">타이핑</option><option value="slide">슬라이드</option></select></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label>외곽선 색</label><input id="pTextStroke" type="color" value="#000000"></div>
+          <div class="field"><label>외곽선 두께 <span id="pTextStrokeWVal">0</span></label><input id="pTextStrokeW" type="range" min="0" max="16" value="0"></div>
+        </div>
       </div>
       <div id="cameraProps" style="display:none">
         <button class="btn" id="pCamFlip" style="width:100%">🔄 전/후면 전환</button>
@@ -764,13 +780,24 @@ function draw(){
       drawKeyed(L, L.img, L.img.naturalWidth, L.img.naturalHeight, hw, hh);
     } else if(L.type==='text'){
       const weight=L.weight||700, align=L.align||'center';
-      ctx.font = `${weight} ${L.font}px -apple-system,"Malgun Gothic",sans-serif`;
+      const fam=L.fontFamily||'-apple-system,"Malgun Gothic",sans-serif';
+      ctx.font = `${weight} ${L.font}px ${fam}`;
       ctx.fillStyle = L.color; ctx.textAlign=align; ctx.textBaseline='middle';
       ctx.shadowColor='rgba(0,0,0,.5)'; ctx.shadowBlur=8;
-      const lines=String(L.text).split('\n'), lh=L.font*1.2;
+      // 애니메이션
+      const anim=L.anim||'none';
+      const now=(typeof performance!=='undefined'?performance.now():0)/1000;
+      if(anim==='fade'){ ctx.globalAlpha *= 0.5+0.5*Math.sin(now*2); }
+      else if(anim==='blink'){ if((Math.floor(now*1.5)%2)===0) ctx.globalAlpha *= 0.15; }
+      else if(anim==='slide'){ ctx.translate(Math.sin(now*1.5)*L.w*0.08, 0); }
+      let lines=String(L.text).split('\n');
+      if(anim==='type'){ const full=String(L.text); const total=full.length; const shown=Math.floor((now*10)%(total+8)); lines=full.slice(0,Math.min(shown,total)).split('\n'); }
+      const lh=L.font*1.2;
       const tx = align==='left' ? -L.w/2 : align==='right' ? L.w/2 : 0;
       const y0 = -(lines.length-1)*lh/2;
-      lines.forEach((ln,i)=>ctx.fillText(ln, tx, y0+i*lh));
+      const sw=L.strokeW||0;
+      if(sw>0){ ctx.lineWidth=sw; ctx.strokeStyle=L.stroke||'#000'; ctx.lineJoin='round'; }
+      lines.forEach((ln,i)=>{ const yy=y0+i*lh; if(sw>0) ctx.strokeText(ln, tx, yy); ctx.fillText(ln, tx, yy); });
     } else if(L.type==='solid'){
       ctx.fillStyle=L.color||'#0066ff'; ctx.fillRect(-hw,-hh,L.w,L.h);
     } else if(L.type==='clock'){
@@ -1037,7 +1064,10 @@ function syncProps(){
   pSat.value=Math.round(sat*100); pSatVal.textContent=Math.round(sat*100)+'%';
   pBlur.value=blur; pBlurVal.textContent=blur+'px';
   if(L.type==='text'){ pText.value=L.text; pFont.value=L.font; pColor.value=L.color;
-    pAlign.value=L.align||'center'; pWeight.value=String(L.weight||700); }
+    pAlign.value=L.align||'center'; pWeight.value=String(L.weight||700);
+    pFontFamily.value=L.fontFamily||"-apple-system,'Malgun Gothic',sans-serif";
+    pTextAnim.value=L.anim||'none'; pTextStroke.value=L.stroke||'#000000';
+    pTextStrokeW.value=L.strokeW||0; pTextStrokeWVal.textContent=L.strokeW||0; }
   if(L.type==='web'){ pUrl.value=L.url; }
   if(L.type==='solid'){ pSolidColor.value=L.color||'#0066ff'; }
   if(L.type==='clock'){ pClockFmt.value=L.fmt||'time'; pClockColor.value=L.color||'#ffffff'; pClockFont.value=L.font||72; }
@@ -1075,6 +1105,10 @@ pColor.oninput=e=>{ const L=sel(); if(L)L.color=e.target.value; };
 pUrl.oninput=e=>{ const L=sel(); if(L&&L.iframe){L.url=e.target.value; L.iframe.src=e.target.value;} };
 pAlign.onchange=e=>{ const L=sel(); if(L)L.align=e.target.value; };
 pWeight.onchange=e=>{ const L=sel(); if(L)L.weight=Number(e.target.value); };
+pFontFamily.onchange=e=>{ const L=sel(); if(L)L.fontFamily=e.target.value; };
+pTextAnim.onchange=e=>{ const L=sel(); if(L)L.anim=e.target.value; };
+pTextStroke.oninput=e=>{ const L=sel(); if(L)L.stroke=e.target.value; };
+pTextStrokeW.oninput=e=>{ const L=sel(); if(L){L.strokeW=+e.target.value; pTextStrokeWVal.textContent=e.target.value;} };
 pSolidColor.oninput=e=>{ const L=sel(); if(L)L.color=e.target.value; };
 pClockFmt.onchange=e=>{ const L=sel(); if(L)L.fmt=e.target.value; };
 pClockColor.oninput=e=>{ const L=sel(); if(L)L.color=e.target.value; };
@@ -1415,7 +1449,7 @@ function sceneData(){
           locked:L.locked,hidden:L.hidden};
         if(L.type==='image') b.src=L.src;
         if(L.chroma) b.chroma=L.chroma;
-        if(L.type==='text'){ b.text=L.text; b.font=L.font; b.color=L.color; b.align=L.align; b.weight=L.weight; }
+        if(L.type==='text'){ b.text=L.text; b.font=L.font; b.color=L.color; b.align=L.align; b.weight=L.weight; b.fontFamily=L.fontFamily; b.anim=L.anim; b.stroke=L.stroke; b.strokeW=L.strokeW; }
         if(L.type==='web') b.url=L.url;
         if(L.type==='solid') b.color=L.color;
         if(L.type==='clock'){ b.color=L.color; b.font=L.font; b.fmt=L.fmt; }
