@@ -268,6 +268,10 @@
             <option value="400">보통</option><option value="700" selected>굵게</option><option value="900">매우굵게</option></select></div>
         </div>
       </div>
+      <div id="cameraProps" style="display:none">
+        <button class="btn" id="pCamFlip" style="width:100%">🔄 전/후면 전환</button>
+        <div class="field"><label>카메라 장치</label><select id="pCamDevice"></select></div>
+      </div>
       <div id="solidProps" style="display:none">
         <div class="field"><label>단색 색상</label><input id="pSolidColor" type="color" value="#0066ff"></div>
       </div>
@@ -495,7 +499,8 @@ async function addVideoSource(kind){
     v.srcObject = stream; v.muted = true; v.playsInline = true; await v.play();
     const ar = (v.videoWidth && v.videoHeight) ? v.videoWidth/v.videoHeight : 16/9;
     const L = addLayer(kind==='screen'?'screen':'camera',
-      {name: kind==='screen'?'화면공유':'카메라', video:v, stream, aspect:ar, fill:true});
+      {name: kind==='screen'?'화면공유':'카메라', video:v, stream, aspect:ar, fill:true,
+       facing: kind==='screen'?null:'user'});
     coverFit(L, canvasDims());
     // 화면공유 중단(브라우저 '공유 중지') 시 레이어 자동 제거
     stream.getVideoTracks()[0].addEventListener('ended', ()=>{
@@ -507,6 +512,15 @@ async function addVideoSource(kind){
 }
 document.getElementById('addCam').onclick = () => addVideoSource('camera');
 document.getElementById('addScreen').onclick = () => addVideoSource('screen');
+/* 카메라 스트림 재획득 (전/후면 전환 · 장치 선택) */
+async function reacquireCamera(L, videoConstraints){
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({video: videoConstraints, audio:false});
+    if(L.stream) L.stream.getTracks().forEach(t=>t.stop());
+    L.stream = stream; L.video.srcObject = stream; await L.video.play();
+    const v=L.video; if(v.videoWidth&&v.videoHeight){ L.aspect=v.videoWidth/v.videoHeight; if(L.fill) coverFit(L,canvasDims()); }
+  }catch(e){ toast('카메라 전환 실패: '+e.message,'err'); }
+}
 document.getElementById('fillBtn').onclick = fillSelected;
 
 /* 이미지 */
@@ -734,6 +748,7 @@ function showProps(){
   document.getElementById('clockProps').style.display=L.type==='clock'?'block':'none';
   document.getElementById('lower3Props').style.display=L.type==='lower3'?'block':'none';
   document.getElementById('cdProps').style.display=L.type==='countdown'?'block':'none';
+  document.getElementById('cameraProps').style.display=L.type==='camera'?'block':'none';
   syncProps();
 }
 function syncProps(){
@@ -757,6 +772,12 @@ function syncProps(){
   if(L.type==='clock'){ pClockFmt.value=L.fmt||'time'; pClockColor.value=L.color||'#ffffff'; pClockFont.value=L.font||72; }
   if(L.type==='lower3'){ pL3Title.value=L.title||''; pL3Sub.value=L.sub||''; pL3Color.value=L.color||'#ffffff'; pL3Bg.value=L.bg||'#0066ff'; pL3Font.value=L.font||48; }
   if(L.type==='countdown'){ pCdMins.value=L.mins!=null?L.mins:5; pCdColor.value=L.color||'#ffffff'; pCdFont.value=L.font||120; }
+  if(L.type==='camera'){
+    navigator.mediaDevices.enumerateDevices().then(ds=>{
+      const cams=ds.filter(d=>d.kind==='videoinput');
+      pCamDevice.innerHTML=cams.map((c,i)=>`<option value="${c.deviceId}">${c.label||('카메라 '+(i+1))}</option>`).join('') || '<option>장치 없음</option>';
+    }).catch(()=>{});
+  }
 }
 ['pX','pY','pW','pH','pR'].forEach(id=>{
   document.getElementById(id).oninput=e=>{ const L=sel(); if(!L)return;
@@ -791,6 +812,10 @@ pCdMins.oninput=e=>{ const L=sel(); if(L)L.mins=Number(e.target.value)||0; };
 pCdColor.oninput=e=>{ const L=sel(); if(L)L.color=e.target.value; };
 pCdFont.oninput=e=>{ const L=sel(); if(L)L.font=Number(e.target.value)||120; };
 document.getElementById('pCdStart').onclick=()=>{ const L=sel(); if(L)L.endAt=Date.now()+(L.mins||0)*60000; };
+document.getElementById('pCamFlip').onclick=()=>{ const L=sel(); if(!L||L.type!=='camera')return;
+  L.facing=(L.facing==='environment')?'user':'environment'; reacquireCamera(L,{facingMode:{ideal:L.facing}}); };
+document.getElementById('pCamDevice').onchange=e=>{ const L=sel(); if(!L||L.type!=='camera'||!e.target.value)return;
+  reacquireCamera(L,{deviceId:{exact:e.target.value}}); };
 document.getElementById('pFront').onclick=()=>{ const L=sel(); if(L){L.z=1e6; normalizeZ(); renderLayers();} };
 document.getElementById('pBack').onclick=()=>{ const L=sel(); if(L){L.z=-1e6; normalizeZ(); renderLayers();} };
 document.getElementById('pDup').onclick=()=>{
