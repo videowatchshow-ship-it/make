@@ -238,6 +238,9 @@
       <button id="addChat">💬 채팅</button>
       <button id="addSticker">⭐ 스티커</button>
       <button id="addFrame">🖼 프레임</button>
+      <button id="addEmote">💗 이모지플로팅</button>
+      <button id="addPoll">📊 투표</button>
+      <button id="addDonors">★ 후원목록</button>
       <button id="fillBtn">⤢ 채우기</button>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between">
@@ -363,6 +366,29 @@
         <div class="row2">
           <div class="field"><label>키 색상</label><input id="pChromaColor" type="color" value="#00ff00"></div>
           <div class="field"><label>강도 <span id="pChromaThrVal">120</span></label><input id="pChromaThr" type="range" min="20" max="255" value="120"></div>
+        </div>
+      </div>
+      <div id="emoteProps" style="display:none">
+        <div class="field"><label>이모지 (여러 개)</label><input id="pEmoteEmojis" type="text" value="👍❤️😂🎉"></div>
+        <div class="row2">
+          <div class="field"><label>개수</label><input id="pEmoteCount" type="number" min="1" max="16" value="8"></div>
+          <div class="field"><label>크기(px)</label><input id="pEmoteSize" type="number" value="48"></div>
+        </div>
+      </div>
+      <div id="pollProps" style="display:none">
+        <div class="field"><label>질문</label><input id="pPollQ" type="text"></div>
+        <div class="field"><label>선택지 (이름:숫자, 줄바꿈)</label><textarea id="pPollOpts" rows="4" style="width:100%"></textarea></div>
+        <div class="row2">
+          <div class="field"><label>박스색</label><input id="pPollBg" type="color" value="#161a22"></div>
+          <div class="field"><label>막대색</label><input id="pPollAccent" type="color" value="#00d9ff"></div>
+        </div>
+      </div>
+      <div id="donorsProps" style="display:none">
+        <div class="field"><label>제목</label><input id="pDonorsTitle" type="text" value="최근 후원"></div>
+        <div class="field"><label>목록 (줄바꿈)</label><textarea id="pDonorsLines" rows="4" style="width:100%"></textarea></div>
+        <div class="row2">
+          <div class="field"><label>박스색</label><input id="pDonorsBg" type="color" value="#141a24"></div>
+          <div class="field"><label>강조색</label><input id="pDonorsAccent" type="color" value="#ffc04d"></div>
         </div>
       </div>
       <div id="chatProps" style="display:none">
@@ -767,6 +793,9 @@ document.getElementById('addGauge').onclick = () => { addLayer('gauge',{name:'�
 document.getElementById('addChat').onclick = () => { addLayer('chat',{name:'채팅',lines:'센트: 안녕하세요\ntak: 방송 잘봐요',bg:'#161a22',color:'#e6e9ef',font:30,w:520,h:360}); };
 document.getElementById('addSticker').onclick = () => { addLayer('sticker',{name:'스티커',emoji:'🔥',w:160,h:160,aspect:1}); };
 document.getElementById('addFrame').onclick = () => { addLayer('frame',{name:'프레임',color:'#00d9ff',thick:12,radius:24,w:700,h:400}); };
+document.getElementById('addEmote').onclick = () => { addLayer('emote',{name:'이모지플로팅',emojis:'👍❤️😂🎉',count:8,size:48,w:300,h:400}); };
+document.getElementById('addPoll').onclick = () => { addLayer('poll',{name:'투표',question:'다음 방송 주제는?',options:'게임:45\n토크:30\n노래:25',bg:'#161a22',color:'#e6e9ef',accent:'#00d9ff',font:26,w:520,h:320}); };
+document.getElementById('addDonors').onclick = () => { addLayer('donors',{name:'후원목록',title:'최근 후원',lines:'센트 5,000원\ntak 3,000원\ndeni 1,000원',bg:'#141a24',color:'#e6e9ef',accent:'#ffc04d',font:26,w:420,h:320}); };
 
 /* 웹 URL */
 document.getElementById('addWeb').onclick = () => {
@@ -937,6 +966,51 @@ function draw(){
       ctx.fillText(L.emoji||'🔥',0,0);
     } else if(L.type==='frame'){
       ctx.lineWidth=L.thick; ctx.strokeStyle=L.color; ctx.beginPath(); ctx.roundRect(-hw+L.thick/2,-hh+L.thick/2,L.w-L.thick,L.h-L.thick,L.radius); ctx.stroke();
+    } else if(L.type==='emote'){
+      const set=[...String(L.emojis||'👍❤️😂🎉').replace(/\s/g,'')]; if(!set.length) set.push('👍');
+      const n=Math.min(16, Math.max(1, L.count||8));
+      const now=(typeof performance!=='undefined'?performance.now():0)/1000;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.save(); ctx.beginPath(); ctx.rect(-hw,-hh,L.w,L.h); ctx.clip();
+      for(let i=0;i<n;i++){
+        const sp=((now*0.35 + i*0.41)%1);
+        const y=hh - sp*L.h;
+        const x=-hw + (((i*137.5)%L.w) + Math.sin((now+i)*1.3)*(L.w*0.06));
+        const sz=(L.size||48)*(0.7+0.3*Math.sin(sp*Math.PI));
+        ctx.globalAlpha=Math.max(0,Math.sin(sp*Math.PI));
+        ctx.font=`${sz}px -apple-system,"Malgun Gothic",sans-serif`;
+        ctx.fillText(set[i%set.length], x, y);
+      }
+      ctx.restore();
+    } else if(L.type==='poll'){
+      ctx.fillStyle=L.bg||'#161a22'; ctx.globalAlpha*=0.9; ctx.beginPath(); ctx.roundRect(-hw,-hh,L.w,L.h,14); ctx.fill(); ctx.globalAlpha=1;
+      const opts=String(L.options||'').split('\n').map(s=>s.trim()).filter(Boolean).map(s=>{ const m=s.match(/^(.*?):(\d+)/); return m?{name:m[1].trim(),val:+m[2]}:{name:s,val:0}; });
+      const total=Math.max(1, opts.reduce((a,o)=>a+o.val,0));
+      const fs=L.font||26, pad=fs*0.7;
+      ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillStyle=L.color||'#e6e9ef';
+      ctx.font=`700 ${fs*1.1}px -apple-system,"Malgun Gothic",sans-serif`;
+      ctx.fillText(String(L.question||'투표'), -hw+pad, -hh+pad);
+      let py=-hh+pad+fs*1.6; const barW=L.w-pad*2, barH=fs*1.1;
+      opts.forEach(o=>{ const frac=o.val/total;
+        ctx.fillStyle='rgba(255,255,255,.12)'; ctx.beginPath(); ctx.roundRect(-hw+pad,py,barW,barH,7); ctx.fill();
+        ctx.fillStyle=L.accent||'#00d9ff'; ctx.beginPath(); ctx.roundRect(-hw+pad,py,barW*frac,barH,7); ctx.fill();
+        ctx.fillStyle=L.color||'#e6e9ef'; ctx.font=`600 ${fs*0.8}px -apple-system,"Malgun Gothic",sans-serif`; ctx.textBaseline='middle';
+        ctx.fillText(`${o.name}  ${Math.round(frac*100)}%`, -hw+pad+8, py+barH/2);
+        ctx.textBaseline='top'; py+=barH+fs*0.5;
+      });
+    } else if(L.type==='donors'){
+      ctx.fillStyle=L.bg||'#141a24'; ctx.globalAlpha*=0.9; ctx.beginPath(); ctx.roundRect(-hw,-hh,L.w,L.h,14); ctx.fill(); ctx.globalAlpha=1;
+      ctx.save(); ctx.beginPath(); ctx.roundRect(-hw,-hh,L.w,L.h,14); ctx.clip();
+      const fs=L.font||26, pad=fs*0.7;
+      ctx.textAlign='left'; ctx.textBaseline='top';
+      ctx.fillStyle=L.accent||'#ffc04d'; ctx.font=`800 ${fs*1.05}px -apple-system,"Malgun Gothic",sans-serif`;
+      ctx.fillText('★ '+String(L.title||'최근 후원'), -hw+pad, -hh+pad);
+      let dy=-hh+pad+fs*1.6;
+      String(L.lines||'').split('\n').filter(s=>s.trim()).forEach(ln=>{
+        ctx.fillStyle=L.color||'#e6e9ef'; ctx.font=`500 ${fs}px -apple-system,"Malgun Gothic",sans-serif`;
+        ctx.fillText(ln, -hw+pad, dy); dy+=fs*1.4;
+      });
+      ctx.restore();
     } else if(L.type==='web'){
       // 캔버스엔 자리표시(합성 불가), 실제 위젯은 프리뷰 오버레이 iframe로 표시
       ctx.fillStyle='rgba(0,217,255,.08)'; ctx.fillRect(-hw,-hh,L.w,L.h);
@@ -1079,7 +1153,7 @@ document.getElementById('arSel').onchange = e=>{
 };
 
 /* ── 레이어 목록 ── */
-const ICON={camera:'🎥',screen:'🖥️',image:'🖼️',text:'🅣',web:'🌐',solid:'🟦',clock:'🕐',lower3:'▬',countdown:'⏱',video:'🎞️',gauge:'📊',chat:'💬',sticker:'⭐',frame:'🖼'};
+const ICON={camera:'🎥',screen:'🖥️',image:'🖼️',text:'🅣',web:'🌐',solid:'🟦',clock:'🕐',lower3:'▬',countdown:'⏱',video:'🎞️',gauge:'📊',chat:'💬',sticker:'⭐',frame:'🖼',emote:'💗',poll:'📊',donors:'★'};
 function renderLayers(){
   const box=document.getElementById('layers'); box.innerHTML='';
   [...state.layers].sort((a,b)=>b.z-a.z).forEach(L=>{
@@ -1112,6 +1186,9 @@ function showProps(){
   document.getElementById('cameraProps').style.display=L.type==='camera'?'block':'none';
   document.getElementById('gaugeProps').style.display=L.type==='gauge'?'block':'none';
   document.getElementById('chromaProps').style.display=(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video')?'block':'none';
+  document.getElementById('emoteProps').style.display=L.type==='emote'?'block':'none';
+  document.getElementById('pollProps').style.display=L.type==='poll'?'block':'none';
+  document.getElementById('donorsProps').style.display=L.type==='donors'?'block':'none';
   document.getElementById('chatProps').style.display=L.type==='chat'?'block':'none';
   document.getElementById('stickerProps').style.display=L.type==='sticker'?'block':'none';
   document.getElementById('frameProps').style.display=L.type==='frame'?'block':'none';
@@ -1143,6 +1220,9 @@ function syncProps(){
   if(L.type==='countdown'){ pCdMins.value=L.mins!=null?L.mins:5; pCdColor.value=L.color||'#ffffff'; pCdFont.value=L.font||120; }
   if(L.type==='gauge'){ pGaugeLabel.value=L.label!=null?L.label:''; pGaugePct.value=L.pct!=null?L.pct:60; pGaugeColor.value=L.color||'#00c48c'; pGaugeBg.value=L.bg||'#1e2430'; }
   if(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video'){ const c=L.chroma||{}; pChromaOn.checked=!!c.on; pChromaColor.value=c.color||'#00ff00'; pChromaThr.value=c.thr||120; pChromaThrVal.textContent=c.thr||120; }
+  if(L.type==='emote'){ pEmoteEmojis.value=L.emojis||'👍❤️😂🎉'; pEmoteCount.value=L.count||8; pEmoteSize.value=L.size||48; }
+  if(L.type==='poll'){ pPollQ.value=L.question||''; pPollOpts.value=L.options||''; pPollBg.value=L.bg||'#161a22'; pPollAccent.value=L.accent||'#00d9ff'; }
+  if(L.type==='donors'){ pDonorsTitle.value=L.title||'최근 후원'; pDonorsLines.value=L.lines||''; pDonorsBg.value=L.bg||'#141a24'; pDonorsAccent.value=L.accent||'#ffc04d'; }
   if(L.type==='chat'){ pChatLines.value=L.lines||''; pChatBg.value=L.bg||'#161a22'; pChatColor.value=L.color||'#e6e9ef'; pChatFont.value=L.font||30; }
   if(L.type==='sticker'){ pStickerEmoji.value=L.emoji||'🔥'; }
   if(L.type==='frame'){ pFrameColor.value=L.color; pFrameThick.value=L.thick; pFrameRadius.value=L.radius; }
@@ -1202,6 +1282,17 @@ function ensureChroma(L){ if(!L.chroma) L.chroma={on:false,color:'#00ff00',thr:1
 pChromaOn.onchange=e=>{const L=sel();if(L){ensureChroma(L).on=e.target.checked;}};
 pChromaColor.oninput=e=>{const L=sel();if(L){ensureChroma(L).color=e.target.value;}};
 pChromaThr.oninput=e=>{const L=sel();if(L){ensureChroma(L).thr=+e.target.value;pChromaThrVal.textContent=e.target.value;}};
+pEmoteEmojis.oninput=e=>{const L=sel();if(L)L.emojis=e.target.value;};
+pEmoteCount.oninput=e=>{const L=sel();if(L)L.count=Math.max(1,Math.min(16,+e.target.value||8));};
+pEmoteSize.oninput=e=>{const L=sel();if(L)L.size=+e.target.value||48;};
+pPollQ.oninput=e=>{const L=sel();if(L)L.question=e.target.value;};
+pPollOpts.oninput=e=>{const L=sel();if(L)L.options=e.target.value;};
+pPollBg.oninput=e=>{const L=sel();if(L)L.bg=e.target.value;};
+pPollAccent.oninput=e=>{const L=sel();if(L)L.accent=e.target.value;};
+pDonorsTitle.oninput=e=>{const L=sel();if(L)L.title=e.target.value;};
+pDonorsLines.oninput=e=>{const L=sel();if(L)L.lines=e.target.value;};
+pDonorsBg.oninput=e=>{const L=sel();if(L)L.bg=e.target.value;};
+pDonorsAccent.oninput=e=>{const L=sel();if(L)L.accent=e.target.value;};
 pChatLines.oninput=e=>{const L=sel();if(L){L.lines=e.target.value;renderLayers();}};
 pChatBg.oninput=e=>{const L=sel();if(L){L.bg=e.target.value;renderLayers();}};
 pChatColor.oninput=e=>{const L=sel();if(L){L.color=e.target.value;renderLayers();}};
@@ -1568,6 +1659,9 @@ function sceneData(){
         if(L.type==='lower3'){ b.title=L.title; b.sub=L.sub; b.color=L.color; b.bg=L.bg; b.font=L.font; }
         if(L.type==='countdown'){ b.color=L.color; b.font=L.font; b.mins=L.mins; b.endAt=L.endAt; }
         if(L.type==='gauge'){ b.label=L.label; b.pct=L.pct; b.color=L.color; b.bg=L.bg; }
+        if(L.type==='emote'){ b.emojis=L.emojis; b.count=L.count; b.size=L.size; }
+        if(L.type==='poll'){ b.question=L.question; b.options=L.options; b.bg=L.bg; b.color=L.color; b.accent=L.accent; b.font=L.font; }
+        if(L.type==='donors'){ b.title=L.title; b.lines=L.lines; b.bg=L.bg; b.color=L.color; b.accent=L.accent; b.font=L.font; }
         if(L.type==='chat'){ b.lines=L.lines; b.bg=L.bg; b.color=L.color; b.font=L.font; }
         if(L.type==='sticker'){ b.emoji=L.emoji; }
         if(L.type==='frame'){ b.color=L.color; b.thick=L.thick; b.radius=L.radius; }
@@ -1598,7 +1692,7 @@ function restoreScene(){
   applyCanvasSize();
   for(const b of (data.layers||[])){
     if(b.type==='image'){ const img=new Image(); img.src=b.src; state.layers.push({...b,id:nextId++,img}); }
-    else if(b.type==='text'||b.type==='solid'||b.type==='clock'||b.type==='lower3'||b.type==='countdown'||b.type==='gauge'||b.type==='chat'||b.type==='sticker'||b.type==='frame'){ state.layers.push({...b,id:nextId++}); }
+    else if(b.type==='text'||b.type==='solid'||b.type==='clock'||b.type==='lower3'||b.type==='countdown'||b.type==='gauge'||b.type==='chat'||b.type==='sticker'||b.type==='frame'||b.type==='emote'||b.type==='poll'||b.type==='donors'){ state.layers.push({...b,id:nextId++}); }
     else if(b.type==='web'){
       const iframe=document.createElement('iframe');
       iframe.src=b.url; iframe.style.cssText='position:absolute;border:0;background:transparent';
@@ -1635,7 +1729,7 @@ function applySnapshot(j){
   applyCanvasSize();
   for(const b of (data.layers||[])){
     if(b.type==='image'){ const img=new Image(); img.src=b.src; state.layers.push({...b,id:nextId++,img}); }
-    else if(['text','solid','clock','lower3','countdown','gauge','chat','sticker','frame'].includes(b.type)){ state.layers.push({...b,id:nextId++}); }
+    else if(['text','solid','clock','lower3','countdown','gauge','chat','sticker','frame','emote','poll','donors'].includes(b.type)){ state.layers.push({...b,id:nextId++}); }
     else if(b.type==='web'){ const iframe=document.createElement('iframe'); iframe.src=b.url; iframe.style.cssText='position:absolute;border:0;background:transparent'; ovl.appendChild(iframe); state.layers.push({...b,id:nextId++,iframe}); }
   }
   normalizeZ(); renderLayers(); histLock=false;
