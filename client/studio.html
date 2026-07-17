@@ -321,8 +321,9 @@
       <button class="btn" id="gGrid" title="그리드 오버레이">▦</button>
       <button class="btn" id="gRuler" title="눈금자">📏</button>
       <button class="btn" id="gSnap" title="그리드 스냅">🧲</button>
-      <button class="btn" id="gBrb" title="자리비움 화면(BRB)">☕</button>
-      <button class="btn" id="gImmersive" title="몰입 모드(패널 숨김)">⛶↔</button>
+      <button class="btn" id="gBrb" title="자리비움 화면(BRB)" aria-label="BRB 화면">☕</button>
+      <button class="btn" id="gRotLock" title="화면 회전 잠금" aria-label="화면 회전 잠금">🔓↻</button>
+      <button class="btn" id="gImmersive" title="몰입 모드(패널 숨김)" aria-label="몰입 모드">⛶↔</button>
       <button class="btn" id="zoomOut" title="축소" style="padding:4px 8px">➖</button>
       <span id="zoomLbl" style="font-size:12px;color:var(--muted);min-width:38px;text-align:center">100%</span>
       <button class="btn" id="zoomIn" title="확대" style="padding:4px 8px">➕</button>
@@ -1675,6 +1676,14 @@ pAlnCY.onclick=()=>{const L=sel();if(!L)return;const d=canvasDims();L.y=d.h/2;re
 [['gSafe','safe'],['gGrid','grid'],['gRuler','ruler'],['gSnap','snap'],['gBrb','brb']].forEach(([id,k])=>{
   document.getElementById(id).onclick=e=>{ guides[k]=!guides[k]; e.currentTarget.classList.toggle('primary',guides[k]); };
 });
+/* 화면 회전 잠금 토글 (310) */
+let _rotLocked=false;
+document.getElementById('gRotLock').onclick=e=>{ _rotLocked=!_rotLocked; e.currentTarget.textContent=_rotLocked?'🔒↻':'🔓↻'; e.currentTarget.classList.toggle('primary',_rotLocked);
+  try{ if(_rotLocked && screen.orientation && screen.orientation.lock){ screen.orientation.lock(state.orient==='portrait'?'portrait':'landscape').then(()=>toast('화면 회전 잠금','ok')).catch(()=>toast('전체화면에서만 잠금 가능','warn')); }
+    else if(!_rotLocked && screen.orientation && screen.orientation.unlock){ screen.orientation.unlock(); toast('회전 잠금 해제'); } }catch(_){} };
+/* aria: 아이콘 전용 소스 버튼에 레이블 부여 (263) */
+document.querySelectorAll('.addbar button').forEach(b=>{ if(!b.getAttribute('aria-label')) b.setAttribute('aria-label', b.textContent.trim()); });
+document.querySelectorAll('.toolbar button, .layers .mini').forEach(b=>{ if(!b.getAttribute('aria-label') && b.title) b.setAttribute('aria-label', b.title); });
 /* 몰입 모드 (패널 숨김) */
 document.getElementById('gImmersive').onclick=e=>{ const app=document.querySelector('.app'); app.classList.toggle('immersive');
   e.currentTarget.classList.toggle('primary', app.classList.contains('immersive')); setTimeout(applyCanvasSize,50); };
@@ -2001,6 +2010,7 @@ async function pollStats(){
   if(!pc) return;
   try{ const stats=await pc.getStats();
     stats.forEach(r=>{
+      if(r.type==='candidate-pair' && r.nominated && r.availableOutgoingBitrate){ _availBw=r.availableOutgoingBitrate; }
       if(r.type==='outbound-rtp' && (r.kind==='video'||r.mediaType==='video')){
         if(lastStatsTs){ const kbps=Math.round((r.bytesSent-lastBytes)*8/(r.timestamp-lastStatsTs));
           document.getElementById('sendStat').textContent='송출 '+kbps+' kbps'; }
@@ -2013,6 +2023,7 @@ async function pollStats(){
         if(ds){ ds.style.display='block'; ds.textContent='드롭 '+dropped+' · 재전송 '+retx+' · NACK '+nack; ds.style.color=(dropped>30||nack>50)?'var(--danger)':''; }
       }
     });
+    if(typeof renderNetBatt==='function') renderNetBatt();   // 가용 대역폭 반영
   }catch(_){}
 }
 const statPeak={framesEncoded:0,framesSent:0};
@@ -2578,13 +2589,14 @@ window.addEventListener('online', ()=>{ updateOnline(); toast('온라인 복구'
 window.addEventListener('offline', ()=>{ updateOnline(); toast('오프라인 상태','warn'); });
 updateOnline();
 /* ── 네트워크 종류 + 배터리 + 저속망 안내 ── */
-let _battRef=null, _slowWarned=false, _lowBattWarned=false;
+let _battRef=null, _slowWarned=false, _lowBattWarned=false, _availBw=0;
 function renderNetBatt(){
   const el=document.getElementById('netStat'); if(!el) return;
   const conn=navigator.connection||navigator.mozConnection||navigator.webkitConnection;
   const net = conn ? (conn.effectiveType||'?').toUpperCase() : '알수없음';
   const batt = _battRef ? Math.round(_battRef.level*100)+'%'+(_battRef.charging?'⚡':'') : '—';
-  el.textContent='네트워크: '+net+' · 배터리: '+batt;
+  const bw = _availBw ? ' · 가용 '+(_availBw/1e6).toFixed(1)+'Mbps' : '';
+  el.textContent='네트워크: '+net+' · 배터리: '+batt+bw;
   // 저속망 안내
   if(conn && /^(slow-2g|2g)$/i.test(conn.effectiveType||'')){ el.style.color='var(--danger)';
     if(state.live && !_slowWarned){ _slowWarned=true; toast('⚠️ 저속 네트워크 — 비트레이트를 낮추세요','warn'); } }
