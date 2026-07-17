@@ -66,7 +66,22 @@ node server.js                    # API :3000
 # MediaMTX 는 별도 실행 (server/README.md 참고)
 ```
 
-전체 배포(참교육카지노 서버 `34.104.233.35`에 서브도메인 `studio.xn--9d0bw2fjtyymch7de9d.info` + HTTPS)는 → **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
+### 배포 (도메인: **panda-avata.cc**)
+
+프로덕션은 서버 `34.104.233.35`(GCP `my-site-1`, Apache 기존 호스팅)에 **`panda-avata.cc`** 로 HTTPS 배포한다. DNS는 Cloudflare(도메인은 GoDaddy 등록 → 네임서버 Cloudflare).
+
+```bash
+# 서버에서 원클릭(멱등). 파일배치 + Apache vhost + certbot SSL + 검증까지.
+sudo bash server/deploy.sh
+# 원격 한 방(맥에서):
+gcloud compute ssh my-site-1 --zone=asia-northeast1-a --command \
+ 'rm -rf /tmp/cb && git clone -b claude/sleepy-goodall-per69w https://github.com/videowatchshow-ship-it/make.git /tmp/cb && sudo bash /tmp/cb/server/deploy.sh'
+```
+
+- **접속(폰/PC)**: `https://panda-avata.cc/studio.html` → 카메라 허용 → "홈화면 추가"로 앱 설치(PWA)
+- **WHIP 엔드포인트**: `https://panda-avata.cc/whip/tak/whip`
+- DNS A레코드(@·www → `34.104.233.35`, **proxied off**) 명령: [docs/CLOUDFLARE_API.md](docs/CLOUDFLARE_API.md)
+- 전체 절차(DNS·vhost·certbot·방화벽): **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
 
 ---
 
@@ -76,7 +91,7 @@ node server.js                    # API :3000
 |--|--|
 | 클라이언트 | Vanilla JS + Canvas 2D + WebRTC(WHIP) + `getUserMedia`/`getDisplayMedia`. 의존성 0, 단일 HTML. |
 | 서버 | Node 22 (LTS) + Express 5, MediaMTX v1.19.2, FFmpeg, PM2 |
-| 배포 | 참교육카지노 서버(34.104.233.35, **Apache 기존 호스팅**) + Cloudflare DNS. `studio.참교육카지노.info` **Apache vhost + certbot HTTPS** (Caddy 아님 — 포트 충돌 주의) |
+| 배포 | 서버 34.104.233.35(GCP `my-site-1`, **Apache 기존 호스팅**) + Cloudflare DNS. **`panda-avata.cc`** Apache vhost + certbot HTTPS. 원클릭 `server/deploy.sh` (Caddy 아님 — 포트 충돌 주의) |
 
 버전 근거·검증은 [docs/ARCHITECTURE.md §기술 결정](docs/ARCHITECTURE.md) 참고 (2026-07 실측).
 
