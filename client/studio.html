@@ -38,6 +38,7 @@
     padding:9px 12px;font-size:14px;cursor:pointer;border-radius:6px}
   .ctxItem:hover{background:var(--panel2)}
   .app.immersive .side, .app.immersive .props{display:none}   /* 몰입 모드 */
+  @keyframes cbspin{to{transform:rotate(360deg)}}
   #offlineBar{position:fixed;left:0;right:0;bottom:0;z-index:9997;display:none;
     background:var(--danger);color:#fff;text-align:center;padding:8px;font-size:13px}
   #offlineBar.show{display:block}
@@ -201,6 +202,12 @@
   <div style="font:13px -apple-system,sans-serif;color:#6b7688">라이브 스튜디오 로딩 중…</div>
 </div>
 <div id="offlineBar">⚠️ 오프라인 상태입니다 — 네트워크 연결을 확인하세요. (방송은 연결 복구 시 자동 재연결)</div>
+<div id="loadingOv" style="position:fixed;inset:0;z-index:9995;display:none;align-items:center;justify-content:center;background:rgba(5,7,12,.55)">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
+    <div style="width:44px;height:44px;border:4px solid rgba(0,217,255,.25);border-top-color:#00d9ff;border-radius:50%;animation:cbspin .8s linear infinite"></div>
+    <div id="loadingTxt" style="color:#cfd6e4;font:14px -apple-system,'Malgun Gothic',sans-serif">준비 중…</div>
+  </div>
+</div>
 <div id="ctxMenu" style="position:fixed;z-index:9996;display:none;background:#141a24;border:1px solid #2a3446;border-radius:10px;padding:6px;min-width:150px;box-shadow:0 8px 30px rgba(0,0,0,.5);font-family:-apple-system,'Malgun Gothic',sans-serif">
   <button class="ctxItem" data-act="front">⬆ 맨 앞으로</button>
   <button class="ctxItem" data-act="back">⬇ 맨 뒤로</button>
@@ -781,11 +788,19 @@ function addLayer(type, data){
   state.layers.push(base);
   select(base.id);
   renderLayers();
+  gestureHint();
   return base;
 }
 
+/* 로딩 인디케이터 (273) */
+function showLoading(txt){ const o=document.getElementById('loadingOv'); if(o){ document.getElementById('loadingTxt').textContent=txt||'준비 중…'; o.style.display='flex'; } }
+function hideLoading(){ const o=document.getElementById('loadingOv'); if(o) o.style.display='none'; }
+/* 제스처 힌트 (274) — 첫 소스 추가 시 1회 */
+function gestureHint(){ try{ if(localStorage.getItem('centbeam.ghint')) return; localStorage.setItem('centbeam.ghint','1');
+  setTimeout(()=>toast('💡 소스를 드래그해 배치, 모서리로 크기조절, 두 손가락으로 확대·회전, 롱프레스로 메뉴','ok'), 400); }catch(_){} }
 /* 카메라 / 화면공유 공통 (비디오 소스 → cover) */
 async function addVideoSource(kind){
+  showLoading(kind==='screen'?'화면공유 준비 중…':'카메라 준비 중…');
   try{
     const stream = kind==='screen'
       ? await navigator.mediaDevices.getDisplayMedia({video:true, audio:false})
@@ -805,6 +820,7 @@ async function addVideoSource(kind){
       normalizeZ(); renderLayers();
     });
   }catch(e){ if(e.name!=='NotAllowedError') toast((kind==='screen'?'화면공유':'카메라')+' 실패: '+e.message,'err'); }
+  finally{ hideLoading(); }
 }
 document.getElementById('addCam').onclick = () => addVideoSource('camera');
 document.getElementById('addScreen').onclick = () => addVideoSource('screen');
@@ -965,6 +981,15 @@ function draw(){
     const iw=state.bgImage.naturalWidth, ih=state.bgImage.naturalHeight, ar=iw/ih, car=cw/ch;
     let dw,dh; if(car>ar){ dw=cw; dh=cw/ar; } else { dh=ch; dw=ch*ar; }
     ctx.drawImage(state.bgImage,(cw-dw)/2,(ch-dh)/2,dw,dh);
+  }
+  // 빈 상태 안내 (269)
+  if(state.layers.length===0){
+    ctx.save(); ctx.fillStyle='rgba(255,255,255,.28)'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font='600 '+Math.round(ch*0.035)+'px -apple-system,"Malgun Gothic",sans-serif';
+    ctx.fillText('＋ 왼쪽에서 소스를 추가하세요', cw/2, ch/2-ch*0.03);
+    ctx.font=Math.round(ch*0.022)+'px -apple-system,"Malgun Gothic",sans-serif';
+    ctx.fillText('카메라 · 화면공유 · 이미지 · 텍스트 · 위젯', cw/2, ch/2+ch*0.03);
+    ctx.restore();
   }
   const ordered = [...state.layers].sort((a,b)=>a.z-b.z);
   for(const L of ordered){
@@ -1697,8 +1722,10 @@ document.getElementById('goLive').onclick = async function(){
   currentWhip=document.getElementById('whip').value.trim();
   if(!currentWhip){ toast('WHIP 엔드포인트를 입력하세요','warn'); return; }
   await runCountdown();
+  showLoading('송출 연결 중…');
   try{ await startPublish(); setLive(true); startTimers(); alertSound('start'); toast('방송 시작','ok'); }
   catch(e){ toast('송출 실패: '+e.message,'err'); }
+  finally{ hideLoading(); }
 };
 /* 알림 사운드 (WebAudio 비프) */
 function alertSound(kind){
