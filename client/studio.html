@@ -34,6 +34,9 @@
   .app{display:flex;height:100vh;overflow:hidden}
   button:disabled,select:disabled,input:disabled{opacity:.42;cursor:not-allowed;filter:grayscale(.3)}  /* disabled 스타일 */
   :focus-visible{outline:2px solid var(--accent2);outline-offset:2px;border-radius:4px}   /* 키보드 포커스 링 */
+  .ctxItem{display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--txt);
+    padding:9px 12px;font-size:14px;cursor:pointer;border-radius:6px}
+  .ctxItem:hover{background:var(--panel2)}
   #offlineBar{position:fixed;left:0;right:0;bottom:0;z-index:9997;display:none;
     background:var(--danger);color:#fff;text-align:center;padding:8px;font-size:13px}
   #offlineBar.show{display:block}
@@ -197,6 +200,14 @@
   <div style="font:13px -apple-system,sans-serif;color:#6b7688">라이브 스튜디오 로딩 중…</div>
 </div>
 <div id="offlineBar">⚠️ 오프라인 상태입니다 — 네트워크 연결을 확인하세요. (방송은 연결 복구 시 자동 재연결)</div>
+<div id="ctxMenu" style="position:fixed;z-index:9996;display:none;background:#141a24;border:1px solid #2a3446;border-radius:10px;padding:6px;min-width:150px;box-shadow:0 8px 30px rgba(0,0,0,.5);font-family:-apple-system,'Malgun Gothic',sans-serif">
+  <button class="ctxItem" data-act="front">⬆ 맨 앞으로</button>
+  <button class="ctxItem" data-act="back">⬇ 맨 뒤로</button>
+  <button class="ctxItem" data-act="dup">⧉ 복제</button>
+  <button class="ctxItem" data-act="lock">🔒 잠금 전환</button>
+  <button class="ctxItem" data-act="hide">👁 숨김 전환</button>
+  <button class="ctxItem" data-act="del" style="color:#ff6b6b">🗑 삭제</button>
+</div>
 <div id="aboutModal" style="position:fixed;inset:0;z-index:9998;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6)">
   <div style="background:#121722;border:1px solid #26304a;border-radius:14px;padding:24px;max-width:340px;text-align:center;font-family:-apple-system,'Malgun Gothic',sans-serif;color:#e6e9ef">
     <div style="font-size:44px;color:#00d9ff">◭</div>
@@ -1260,9 +1271,35 @@ window.addEventListener('pointermove', e=>{
   else if(drag.mode==='rot'){ L.rot=Math.atan2(p.y-L.y,p.x-L.x)*180/Math.PI+90; }
   syncProps();
 });
-function endPointer(e){ gPointers.delete(e.pointerId); if(gPointers.size<2) gesture=null; if(gPointers.size===0) drag=null; }
+function endPointer(e){ gPointers.delete(e.pointerId); if(gPointers.size<2) gesture=null; if(gPointers.size===0) drag=null; clearLongPress(); }
 window.addEventListener('pointerup', endPointer);
 window.addEventListener('pointercancel', endPointer);
+
+/* ── 롱프레스 컨텍스트 메뉴 (106) ── */
+let _lpTimer=null, _lpStart=null;
+function clearLongPress(){ if(_lpTimer){ clearTimeout(_lpTimer); _lpTimer=null; } }
+hit.addEventListener('pointerdown', e=>{ if(!sel()) return; _lpStart={x:e.clientX,y:e.clientY};
+  clearLongPress(); _lpTimer=setTimeout(()=>{ if(gPointers.size<2) openCtxMenu(e.clientX,e.clientY); }, 500); });
+window.addEventListener('pointermove', e=>{ if(_lpStart && (Math.abs(e.clientX-_lpStart.x)>8||Math.abs(e.clientY-_lpStart.y)>8)) clearLongPress(); });
+document.getElementById('ovl').addEventListener('contextmenu', e=>{ if(!sel())return; e.preventDefault(); openCtxMenu(e.clientX,e.clientY); });
+function openCtxMenu(x,y){
+  const m=document.getElementById('ctxMenu'); m.style.display='block';
+  const mw=170, mh=240;
+  m.style.left=Math.min(x, innerWidth-mw)+'px'; m.style.top=Math.min(y, innerHeight-mh)+'px';
+  haptic(20);
+}
+function closeCtxMenu(){ document.getElementById('ctxMenu').style.display='none'; }
+document.getElementById('ctxMenu').addEventListener('click', e=>{
+  const act=e.target.dataset.act; if(!act) return; const L=sel(); if(!L){ closeCtxMenu(); return; }
+  if(act==='front'){ L.z=1e6; normalizeZ(); renderLayers(); }
+  else if(act==='back'){ L.z=-1e6; normalizeZ(); renderLayers(); }
+  else if(act==='dup'){ document.getElementById('pDup').click(); }
+  else if(act==='lock'){ L.locked=!L.locked; syncProps(); }
+  else if(act==='hide'){ L.hidden=!L.hidden; renderLayers(); syncProps(); }
+  else if(act==='del'){ document.getElementById('pDel').click(); }
+  closeCtxMenu();
+});
+window.addEventListener('pointerdown', e=>{ if(!e.target.closest('#ctxMenu')) closeCtxMenu(); });
 function sel(){ return state.layers.find(l=>l.id===state.selId); }
 
 /* ── 방향/해상도 ── */
