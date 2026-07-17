@@ -973,12 +973,28 @@ function drawHandles(){
 let drag=null;
 function pt(e){ const r=frame.getBoundingClientRect(); const s=r.width/canvasDims().w;
   return {x:(e.clientX-r.left)/s, y:(e.clientY-r.top)/s}; }
+/* 멀티터치 제스처(핀치 확대/축소 + 두손가락 회전) 상태 */
+const gPointers=new Map(); let gesture=null;
+function twoPtMetrics(){ const [a,b]=[...gPointers.values()]; const dx=b.x-a.x, dy=b.y-a.y;
+  return { dist:Math.hypot(dx,dy)||1, ang:Math.atan2(dy,dx)*180/Math.PI }; }
 hit.addEventListener('pointerdown', e=>{ const L=sel(); if(!L)return; const p=pt(e);
-  drag={mode:'move',ox:p.x-L.x,oy:p.y-L.y}; e.target.setPointerCapture(e.pointerId); });
+  gPointers.set(e.pointerId, p); try{ e.target.setPointerCapture(e.pointerId); }catch(_){}
+  if(gPointers.size>=2){ const m=twoPtMetrics(); gesture={baseDist:m.dist, baseAng:m.ang, w:L.w, h:L.h, rot:L.rot||0}; drag=null; }
+  else drag={mode:'move',ox:p.x-L.x,oy:p.y-L.y};
+});
 gripR.addEventListener('pointerdown', e=>{ drag={mode:'size'}; e.target.setPointerCapture(e.pointerId); e.stopPropagation(); });
 gripT.addEventListener('pointerdown', e=>{ drag={mode:'rot'}; e.target.setPointerCapture(e.pointerId); e.stopPropagation(); });
 window.addEventListener('pointermove', e=>{
-  const L=sel(); if(!L||!drag||L.locked) return; const p=pt(e);
+  const L=sel(); if(!L||L.locked) return; const p=pt(e);
+  if(gPointers.has(e.pointerId)) gPointers.set(e.pointerId, p);
+  // 두 손가락: 핀치 스케일 + 회전
+  if(gesture && gPointers.size>=2){
+    const m=twoPtMetrics(); const s=m.dist/gesture.baseDist;
+    L.w=Math.max(20, gesture.w*s); L.h=Math.max(20, gesture.h*s);
+    L.rot=gesture.rot + (m.ang-gesture.baseAng);
+    syncProps(); return;
+  }
+  if(!drag) return;
   if(drag.mode==='move'){ L.x=p.x-drag.ox; L.y=p.y-drag.oy;
     if(guides.snap){ const d=canvasDims(), step=Math.round(d.w/12); L.x=Math.round(L.x/step)*step; L.y=Math.round(L.y/step)*step; } }
   else if(drag.mode==='size'){
@@ -989,7 +1005,9 @@ window.addEventListener('pointermove', e=>{
   else if(drag.mode==='rot'){ L.rot=Math.atan2(p.y-L.y,p.x-L.x)*180/Math.PI+90; }
   syncProps();
 });
-window.addEventListener('pointerup', ()=>drag=null);
+function endPointer(e){ gPointers.delete(e.pointerId); if(gPointers.size<2) gesture=null; if(gPointers.size===0) drag=null; }
+window.addEventListener('pointerup', endPointer);
+window.addEventListener('pointercancel', endPointer);
 function sel(){ return state.layers.find(l=>l.id===state.selId); }
 
 /* ── 방향/해상도 ── */
