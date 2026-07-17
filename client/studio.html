@@ -673,6 +673,10 @@
         <div class="field"><label>출력 채널</label><select id="chanSel"><option value="stereo">스테레오</option><option value="mono">모노</option></select></div>
         <div class="field"><label>마이크 장치</label><select id="micDevice"><option value="">기본</option></select></div>
       </div>
+      <div class="row2" style="margin-top:6px;align-items:center">
+        <button class="btn" id="fxMonitor" title="이어폰으로 모니터링(에코 주의)">🎧 모니터링</button>
+        <div class="field" style="flex:1"><label>싱크 오프셋 <span id="delayVal">0</span>ms</label><input id="pDelay" type="range" min="0" max="500" value="0"></div>
+      </div>
     </div>
 
     <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
@@ -851,8 +855,10 @@ async function addVideoSource(kind){
   showLoading(kind==='screen'?'화면공유 준비 중…':'카메라 준비 중…');
   try{
     const stream = kind==='screen'
-      ? await navigator.mediaDevices.getDisplayMedia({video:true, audio:false})
+      ? await navigator.mediaDevices.getDisplayMedia({video:true, audio:true})   // 시스템/탭 오디오 캡처
       : await navigator.mediaDevices.getUserMedia({video:true, audio:false});
+    // 화면공유에 오디오 트랙이 있으면 믹서에 소스로 추가
+    if(kind==='screen'){ const atrk=stream.getAudioTracks(); if(atrk.length){ addScreenAudio(new MediaStream(atrk)); } }
     const v = document.createElement('video');
     v.srcObject = stream; v.muted = true; v.playsInline = true; await v.play();
     const ar = (v.videoWidth && v.videoHeight) ? v.videoWidth/v.videoHeight : 16/9;
@@ -2329,12 +2335,15 @@ function ensureMixer(){
   mixer.eqHigh = C.createBiquadFilter(); mixer.eqHigh.type='highshelf'; mixer.eqHigh.frequency.value=4000; mixer.eqHigh.gain.value=0;
   mixer.comp = C.createDynamicsCompressor(); setCompBypass(mixer.comp, true);
   mixer.limiter = C.createDynamicsCompressor(); setLimiterBypass(mixer.limiter, true);
-  // 스테레오/모노 다운믹스 노드 (limiter → mono → analyser+dest)
+  // 스테레오/모노 다운믹스 노드 (limiter → mono → delay → analyser+dest)
   mixer.mono = C.createGain(); mixer.mono.channelCountMode='max'; // 기본 스테레오 통과
+  mixer.delay = C.createDelay(2.0); mixer.delay.delayTime.value=0;   // A/V 싱크 오프셋
+  mixer.monitor = C.createGain(); mixer.monitor.gain.value=0;         // 이어폰 모니터링(기본 off)
   mixer.master.connect(mixer.eqLow); mixer.eqLow.connect(mixer.eqMid); mixer.eqMid.connect(mixer.eqHigh);
   mixer.eqHigh.connect(mixer.comp); mixer.comp.connect(mixer.limiter);
-  mixer.limiter.connect(mixer.mono);
-  mixer.mono.connect(mixer.masterAn); mixer.mono.connect(mixer.dest);
+  mixer.limiter.connect(mixer.mono); mixer.mono.connect(mixer.delay);
+  mixer.delay.connect(mixer.masterAn); mixer.delay.connect(mixer.dest);
+  mixer.delay.connect(mixer.monitor); mixer.monitor.connect(C.destination);
   mixer.fx = { comp:false, limit:false, duck:false, gate:false, gateThr:0.06 };
   const mv = document.getElementById('masterVol');
   mixer.master.gain.value = mv.value/100;
@@ -2360,6 +2369,17 @@ async function addMic(){
     const s = {id:'a'+nextId++, kind:'mic', label:'마이크', gain, an, stream, srcNode:src, muted:false, vol:1};
     applyGain(s); mixer.sources.push(s); renderMixer();
   }catch(e){ toast('마이크 접근 실패: '+e.message,'err'); }
+}
+/* 화면공유 시스템 오디오 → 믹서 소스 (146) */
+function addScreenAudio(stream){
+  ensureMixer();
+  if(mixer.ctx.state==='suspended') mixer.ctx.resume();
+  const src = mixer.ctx.createMediaStreamSource(stream);
+  const gain = mixer.ctx.createGain();
+  const an = mixer.ctx.createAnalyser(); an.fftSize=256;
+  src.connect(gain); gain.connect(an); gain.connect(mixer.master);
+  const s = {id:'a'+nextId++, kind:'bgm', label:'화면 오디오', gain, an, stream, srcNode:src, muted:false, vol:1};
+  applyGain(s); mixer.sources.push(s); renderMixer();
 }
 function addBgm(file, playlist){
   ensureMixer();
@@ -2465,6 +2485,9 @@ function initMixer(){
   document.getElementById('fxGate').onclick=e=>{ ensureMixer(); mixer.fx.gate=!mixer.fx.gate; e.target.classList.toggle('primary',mixer.fx.gate);
     if(!mixer.fx.gate) mixer.sources.filter(s=>s.kind==='mic').forEach(applyGain); };
   document.getElementById('gateThr').oninput=e=>{ ensureMixer(); mixer.fx.gateThr=(+e.target.value)/100; document.getElementById('gateThrVal').textContent=e.target.value; };
+  // 모니터링 + 싱크 오프셋
+  document.getElementById('fxMonitor').onclick=e=>{ ensureMixer(); const on=mixer.monitor.gain.value<0.5; mixer.monitor.gain.value=on?1:0; e.target.classList.toggle('primary',on); if(on) toast('모니터링 ON — 이어폰 사용 권장(스피커 시 에코)','warn'); };
+  document.getElementById('pDelay').oninput=e=>{ ensureMixer(); mixer.delay.delayTime.value=(+e.target.value)/1000; document.getElementById('delayVal').textContent=e.target.value; };
   // 스테레오/모노 출력
   document.getElementById('chanSel').onchange=e=>{ ensureMixer(); if(!mixer.mono) return;
     if(e.target.value==='mono'){ mixer.mono.channelCount=1; mixer.mono.channelCountMode='explicit'; mixer.mono.channelInterpretation='speakers'; }
