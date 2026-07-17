@@ -234,7 +234,13 @@
       <button id="addFrame">🖼 프레임</button>
       <button id="fillBtn">⤢ 채우기</button>
     </div>
-    <h2>레이어 (위 = 앞)</h2>
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <h2 style="margin:14px 0 6px">레이어 (위 = 앞)</h2>
+      <div class="row2" style="gap:4px">
+        <button class="btn" id="undoBtn" style="padding:3px 8px" title="되돌리기 (Ctrl+Z)">↶</button>
+        <button class="btn" id="redoBtn" style="padding:3px 8px" title="다시 실행 (Ctrl+Y)">↷</button>
+      </div>
+    </div>
     <div class="layers" id="layers"></div>
     <input type="file" id="imgFile" accept="image/*">
   </aside>
@@ -1391,6 +1397,7 @@ function saveScene(){
   try{
     localStorage.setItem('prisent.scene', JSON.stringify(sceneData()));
     const w=document.getElementById('whip'); if(w) localStorage.setItem('prisent.whip', w.value);
+    pushHistory();
   }catch(_){ /* quota 등 무시 */ }
 }
 function restoreScene(){
@@ -1418,6 +1425,51 @@ function restoreScene(){
   }
   normalizeZ(); renderLayers();
 }
+
+/* ── 되돌리기/다시실행 (씬 스냅샷 히스토리) ── */
+let history=[], histIdx=-1, histLock=false;
+function snapshotJSON(){ try{ return JSON.stringify(sceneData()); }catch(_){ return null; } }
+function pushHistory(){
+  if(histLock) return;
+  const j=snapshotJSON(); if(j==null || history[histIdx]===j) return;
+  history=history.slice(0,histIdx+1);
+  history.push(j); if(history.length>40) history.shift();
+  histIdx=history.length-1;
+}
+function applySnapshot(j){
+  let data; try{ data=JSON.parse(j); }catch(_){ return; }
+  histLock=true;
+  state.layers=state.layers.filter(L=>{
+    if(L.type==='camera'||L.type==='screen') return true;
+    if(L.iframe){ try{L.iframe.remove();}catch(_){} }
+    return false;
+  });
+  state.orient=data.orient||'landscape'; state.res=data.res||1080; state.ar=data.ar||16/9;
+  state.bgColor=data.bg||'#000000';
+  const bgc=document.getElementById('bgColor'); if(bgc) bgc.value=state.bgColor;
+  document.querySelectorAll('#orient button').forEach(x=>x.classList.toggle('on', x.dataset.o===state.orient));
+  document.getElementById('resSel').value=({720:'720',1080:'1080',1440:'1440'})[state.res]||'custom';
+  const arSel=document.getElementById('arSel'); if(arSel){ const near=[...arSel.options].find(o=>Math.abs(Number(o.value)-state.ar)<0.01); arSel.value=near?near.value:'1.7778'; }
+  applyCanvasSize();
+  for(const b of (data.layers||[])){
+    if(b.type==='image'){ const img=new Image(); img.src=b.src; state.layers.push({...b,id:nextId++,img}); }
+    else if(['text','solid','clock','lower3','countdown','gauge','chat','sticker','frame'].includes(b.type)){ state.layers.push({...b,id:nextId++}); }
+    else if(b.type==='web'){ const iframe=document.createElement('iframe'); iframe.src=b.url; iframe.style.cssText='position:absolute;border:0;background:transparent'; ovl.appendChild(iframe); state.layers.push({...b,id:nextId++,iframe}); }
+  }
+  normalizeZ(); renderLayers(); histLock=false;
+}
+function undo(){ if(histIdx>0){ histIdx--; applySnapshot(history[histIdx]); toast('되돌리기'); } else toast('되돌릴 항목 없음','warn'); }
+function redo(){ if(histIdx<history.length-1){ histIdx++; applySnapshot(history[histIdx]); toast('다시 실행'); } }
+window.addEventListener('keydown', e=>{
+  if(!(e.ctrlKey||e.metaKey)) return;
+  const k=e.key.toLowerCase();
+  const tag=(e.target.tagName||'').toLowerCase();
+  if(tag==='input'||tag==='textarea'||tag==='select') return;
+  if(k==='z' && !e.shiftKey){ e.preventDefault(); undo(); }
+  else if((k==='z' && e.shiftKey)||k==='y'){ e.preventDefault(); redo(); }
+});
+document.getElementById('undoBtn').onclick=undo;
+document.getElementById('redoBtn').onclick=redo;
 
 /* ── 대상 채널 관리 ── */
 const DKEY='centbeam.destinations';
@@ -1656,6 +1708,7 @@ if('serviceWorker' in navigator && location.protocol!=='file:'){
   navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
 restoreScene();
+pushHistory();          // 초기 스냅샷(되돌리기 기준점)
 initDestinations();
 initMixer();
 applyCanvasSize();
