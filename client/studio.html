@@ -222,6 +222,7 @@
       <button class="btn" id="gGrid" title="그리드 오버레이">▦</button>
       <button class="btn" id="gRuler" title="눈금자">📏</button>
       <button class="btn" id="gSnap" title="그리드 스냅">🧲</button>
+      <button class="btn" id="gBrb" title="자리비움 화면(BRB)">☕</button>
       <div class="spacer"></div>
       <span class="live-dot" id="dot"></span>
       <span id="liveTxt" style="font-size:12px;color:var(--muted)">오프라인</span>
@@ -792,10 +793,19 @@ function draw(){
     if(L.type==='web' && L.iframe){ positionIframe(L); }
   }
   drawGuides(cw,ch);
+  if(guides.brb){
+    ctx.save(); ctx.fillStyle='#0a0d14'; ctx.fillRect(0,0,cw,ch);
+    ctx.fillStyle='#00d9ff'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font='700 '+Math.round(ch*0.09)+'px -apple-system,"Malgun Gothic",sans-serif';
+    ctx.fillText('☕ 잠시 후 시작합니다', cw/2, ch/2);
+    ctx.fillStyle='#8a93a6'; ctx.font=Math.round(ch*0.035)+'px -apple-system,"Malgun Gothic",sans-serif';
+    ctx.fillText('Be Right Back', cw/2, ch/2+ch*0.09);
+    ctx.restore();
+  }
   drawHandles();
   requestAnimationFrame(draw);
 }
-const guides = { safe:false, grid:false, ruler:false, snap:false };
+const guides = { safe:false, grid:false, ruler:false, snap:false, brb:false };
 function drawGuides(cw,ch){
   if(guides.grid){
     ctx.save(); ctx.strokeStyle='rgba(255,255,255,.12)'; ctx.lineWidth=1;
@@ -1012,8 +1022,16 @@ pAlnT.onclick=()=>{const L=sel();if(!L)return;const d=canvasDims();L.y=L.h/2;ren
 pAlnB.onclick=()=>{const L=sel();if(!L)return;const d=canvasDims();L.y=d.h-L.h/2;renderLayers();syncProps();};
 pAlnCY.onclick=()=>{const L=sel();if(!L)return;const d=canvasDims();L.y=d.h/2;renderLayers();syncProps();};
 /* 가이드 토글 */
-[['gSafe','safe'],['gGrid','grid'],['gRuler','ruler'],['gSnap','snap']].forEach(([id,k])=>{
+[['gSafe','safe'],['gGrid','grid'],['gRuler','ruler'],['gSnap','snap'],['gBrb','brb']].forEach(([id,k])=>{
   document.getElementById(id).onclick=e=>{ guides[k]=!guides[k]; e.currentTarget.classList.toggle('primary',guides[k]); };
+});
+/* 뮤트 핫키(M) — 첫 마이크 토글 */
+window.addEventListener('keydown',e=>{
+  if(e.key!=='m'&&e.key!=='M') return;
+  const tag=(e.target.tagName||'').toLowerCase();
+  if(tag==='input'||tag==='textarea'||tag==='select') return;
+  const s=mixer.sources.find(x=>x.kind==='mic'); if(!s) return;
+  s.muted=!s.muted; applyGain(s); renderMixer(); toast(s.muted?'마이크 음소거':'마이크 켜짐');
 });
 /* 스냅샷 */
 document.getElementById('snapBtn').onclick = () => {
@@ -1134,12 +1152,23 @@ function toast(msg,type){
 }
 
 document.getElementById('goLive').onclick = async function(){
-  if(state.live){ stopLive(); toast('방송 종료'); return; }
+  if(state.live){ if(!confirm('방송을 종료할까요?')) return; stopLive(); toast('방송 종료'); return; }
   currentWhip=document.getElementById('whip').value.trim();
   if(!currentWhip){ toast('WHIP 엔드포인트를 입력하세요','warn'); return; }
+  await runCountdown();
   try{ await startPublish(); setLive(true); startTimers(); toast('방송 시작','ok'); }
   catch(e){ toast('송출 실패: '+e.message,'err'); }
 };
+function runCountdown(){
+  return new Promise(res=>{
+    const ov=document.getElementById('ovl');
+    const el=document.createElement('div'); el.className='countdown-ov';
+    el.style.cssText='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:22vh;font-weight:800;color:#fff;text-shadow:0 0 30px #00d9ff;z-index:50;background:rgba(0,0,0,.35)';
+    ov.appendChild(el);
+    let n=3; el.textContent=n;
+    const t=setInterval(()=>{ n--; if(n<=0){ clearInterval(t); el.remove(); res(); } else el.textContent=n; },1000);
+  });
+}
 
 async function startPublish(){
   const fps=Number(document.getElementById('fpsSel').value)||30;
