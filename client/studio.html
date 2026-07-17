@@ -283,6 +283,7 @@
       <button id="addNowPlaying">🎧 BGM정보</button>
       <button id="addAudioBars">〰 오디오바</button>
       <button id="addRoulette">🎡 룰렛</button>
+      <button id="addSlideshow">🖽 슬라이드</button>
       <button id="fillBtn">⤢ 채우기</button>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between">
@@ -294,6 +295,7 @@
     </div>
     <div class="layers" id="layers"></div>
     <input type="file" id="imgFile" accept="image/*">
+    <input type="file" id="slideFile" accept="image/*" multiple style="display:none">
   </aside>
 
   <!-- CANVAS -->
@@ -438,6 +440,13 @@
         <div class="row2">
           <div class="field"><label>키 색상</label><input id="pChromaColor" type="color" value="#00ff00"></div>
           <div class="field"><label>강도 <span id="pChromaThrVal">120</span></label><input id="pChromaThr" type="range" min="20" max="255" value="120"></div>
+        </div>
+      </div>
+      <div id="slideshowProps" style="display:none">
+        <div class="field"><label>전환 간격 <span id="pSlideIntVal">3.0</span>초</label><input id="pSlideInt" type="range" min="1" max="15" step="0.5" value="3"></div>
+        <div class="row2">
+          <button class="btn" id="pSlideAdd">＋ 이미지 추가</button>
+          <button class="btn" id="pSlideClear">비우기</button>
         </div>
       </div>
       <div id="rouletteProps" style="display:none">
@@ -964,6 +973,16 @@ document.getElementById('addDonors').onclick = () => { addLayer('donors',{name:'
 document.getElementById('addNowPlaying').onclick = () => { addLayer('nowplaying',{name:'BGM정보',bg:'#0f1420',color:'#e6e9ef',accent:'#00d9ff',font:26,w:420,h:72}); };
 document.getElementById('addAudioBars').onclick = () => { addLayer('audiobars',{name:'오디오바',color:'#00d9ff',bars:32,w:500,h:160}); };
 document.getElementById('addRoulette').onclick = () => { addLayer('roulette',{name:'룰렛',options:'꽝,당첨,한번더,꽝,당첨,꽝',angle:0,vel:0,w:360,h:360,aspect:1}); };
+document.getElementById('addSlideshow').onclick = () => { document.getElementById('slideFile').click(); };
+function loadSlideImages(files, L){
+  const srcs=L.srcs||[], imgs=L.imgs||[]; let pending=files.length;
+  [...files].forEach(f=>{ const r=new FileReader(); r.onload=()=>{ const img=new Image(); img.onload=()=>{ if(--pending===0) renderLayers(); }; img.src=r.result; imgs.push(img); srcs.push(r.result);
+    if(!L.aspect && img.naturalWidth){ /* first sets aspect after load */ } }; r.readAsDataURL(f); });
+  L.imgs=imgs; L.srcs=srcs;
+}
+document.getElementById('slideFile').onchange=e=>{ const files=e.target.files; if(!files||!files.length){ e.target.value=''; return; }
+  let L=sel(); if(!L || L.type!=='slideshow'){ L=addLayer('slideshow',{name:'슬라이드',imgs:[],srcs:[],idx:0,interval:3000,w:700,h:400}); }
+  loadSlideImages(files, L); toast(files.length+'장 추가됨','ok'); e.target.value=''; };
 
 /* 웹 URL */
 document.getElementById('addWeb').onclick = () => {
@@ -1220,6 +1239,15 @@ function draw(){
         ctx.fillText(`${o.name}  ${Math.round(frac*100)}%`, -hw+pad+8, py+barH/2);
         ctx.textBaseline='top'; py+=barH+fs*0.5;
       });
+    } else if(L.type==='slideshow'){
+      if(L.imgs && L.imgs.length){
+        const now2=(typeof performance!=='undefined'?performance.now():0);
+        if(!L._adv) L._adv=now2;
+        if(now2-L._adv > (L.interval||3000)){ L.idx=((L.idx||0)+1)%L.imgs.length; L._adv=now2; }
+        const img=L.imgs[(L.idx||0)%L.imgs.length];
+        if(img && img.complete) ctx.drawImage(img, -hw,-hh, L.w, L.h);
+      } else { ctx.fillStyle='rgba(255,255,255,.08)'; ctx.fillRect(-hw,-hh,L.w,L.h);
+        ctx.fillStyle='#8a93a6'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.font='20px -apple-system,"Malgun Gothic",sans-serif'; ctx.fillText('슬라이드 이미지 추가',0,0); }
     } else if(L.type==='roulette'){
       const opts=String(L.options||'꽝,당첨,한번더,꽝,당첨,꽝').split(',').map(s=>s.trim()).filter(Boolean);
       const n=Math.max(2,opts.length), seg=2*Math.PI/n, R=Math.min(hw,hh)*0.92;
@@ -1444,7 +1472,7 @@ document.getElementById('arSel').onchange = e=>{
 };
 
 /* ── 레이어 목록 ── */
-const ICON={camera:'🎥',screen:'🖥️',image:'🖼️',text:'🅣',web:'🌐',solid:'🟦',clock:'🕐',lower3:'▬',countdown:'⏱',video:'🎞️',gauge:'📊',chat:'💬',sticker:'⭐',frame:'🖼',emote:'💗',poll:'📊',donors:'★',nowplaying:'🎧',audiobars:'〰',roulette:'🎡'};
+const ICON={camera:'🎥',screen:'🖥️',image:'🖼️',text:'🅣',web:'🌐',solid:'🟦',clock:'🕐',lower3:'▬',countdown:'⏱',video:'🎞️',gauge:'📊',chat:'💬',sticker:'⭐',frame:'🖼',emote:'💗',poll:'📊',donors:'★',nowplaying:'🎧',audiobars:'〰',roulette:'🎡',slideshow:'🖽'};
 function renderLayers(){
   const box=document.getElementById('layers'); box.innerHTML='';
   [...state.layers].sort((a,b)=>b.z-a.z).forEach(L=>{
@@ -1522,6 +1550,7 @@ function showProps(){
   const fxTypes=(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video'||L.type==='solid');
   document.getElementById('fxProps').style.display=fxTypes?'block':'none';
   document.getElementById('chromaProps').style.display=(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video')?'block':'none';
+  document.getElementById('slideshowProps').style.display=L.type==='slideshow'?'block':'none';
   document.getElementById('rouletteProps').style.display=L.type==='roulette'?'block':'none';
   document.getElementById('audiobarsProps').style.display=L.type==='audiobars'?'block':'none';
   document.getElementById('nowplayingProps').style.display=L.type==='nowplaying'?'block':'none';
@@ -1561,6 +1590,7 @@ function syncProps(){
   if(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video'||L.type==='solid'){ pPreset.value=L.preset||'none'; pBlend.value=L.blend||'normal'; pCornerR.value=L.cornerR||0; pCornerRVal.textContent=L.cornerR||0; pBorderW.value=L.borderW||0; pBorderWVal.textContent=L.borderW||0; pBorderColor.value=L.borderColor||'#ffffff'; pShadow.checked=!!L.shadow; pWb.value=L.wb||0; pWbVal.textContent=L.wb||0; pMosaic.value=L.mosaic||0; pMosaicVal.textContent=L.mosaic||0; pCropX.value=Math.round((L.cropX||0)*100); pCropXVal.textContent=Math.round((L.cropX||0)*100); pCropY.value=Math.round((L.cropY||0)*100); pCropYVal.textContent=Math.round((L.cropY||0)*100); }
   if(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video'){ const c=L.chroma||{}; pChromaOn.checked=!!c.on; pChromaColor.value=c.color||'#00ff00'; pChromaThr.value=c.thr||120; pChromaThrVal.textContent=c.thr||120; }
   if(L.type==='nowplaying'){ pNpBg.value=L.bg||'#0f1420'; pNpAccent.value=L.accent||'#00d9ff'; }
+  if(L.type==='slideshow'){ pSlideInt.value=(L.interval||3000)/1000; pSlideIntVal.textContent=((L.interval||3000)/1000).toFixed(1); }
   if(L.type==='roulette'){ pRouletteOpts.value=L.options||''; }
   if(L.type==='audiobars'){ pBarsColor.value=L.color||'#00d9ff'; pBarsN.value=L.bars||32; }
   if(L.type==='emote'){ pEmoteEmojis.value=L.emojis||'👍❤️😂🎉'; pEmoteCount.value=L.count||8; pEmoteSize.value=L.size||48; }
@@ -1643,6 +1673,9 @@ pChromaColor.oninput=e=>{const L=sel();if(L){ensureChroma(L).color=e.target.valu
 pChromaThr.oninput=e=>{const L=sel();if(L){ensureChroma(L).thr=+e.target.value;pChromaThrVal.textContent=e.target.value;}};
 pNpBg.oninput=e=>{const L=sel();if(L)L.bg=e.target.value;};
 pNpAccent.oninput=e=>{const L=sel();if(L)L.accent=e.target.value;};
+pSlideInt.oninput=e=>{const L=sel();if(L){L.interval=(+e.target.value)*1000;pSlideIntVal.textContent=(+e.target.value).toFixed(1);}};
+pSlideAdd.onclick=()=>document.getElementById('slideFile').click();
+pSlideClear.onclick=()=>{const L=sel();if(L&&L.type==='slideshow'){L.imgs=[];L.srcs=[];L.idx=0;renderLayers();toast('슬라이드 비움');}};
 pRouletteOpts.oninput=e=>{const L=sel();if(L)L.options=e.target.value;};
 pRouletteSpin.onclick=()=>{const L=sel();if(L&&L.type==='roulette'){ L.vel=0.3+([...crypto.getRandomValues(new Uint8Array(1))][0]/255)*0.18; haptic(20); }};
 pBarsColor.oninput=e=>{const L=sel();if(L)L.color=e.target.value;};
@@ -2119,6 +2152,7 @@ function sceneData(){
         if(L.type==='nowplaying'){ b.bg=L.bg; b.color=L.color; b.accent=L.accent; b.font=L.font; }
         if(L.type==='audiobars'){ b.color=L.color; b.bars=L.bars; }
         if(L.type==='roulette'){ b.options=L.options; b.angle=L.angle; }
+        if(L.type==='slideshow'){ b.srcs=L.srcs||[]; b.interval=L.interval; b.idx=L.idx; }
         if(L.type==='emote'){ b.emojis=L.emojis; b.count=L.count; b.size=L.size; }
         if(L.type==='poll'){ b.question=L.question; b.options=L.options; b.bg=L.bg; b.color=L.color; b.accent=L.accent; b.font=L.font; }
         if(L.type==='donors'){ b.title=L.title; b.lines=L.lines; b.bg=L.bg; b.color=L.color; b.accent=L.accent; b.font=L.font; }
@@ -2154,6 +2188,7 @@ function restoreScene(){
   applyCanvasSize();
   for(const b of (data.layers||[])){
     if(b.type==='image'){ const img=new Image(); img.src=b.src; state.layers.push({...b,id:nextId++,img}); }
+    else if(b.type==='slideshow'){ const imgs=(b.srcs||[]).map(s=>{const i=new Image();i.src=s;return i;}); state.layers.push({...b,id:nextId++,imgs}); }
     else if(b.type==='text'||b.type==='solid'||b.type==='clock'||b.type==='lower3'||b.type==='countdown'||b.type==='gauge'||b.type==='chat'||b.type==='sticker'||b.type==='frame'||b.type==='emote'||b.type==='poll'||b.type==='donors'||b.type==='nowplaying'||b.type==='audiobars'||b.type==='roulette'){ state.layers.push({...b,id:nextId++}); }
     else if(b.type==='web'){
       const iframe=document.createElement('iframe');
@@ -2193,6 +2228,7 @@ function applySnapshot(j){
   applyCanvasSize();
   for(const b of (data.layers||[])){
     if(b.type==='image'){ const img=new Image(); img.src=b.src; state.layers.push({...b,id:nextId++,img}); }
+    else if(b.type==='slideshow'){ const imgs=(b.srcs||[]).map(s=>{const i=new Image();i.src=s;return i;}); state.layers.push({...b,id:nextId++,imgs}); }
     else if(['text','solid','clock','lower3','countdown','gauge','chat','sticker','frame','emote','poll','donors','nowplaying','audiobars','roulette'].includes(b.type)){ state.layers.push({...b,id:nextId++}); }
     else if(b.type==='web'){ const iframe=document.createElement('iframe'); iframe.src=b.url; iframe.style.cssText='position:absolute;border:0;background:transparent'; iframe.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-forms'); ovl.appendChild(iframe); state.layers.push({...b,id:nextId++,iframe}); }
   }
@@ -2611,6 +2647,17 @@ function renderNetBatt(){
   if(navigator.getBattery){ navigator.getBattery().then(b=>{ _battRef=b;
     ['levelchange','chargingchange'].forEach(ev=>b.addEventListener(ev, renderNetBatt)); renderNetBatt(); }).catch(()=>{}); }
   renderNetBatt(); setInterval(renderNetBatt, 15000);
+})();
+/* ── 가상 키보드 회피 (41/308) — visualViewport ── */
+(function keyboardAvoid(){
+  if(!window.visualViewport) return;
+  const vv=window.visualViewport;
+  vv.addEventListener('resize', ()=>{
+    const kb=Math.max(0, innerHeight - vv.height - vv.offsetTop);
+    document.documentElement.style.setProperty('--kb', kb+'px');
+    const ae=document.activeElement;
+    if(kb>120 && ae && /input|textarea|select/i.test(ae.tagName)){ setTimeout(()=>ae.scrollIntoView({block:'center',behavior:'smooth'}),50); }
+  });
 })();
 /* 첫 실행 온보딩 팁 */
 (function onboarding(){
