@@ -191,6 +191,8 @@
       <button id="addWeb">🌐 웹 URL</button>
       <button id="addSolid">🟦 단색</button>
       <button id="addClock">🕐 시계</button>
+      <button id="addLower3">▬ 로워서드</button>
+      <button id="addCountdown">⏱ 카운트다운</button>
       <button id="fillBtn">⤢ 채우기</button>
     </div>
     <h2>레이어 (위 = 앞)</h2>
@@ -276,6 +278,23 @@
           <div class="field"><label>색</label><input id="pClockColor" type="color" value="#ffffff"></div>
         </div>
         <div class="field"><label>크기(px)</label><input id="pClockFont" type="number" value="72"></div>
+      </div>
+      <div id="lower3Props" style="display:none">
+        <div class="field"><label>제목</label><input id="pL3Title" placeholder="제목"></div>
+        <div class="field"><label>부제목</label><input id="pL3Sub" placeholder="부제목"></div>
+        <div class="row2">
+          <div class="field"><label>글자색</label><input id="pL3Color" type="color" value="#ffffff"></div>
+          <div class="field"><label>배경색</label><input id="pL3Bg" type="color" value="#0066ff"></div>
+        </div>
+        <div class="field"><label>크기(px)</label><input id="pL3Font" type="number" value="48"></div>
+      </div>
+      <div id="cdProps" style="display:none">
+        <div class="row2">
+          <div class="field"><label>분</label><input id="pCdMins" type="number" min="0" value="5"></div>
+          <div class="field"><label>색</label><input id="pCdColor" type="color" value="#ffffff"></div>
+        </div>
+        <div class="field"><label>크기(px)</label><input id="pCdFont" type="number" value="120"></div>
+        <button class="btn primary" id="pCdStart" style="width:100%;margin-top:6px">▶ 시작/리셋</button>
       </div>
       <div id="webProps" style="display:none">
         <div class="field"><label>웹 URL</label><input id="pUrl" placeholder="https://…"></div>
@@ -521,6 +540,15 @@ document.getElementById('addSolid').onclick = () => {
 document.getElementById('addClock').onclick = () => {
   addLayer('clock', {name:'시계', color:'#ffffff', font:72, fmt:'time', w:640, h:120});
 };
+document.getElementById('addLower3').onclick = () => {
+  const {w:cw,h:ch}=canvasDims();
+  addLayer('lower3', {name:'로워서드', title:'제목', sub:'부제목', font:48,
+    color:'#ffffff', bg:'#0066ff', w:cw*0.55, h:170, x:cw*0.32, y:ch*0.8});
+};
+document.getElementById('addCountdown').onclick = () => {
+  addLayer('countdown', {name:'카운트다운', mins:5, endAt:Date.now()+5*60000,
+    color:'#ffffff', font:120, w:460, h:180});
+};
 
 /* 웹 URL */
 document.getElementById('addWeb').onclick = () => {
@@ -578,6 +606,25 @@ function draw(){
       ctx.fillStyle=L.color||'#ffffff'; ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.shadowColor='rgba(0,0,0,.5)'; ctx.shadowBlur=8;
       ctx.fillText(s,0,0);
+    } else if(L.type==='lower3'){
+      ctx.fillStyle = L.bg || '#0066ff'; ctx.fillRect(-hw,-hh,L.w,L.h);
+      ctx.fillStyle = '#00d9ff'; ctx.fillRect(-hw,-hh,10,L.h); // 좌측 액센트 바
+      ctx.textBaseline='middle'; ctx.textAlign='left';
+      const fs=L.font||48;
+      ctx.fillStyle=L.color||'#ffffff';
+      ctx.font=`800 ${fs}px -apple-system,"Malgun Gothic",sans-serif`;
+      ctx.fillText(L.title||'제목', -hw+30, -hh+L.h*0.36);
+      ctx.font=`500 ${Math.round(fs*0.6)}px -apple-system,"Malgun Gothic",sans-serif`;
+      ctx.globalAlpha *= 0.85;
+      ctx.fillText(L.sub||'부제목', -hw+30, -hh+L.h*0.72);
+    } else if(L.type==='countdown'){
+      const rem=Math.max(0, Math.round(((L.endAt||Date.now())-Date.now())/1000));
+      const mm=String((rem/60)|0).padStart(2,'0'), ss=String(rem%60).padStart(2,'0');
+      ctx.font=`800 ${L.font||96}px -apple-system,"Malgun Gothic",monospace`;
+      ctx.fillStyle=(rem<=10&&rem>0)?(L.warnColor||'#ff5c5c'):(L.color||'#ffffff');
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.shadowColor='rgba(0,0,0,.5)'; ctx.shadowBlur=8;
+      ctx.fillText(mm+':'+ss, 0, 0);
     } else if(L.type==='web'){
       // 캔버스엔 자리표시(합성 불가), 실제 위젯은 프리뷰 오버레이 iframe로 표시
       ctx.fillStyle='rgba(0,217,255,.08)'; ctx.fillRect(-hw,-hh,L.w,L.h);
@@ -657,7 +704,7 @@ document.getElementById('resSel').onchange = e=>{
 };
 
 /* ── 레이어 목록 ── */
-const ICON={camera:'🎥',screen:'🖥️',image:'🖼️',text:'🅣',web:'🌐',solid:'🟦',clock:'🕐'};
+const ICON={camera:'🎥',screen:'🖥️',image:'🖼️',text:'🅣',web:'🌐',solid:'🟦',clock:'🕐',lower3:'▬',countdown:'⏱'};
 function renderLayers(){
   const box=document.getElementById('layers'); box.innerHTML='';
   [...state.layers].sort((a,b)=>b.z-a.z).forEach(L=>{
@@ -685,6 +732,8 @@ function showProps(){
   document.getElementById('webProps').style.display=L.type==='web'?'block':'none';
   document.getElementById('solidProps').style.display=L.type==='solid'?'block':'none';
   document.getElementById('clockProps').style.display=L.type==='clock'?'block':'none';
+  document.getElementById('lower3Props').style.display=L.type==='lower3'?'block':'none';
+  document.getElementById('cdProps').style.display=L.type==='countdown'?'block':'none';
   syncProps();
 }
 function syncProps(){
@@ -706,6 +755,8 @@ function syncProps(){
   if(L.type==='web'){ pUrl.value=L.url; }
   if(L.type==='solid'){ pSolidColor.value=L.color||'#0066ff'; }
   if(L.type==='clock'){ pClockFmt.value=L.fmt||'time'; pClockColor.value=L.color||'#ffffff'; pClockFont.value=L.font||72; }
+  if(L.type==='lower3'){ pL3Title.value=L.title||''; pL3Sub.value=L.sub||''; pL3Color.value=L.color||'#ffffff'; pL3Bg.value=L.bg||'#0066ff'; pL3Font.value=L.font||48; }
+  if(L.type==='countdown'){ pCdMins.value=L.mins!=null?L.mins:5; pCdColor.value=L.color||'#ffffff'; pCdFont.value=L.font||120; }
 }
 ['pX','pY','pW','pH','pR'].forEach(id=>{
   document.getElementById(id).oninput=e=>{ const L=sel(); if(!L)return;
@@ -731,6 +782,15 @@ pSolidColor.oninput=e=>{ const L=sel(); if(L)L.color=e.target.value; };
 pClockFmt.onchange=e=>{ const L=sel(); if(L)L.fmt=e.target.value; };
 pClockColor.oninput=e=>{ const L=sel(); if(L)L.color=e.target.value; };
 pClockFont.oninput=e=>{ const L=sel(); if(L)L.font=Number(e.target.value)||72; };
+pL3Title.oninput=e=>{ const L=sel(); if(L)L.title=e.target.value; };
+pL3Sub.oninput=e=>{ const L=sel(); if(L)L.sub=e.target.value; };
+pL3Color.oninput=e=>{ const L=sel(); if(L)L.color=e.target.value; };
+pL3Bg.oninput=e=>{ const L=sel(); if(L)L.bg=e.target.value; };
+pL3Font.oninput=e=>{ const L=sel(); if(L)L.font=Number(e.target.value)||48; };
+pCdMins.oninput=e=>{ const L=sel(); if(L)L.mins=Number(e.target.value)||0; };
+pCdColor.oninput=e=>{ const L=sel(); if(L)L.color=e.target.value; };
+pCdFont.oninput=e=>{ const L=sel(); if(L)L.font=Number(e.target.value)||120; };
+document.getElementById('pCdStart').onclick=()=>{ const L=sel(); if(L)L.endAt=Date.now()+(L.mins||0)*60000; };
 document.getElementById('pFront').onclick=()=>{ const L=sel(); if(L){L.z=1e6; normalizeZ(); renderLayers();} };
 document.getElementById('pBack').onclick=()=>{ const L=sel(); if(L){L.z=-1e6; normalizeZ(); renderLayers();} };
 document.getElementById('pDup').onclick=()=>{
@@ -938,6 +998,8 @@ function sceneData(){
         if(L.type==='web') b.url=L.url;
         if(L.type==='solid') b.color=L.color;
         if(L.type==='clock'){ b.color=L.color; b.font=L.font; b.fmt=L.fmt; }
+        if(L.type==='lower3'){ b.title=L.title; b.sub=L.sub; b.color=L.color; b.bg=L.bg; b.font=L.font; }
+        if(L.type==='countdown'){ b.color=L.color; b.font=L.font; b.mins=L.mins; b.endAt=L.endAt; }
         return b;
       }) };
 }
@@ -961,7 +1023,7 @@ function restoreScene(){
   applyCanvasSize();
   for(const b of (data.layers||[])){
     if(b.type==='image'){ const img=new Image(); img.src=b.src; state.layers.push({...b,id:nextId++,img}); }
-    else if(b.type==='text'||b.type==='solid'||b.type==='clock'){ state.layers.push({...b,id:nextId++}); }
+    else if(b.type==='text'||b.type==='solid'||b.type==='clock'||b.type==='lower3'||b.type==='countdown'){ state.layers.push({...b,id:nextId++}); }
     else if(b.type==='web'){
       const iframe=document.createElement('iframe');
       iframe.src=b.url; iframe.style.cssText='position:absolute;border:0;background:transparent';
