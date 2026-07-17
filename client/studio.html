@@ -512,6 +512,10 @@
     <div class="field"><label>WHIP 엔드포인트</label>
       <input id="whip" placeholder="https://studio.xn--9d0bw2fjtyymch7de9d.info/whip/tak/whip 또는 http://34.104.233.35:8889/tak/whip"></div>
     <div class="row2">
+      <div class="field" style="flex:1"><label>WHIP 토큰 (Bearer, 선택)</label><input id="whipToken" type="password" placeholder="publish 토큰"></div>
+      <button class="btn" id="randPathBtn" title="랜덤 스트림 경로 생성(보안)" style="align-self:flex-end;padding:8px">🎲 랜덤경로</button>
+    </div>
+    <div class="row2">
       <div class="field"><label>FPS</label>
         <select id="fpsSel"><option value="30">30</option><option value="60">60</option></select></div>
       <div class="field"><label>비디오 비트레이트</label>
@@ -1591,7 +1595,10 @@ async function whipPublish(url, stream){
   const offer = await pc.createOffer();
   offer.sdp = setOpusBitrate(offer.sdp, Number(document.getElementById('abrSel').value)||128);
   await pc.setLocalDescription(offer);
-  const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/sdp'}, body:offer.sdp});
+  const headers={'Content-Type':'application/sdp'};
+  const tok=(document.getElementById('whipToken')||{}).value;
+  if(tok && tok.trim()) headers['Authorization']='Bearer '+tok.trim();   // RFC 9725 WHIP 인증
+  const res = await fetch(url, {method:'POST', headers, body:offer.sdp});
   if(!res.ok) throw new Error('WHIP '+res.status);
   await pc.setRemoteDescription({type:'answer', sdp:await res.text()});
 }
@@ -1645,6 +1652,15 @@ document.getElementById('vbrSel').onchange=()=>{ if(state.live) applyEncoding();
 document.getElementById('fpsSel').onchange=()=>{ if(state.live) applyEncoding(); };
 document.getElementById('scaleSel').onchange=()=>{ if(state.live) applyEncoding(); };
 document.getElementById('rcSel').onchange=()=>{ if(state.live) applyEncoding(); };
+/* 랜덤 스트림 경로 생성 (보안: 추측 불가한 긴 경로) */
+document.getElementById('randPathBtn').onclick=()=>{
+  const rnd=[...crypto.getRandomValues(new Uint8Array(12))].map(b=>b.toString(16).padStart(2,'0')).join('');
+  const w=document.getElementById('whip'); const cur=w.value.trim();
+  const m=cur.match(/^(.*\/whip\/)[^/]+(\/whip\/?)$/);
+  w.value = m ? (m[1]+rnd+m[2]) : ((cur.replace(/\/+$/,'')||'https://studio.xn--9d0bw2fjtyymch7de9d.info/whip')+'/'+rnd+'/whip');
+  toast('랜덤 스트림 경로 생성 — 서버 대상 경로도 동일하게 맞추세요','ok');
+};
+document.getElementById('whipToken').oninput=e=>{ try{ localStorage.setItem('centbeam.whipToken', e.target.value); }catch(_){} };
 
 function scheduleReconnect(){
   if(reconnecting || !state.live) return;
@@ -1814,6 +1830,7 @@ function restoreScene(){
   let data; try{ data=JSON.parse(localStorage.getItem('prisent.scene')||'null'); }catch(_){ return; }
   const w=document.getElementById('whip');
   if(w){ const s=localStorage.getItem('prisent.whip'); if(s) w.value=s; }
+  const wt=document.getElementById('whipToken'); if(wt){ const tk=localStorage.getItem('centbeam.whipToken'); if(tk) wt.value=tk; }
   if(!data) return;
   state.orient=data.orient||'landscape'; state.res=data.res||1080;
   state.ar=data.ar||16/9;
