@@ -319,6 +319,7 @@
       <button id="addPoll">📊 투표</button>
       <button id="addDonors">★ 후원목록</button>
       <button id="addNowPlaying">🎧 BGM정보</button>
+      <button id="addData">🔢 데이터</button>
       <button id="addAudioBars">〰 오디오바</button>
       <button id="addRoulette">🎡 룰렛</button>
       <button id="addSlideshow">🖽 슬라이드</button>
@@ -513,6 +514,13 @@
           <div class="field"><label>강조색</label><input id="pNpAccent" type="color" value="#00d9ff"></div>
         </div>
         <div class="note">재생 중인 BGM 이름을 자동 표시합니다.</div>
+      </div>
+      <div id="dataProps" style="display:none">
+        <div class="field"><label>라벨</label><input id="pDataLabel" type="text"></div>
+        <div class="field"><label>JSON URL</label><input id="pDataUrl" type="text" placeholder="https://api.example.com/data"></div>
+        <div class="field"><label>JSON 경로 (예: data.count)</label><input id="pDataPath" type="text" placeholder="비우면 전체"></div>
+        <div class="field"><label>새로고침 <span id="pDataRefVal">30</span>초</label><input id="pDataRef" type="range" min="5" max="300" value="30"></div>
+        <div class="note">⚠️ CORS 허용 API만 동작 (서버가 Access-Control-Allow-Origin 헤더를 줘야 함).</div>
       </div>
       <div id="emoteProps" style="display:none">
         <div class="field"><label>이모지 (여러 개)</label><input id="pEmoteEmojis" type="text" value="👍❤️😂🎉"></div>
@@ -1045,6 +1053,20 @@ document.getElementById('addEmote').onclick = () => { addLayer('emote',{name:'�
 document.getElementById('addPoll').onclick = () => { addLayer('poll',{name:'투표',question:'다음 방송 주제는?',options:'게임:45\n토크:30\n노래:25',bg:'#161a22',color:'#e6e9ef',accent:'#00d9ff',font:26,w:520,h:320}); };
 document.getElementById('addDonors').onclick = () => { addLayer('donors',{name:'후원목록',title:'최근 후원',lines:'센트 5,000원\ntak 3,000원\ndeni 1,000원',bg:'#141a24',color:'#e6e9ef',accent:'#ffc04d',font:26,w:420,h:320}); };
 document.getElementById('addNowPlaying').onclick = () => { addLayer('nowplaying',{name:'BGM정보',bg:'#0f1420',color:'#e6e9ef',accent:'#00d9ff',font:26,w:420,h:72}); };
+document.getElementById('addData').onclick = () => { const L=addLayer('data',{name:'데이터',url:'',path:'',label:'데이터',bg:'#161a22',color:'#e6e9ef',accent:'#00d9ff',font:36,refresh:30,w:360,h:120,_val:'URL 설정'}); };
+/* 외부 데이터 위젯 (84): URL을 주기적으로 fetch → JSON 경로 추출해 표시. CORS 허용 엔드포인트만 동작. */
+function dataPick(obj, path){ try{ return String(path.split('.').filter(Boolean).reduce((o,k)=>o[k], obj)); }catch(_){ return null; } }
+async function refreshDataLayers(){
+  for(const L of state.layers){ if(L.type!=='data' || !L.url) continue;
+    if(L._next && performance.now()<L._next) continue;
+    L._next=performance.now()+Math.max(5,L.refresh||30)*1000;
+    try{ const res=await fetch(L.url,{cache:'no-store'}); const ct=res.headers.get('content-type')||'';
+      if(ct.includes('json')){ const j=await res.json(); L._val = L.path ? (dataPick(j,L.path)??'(경로없음)') : JSON.stringify(j).slice(0,40); }
+      else { L._val=(await res.text()).slice(0,40); }
+    }catch(e){ L._val='CORS/오류'; }
+  }
+}
+setInterval(refreshDataLayers, 2000);
 document.getElementById('addAudioBars').onclick = () => { addLayer('audiobars',{name:'오디오바',color:'#00d9ff',bars:32,w:500,h:160}); };
 document.getElementById('addRoulette').onclick = () => { addLayer('roulette',{name:'룰렛',options:'꽝,당첨,한번더,꽝,당첨,꽝',angle:0,vel:0,w:360,h:360,aspect:1}); };
 document.getElementById('addSlideshow').onclick = () => { document.getElementById('slideFile').click(); };
@@ -1347,6 +1369,16 @@ function draw(){
           ctx.fillStyle=L.color||'#00d9ff'; ctx.fillRect(-hw+i*bw, hh-bh, bw*0.72, bh); } }
       else { ctx.fillStyle=L.color||'#00d9ff'; ctx.globalAlpha*=0.3;
         for(let i=0;i<n;i++){ ctx.fillRect(-hw+i*bw, hh-4, bw*0.72, 4); } }
+    } else if(L.type==='data'){
+      const r=Math.min(14,L.h/2);
+      ctx.fillStyle=L.bg||'#161a22'; ctx.globalAlpha*=0.9; ctx.beginPath(); ctx.roundRect(-hw,-hh,L.w,L.h,r); ctx.fill(); ctx.globalAlpha=1;
+      ctx.save(); ctx.beginPath(); ctx.roundRect(-hw,-hh,L.w,L.h,r); ctx.clip();
+      const fs=L.font||30, pad=fs*0.6;
+      ctx.textAlign='left'; ctx.textBaseline='top';
+      if(L.label){ ctx.fillStyle=L.accent||'#00d9ff'; ctx.font=`700 ${fs*0.7}px -apple-system,"Malgun Gothic",sans-serif`; ctx.fillText(L.label, -hw+pad, -hh+pad); }
+      ctx.fillStyle=L.color||'#e6e9ef'; ctx.font=`700 ${fs}px -apple-system,"Malgun Gothic",sans-serif`;
+      ctx.fillText(String(L._val!=null?L._val:'—'), -hw+pad, -hh+pad+(L.label?fs*0.9:0));
+      ctx.restore();
     } else if(L.type==='nowplaying'){
       const bgm=(typeof mixer!=='undefined'&&mixer.sources)?mixer.sources.find(s=>s.kind==='bgm'&&!s.muted):null;
       const label=bgm?bgm.label:'재생 중 아님';
@@ -1546,7 +1578,7 @@ document.getElementById('arSel').onchange = e=>{
 };
 
 /* ── 레이어 목록 ── */
-const ICON={camera:'🎥',screen:'🖥️',image:'🖼️',text:'🅣',web:'🌐',solid:'🟦',clock:'🕐',lower3:'▬',countdown:'⏱',video:'🎞️',gauge:'📊',chat:'💬',sticker:'⭐',frame:'🖼',emote:'💗',poll:'📊',donors:'★',nowplaying:'🎧',audiobars:'〰',roulette:'🎡',slideshow:'🖽'};
+const ICON={camera:'🎥',screen:'🖥️',image:'🖼️',text:'🅣',web:'🌐',solid:'🟦',clock:'🕐',lower3:'▬',countdown:'⏱',video:'🎞️',gauge:'📊',chat:'💬',sticker:'⭐',frame:'🖼',emote:'💗',poll:'📊',donors:'★',nowplaying:'🎧',audiobars:'〰',roulette:'🎡',slideshow:'🖽',data:'🔢'};
 function renderLayers(){
   const box=document.getElementById('layers'); box.innerHTML='';
   [...state.layers].sort((a,b)=>b.z-a.z).forEach(L=>{
@@ -1649,6 +1681,7 @@ function showProps(){
   document.getElementById('rouletteProps').style.display=L.type==='roulette'?'block':'none';
   document.getElementById('audiobarsProps').style.display=L.type==='audiobars'?'block':'none';
   document.getElementById('nowplayingProps').style.display=L.type==='nowplaying'?'block':'none';
+  document.getElementById('dataProps').style.display=L.type==='data'?'block':'none';
   document.getElementById('emoteProps').style.display=L.type==='emote'?'block':'none';
   document.getElementById('pollProps').style.display=L.type==='poll'?'block':'none';
   document.getElementById('donorsProps').style.display=L.type==='donors'?'block':'none';
@@ -1687,6 +1720,7 @@ function syncProps(){
   if(L.type==='nowplaying'){ pNpBg.value=L.bg||'#0f1420'; pNpAccent.value=L.accent||'#00d9ff'; }
   if(L.type==='slideshow'){ pSlideInt.value=(L.interval||3000)/1000; pSlideIntVal.textContent=((L.interval||3000)/1000).toFixed(1); }
   if(L.type==='roulette'){ pRouletteOpts.value=L.options||''; }
+  if(L.type==='data'){ pDataLabel.value=L.label||''; pDataUrl.value=L.url||''; pDataPath.value=L.path||''; pDataRef.value=L.refresh||30; pDataRefVal.textContent=L.refresh||30; }
   if(L.type==='audiobars'){ pBarsColor.value=L.color||'#00d9ff'; pBarsN.value=L.bars||32; }
   if(L.type==='emote'){ pEmoteEmojis.value=L.emojis||'👍❤️😂🎉'; pEmoteCount.value=L.count||8; pEmoteSize.value=L.size||48; }
   if(L.type==='poll'){ pPollQ.value=L.question||''; pPollOpts.value=L.options||''; pPollBg.value=L.bg||'#161a22'; pPollAccent.value=L.accent||'#00d9ff'; }
@@ -1773,6 +1807,10 @@ pSlideAdd.onclick=()=>document.getElementById('slideFile').click();
 pSlideClear.onclick=()=>{const L=sel();if(L&&L.type==='slideshow'){L.imgs=[];L.srcs=[];L.idx=0;renderLayers();toast('슬라이드 비움');}};
 pRouletteOpts.oninput=e=>{const L=sel();if(L)L.options=e.target.value;};
 pRouletteSpin.onclick=()=>{const L=sel();if(L&&L.type==='roulette'){ L.vel=0.3+([...crypto.getRandomValues(new Uint8Array(1))][0]/255)*0.18; haptic(20); }};
+pDataLabel.oninput=e=>{const L=sel();if(L)L.label=e.target.value;};
+pDataUrl.oninput=e=>{const L=sel();if(L){L.url=e.target.value;L._next=0;}};
+pDataPath.oninput=e=>{const L=sel();if(L){L.path=e.target.value;L._next=0;}};
+pDataRef.oninput=e=>{const L=sel();if(L){L.refresh=+e.target.value;pDataRefVal.textContent=e.target.value;}};
 pBarsColor.oninput=e=>{const L=sel();if(L)L.color=e.target.value;};
 pBarsN.oninput=e=>{const L=sel();if(L)L.bars=Math.max(8,Math.min(96,+e.target.value||32));};
 pEmoteEmojis.oninput=e=>{const L=sel();if(L)L.emojis=e.target.value;};
@@ -2286,6 +2324,7 @@ function sceneData(){
         if(L.type==='gauge'){ b.label=L.label; b.pct=L.pct; b.color=L.color; b.bg=L.bg; }
         if(L.type==='nowplaying'){ b.bg=L.bg; b.color=L.color; b.accent=L.accent; b.font=L.font; }
         if(L.type==='audiobars'){ b.color=L.color; b.bars=L.bars; }
+        if(L.type==='data'){ b.url=L.url; b.path=L.path; b.label=L.label; b.bg=L.bg; b.color=L.color; b.accent=L.accent; b.font=L.font; b.refresh=L.refresh; }
         if(L.type==='roulette'){ b.options=L.options; b.angle=L.angle; }
         if(L.type==='slideshow'){ b.srcs=L.srcs||[]; b.interval=L.interval; b.idx=L.idx; }
         if(L.type==='emote'){ b.emojis=L.emojis; b.count=L.count; b.size=L.size; }
@@ -2324,7 +2363,7 @@ function restoreScene(){
   for(const b of (data.layers||[])){
     if(b.type==='image'){ const img=new Image(); img.src=b.src; state.layers.push({...b,id:nextId++,img}); }
     else if(b.type==='slideshow'){ const imgs=(b.srcs||[]).map(s=>{const i=new Image();i.src=s;return i;}); state.layers.push({...b,id:nextId++,imgs}); }
-    else if(b.type==='text'||b.type==='solid'||b.type==='clock'||b.type==='lower3'||b.type==='countdown'||b.type==='gauge'||b.type==='chat'||b.type==='sticker'||b.type==='frame'||b.type==='emote'||b.type==='poll'||b.type==='donors'||b.type==='nowplaying'||b.type==='audiobars'||b.type==='roulette'){ state.layers.push({...b,id:nextId++}); }
+    else if(b.type==='text'||b.type==='solid'||b.type==='clock'||b.type==='lower3'||b.type==='countdown'||b.type==='gauge'||b.type==='chat'||b.type==='sticker'||b.type==='frame'||b.type==='emote'||b.type==='poll'||b.type==='donors'||b.type==='nowplaying'||b.type==='audiobars'||b.type==='roulette'||b.type==='data'){ state.layers.push({...b,id:nextId++}); }
     else if(b.type==='web'){
       const iframe=document.createElement('iframe');
       iframe.src=b.url; iframe.style.cssText='position:absolute;border:0;background:transparent';
@@ -2364,7 +2403,7 @@ function applySnapshot(j){
   for(const b of (data.layers||[])){
     if(b.type==='image'){ const img=new Image(); img.src=b.src; state.layers.push({...b,id:nextId++,img}); }
     else if(b.type==='slideshow'){ const imgs=(b.srcs||[]).map(s=>{const i=new Image();i.src=s;return i;}); state.layers.push({...b,id:nextId++,imgs}); }
-    else if(['text','solid','clock','lower3','countdown','gauge','chat','sticker','frame','emote','poll','donors','nowplaying','audiobars','roulette'].includes(b.type)){ state.layers.push({...b,id:nextId++}); }
+    else if(['text','solid','clock','lower3','countdown','gauge','chat','sticker','frame','emote','poll','donors','nowplaying','audiobars','roulette','data'].includes(b.type)){ state.layers.push({...b,id:nextId++}); }
     else if(b.type==='web'){ const iframe=document.createElement('iframe'); iframe.src=b.url; iframe.style.cssText='position:absolute;border:0;background:transparent'; iframe.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-forms'); ovl.appendChild(iframe); state.layers.push({...b,id:nextId++,iframe}); }
   }
   normalizeZ(); renderLayers(); histLock=false;
