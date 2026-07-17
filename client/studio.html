@@ -399,6 +399,10 @@
         <div class="field"><label><input type="checkbox" id="pShadow"> 그림자 효과</label></div>
         <div class="field"><label>화이트밸런스 <span id="pWbVal">0</span></label><input id="pWb" type="range" min="-100" max="100" value="0"></div>
         <div class="field"><label>모자이크 <span id="pMosaicVal">0</span></label><input id="pMosaic" type="range" min="0" max="40" value="0"></div>
+        <div class="row2">
+          <div class="field"><label>크롭 좌우 <span id="pCropXVal">0</span>%</label><input id="pCropX" type="range" min="0" max="45" value="0"></div>
+          <div class="field"><label>크롭 상하 <span id="pCropYVal">0</span>%</label><input id="pCropY" type="range" min="0" max="45" value="0"></div>
+        </div>
       </div>
       <div id="chromaProps" style="display:none">
         <div class="field"><label><input type="checkbox" id="pChromaOn"> 크로마키 (배경 제거)</label></div>
@@ -898,7 +902,12 @@ function drawKeyed(L, src, natW, natH, hw, hh){
   if(L.chroma && L.chroma.on){ source=chromaCanvas(src, natW, natH, hexToRgb(L.chroma.color||'#00ff00'), L.chroma.thr||120); }
   if(L.mosaic>0){ const mz=mosaicCanvas(source, L.w, L.h, L.mosaic); const prev=ctx.imageSmoothingEnabled;
     ctx.imageSmoothingEnabled=false; ctx.drawImage(mz, -hw,-hh, L.w, L.h); ctx.imageSmoothingEnabled=prev; return; }
-  ctx.drawImage(source, -hw,-hh, L.w, L.h);
+  // 소스 크롭 (중심 기준 대칭 인셋)
+  const sW=source.videoWidth||source.naturalWidth||source.width||natW||L.w;
+  const sH=source.videoHeight||source.naturalHeight||source.height||natH||L.h;
+  const cx=(L.cropX||0), cy=(L.cropY||0);
+  if(cx>0||cy>0){ const sx=cx*sW, sy=cy*sH; ctx.drawImage(source, sx,sy, sW-2*sx, sH-2*sy, -hw,-hh, L.w,L.h); }
+  else ctx.drawImage(source, -hw,-hh, L.w, L.h);
 }
 /* ── 렌더 루프 ── */
 const FILTER_PRESETS={
@@ -1340,7 +1349,7 @@ function syncProps(){
   if(L.type==='lower3'){ pL3Title.value=L.title||''; pL3Sub.value=L.sub||''; pL3Color.value=L.color||'#ffffff'; pL3Bg.value=L.bg||'#0066ff'; pL3Font.value=L.font||48; }
   if(L.type==='countdown'){ pCdMins.value=L.mins!=null?L.mins:5; pCdColor.value=L.color||'#ffffff'; pCdFont.value=L.font||120; }
   if(L.type==='gauge'){ pGaugeLabel.value=L.label!=null?L.label:''; pGaugePct.value=L.pct!=null?L.pct:60; pGaugeColor.value=L.color||'#00c48c'; pGaugeBg.value=L.bg||'#1e2430'; }
-  if(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video'||L.type==='solid'){ pPreset.value=L.preset||'none'; pBlend.value=L.blend||'normal'; pCornerR.value=L.cornerR||0; pCornerRVal.textContent=L.cornerR||0; pBorderW.value=L.borderW||0; pBorderWVal.textContent=L.borderW||0; pBorderColor.value=L.borderColor||'#ffffff'; pShadow.checked=!!L.shadow; pWb.value=L.wb||0; pWbVal.textContent=L.wb||0; pMosaic.value=L.mosaic||0; pMosaicVal.textContent=L.mosaic||0; }
+  if(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video'||L.type==='solid'){ pPreset.value=L.preset||'none'; pBlend.value=L.blend||'normal'; pCornerR.value=L.cornerR||0; pCornerRVal.textContent=L.cornerR||0; pBorderW.value=L.borderW||0; pBorderWVal.textContent=L.borderW||0; pBorderColor.value=L.borderColor||'#ffffff'; pShadow.checked=!!L.shadow; pWb.value=L.wb||0; pWbVal.textContent=L.wb||0; pMosaic.value=L.mosaic||0; pMosaicVal.textContent=L.mosaic||0; pCropX.value=Math.round((L.cropX||0)*100); pCropXVal.textContent=Math.round((L.cropX||0)*100); pCropY.value=Math.round((L.cropY||0)*100); pCropYVal.textContent=Math.round((L.cropY||0)*100); }
   if(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video'){ const c=L.chroma||{}; pChromaOn.checked=!!c.on; pChromaColor.value=c.color||'#00ff00'; pChromaThr.value=c.thr||120; pChromaThrVal.textContent=c.thr||120; }
   if(L.type==='nowplaying'){ pNpBg.value=L.bg||'#0f1420'; pNpAccent.value=L.accent||'#00d9ff'; }
   if(L.type==='emote'){ pEmoteEmojis.value=L.emojis||'👍❤️😂🎉'; pEmoteCount.value=L.count||8; pEmoteSize.value=L.size||48; }
@@ -1376,6 +1385,8 @@ document.getElementById('bgImgFile').onchange=e=>{ const f=e.target.files[0]; if
   r.readAsDataURL(f); e.target.value=''; };
 pWb.oninput=e=>{const L=sel();if(L){L.wb=+e.target.value;pWbVal.textContent=e.target.value;}};
 pMosaic.oninput=e=>{const L=sel();if(L){L.mosaic=+e.target.value;pMosaicVal.textContent=e.target.value;}};
+pCropX.oninput=e=>{const L=sel();if(L){L.cropX=(+e.target.value)/100;pCropXVal.textContent=e.target.value;}};
+pCropY.oninput=e=>{const L=sel();if(L){L.cropY=(+e.target.value)/100;pCropYVal.textContent=e.target.value;}};
 pText.oninput=e=>{ const L=sel(); if(L)L.text=e.target.value; };
 pFont.oninput=e=>{ const L=sel(); if(L)L.font=Number(e.target.value)||72; };
 pColor.oninput=e=>{ const L=sel(); if(L)L.color=e.target.value; };
@@ -1841,7 +1852,7 @@ function sceneData(){
         if(L.chroma) b.chroma=L.chroma;
         if(L.preset) b.preset=L.preset; if(L.blend) b.blend=L.blend; if(L.cornerR) b.cornerR=L.cornerR;
         if(L.borderW) b.borderW=L.borderW; if(L.borderColor) b.borderColor=L.borderColor; if(L.shadow) b.shadow=L.shadow;
-        if(L.wb) b.wb=L.wb; if(L.mosaic) b.mosaic=L.mosaic;
+        if(L.wb) b.wb=L.wb; if(L.mosaic) b.mosaic=L.mosaic; if(L.cropX) b.cropX=L.cropX; if(L.cropY) b.cropY=L.cropY;
         if(L.type==='text'){ b.text=L.text; b.font=L.font; b.color=L.color; b.align=L.align; b.weight=L.weight; b.fontFamily=L.fontFamily; b.anim=L.anim; b.stroke=L.stroke; b.strokeW=L.strokeW; }
         if(L.type==='web') b.url=L.url;
         if(L.type==='solid') b.color=L.color;
