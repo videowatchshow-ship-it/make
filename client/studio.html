@@ -390,6 +390,11 @@
             <option value="overlay">오버레이</option><option value="lighten">라이튼</option><option value="darken">다크</option><option value="difference">디퍼런스</option></select></div>
         </div>
         <div class="field"><label>둥근 모서리 <span id="pCornerRVal">0</span>px</label><input id="pCornerR" type="range" min="0" max="200" value="0"></div>
+        <div class="row2">
+          <div class="field"><label>테두리 <span id="pBorderWVal">0</span>px</label><input id="pBorderW" type="range" min="0" max="40" value="0"></div>
+          <div class="field"><label>테두리 색</label><input id="pBorderColor" type="color" value="#ffffff"></div>
+        </div>
+        <div class="field"><label><input type="checkbox" id="pShadow"> 그림자 효과</label></div>
       </div>
       <div id="chromaProps" style="display:none">
         <div class="field"><label><input type="checkbox" id="pChromaOn"> 크로마키 (배경 제거)</label></div>
@@ -923,8 +928,12 @@ function draw(){
     if(L.blend && L.blend!=='normal') ctx.globalCompositeOperation = L.blend;   // 블렌드 모드
     if(L.flipH||L.flipV) ctx.scale(L.flipH?-1:1, L.flipV?-1:1);
     const hw = L.w/2, hh = L.h/2;
+    const _fxType=(L.type==='image'||L.type==='camera'||L.type==='screen'||L.type==='video'||L.type==='solid');
+    // 그림자 효과 (클립 전에 그려 그림자 헤일로가 박스 밖으로 퍼지게)
+    if(L.shadow && _fxType){ ctx.save(); ctx.shadowColor='rgba(0,0,0,.5)'; ctx.shadowBlur=22; ctx.shadowOffsetY=10;
+      ctx.fillStyle='#000'; ctx.beginPath(); ctx.roundRect(-hw,-hh,L.w,L.h,Math.min(L.cornerR||0,hw,hh)); ctx.fill(); ctx.restore(); }
     // 둥근모서리 마스크 (이미지/카메라/비디오/단색)
-    if(L.cornerR>0 && (L.type==='image'||L.type==='camera'||L.type==='screen'||L.type==='video'||L.type==='solid')){
+    if(L.cornerR>0 && _fxType){
       ctx.beginPath(); ctx.roundRect(-hw,-hh,L.w,L.h,Math.min(L.cornerR,hw,hh)); ctx.clip();
     }
     if((L.type==='camera'||L.type==='screen') && L.video.readyState>=2){
@@ -1106,6 +1115,9 @@ function draw(){
       ctx.strokeStyle='rgba(0,217,255,.5)'; ctx.setLineDash([8,6]); ctx.strokeRect(-hw,-hh,L.w,L.h);
       ctx.setLineDash([]);
     }
+    // 테두리 (클립 안쪽 inset — 잘리지 않게)
+    if(L.borderW>0 && _fxType){ const bw=L.borderW; ctx.lineWidth=bw; ctx.strokeStyle=L.borderColor||'#ffffff';
+      ctx.beginPath(); ctx.roundRect(-hw+bw/2,-hh+bw/2,L.w-bw,L.h-bw, Math.max(0,Math.min((L.cornerR||0),hw,hh)-bw/2)); ctx.stroke(); }
     ctx.restore();
     if(L.type==='web' && L.iframe){ positionIframe(L); }
   }
@@ -1310,7 +1322,7 @@ function syncProps(){
   if(L.type==='lower3'){ pL3Title.value=L.title||''; pL3Sub.value=L.sub||''; pL3Color.value=L.color||'#ffffff'; pL3Bg.value=L.bg||'#0066ff'; pL3Font.value=L.font||48; }
   if(L.type==='countdown'){ pCdMins.value=L.mins!=null?L.mins:5; pCdColor.value=L.color||'#ffffff'; pCdFont.value=L.font||120; }
   if(L.type==='gauge'){ pGaugeLabel.value=L.label!=null?L.label:''; pGaugePct.value=L.pct!=null?L.pct:60; pGaugeColor.value=L.color||'#00c48c'; pGaugeBg.value=L.bg||'#1e2430'; }
-  if(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video'||L.type==='solid'){ pPreset.value=L.preset||'none'; pBlend.value=L.blend||'normal'; pCornerR.value=L.cornerR||0; pCornerRVal.textContent=L.cornerR||0; }
+  if(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video'||L.type==='solid'){ pPreset.value=L.preset||'none'; pBlend.value=L.blend||'normal'; pCornerR.value=L.cornerR||0; pCornerRVal.textContent=L.cornerR||0; pBorderW.value=L.borderW||0; pBorderWVal.textContent=L.borderW||0; pBorderColor.value=L.borderColor||'#ffffff'; pShadow.checked=!!L.shadow; }
   if(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video'){ const c=L.chroma||{}; pChromaOn.checked=!!c.on; pChromaColor.value=c.color||'#00ff00'; pChromaThr.value=c.thr||120; pChromaThrVal.textContent=c.thr||120; }
   if(L.type==='nowplaying'){ pNpBg.value=L.bg||'#0f1420'; pNpAccent.value=L.accent||'#00d9ff'; }
   if(L.type==='emote'){ pEmoteEmojis.value=L.emojis||'👍❤️😂🎉'; pEmoteCount.value=L.count||8; pEmoteSize.value=L.size||48; }
@@ -1376,6 +1388,9 @@ pGaugeBg.oninput=e=>{ const L=sel(); if(L)L.bg=e.target.value; };
 pPreset.onchange=e=>{const L=sel();if(L)L.preset=e.target.value;};
 pBlend.onchange=e=>{const L=sel();if(L)L.blend=e.target.value;};
 pCornerR.oninput=e=>{const L=sel();if(L){L.cornerR=+e.target.value;pCornerRVal.textContent=e.target.value;}};
+pBorderW.oninput=e=>{const L=sel();if(L){L.borderW=+e.target.value;pBorderWVal.textContent=e.target.value;}};
+pBorderColor.oninput=e=>{const L=sel();if(L)L.borderColor=e.target.value;};
+pShadow.onchange=e=>{const L=sel();if(L)L.shadow=e.target.checked;};
 function ensureChroma(L){ if(!L.chroma) L.chroma={on:false,color:'#00ff00',thr:120}; return L.chroma; }
 pChromaOn.onchange=e=>{const L=sel();if(L){ensureChroma(L).on=e.target.checked;}};
 pChromaColor.oninput=e=>{const L=sel();if(L){ensureChroma(L).color=e.target.value;}};
@@ -1801,6 +1816,7 @@ function sceneData(){
         if(L.type==='image') b.src=L.src;
         if(L.chroma) b.chroma=L.chroma;
         if(L.preset) b.preset=L.preset; if(L.blend) b.blend=L.blend; if(L.cornerR) b.cornerR=L.cornerR;
+        if(L.borderW) b.borderW=L.borderW; if(L.borderColor) b.borderColor=L.borderColor; if(L.shadow) b.shadow=L.shadow;
         if(L.type==='text'){ b.text=L.text; b.font=L.font; b.color=L.color; b.align=L.align; b.weight=L.weight; b.fontFamily=L.fontFamily; b.anim=L.anim; b.stroke=L.stroke; b.strokeW=L.strokeW; }
         if(L.type==='web') b.url=L.url;
         if(L.type==='solid') b.color=L.color;
