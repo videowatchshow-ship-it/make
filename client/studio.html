@@ -33,6 +33,7 @@
     overscroll-behavior:none;-webkit-overflow-scrolling:touch}   /* 스크롤 바운스 억제 */
   .app{display:flex;height:100vh;overflow:hidden}
   button:disabled,select:disabled,input:disabled{opacity:.42;cursor:not-allowed;filter:grayscale(.3)}  /* disabled 스타일 */
+  :focus-visible{outline:2px solid var(--accent2);outline-offset:2px;border-radius:4px}   /* 키보드 포커스 링 */
   #offlineBar{position:fixed;left:0;right:0;bottom:0;z-index:9997;display:none;
     background:var(--danger);color:#fff;text-align:center;padding:8px;font-size:13px}
   #offlineBar.show{display:block}
@@ -204,6 +205,21 @@
     <button class="btn primary" id="aboutClose" style="margin-top:16px;width:100%">닫기</button>
   </div>
 </div>
+<div id="helpModal" style="position:fixed;inset:0;z-index:9998;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6)">
+  <div style="background:#121722;border:1px solid #26304a;border-radius:14px;padding:24px;max-width:400px;font-family:-apple-system,'Malgun Gothic',sans-serif;color:#e6e9ef">
+    <div style="font:700 18px sans-serif;margin-bottom:12px">⌨ 단축키 / 도움말</div>
+    <table style="width:100%;font-size:13px;color:#c7cdd9;border-collapse:collapse">
+      <tr><td style="padding:4px 8px;color:#00d9ff">Ctrl+Z / Ctrl+Y</td><td>되돌리기 / 다시 실행</td></tr>
+      <tr><td style="padding:4px 8px;color:#00d9ff">숫자키 1-9</td><td>씬 전환</td></tr>
+      <tr><td style="padding:4px 8px;color:#00d9ff">화살표 / Shift+화살표</td><td>선택 레이어 미세이동 (1px / 10px)</td></tr>
+      <tr><td style="padding:4px 8px;color:#00d9ff">M</td><td>마이크 음소거 토글</td></tr>
+      <tr><td style="padding:4px 8px;color:#00d9ff">두 손가락</td><td>핀치 확대·회전 (터치)</td></tr>
+      <tr><td style="padding:4px 8px;color:#00d9ff">Delete</td><td>선택 레이어 삭제</td></tr>
+    </table>
+    <div style="font-size:12px;color:#8a93a6;margin-top:12px;line-height:1.6">소스 추가 → 드래그로 배치 → 오디오 믹서 확인 → WHIP 입력 → 방송 시작. 씬을 여러 개 만들어 숫자키로 전환하세요.</div>
+    <button class="btn primary" id="helpClose" style="margin-top:16px;width:100%">닫기</button>
+  </div>
+</div>
 <div class="app">
   <!-- SOURCES -->
   <aside class="side">
@@ -214,7 +230,8 @@
     <div class="row2" style="margin:-4px 0 10px;gap:6px;flex-wrap:wrap">
       <button class="btn" id="aboutBtn" style="padding:4px 8px;font-size:12px" title="정보">ⓘ <span id="verTag"></span></button>
       <button class="btn" id="installBtn" style="padding:4px 8px;font-size:12px;display:none" title="홈화면 설치">⬇ 설치</button>
-      <button class="btn" id="fsBtn" style="padding:4px 8px;font-size:12px" title="풀스크린">⛶ 전체화면</button>
+      <button class="btn" id="fsBtn" style="padding:4px 8px;font-size:12px" title="풀스크린" aria-label="전체화면">⛶ 전체화면</button>
+      <button class="btn" id="helpBtn" style="padding:4px 8px;font-size:12px" title="도움말/단축키" aria-label="도움말">? 도움말</button>
       <select class="btn" id="themeSel" style="padding:4px 6px;font-size:12px" title="테마">
         <option value="dark">🌙 다크</option>
         <option value="light">☀️ 라이트</option>
@@ -1475,6 +1492,7 @@ function toast(msg,type){
 }
 
 document.getElementById('goLive').onclick = async function(){
+  haptic(30);
   if(state.live){ if(!confirm('방송을 종료할까요?')) return; stopLive(); toast('방송 종료'); return; }
   currentWhip=document.getElementById('whip').value.trim();
   if(!currentWhip){ toast('WHIP 엔드포인트를 입력하세요','warn'); return; }
@@ -1836,7 +1854,7 @@ function renderSceneTabs(){
 }
 function switchScene(i){
   if(i===activeScene || !scenes[i]) return;
-  captureActive();
+  haptic(15); captureActive();
   const doSwitch=()=>{ activeScene=i; applySnapshot(scenes[i].data); saveScenes(); renderSceneTabs(); };
   const trans=document.getElementById('sceneTrans');
   if(trans && trans.checked){
@@ -2107,6 +2125,11 @@ document.getElementById('aboutVer').textContent=APP_VERSION;
 document.getElementById('aboutBtn').onclick=()=>{ document.getElementById('aboutModal').style.display='flex'; };
 document.getElementById('aboutClose').onclick=()=>{ document.getElementById('aboutModal').style.display='none'; };
 document.getElementById('aboutModal').onclick=e=>{ if(e.target.id==='aboutModal') e.currentTarget.style.display='none'; };
+document.getElementById('helpBtn').onclick=()=>{ document.getElementById('helpModal').style.display='flex'; };
+document.getElementById('helpClose').onclick=()=>{ document.getElementById('helpModal').style.display='none'; };
+document.getElementById('helpModal').onclick=e=>{ if(e.target.id==='helpModal') e.currentTarget.style.display='none'; };
+/* 햅틱 피드백 */
+function haptic(ms){ try{ if(navigator.vibrate) navigator.vibrate(ms||10); }catch(_){} }
 document.getElementById('fsBtn').onclick=()=>{ const d=document.documentElement;
   if(!document.fullscreenElement){ (d.requestFullscreen||d.webkitRequestFullscreen||(()=>{})).call(d); }
   else{ (document.exitFullscreen||document.webkitExitFullscreen||(()=>{})).call(document); } };
