@@ -193,6 +193,8 @@
       <button id="addClock">🕐 시계</button>
       <button id="addLower3">▬ 로워서드</button>
       <button id="addCountdown">⏱ 카운트다운</button>
+      <button id="addVideo">🎞️ 비디오</button>
+      <button id="addGauge">📊 게이지</button>
       <button id="fillBtn">⤢ 채우기</button>
     </div>
     <h2>레이어 (위 = 앞)</h2>
@@ -272,6 +274,14 @@
         <button class="btn" id="pCamFlip" style="width:100%">🔄 전/후면 전환</button>
         <div class="field"><label>카메라 장치</label><select id="pCamDevice"></select></div>
       </div>
+      <div id="gaugeProps" style="display:none">
+        <div class="field"><label>라벨</label><input id="pGaugeLabel" placeholder="목표"></div>
+        <div class="field"><label>진행률 (%)</label><input id="pGaugePct" type="number" min="0" max="100" value="60"></div>
+        <div class="row2">
+          <div class="field"><label>채움색</label><input id="pGaugeColor" type="color" value="#00c48c"></div>
+          <div class="field"><label>트랙색</label><input id="pGaugeBg" type="color" value="#1e2430"></div>
+        </div>
+      </div>
       <div id="solidProps" style="display:none">
         <div class="field"><label>단색 색상</label><input id="pSolidColor" type="color" value="#0066ff"></div>
       </div>
@@ -333,6 +343,10 @@
     </div>
     <div class="note" id="sendStat">송출 대기</div>
     <div class="note">방송 시작 시 이 캔버스가 MediaMTX WHIP로 송출됩니다. 서버가 아래 대상으로 fan-out.</div>
+    <div class="row2">
+      <button class="btn" id="snapBtn">📸 스냅샷</button>
+      <button class="btn" id="recBtn">⏺ 녹화 시작</button>
+    </div>
 
     <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
     <h2>대상 채널 (fan-out)</h2>
@@ -563,6 +577,25 @@ document.getElementById('addCountdown').onclick = () => {
   addLayer('countdown', {name:'카운트다운', mins:5, endAt:Date.now()+5*60000,
     color:'#ffffff', font:120, w:460, h:180});
 };
+const videoFile = document.createElement('input');
+videoFile.type = 'file'; videoFile.id = 'videoFile'; videoFile.accept = 'video/*';
+videoFile.style.display = 'none';
+document.body.appendChild(videoFile);
+document.getElementById('addVideo').onclick = () => videoFile.click();
+videoFile.onchange = () => {
+  const f = videoFile.files[0]; if(!f) return;
+  const v = document.createElement('video');
+  v.src = URL.createObjectURL(f);
+  v.loop = true; v.muted = true; v.playsInline = true;
+  v.onloadeddata = () => {
+    const ar = (v.videoWidth && v.videoHeight) ? v.videoWidth/v.videoHeight : 16/9;
+    const L = addLayer('video', {name: f.name, video: v, aspect: ar, fill: true});
+    coverFit(L, canvasDims());
+    v.play().catch(()=>{});
+  };
+  videoFile.value = '';
+};
+document.getElementById('addGauge').onclick = () => { addLayer('gauge',{name:'게이지',label:'목표',pct:60,color:'#00c48c',bg:'#1e2430',w:700,h:90}); };
 
 /* 웹 URL */
 document.getElementById('addWeb').onclick = () => {
@@ -639,6 +672,29 @@ function draw(){
       ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.shadowColor='rgba(0,0,0,.5)'; ctx.shadowBlur=8;
       ctx.fillText(mm+':'+ss, 0, 0);
+    } else if(L.type==='video'){
+      if(L.video && L.video.readyState>=2){ ctx.drawImage(L.video, -hw,-hh, L.w, L.h); }
+    } else if(L.type==='gauge'){
+      const pct=Math.max(0,Math.min(100,(L.pct!=null?L.pct:0)));
+      const barH=Math.max(8,Math.min(L.h*0.4,40));
+      const barY=hh-barH;
+      const r=barH/2;
+      const textH=L.h-barH;
+      const fs=Math.max(12,textH*0.66);
+      ctx.fillStyle=L.bg||'#1e2430';
+      ctx.beginPath(); ctx.roundRect(-hw,barY,L.w,barH,r); ctx.fill();
+      const fw=Math.max(barH,L.w*(pct/100));
+      ctx.save();
+      ctx.beginPath(); ctx.roundRect(-hw,barY,L.w,barH,r); ctx.clip();
+      ctx.fillStyle=L.color||'#00c48c';
+      ctx.fillRect(-hw,barY,fw,barH);
+      ctx.restore();
+      ctx.shadowColor='rgba(0,0,0,.4)'; ctx.shadowBlur=6;
+      ctx.font=`700 ${fs}px -apple-system,"Malgun Gothic",sans-serif`;
+      ctx.fillStyle=L.color||'#00c48c';
+      ctx.textBaseline='middle';
+      ctx.textAlign='left';  ctx.fillText(String(L.label!=null?L.label:''), -hw, -hh+textH/2);
+      ctx.textAlign='right'; ctx.fillText(Math.round(pct)+'%', hw, -hh+textH/2);
     } else if(L.type==='web'){
       // 캔버스엔 자리표시(합성 불가), 실제 위젯은 프리뷰 오버레이 iframe로 표시
       ctx.fillStyle='rgba(0,217,255,.08)'; ctx.fillRect(-hw,-hh,L.w,L.h);
@@ -718,7 +774,7 @@ document.getElementById('resSel').onchange = e=>{
 };
 
 /* ── 레이어 목록 ── */
-const ICON={camera:'🎥',screen:'🖥️',image:'🖼️',text:'🅣',web:'🌐',solid:'🟦',clock:'🕐',lower3:'▬',countdown:'⏱'};
+const ICON={camera:'🎥',screen:'🖥️',image:'🖼️',text:'🅣',web:'🌐',solid:'🟦',clock:'🕐',lower3:'▬',countdown:'⏱',video:'🎞️',gauge:'📊'};
 function renderLayers(){
   const box=document.getElementById('layers'); box.innerHTML='';
   [...state.layers].sort((a,b)=>b.z-a.z).forEach(L=>{
@@ -749,6 +805,7 @@ function showProps(){
   document.getElementById('lower3Props').style.display=L.type==='lower3'?'block':'none';
   document.getElementById('cdProps').style.display=L.type==='countdown'?'block':'none';
   document.getElementById('cameraProps').style.display=L.type==='camera'?'block':'none';
+  document.getElementById('gaugeProps').style.display=L.type==='gauge'?'block':'none';
   syncProps();
 }
 function syncProps(){
@@ -772,6 +829,7 @@ function syncProps(){
   if(L.type==='clock'){ pClockFmt.value=L.fmt||'time'; pClockColor.value=L.color||'#ffffff'; pClockFont.value=L.font||72; }
   if(L.type==='lower3'){ pL3Title.value=L.title||''; pL3Sub.value=L.sub||''; pL3Color.value=L.color||'#ffffff'; pL3Bg.value=L.bg||'#0066ff'; pL3Font.value=L.font||48; }
   if(L.type==='countdown'){ pCdMins.value=L.mins!=null?L.mins:5; pCdColor.value=L.color||'#ffffff'; pCdFont.value=L.font||120; }
+  if(L.type==='gauge'){ pGaugeLabel.value=L.label!=null?L.label:''; pGaugePct.value=L.pct!=null?L.pct:60; pGaugeColor.value=L.color||'#00c48c'; pGaugeBg.value=L.bg||'#1e2430'; }
   if(L.type==='camera'){
     navigator.mediaDevices.enumerateDevices().then(ds=>{
       const cams=ds.filter(d=>d.kind==='videoinput');
@@ -816,6 +874,65 @@ document.getElementById('pCamFlip').onclick=()=>{ const L=sel(); if(!L||L.type!=
   L.facing=(L.facing==='environment')?'user':'environment'; reacquireCamera(L,{facingMode:{ideal:L.facing}}); };
 document.getElementById('pCamDevice').onchange=e=>{ const L=sel(); if(!L||L.type!=='camera'||!e.target.value)return;
   reacquireCamera(L,{deviceId:{exact:e.target.value}}); };
+pGaugeLabel.oninput=e=>{ const L=sel(); if(L)L.label=e.target.value; };
+pGaugePct.oninput=e=>{ const L=sel(); if(L)L.pct=Math.max(0,Math.min(100,Number(e.target.value)||0)); };
+pGaugeColor.oninput=e=>{ const L=sel(); if(L)L.color=e.target.value; };
+pGaugeBg.oninput=e=>{ const L=sel(); if(L)L.bg=e.target.value; };
+/* 스냅샷 */
+document.getElementById('snapBtn').onclick = () => {
+  const c = document.getElementById('view');
+  if(!c){ toast('캔버스를 찾을 수 없습니다','err'); return; }
+  c.toBlob((blob) => {
+    if(!blob){ toast('스냅샷 실패','err'); return; }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'centbeam-snapshot.png';
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    toast('스냅샷 저장됨','ok');
+  }, 'image/png');
+};
+/* 로컬 녹화 */
+let mediaRec=null, recChunks=[];
+document.getElementById('recBtn').onclick = function(){
+  const btn = this;
+  if(mediaRec && mediaRec.state !== 'inactive'){ mediaRec.stop(); return; }
+  try{
+    const view = document.getElementById('view');
+    if(!view || typeof view.captureStream !== 'function'){ throw new Error('캔버스 캡처 미지원'); }
+    const vStream = view.captureStream(30);
+    const tracks = vStream.getVideoTracks().slice();
+    if(typeof mixer !== 'undefined' && mixer.dest && mixer.sources && mixer.sources.length){
+      if(mixer.ctx && mixer.ctx.state === 'suspended'){ try{ mixer.ctx.resume(); }catch(_){} }
+      const at = mixer.dest.stream.getAudioTracks();
+      for(let i=0;i<at.length;i++) tracks.push(at[i]);
+    }
+    const recStream = new MediaStream(tracks);
+    let mime = 'video/webm;codecs=vp9,opus';
+    if(!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm;codecs=vp8,opus';
+    if(!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm';
+    recChunks = [];
+    mediaRec = new MediaRecorder(recStream, {mimeType:mime});
+    mediaRec.ondataavailable = e => { if(e.data && e.data.size > 0) recChunks.push(e.data); };
+    mediaRec.onstop = () => {
+      const blob = new Blob(recChunks, {type:'video/webm'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const ts = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+      a.href = url; a.download = 'centbeam-' + ts + '.webm';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      recChunks = []; mediaRec = null;
+      btn.textContent = '⏺ 녹화 시작'; btn.classList.remove('stop');
+      toast('녹화 저장됨','ok');
+    };
+    mediaRec.start();
+    btn.textContent = '⏹ 녹화 중지'; btn.classList.add('stop');
+    toast('녹화 시작','ok');
+  }catch(e){
+    mediaRec = null; recChunks = [];
+    btn.textContent = '⏺ 녹화 시작'; btn.classList.remove('stop');
+    toast('녹화 실패: ' + e.message,'err');
+  }
+};
 document.getElementById('pFront').onclick=()=>{ const L=sel(); if(L){L.z=1e6; normalizeZ(); renderLayers();} };
 document.getElementById('pBack').onclick=()=>{ const L=sel(); if(L){L.z=-1e6; normalizeZ(); renderLayers();} };
 document.getElementById('pDup').onclick=()=>{
@@ -1025,6 +1142,7 @@ function sceneData(){
         if(L.type==='clock'){ b.color=L.color; b.font=L.font; b.fmt=L.fmt; }
         if(L.type==='lower3'){ b.title=L.title; b.sub=L.sub; b.color=L.color; b.bg=L.bg; b.font=L.font; }
         if(L.type==='countdown'){ b.color=L.color; b.font=L.font; b.mins=L.mins; b.endAt=L.endAt; }
+        if(L.type==='gauge'){ b.label=L.label; b.pct=L.pct; b.color=L.color; b.bg=L.bg; }
         return b;
       }) };
 }
@@ -1048,7 +1166,7 @@ function restoreScene(){
   applyCanvasSize();
   for(const b of (data.layers||[])){
     if(b.type==='image'){ const img=new Image(); img.src=b.src; state.layers.push({...b,id:nextId++,img}); }
-    else if(b.type==='text'||b.type==='solid'||b.type==='clock'||b.type==='lower3'||b.type==='countdown'){ state.layers.push({...b,id:nextId++}); }
+    else if(b.type==='text'||b.type==='solid'||b.type==='clock'||b.type==='lower3'||b.type==='countdown'||b.type==='gauge'){ state.layers.push({...b,id:nextId++}); }
     else if(b.type==='web'){
       const iframe=document.createElement('iframe');
       iframe.src=b.url; iframe.style.cssText='position:absolute;border:0;background:transparent';
