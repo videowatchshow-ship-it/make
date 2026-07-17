@@ -65,7 +65,7 @@ mediamtx ./mediamtx.yml
 
 ## 5. 배포 (요약)
 
-프로덕션은 PM2 데몬 + Caddy(HTTPS). 서브도메인 `studio.centsolution.com`.
+프로덕션은 PM2 데몬 + Caddy(HTTPS). 참교육카지노 서버(34.104.233.35)에 서브도메인 `studio.<도메인>`.
 
 ```bash
 pm2 start server.js --name centbeam-web

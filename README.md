@@ -66,7 +66,7 @@ node server.js                    # API :3000
 # MediaMTX 는 별도 실행 (server/README.md 참고)
 ```
 
-전체 배포(서브도메인 `studio.centsolution.com` + HTTPS + PM2)는 → **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
+전체 배포(참교육카지노 서버 `34.104.233.35`에 서브도메인 `studio.<도메인>` + HTTPS)는 → **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
 
 ---
 
