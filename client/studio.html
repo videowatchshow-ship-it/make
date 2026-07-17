@@ -46,6 +46,10 @@
     padding:9px 12px;font-size:14px;cursor:pointer;border-radius:6px}
   .ctxItem:hover{background:var(--panel2)}
   .app.immersive .side, .app.immersive .props{display:none}   /* 몰입 모드 */
+  .drag-handle{cursor:grab;color:var(--muted);padding:0 4px;touch-action:none;user-select:none}
+  .resizer{flex:0 0 6px;cursor:col-resize;background:transparent;position:relative;z-index:5}
+  .resizer:hover,.resizer.drag{background:var(--accent2)}
+  @media (max-width:820px){ .resizer{display:none} }   /* 모바일은 리사이저 숨김 */
   @keyframes cbspin{to{transform:rotate(360deg)}}
   #offlineBar{position:fixed;left:0;right:0;bottom:0;z-index:9997;display:none;
     background:var(--danger);color:#fff;text-align:center;padding:8px;font-size:13px}
@@ -314,6 +318,8 @@
     <input type="file" id="slideFile" accept="image/*" multiple style="display:none">
   </aside>
 
+  <div class="resizer" id="resizeL" title="사이드 패널 크기조절"></div>
+
   <!-- CANVAS -->
   <main class="stage">
     <div class="toolbar">
@@ -358,6 +364,8 @@
       </div>
     </div>
   </main>
+
+  <div class="resizer" id="resizeR" title="속성 패널 크기조절"></div>
 
   <!-- PROPERTIES -->
   <aside class="props" id="props">
@@ -820,6 +828,21 @@ function applyCanvasSize(){
   frame.style.height = (h*scale)+'px';
 }
 window.addEventListener('resize', applyCanvasSize);
+/* ── 패널 드래그 리사이즈 (40) ── */
+function initResizer(id, panelSel, side){
+  const rz=document.getElementById(id), panel=document.querySelector(panelSel); if(!rz||!panel) return;
+  let dragging=false;
+  rz.addEventListener('pointerdown', e=>{ dragging=true; rz.classList.add('drag'); rz.setPointerCapture(e.pointerId); e.preventDefault(); });
+  window.addEventListener('pointermove', e=>{ if(!dragging) return;
+    const r=panel.getBoundingClientRect();
+    let w = side==='left' ? (e.clientX - r.left) : (r.right - e.clientX);
+    w=Math.max(180, Math.min(460, w)); panel.style.flex='0 0 '+w+'px'; panel.style.width=w+'px'; applyCanvasSize(); });
+  window.addEventListener('pointerup', ()=>{ if(dragging){ dragging=false; rz.classList.remove('drag');
+    try{ localStorage.setItem('centbeam.'+id, panel.style.width); }catch(_){} } });
+  try{ const s=localStorage.getItem('centbeam.'+id); if(s){ panel.style.flex='0 0 '+s; panel.style.width=s; } }catch(_){}
+}
+initResizer('resizeL', '.side', 'left');
+initResizer('resizeR', '.props', 'right');
 /* ── 에디터 줌 (39/62/307) ── */
 let editorZoom=1, panX=0, panY=0;
 function applyZoom(){
@@ -1503,9 +1526,13 @@ function renderLayers(){
     const isMulti=state.multiSel.indexOf(L.id)>=0;
     el.className='layer'+(L.id===state.selId?' sel':'')+(isMulti?' multi':'');
     if(isMulti && L.id!==state.selId) el.style.boxShadow='0 0 0 1px var(--accent) inset';
-    el.innerHTML=`<div class="ico">${ICON[L.type]||'▪'}</div>
+    el.dataset.lid=L.id;
+    el.innerHTML=`<span class="drag-handle" title="드래그로 순서변경">⠿</span><div class="ico">${ICON[L.type]||'▪'}</div>
       <div class="nm">${L.name}${L.groupId?' 🔗':''}</div>
       <button class="mini" data-up>▲</button><button class="mini" data-dn>▼</button>`;
+    el.querySelector('.drag-handle').addEventListener('pointerdown', ev=>{ ev.stopPropagation();
+      reorderDrag={id:L.id, y0:ev.clientY, el}; el.style.opacity='0.6'; el.style.transition='none';
+      try{ ev.target.setPointerCapture(ev.pointerId); }catch(_){} });
     el.onclick=ev=>{ if(ev.target.dataset.up!==undefined){bump(L,1);ev.stopPropagation();return;}
       if(ev.target.dataset.dn!==undefined){bump(L,-1);ev.stopPropagation();return;}
       if(ev.ctrlKey||ev.metaKey||ev.shiftKey){ toggleMulti(L.id); } else select(L.id); };
@@ -1526,6 +1553,23 @@ function renderLayers(){
 function bump(L,dir){ L.z+=dir*1.5; normalizeZ(); renderLayers(); }
 function normalizeZ(){ [...state.layers].sort((a,b)=>a.z-b.z).forEach((l,i)=>l.z=i); }
 
+/* ── 레이어 드래그 순서변경 (321) ── */
+let reorderDrag=null;
+window.addEventListener('pointermove', e=>{ if(!reorderDrag) return; reorderDrag.el.style.transform='translateY('+(e.clientY-reorderDrag.y0)+'px)'; });
+window.addEventListener('pointerup', e=>{ if(!reorderDrag) return;
+  const items=[...document.querySelectorAll('#layers .layer')]; let beforeId=null;
+  for(const it of items){ if(it.dataset.lid===String(reorderDrag.id)) continue;
+    const r=it.getBoundingClientRect(); if(e.clientY < r.top + r.height/2){ beforeId=it.dataset.lid; break; } }
+  reorderLayer(reorderDrag.id, beforeId); reorderDrag=null; renderLayers();
+});
+function reorderLayer(id, beforeId){
+  const order=[...state.layers].sort((a,b)=>b.z-a.z);  // front-first
+  const di=order.findIndex(l=>String(l.id)===String(id)); if(di<0) return;
+  const [d]=order.splice(di,1);
+  let ti = beforeId==null ? order.length : order.findIndex(l=>String(l.id)===String(beforeId));
+  if(ti<0) ti=order.length; order.splice(ti,0,d);
+  const n=order.length; order.forEach((l,i)=>l.z=n-1-i);
+}
 /* ── 선택/속성 ── */
 function select(id){ state.selId=id; state.multiSel=[]; renderLayers(); showProps(); }
 function toggleMulti(id){
