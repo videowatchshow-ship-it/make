@@ -1,137 +1,149 @@
-# 배포 — 참교육카지노(videowatch) 서버에 서브도메인 + HTTPS
+# 배포 — 참교육카지노 서버에 studio 서브도메인 (Apache vhost 방식)
 
-> 목표: 참교육카지노 서버(**34.104.233.35**, 이미 MediaMTX 구동 중)에 센트빔 스튜디오를 서브도메인 **`studio.xn--9d0bw2fjtyymch7de9d.info`** (참교육카지노.info) 으로 HTTPS 배포한다.
-> **왜 HTTPS**: 폰 브라우저는 보안 컨텍스트(HTTPS)가 아니면 카메라/마이크를 차단한다. IP+HTTP로는 방송 불가.
+> 목표: 참교육카지노 서버(**34.104.233.35**)에 센트빔 스튜디오를 **`studio.참교육카지노.info`** (`studio.xn--9d0bw2fjtyymch7de9d.info`) 로 HTTPS 배포.
+> 도메인: `참교육카지노.info` = `xn--9d0bw2fjtyymch7de9d.info`, Cloudflare DNS (Zone ID `7e5faed2d3d4d6da7aceb4ddde81a62b`).
 
-> ✅ **도메인 확정**: `참교육카지노.info` = `xn--9d0bw2fjtyymch7de9d.info`, **이미 등록됨 · Cloudflare DNS 사용 중** (apex → Cloudflare IP 확인). 이 문서엔 실제 도메인이 이미 박혀 있으니 **치환 없이 복붙** 하면 된다.
->
-> ⚠️ **제가(AI) 직접 못 하는 것 1개 — 사용자님이 하셔야 함**: **Cloudflare에 `studio` DNS 레코드 추가** (§1). Cloudflare 로그인이 필요해 저는 접근 불가. 그 한 줄 + 서버 SSH만 사용자님이 하시면 나머지는 그대로 복붙.
+> 🚨 **절대 주의 — Caddy 쓰지 말 것.**
+> 이 서버는 **이미 Apache가 80/443에서 참교육카지노.info를 호스팅 중**이다. Caddy를 80/443에 올리면 포트 충돌로 **참교육카지노 사이트가 죽는다.**
+> → **Apache에 studio 서브도메인 vhost를 추가**하고 certbot으로 SSL 발급한다. MediaMTX는 그대로 두고 Apache가 리버스프록시만 한다.
 
----
-
-## 0. 사전 — 이 서버 상태
-참교육카지노 서버(34.104.233.35)에는 이미:
-- MediaMTX 구동 (RTMP :1935, HLS :8888, WHIP :8889), 4 아바타 path 등록됨 (tak/deny/jay/ddoki)
-→ 그래서 **미디어 서버는 이미 있음**. 여기선 (a) 스튜디오 정적 파일 배치 + (b) Caddy HTTPS만 얹으면 된다.
+> 제가(AI) 대신 못 하는 것: **① Cloudflare DNS 추가(토큰 필요) ② 서버 SSH 실행**. 명령어는 아래에 다 있음.
 
 ---
 
-## 1. DNS — Cloudflare에 `studio` 레코드 추가  ← 사용자님이 직접
+## 1. Cloudflare DNS — `studio` A 레코드 (프록시 OFF)
 
-Cloudflare 대시보드 → `참교육카지노.info` 선택 → **DNS → Records → Add record**:
-
-| Type | Name | IPv4 address | Proxy status | TTL |
-|--|--|--|--|--|
-| A | `studio` | `34.104.233.35` | **🔘 DNS only (회색 구름, 프록시 OFF)** | Auto |
-
-> ⚠️ **가장 중요 — 프록시(주황 구름)를 반드시 끄세요(DNS only).**
-> Cloudflare 프록시가 켜져 있으면 (1) Caddy의 Let's Encrypt 인증서 발급이 Cloudflare SSL과 충돌하고, (2) **WebRTC(WHIP) 송출이 프록시를 못 통과**해 방송이 안 됩니다. 회색 구름(DNS only)이어야 Caddy가 직접 인증서 받고 WebRTC가 직통으로 됩니다.
-
-→ `studio.xn--9d0bw2fjtyymch7de9d.info` 이 34.104.233.35를 직접 가리킴. (전파 1~5분)
-
-확인 (전파 후):
+맥 터미널에서 (`$CF_API_TOKEN` = Cloudflare API 토큰, DNS Edit 권한):
 ```bash
-dig +short studio.xn--9d0bw2fjtyymch7de9d.info      # 34.104.233.35 나와야 함 (Cloudflare IP면 프록시 아직 켜진 것)
+curl -X POST "https://api.cloudflare.com/client/v4/zones/7e5faed2d3d4d6da7aceb4ddde81a62b/dns_records" \
+  -H "Authorization: Bearer $CF_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"type":"A","name":"studio","content":"34.104.233.35","ttl":300,"proxied":false}'
+```
+> **`proxied:false` 필수.** Cloudflare 프록시(주황 구름)가 켜지면 (1) certbot 인증서 발급이 CF SSL과 충돌, (2) **WebRTC(WHIP) 송출이 프록시를 못 뚫어 방송 불가**. 회색 구름(DNS only)이어야 함.
+
+확인:
+```bash
+dig +short studio.xn--9d0bw2fjtyymch7de9d.info      # 34.104.233.35 나와야 함
 ```
 
 ---
 
-## 2. 방화벽 (GCP) — 참교육카지노 서버
-
+## 2. 서버 SSH 접속 (맥 터미널)
 ```bash
-gcloud compute firewall-rules create centbeam-web \
-  --allow tcp:80,tcp:443 --source-ranges 0.0.0.0/0 2>/dev/null || echo exists
-# 1935(RTMP)는 참교육카지노용으로 이미 열려 있음
+gcloud compute ssh videowatch_show_gmail_com@my-site-1 --zone=asia-northeast1-a
+# 안 되면 zone 확인: gcloud compute instances list --filter="EXTERNAL_IP=34.104.233.35"
 ```
-- 80/443: Caddy(HTTPS). 8888/8889/3000은 직접 노출하지 않고 Caddy 뒤로 둔다.
 
 ---
 
-## 3. 스튜디오 파일 배치 (34.104.233.35 안에서)
-
+## 3. 스튜디오 파일 배치 (서버 안에서)
 ```bash
 sudo mkdir -p /opt/centbeam && sudo chown $USER /opt/centbeam
 cd /opt/centbeam
-# 저장소에서 client/ server/ 가져오기 (git clone 또는 scp)
-#   예: git clone <이 저장소> . 하거나, client/ 폴더만 올려도 됨
-
-# (선택) 대상 CRUD API 쓰려면 server 도 실행
-cd server && npm install && mkdir -p data
-cp destinations.example.json data/destinations.json
-pm2 start server.js --name centbeam-web && pm2 save
+# 이 저장소에서 client/ 만 있으면 됨 (studio.html + manifest + sw.js + icons)
+git clone https://github.com/videowatchshow-ship-it/make.git repo && cp -r repo/client ./client
+#   또는 scp 로 client/ 폴더만 업로드
+ls client/studio.html    # 있어야 함
 ```
-> MediaMTX 는 이미 돌고 있으니 재설치 불필요. `mediamtx.yml`의 `runOnReady`가 fanout.sh를 부르는지만 확인.
 
 ---
 
-## 4. Caddy — 자동 HTTPS (Let's Encrypt)
+## 4. Apache vhost 추가 (참교육카지노 사이트는 그대로 유지)
 
+필요한 모듈:
 ```bash
-sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
-sudo apt update && sudo apt install -y caddy
+sudo a2enmod proxy proxy_http headers rewrite ssl
 ```
 
-`/etc/caddy/Caddyfile` — `xn--9d0bw2fjtyymch7de9d.info` 을 실제 도메인으로 치환:
-```caddyfile
-studio.xn--9d0bw2fjtyymch7de9d.info {
-    encode gzip
-    root * /opt/centbeam/client
-    file_server
+`/etc/apache2/sites-available/studio-centbeam.conf`:
+```apache
+<VirtualHost *:80>
+    ServerName studio.xn--9d0bw2fjtyymch7de9d.info
+    DocumentRoot /opt/centbeam/client
 
-    handle /api/* {
-        reverse_proxy 127.0.0.1:3000
-    }
-    # WHIP 인제스트 → 로컬 MediaMTX :8889
-    handle /whip/* {
-        uri strip_prefix /whip
-        reverse_proxy 127.0.0.1:8889
-    }
+    <Directory /opt/centbeam/client>
+        Require all granted
+        Options -Indexes
+    </Directory>
+
+    ProxyPreserveHost On
+    # WHIP 인제스트(WebRTC signaling) → 로컬 MediaMTX :8889
+    ProxyPass        /whip/ http://127.0.0.1:8889/
+    ProxyPassReverse /whip/ http://127.0.0.1:8889/
     # HLS 재생 → 로컬 MediaMTX :8888
-    handle /hls/* {
-        uri strip_prefix /hls
-        reverse_proxy 127.0.0.1:8888
-    }
-}
+    ProxyPass        /hls/  http://127.0.0.1:8888/
+    ProxyPassReverse /hls/  http://127.0.0.1:8888/
+    # (선택) 대상 CRUD API → server.js :3000
+    ProxyPass        /api/  http://127.0.0.1:3000/
+    ProxyPassReverse /api/  http://127.0.0.1:3000/
+</VirtualHost>
 ```
-```bash
-sudo systemctl reload caddy
-```
-
-→ 접속: `https://studio.xn--9d0bw2fjtyymch7de9d.info/studio.html`
-→ WHIP 엔드포인트(스튜디오 속성 패널): `https://studio.xn--9d0bw2fjtyymch7de9d.info/whip/tak/whip`
-
----
-
-## 5. 검증
+> 정적 파일(studio.html·manifest·sw.js·아이콘)은 DocumentRoot에서 그대로 서빙되고, `/whip /hls /api` 만 MediaMTX/서버로 프록시된다. **참교육카지노.info vhost는 건드리지 않으므로 사이트는 그대로 산다.**
 
 ```bash
-curl -s https://studio.xn--9d0bw2fjtyymch7de9d.info/api/health         # {"ok":true,...} (server.js 실행 시)
-# 폰 브라우저로 https://studio.xn--9d0bw2fjtyymch7de9d.info/studio.html → 카메라 허용됨(HTTPS라서) → 홈화면 추가(PWA)
-```
-
-송출 테스트(로컬 파일 → 참교육카지노 path):
-```bash
-ffmpeg -re -i sample.mp4 -c copy -f flv rtmp://34.104.233.35:1935/tak
+sudo a2ensite studio-centbeam
+sudo apache2ctl configtest && sudo systemctl reload apache2
 ```
 
 ---
 
-## 6. (선택) OAuth 리다이렉트 — YouTube 로그인 붙일 때
-Google Cloud Console → OAuth 클라이언트 → 승인된 리디렉션 URI:
+## 5. SSL 발급 (certbot — 이미 설치됨)
+```bash
+sudo certbot --apache -d studio.xn--9d0bw2fjtyymch7de9d.info
 ```
-https://studio.xn--9d0bw2fjtyymch7de9d.info/api/auth/callback/google
-```
-HTTPS 필수라 서브도메인이 먼저 있어야 함. 스코프 최소(RFC 9700).
+- certbot이 자동으로 `:443` SSL vhost를 만들고 HTTP→HTTPS 리다이렉트 설정.
+- HTTP-01 챌린지가 80포트로 오므로 CF 프록시 OFF(§1) 상태여야 성공.
+- **참교육카지노.info 인증서는 별개**라 영향 없음.
 
 ---
 
-## 7. 요약 — 지금 사용자님이 할 일 순서
-1. ~~도메인 확정~~ ✅ 완료 (`참교육카지노.info`, Cloudflare).
-2. **Cloudflare에 `studio` A 레코드 → 34.104.233.35, 프록시 OFF(회색 구름)** 추가 (§1). ← 유일하게 남은 "사용자님만 가능"
-3. 참교육카지노 서버(34.104.233.35) SSH → §2~4 **그대로 복붙** (치환 불필요).
-4. 폰에서 `https://studio.xn--9d0bw2fjtyymch7de9d.info/studio.html` 접속 → 방송.
+## 6. MediaMTX WebRTC ICE 포트 (방송 되게 하는 핵심)
+WHIP **시그널링**은 Apache가 8889로 프록시하지만, **미디어는 UDP로 서버에 직접** 간다. MediaMTX WebRTC ICE 포트를 열어야 함.
 
-> 2번(Cloudflare 한 줄)만 사용자님 손이 필요하고, 3·4는 명령어 그대로입니다.
-> 저는 Cloudflare/서버 로그인이 없어 2·3을 대신 실행할 수 없습니다 — 명령어는 다 준비돼 있습니다.
+`mediamtx.yml`에 공인 IP를 알려주고:
+```yaml
+webrtcAdditionalHosts: [34.104.233.35]
+# webrtcLocalUDPAddress: :8189   # 기본값
+```
+방화벽:
+```bash
+gcloud compute firewall-rules create centbeam-webrtc \
+  --allow udp:8189 --source-ranges 0.0.0.0/0 2>/dev/null || echo exists
+```
+MediaMTX 재시작 후 적용.
+
+---
+
+## 7. 검증
+```bash
+curl -sI https://studio.xn--9d0bw2fjtyymch7de9d.info/studio.html   # 200
+curl -s  https://참교육카지노.info/ -o /dev/null -w "%{http_code}\n"  # 참교육 사이트 살아있나 확인(그대로 200)
+```
+- 폰 브라우저로 `https://studio.xn--9d0bw2fjtyymch7de9d.info/studio.html` → 카메라 허용(HTTPS) → 홈화면 추가(PWA)
+- 스튜디오 WHIP 엔드포인트: `https://studio.xn--9d0bw2fjtyymch7de9d.info/whip/tak/whip`
+- 방송 시작 → 참교육카지노 path(tak 등)로 송출 확인
+
+---
+
+## 8. 요약 — 사용자님이 하실 것 (2개만)
+1. **Cloudflare DNS 한 줄** (§1, 토큰 필요, proxied:false).
+2. **서버 SSH → §3~6 복붙** (도메인 이미 박혀 있음, 치환 불필요).
+
+> 저는 Cloudflare 토큰·서버 로그인이 없어 1·2를 대신 실행 못 함. 명령어는 전부 준비됨.
+
+---
+
+## 9. 다른 세션에 넘길 브리핑 (그대로 복붙)
+```
+서버: 참교육카지노 서버 34.104.233.35 (GCP my-site-1, asia-northeast1-a).
+      이미 Apache가 80/443에서 참교육카지노.info 호스팅 중 + MediaMTX(1935/8888/8889) 구동중.
+목표: studio.참교육카지노.info(xn--9d0bw2fjtyymch7de9d.info) 서브도메인으로 센트빔 스튜디오 HTTPS 배포.
+DNS: Cloudflare, Zone 7e5faed2d3d4d6da7aceb4ddde81a62b, studio A→34.104.233.35 proxied:false.
+
+🚨 절대 Caddy 쓰지 말 것 — 80/443은 Apache가 이미 씀. Caddy 올리면 참교육카지노 사이트 죽음.
+   → Apache에 studio vhost 추가(ProxyPass /whip→8889 /hls→8888 /api→3000) + certbot --apache 로 SSL.
+   → 참교육카지노.info vhost는 절대 건드리지 말 것.
+WebRTC: mediamtx webrtcAdditionalHosts:[34.104.233.35] + 방화벽 udp:8189 열기.
+스튜디오 파일: 이 저장소 client/ (studio.html 단일). docs/DEPLOYMENT.md 참고.
+```

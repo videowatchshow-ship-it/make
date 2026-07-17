@@ -75,8 +75,8 @@ node server.js                    # API :3000
 | 파트 | 스택 |
 |--|--|
 | 클라이언트 | Vanilla JS + Canvas 2D + WebRTC(WHIP) + `getUserMedia`/`getDisplayMedia`. 의존성 0, 단일 HTML. |
-| 서버 | Node 22 (LTS) + Express 5, MediaMTX v1.19.2, FFmpeg, PM2, Caddy(HTTPS) |
-| 배포 | 참교육카지노 서버(34.104.233.35) + Cloudflare DNS, 서브도메인 `studio.참교육카지노.info` + Caddy HTTPS |
+| 서버 | Node 22 (LTS) + Express 5, MediaMTX v1.19.2, FFmpeg, PM2 |
+| 배포 | 참교육카지노 서버(34.104.233.35, **Apache 기존 호스팅**) + Cloudflare DNS. `studio.참교육카지노.info` **Apache vhost + certbot HTTPS** (Caddy 아님 — 포트 충돌 주의) |
 
 버전 근거·검증은 [docs/ARCHITECTURE.md §기술 결정](docs/ARCHITECTURE.md) 참고 (2026-07 실측).
 

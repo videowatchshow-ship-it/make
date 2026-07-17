@@ -69,7 +69,7 @@ flowchart TD
 | 8888 | HLS 재생 (자체 사이트 임베드용) | 공개 |
 | 3000 | Express 관리 API | 프록시 뒤(권장) |
 
-프로덕션에서는 Caddy가 443에서 TLS 종단 → 3000/8888/8889로 리버스프록시. [docs/DEPLOYMENT.md](DEPLOYMENT.md) 참고.
+프로덕션(참교육카지노 서버)에서는 **기존 Apache**에 studio vhost를 추가해 443에서 TLS 종단(certbot) → 3000/8888/8889로 리버스프록시. **Caddy는 쓰지 않는다**(Apache가 80/443 선점 중, 충돌 시 사이트 다운). [docs/DEPLOYMENT.md](DEPLOYMENT.md) 참고.
 
 ---
 

@@ -65,14 +65,14 @@ mediamtx ./mediamtx.yml
 
 ## 5. 배포 (요약)
 
-프로덕션은 PM2 데몬 + Caddy(HTTPS). 참교육카지노 서버(34.104.233.35)에 서브도메인 `studio.xn--9d0bw2fjtyymch7de9d.info`.
+프로덕션은 PM2 데몬 + **기존 Apache vhost + certbot(HTTPS)** (Caddy 아님 — Apache가 80/443 선점 중). 참교육카지노 서버(34.104.233.35)에 서브도메인 `studio.xn--9d0bw2fjtyymch7de9d.info`.
 
 ```bash
 pm2 start server.js --name centbeam-web
 pm2 start mediamtx --name centbeam-mtx -- ./mediamtx.yml
 pm2 save
 ```
-전체 단계(DNS·Caddy·방화벽)는 → **[../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md)**
+전체 단계(Cloudflare DNS·Apache vhost·certbot·방화벽)는 → **[../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md)**
 
 ---
 
