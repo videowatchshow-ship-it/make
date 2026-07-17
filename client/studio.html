@@ -106,7 +106,7 @@
   @media (pointer:coarse){ .grip::after{content:'';position:absolute;inset:-16px} }  /* 터치 타깃 ≥44px */
   .hit{position:absolute;pointer-events:auto;cursor:move}
   /* ── right: properties ── */
-  .props{width:260px;flex:0 0 260px;background:var(--panel);border-left:1px solid var(--line);
+  .props{width:260px;flex:0 0 260px;container-type:inline-size;background:var(--panel);border-left:1px solid var(--line);
     padding:14px 16px;overflow:auto}
   .props h2{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:0 0 10px}
   .field{margin:10px 0}
@@ -166,6 +166,12 @@
   .mobilebar,.drawer-backdrop{display:none}
 
   /* ── 모바일 반응형 (≤820px): 캔버스 최대화 + 하단 탭바 + 드로어 ── */
+  /* 컨테이너 쿼리 (48): 속성 패널이 좁아지면 2열 필드를 1열로 리플로우 */
+  @container (max-width:225px){ .props .row2{flex-direction:column;gap:6px} }
+  /* 대화면 (38): 넓은 데스크톱은 패널을 더 넓게 */
+  @media (min-width:1500px){ .side{flex-basis:320px;width:320px} .props{flex-basis:300px;width:300px} }
+  /* 폴더블 (38): 가로 2세그먼트 기기는 스테이지가 접힘선을 넘지 않도록 여백 */
+  @media (horizontal-viewport-segments:2){ .stage{padding:0 env(viewport-segment-right 0 0,0)} }
   /* 태블릿 (821~1100px): 3패널 유지하되 좁은 사이드/속성 + 터치 타깃 확대 */
   @media (min-width:821px) and (max-width:1100px){
     .side{width:230px;flex:0 0 230px}
@@ -932,6 +938,16 @@ async function addVideoSource(kind){
        facing: kind==='screen'?null:'user'});
     coverFit(L, canvasDims());
     if(kind!=='screen' && L.facing==='user'){ L.flipH=true; }  // 전면 카메라 셀피 미러링
+    // 스크린캐스트 자동회전 (56): 공유 화면이 세로면 캔버스도 세로로 맞춤
+    if(kind==='screen' && v.videoWidth && v.videoHeight){
+      const wantOrient = v.videoHeight > v.videoWidth ? 'portrait' : 'landscape';
+      if(!state.live && wantOrient !== state.orient){
+        const old=canvasDims(); state.orient=wantOrient;
+        document.querySelectorAll('#orient button').forEach(x=>x.classList.toggle('on', x.dataset.o===state.orient));
+        applyCanvasSize(); refitLayers(old, canvasDims()); coverFit(L, canvasDims());
+        toast('공유 화면 방향에 맞춰 '+(wantOrient==='portrait'?'세로':'가로')+'로 전환','ok');
+      }
+    }
     // 화면공유 중단(브라우저 '공유 중지') 시 레이어 자동 제거
     stream.getVideoTracks()[0].addEventListener('ended', ()=>{
       state.layers = state.layers.filter(x=>x.id!==L.id);
