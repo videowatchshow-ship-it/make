@@ -464,6 +464,14 @@
         <button class="btn primary" id="pCdStart" style="width:100%;margin-top:6px">▶ 시작/리셋</button>
       </div>
       <div id="webProps" style="display:none">
+        <div class="field"><label>위젯 프리셋</label><select id="pWebPreset">
+          <option value="">직접 입력…</option>
+          <option value="https://streamlabs.com/alert-box/">Streamlabs 알림</option>
+          <option value="https://streamelements.com/overlay/">StreamElements 오버레이</option>
+          <option value="https://widgets.donationalerts.com/">DonationAlerts</option>
+          <option value="https://nightbot.tv/">Nightbot</option>
+          <option value="https://www.twitchalerts.com/">TwitchAlerts</option>
+        </select></div>
         <div class="field"><label>웹 URL</label><input id="pUrl" placeholder="https://…"></div>
         <div class="note">⚠️ 외부 URL은 CORS 때문에 브라우저 캔버스에 직접 합성이 안 됩니다.
           프리뷰 오버레이로만 표시되고, 실제 송출 합성은 (a)서버 headless 렌더 또는 (b)네이티브 앱 WebView 캡처가 필요합니다.</div>
@@ -570,7 +578,7 @@
       <button class="btn" id="addMic">🎤 마이크</button>
       <button class="btn" id="addBgm">🎵 배경음악</button>
     </div>
-    <input type="file" id="bgmFile" accept="audio/*">
+    <input type="file" id="bgmFile" accept="audio/*" multiple>
     <div class="note">방송 시 이 믹서 출력이 송출됩니다. 마이크가 없으면 무음으로 송출.</div>
 
     <div class="mix-fx">
@@ -1304,6 +1312,7 @@ pText.oninput=e=>{ const L=sel(); if(L)L.text=e.target.value; };
 pFont.oninput=e=>{ const L=sel(); if(L)L.font=Number(e.target.value)||72; };
 pColor.oninput=e=>{ const L=sel(); if(L)L.color=e.target.value; };
 pUrl.oninput=e=>{ const L=sel(); if(L&&L.iframe){L.url=e.target.value; L.iframe.src=e.target.value;} };
+pWebPreset.onchange=e=>{ const v=e.target.value; if(!v) return; const L=sel(); if(L&&L.iframe){ L.url=v; L.iframe.src=v; pUrl.value=v; toast('프리셋 URL 적용','ok'); } };
 pAlign.onchange=e=>{ const L=sel(); if(L)L.align=e.target.value; };
 pWeight.onchange=e=>{ const L=sel(); if(L)L.weight=Number(e.target.value); };
 pFontFamily.onchange=e=>{ const L=sel(); if(L)L.fontFamily=e.target.value; };
@@ -1987,15 +1996,18 @@ async function addMic(){
     applyGain(s); mixer.sources.push(s); renderMixer();
   }catch(e){ toast('마이크 접근 실패: '+e.message,'err'); }
 }
-function addBgm(file){
+function addBgm(file, playlist){
   ensureMixer();
   if(mixer.ctx.state==='suspended') mixer.ctx.resume();
-  const el = new Audio(URL.createObjectURL(file)); el.loop = true;
+  const list = playlist && playlist.length ? playlist : [file];
+  const el = new Audio(URL.createObjectURL(list[0]));
+  el.loop = list.length<=1;   // 단일이면 반복, 플레이리스트면 다음 곡으로
   const src = mixer.ctx.createMediaElementSource(el);
   const gain = mixer.ctx.createGain();
   const an = mixer.ctx.createAnalyser(); an.fftSize=256;
   src.connect(gain); gain.connect(an); gain.connect(mixer.master);
-  const s = {id:'a'+nextId++, kind:'bgm', label:file.name, gain, an, el, muted:false, vol:0.6};
+  const s = {id:'a'+nextId++, kind:'bgm', label:list[0].name+(list.length>1?` (1/${list.length})`:''), gain, an, el, muted:false, vol:0.6, playlist:list, plIdx:0};
+  if(list.length>1){ el.onended=()=>{ s.plIdx=(s.plIdx+1)%list.length; try{ el.src=URL.createObjectURL(list[s.plIdx]); s.label=list[s.plIdx].name+` (${s.plIdx+1}/${list.length})`; el.play().catch(()=>{}); renderMixer(); }catch(_){} }; }
   mixer.sources.push(s); renderMixer();
   // 페이드 인 (0 → vol, 1.5초)
   const t=mixer.ctx.currentTime;
@@ -2076,7 +2088,7 @@ function initMixer(){
   document.getElementById('addMic').onclick=addMic;
   const bgmFile=document.getElementById('bgmFile');
   document.getElementById('addBgm').onclick=()=>bgmFile.click();
-  bgmFile.onchange=()=>{ const f=bgmFile.files[0]; if(f) addBgm(f); bgmFile.value=''; };
+  bgmFile.onchange=()=>{ const fl=[...bgmFile.files]; if(fl.length) addBgm(fl[0], fl); bgmFile.value=''; };
   document.getElementById('masterVol').oninput=e=>{ ensureMixer(); mixer.master.gain.value=e.target.value/100; };
   document.getElementById('fxComp').onclick=e=>{ ensureMixer(); mixer.fx.comp=!mixer.fx.comp; setCompBypass(mixer.comp,!mixer.fx.comp); e.target.classList.toggle('primary',mixer.fx.comp); };
   document.getElementById('fxLimit').onclick=e=>{ ensureMixer(); mixer.fx.limit=!mixer.fx.limit; setLimiterBypass(mixer.limiter,!mixer.fx.limit); e.target.classList.toggle('primary',mixer.fx.limit); };
