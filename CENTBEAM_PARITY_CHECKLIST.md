@@ -421,22 +421,22 @@
 |--|--|--|--|
 |331|전 구간 HTTPS/TLS·RTMPS|⚠️|MDN Web Security · OWASP MASVS-NETWORK|
 |332|WebRTC 미디어 DTLS-SRTP 암호화|✅|RFC 8827/8826 (WebRTC 암호화 필수)|
-|333|CSP(Content-Security-Policy) 적용|❌|MDN CSP · OWASP ASVS v4 §14.4|
+|333|CSP(Content-Security-Policy) 적용|✅|CSP 메타(object-src none·base-uri·frame-src 제한)|
 |334|스트림키·비번 평문 저장 금지|❌|OWASP MASVS-STORAGE|
 |335|OAuth 2.0 Auth Code + PKCE|❌|RFC 9700 (모든 클라이언트 PKCE 필수)|
 |336|토큰 보안 저장(Keychain/Keystore)|❌|OWASP MASVS-STORAGE|
 |337|최소 권한 OAuth 스코프|❌|RFC 9700 · Google API 정책|
-|338|WHIP publish Bearer 인증|❌|RFC 9725 §(Auth: Bearer MUST 지원)|
+|338|WHIP publish Bearer 인증|✅|WHIP Authorization: Bearer 송신(항목292)|
 |339|MediaMTX publishUser/pass·비밀 경로|❌|MediaMTX 인증 문서|
 |340|레이트리밋/브루트포스 방지|❌|OWASP API Top 10 (API4:2023)|
 |341|입력 검증·인젝션 방지|⚠️|OWASP ASVS §5 · API Top 10 (API8)|
 |342|웹URL 소스 XSS 방지·sanitize|⚠️|MDN · OWASP ASVS §5.3|
-|343|iframe sandbox 속성|❌|MDN iframe sandbox|
+|343|iframe sandbox 속성|✅|위젯 iframe sandbox 속성|
 |344|CORS 최소 허용|⚠️|MDN CORS · OWASP ASVS §14.5|
 |345|의존성 취약점 스캔(npm audit/SCA)|❌|OWASP ASVS §14.2|
 |346|저장소 비밀정보 금지·시크릿 스캔|⚠️|OWASP · GitHub Secret Scanning|
-|347|로그에 민감정보 미기록|❌|OWASP MASVS-STORAGE (fanout 로그에 키)|
-|348|보안 응답 헤더(HSTS/frame-ancestors)|❌|MDN · OWASP Secure Headers|
+|347|로그에 민감정보 미기록|✅|fanout 로그에 스트림키 미기록(URL만)|
+|348|보안 응답 헤더(HSTS/frame-ancestors)|✅|Apache vhost HSTS/XCTO/XFO/Referrer/Permissions|
 |349|서버 최신 패치·최소 노출 포트|⚠️|OWASP · 클라우드 방화벽 원칙|
 |350|앱 무결성/변조 탐지(선택)|➖|OWASP MASVS-RESILIENCE (PWA 부분해당)|
 
@@ -446,9 +446,9 @@
 
 | 상태 | 개수 | 비율 |
 |--|--|--|
-| ✅ 통과 | 237 | 68% |
+| ✅ 통과 | 242 | 69% |
 | ⚠️ 부분 | 40 | 11% |
-| ❌ 미구현 | 71 | 20% |
+| ❌ 미구현 | 66 | 19% |
 | ➖ 해당없음 | 2 | 1% |
 | **합계** | **350** | 100% |
 

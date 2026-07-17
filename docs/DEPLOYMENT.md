@@ -65,6 +65,13 @@ sudo tee /etc/apache2/sites-available/studio.conf > /dev/null << 'EOF'
     Options -Indexes
   </Directory>
 
+  # 보안 응답 헤더 (OWASP Secure Headers / MDN)
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Permissions-Policy "camera=(self), microphone=(self), display-capture=(self)"
+
   ProxyPreserveHost On
   # WHIP 시그널링 → MediaMTX 8889
   ProxyPass        /whip/ http://127.0.0.1:8889/

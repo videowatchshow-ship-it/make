@@ -2,6 +2,8 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
+<!-- 보안: Content-Security-Policy (인라인 스타일/스크립트 허용은 단일파일 구조상 필요, 그 외 최소화) -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; connect-src *; frame-src https: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>센트빔 CENTBEAM — 라이브 스튜디오</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230066ff'/%3E%3Cpath d='M28 70 L50 26 L72 70 Z' fill='none' stroke='%2300d9ff' stroke-width='7' stroke-linejoin='round'/%3E%3C/svg%3E">
@@ -935,6 +937,7 @@ document.getElementById('addWeb').onclick = () => {
   const {w:cw,h:ch} = canvasDims();
   const iframe = document.createElement('iframe');
   iframe.src = url; iframe.style.cssText = 'position:absolute;border:0;background:transparent';
+  iframe.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-forms');   // iframe 격리
   ovl.appendChild(iframe);
   addLayer('web', {name:'웹: '+url.replace(/^https?:\/\//,'').slice(0,20), url, iframe, w:cw*0.5, h:ch*0.4});
 };
@@ -1686,7 +1689,7 @@ document.getElementById('pDup').onclick=()=>{
   if(L.type==='camera'||L.type==='screen'){ toast('카메라/화면은 복제 불가','warn'); return; }
   const c={...L, id:nextId++, x:L.x+40, y:L.y+40, z:state.layers.length, locked:false};
   if(L.type==='web'){ const ifr=document.createElement('iframe'); ifr.src=L.url;
-    ifr.style.cssText='position:absolute;border:0;background:transparent'; ovl.appendChild(ifr); c.iframe=ifr; }
+    ifr.style.cssText='position:absolute;border:0;background:transparent'; ifr.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-forms'); ovl.appendChild(ifr); c.iframe=ifr; }
   state.layers.push(c); select(c.id); renderLayers();
 };
 document.getElementById('pLock').onclick=()=>{ const L=sel(); if(!L)return; L.locked=!L.locked;
@@ -2057,6 +2060,7 @@ function restoreScene(){
     else if(b.type==='web'){
       const iframe=document.createElement('iframe');
       iframe.src=b.url; iframe.style.cssText='position:absolute;border:0;background:transparent';
+      iframe.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-forms');
       ovl.appendChild(iframe); state.layers.push({...b,id:nextId++,iframe});
     }
   }
@@ -2092,7 +2096,7 @@ function applySnapshot(j){
   for(const b of (data.layers||[])){
     if(b.type==='image'){ const img=new Image(); img.src=b.src; state.layers.push({...b,id:nextId++,img}); }
     else if(['text','solid','clock','lower3','countdown','gauge','chat','sticker','frame','emote','poll','donors','nowplaying'].includes(b.type)){ state.layers.push({...b,id:nextId++}); }
-    else if(b.type==='web'){ const iframe=document.createElement('iframe'); iframe.src=b.url; iframe.style.cssText='position:absolute;border:0;background:transparent'; ovl.appendChild(iframe); state.layers.push({...b,id:nextId++,iframe}); }
+    else if(b.type==='web'){ const iframe=document.createElement('iframe'); iframe.src=b.url; iframe.style.cssText='position:absolute;border:0;background:transparent'; iframe.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-forms'); ovl.appendChild(iframe); state.layers.push({...b,id:nextId++,iframe}); }
   }
   normalizeZ(); renderLayers(); histLock=false;
 }
