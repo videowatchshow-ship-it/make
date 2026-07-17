@@ -458,6 +458,7 @@
       <div class="row2" style="gap:6px">
         <button class="btn" id="fxComp" title="다이나믹 컴프레서">컴프레서</button>
         <button class="btn" id="fxLimit" title="피크 리미터(클리핑 방지)">리미터</button>
+        <button class="btn" id="fxDuck" title="말할 때 BGM 자동 감소">덕킹</button>
       </div>
       <div class="field" style="margin-top:8px"><label>EQ 저음 <span id="eqLowVal">0</span>dB</label><input type="range" id="eqLow" min="-12" max="12" value="0"></div>
       <div class="field"><label>EQ 중음 <span id="eqMidVal">0</span>dB</label><input type="range" id="eqMid" min="-12" max="12" value="0"></div>
@@ -1535,7 +1536,21 @@ function addBgm(file){
   const an = mixer.ctx.createAnalyser(); an.fftSize=256;
   src.connect(gain); gain.connect(an); gain.connect(mixer.master);
   const s = {id:'a'+nextId++, kind:'bgm', label:file.name, gain, an, el, muted:false, vol:0.6};
-  applyGain(s); el.play().catch(()=>{}); mixer.sources.push(s); renderMixer();
+  mixer.sources.push(s); renderMixer();
+  // 페이드 인 (0 → vol, 1.5초)
+  const t=mixer.ctx.currentTime;
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.linearRampToValueAtTime(s.vol, t+1.5);
+  el.play().catch(()=>{});
+}
+/* BGM 페이드 아웃 후 정지 (1.5초) */
+function fadeOutBgm(s){
+  if(!s||!s.gain||!mixer.ctx) return;
+  const t=mixer.ctx.currentTime;
+  s.gain.gain.cancelScheduledValues(t);
+  s.gain.gain.setValueAtTime(s.gain.gain.value, t);
+  s.gain.gain.linearRampToValueAtTime(0.0001, t+1.5);
+  if(s.el) setTimeout(()=>{ try{s.el.pause();}catch(_){} }, 1550);
 }
 function renderMixer(){
   const box = document.getElementById('mixerList'); box.innerHTML='';
@@ -1564,7 +1579,14 @@ function rmsLevel(an){ const b=new Uint8Array(an.fftSize); an.getByteTimeDomainD
   let s=0; for(const v of b){ const x=(v-128)/128; s+=x*x; } return Math.sqrt(s/b.length); }
 function meterLoop(){
   if(mixer.ctx){
-    for(const s of mixer.sources){ if(s.meterEl) s.meterEl.style.width=Math.min(100,rmsLevel(s.an)*300)+'%'; }
+    let micPeak=0;
+    for(const s of mixer.sources){ const lv=rmsLevel(s.an); if(s.meterEl) s.meterEl.style.width=Math.min(100,lv*300)+'%'; if(s.kind==='mic'&&!s.muted) micPeak=Math.max(micPeak,lv); }
+    // 덕킹: 마이크 말할 때 BGM 자동 감소
+    if(mixer.fx && mixer.fx.duck){
+      const speaking = micPeak>0.06;
+      const t=mixer.ctx.currentTime;
+      for(const s of mixer.sources){ if(s.kind==='bgm'&&!s.muted){ const tgt=s.vol*(speaking?0.25:1); s.gain.gain.setTargetAtTime(tgt, t, 0.15); } }
+    }
     const mm=document.getElementById('masterMeter');
     const ml=rmsLevel(mixer.masterAn);
     if(mm){ mm.style.width=Math.min(100,ml*300)+'%'; mm.style.background=ml>0.9?'#ff3b3b':''; }
@@ -1594,6 +1616,8 @@ function initMixer(){
   document.getElementById('masterVol').oninput=e=>{ ensureMixer(); mixer.master.gain.value=e.target.value/100; };
   document.getElementById('fxComp').onclick=e=>{ ensureMixer(); mixer.fx.comp=!mixer.fx.comp; setCompBypass(mixer.comp,!mixer.fx.comp); e.target.classList.toggle('primary',mixer.fx.comp); };
   document.getElementById('fxLimit').onclick=e=>{ ensureMixer(); mixer.fx.limit=!mixer.fx.limit; setLimiterBypass(mixer.limiter,!mixer.fx.limit); e.target.classList.toggle('primary',mixer.fx.limit); };
+  document.getElementById('fxDuck').onclick=e=>{ ensureMixer(); mixer.fx.duck=!mixer.fx.duck; e.target.classList.toggle('primary',mixer.fx.duck);
+    if(!mixer.fx.duck) mixer.sources.filter(s=>s.kind==='bgm').forEach(applyGain); };
   const eq={eqLow:'eqLowVal',eqMid:'eqMidVal',eqHigh:'eqHighVal'};
   Object.keys(eq).forEach(id=>{ document.getElementById(id).oninput=e=>{ ensureMixer(); mixer[id].gain.value=+e.target.value; document.getElementById(eq[id]).textContent=e.target.value; }; });
   requestAnimationFrame(meterLoop);
