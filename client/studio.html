@@ -83,6 +83,7 @@
   .grip{position:absolute;width:12px;height:12px;background:#fff;border:1.5px solid var(--accent);
     border-radius:50%;pointer-events:auto;cursor:nwse-resize}
   .grip.rot{background:var(--accent2);cursor:grab;border-radius:50%}
+  @media (pointer:coarse){ .grip::after{content:'';position:absolute;inset:-16px} }  /* 터치 타깃 ≥44px */
   .hit{position:absolute;pointer-events:auto;cursor:move}
   /* ── right: properties ── */
   .props{width:260px;flex:0 0 260px;background:var(--panel);border-left:1px solid var(--line);
@@ -744,7 +745,7 @@ async function addVideoSource(kind){
       if(state.selId===L.id){ state.selId=null; showProps(); }
       normalizeZ(); renderLayers();
     });
-  }catch(e){ if(e.name!=='NotAllowedError') alert((kind==='screen'?'화면공유':'카메라')+' 실패: '+e.message); }
+  }catch(e){ if(e.name!=='NotAllowedError') toast((kind==='screen'?'화면공유':'카메라')+' 실패: '+e.message,'err'); }
 }
 document.getElementById('addCam').onclick = () => addVideoSource('camera');
 document.getElementById('addScreen').onclick = () => addVideoSource('screen');
@@ -1929,8 +1930,8 @@ function initDestinations(){
     const p=platById(sel.value);
     const key=document.getElementById('destKey').value.trim();
     const base=p.session?document.getElementById('destServer').value.trim():p.ingestUrl;
-    if(!base){ alert('서버 URL을 입력하세요.'); return; }
-    if(!key){ alert('스트림 키를 입력하세요.'); return; }
+    if(!base){ toast('서버 URL을 입력하세요.','warn'); return; }
+    if(!key){ toast('스트림 키를 입력하세요.','warn'); return; }
     state.destinations.push({id:'d'+nextId++, platform:p.id, name:p.name, rtmpUrl:base, streamKey:key, locked:false});
     document.getElementById('destKey').value=''; document.getElementById('destServer').value='';
     saveDest(); renderDest();
@@ -1984,7 +1985,7 @@ async function addMic(){
     src.connect(gain); gain.connect(an); gain.connect(mixer.master);
     const s = {id:'a'+nextId++, kind:'mic', label:'마이크', gain, an, stream, srcNode:src, muted:false, vol:1};
     applyGain(s); mixer.sources.push(s); renderMixer();
-  }catch(e){ alert('마이크 접근 실패: '+e.message); }
+  }catch(e){ toast('마이크 접근 실패: '+e.message,'err'); }
 }
 function addBgm(file){
   ensureMixer();
@@ -2145,6 +2146,13 @@ function updateOnline(){ const bar=document.getElementById('offlineBar'); if(bar
 window.addEventListener('online', ()=>{ updateOnline(); toast('온라인 복구','ok'); });
 window.addEventListener('offline', ()=>{ updateOnline(); toast('오프라인 상태','warn'); });
 updateOnline();
+/* 첫 실행 온보딩 팁 */
+(function onboarding(){
+  try{ if(localStorage.getItem('centbeam.onboarded')) return;
+    setTimeout(()=>{ toast('👋 센트빔에 오신 걸 환영합니다! 소스를 추가하고 WHIP 입력 후 방송을 시작하세요. ?(도움말)에서 단축키를 확인하세요.','ok'); }, 1200);
+    localStorage.setItem('centbeam.onboarded','1');
+  }catch(_){}
+})();
 /* PWA 단축아이콘(shortcuts) 액션 처리 */
 (function handleShortcut(){
   const a=new URLSearchParams(location.search).get('action');
