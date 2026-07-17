@@ -195,6 +195,9 @@
       <button id="addCountdown">⏱ 카운트다운</button>
       <button id="addVideo">🎞️ 비디오</button>
       <button id="addGauge">📊 게이지</button>
+      <button id="addChat">💬 채팅</button>
+      <button id="addSticker">⭐ 스티커</button>
+      <button id="addFrame">🖼 프레임</button>
       <button id="fillBtn">⤢ 채우기</button>
     </div>
     <h2>레이어 (위 = 앞)</h2>
@@ -282,6 +285,24 @@
           <div class="field"><label>트랙색</label><input id="pGaugeBg" type="color" value="#1e2430"></div>
         </div>
       </div>
+      <div id="chatProps" style="display:none">
+        <div class="field"><label>채팅 내용 (이름: 메시지)</label><textarea id="pChatLines" rows="5" style="width:100%"></textarea></div>
+        <div class="row2">
+          <div class="field"><label>박스 색</label><input id="pChatBg" type="color" value="#161a22"></div>
+          <div class="field"><label>글자 색</label><input id="pChatColor" type="color" value="#e6e9ef"></div>
+        </div>
+        <div class="field"><label>글자 크기(px)</label><input id="pChatFont" type="number" value="30"></div>
+      </div>
+      <div id="stickerProps" style="display:none">
+        <div class="field"><label>이모지</label><input id="pStickerEmoji" type="text" value="🔥" maxlength="8"></div>
+      </div>
+      <div id="frameProps" style="display:none">
+        <div class="row2">
+          <div class="field"><label>테두리 색</label><input id="pFrameColor" type="color" value="#00d9ff"></div>
+          <div class="field"><label>두께</label><input id="pFrameThick" type="number" min="1" value="12"></div>
+        </div>
+        <div class="field"><label>모서리 반경</label><input id="pFrameRadius" type="number" min="0" value="24"></div>
+      </div>
       <div id="solidProps" style="display:none">
         <div class="field"><label>단색 색상</label><input id="pSolidColor" type="color" value="#0066ff"></div>
       </div>
@@ -314,6 +335,15 @@
         <div class="field"><label>웹 URL</label><input id="pUrl" placeholder="https://…"></div>
         <div class="note">⚠️ 외부 URL은 CORS 때문에 브라우저 캔버스에 직접 합성이 안 됩니다.
           프리뷰 오버레이로만 표시되고, 실제 송출 합성은 (a)서버 headless 렌더 또는 (b)네이티브 앱 WebView 캡처가 필요합니다.</div>
+      </div>
+      <div class="row2" style="margin-top:6px;align-items:center;gap:4px;flex-wrap:wrap">
+        <span style="font:12px -apple-system,'Malgun Gothic',sans-serif;opacity:.7;margin-right:2px">정렬</span>
+        <button class="btn" id="pAlnL" style="padding:3px 7px">좌</button>
+        <button class="btn" id="pAlnCX" style="padding:3px 7px">가로중앙</button>
+        <button class="btn" id="pAlnR" style="padding:3px 7px">우</button>
+        <button class="btn" id="pAlnT" style="padding:3px 7px">상</button>
+        <button class="btn" id="pAlnCY" style="padding:3px 7px">세로중앙</button>
+        <button class="btn" id="pAlnB" style="padding:3px 7px">하</button>
       </div>
       <div class="row2" style="margin-top:6px">
         <button class="btn" id="pFront">맨 앞으로</button>
@@ -596,6 +626,9 @@ videoFile.onchange = () => {
   videoFile.value = '';
 };
 document.getElementById('addGauge').onclick = () => { addLayer('gauge',{name:'게이지',label:'목표',pct:60,color:'#00c48c',bg:'#1e2430',w:700,h:90}); };
+document.getElementById('addChat').onclick = () => { addLayer('chat',{name:'채팅',lines:'센트: 안녕하세요\ntak: 방송 잘봐요',bg:'#161a22',color:'#e6e9ef',font:30,w:520,h:360}); };
+document.getElementById('addSticker').onclick = () => { addLayer('sticker',{name:'스티커',emoji:'🔥',w:160,h:160,aspect:1}); };
+document.getElementById('addFrame').onclick = () => { addLayer('frame',{name:'프레임',color:'#00d9ff',thick:12,radius:24,w:700,h:400}); };
 
 /* 웹 URL */
 document.getElementById('addWeb').onclick = () => {
@@ -695,6 +728,45 @@ function draw(){
       ctx.textBaseline='middle';
       ctx.textAlign='left';  ctx.fillText(String(L.label!=null?L.label:''), -hw, -hh+textH/2);
       ctx.textAlign='right'; ctx.fillText(Math.round(pct)+'%', hw, -hh+textH/2);
+    } else if(L.type==='chat'){
+      const r=Math.min(18, L.w/2, L.h/2);
+      ctx.fillStyle=L.bg||'#161a22';
+      ctx.globalAlpha *= 0.85;
+      ctx.beginPath(); ctx.roundRect(-hw,-hh,L.w,L.h,r); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.save();
+      ctx.beginPath(); ctx.roundRect(-hw,-hh,L.w,L.h,r); ctx.clip();
+      const fs=L.font||30, lh=fs*1.35, pad=fs*0.6;
+      ctx.textAlign='left'; ctx.textBaseline='top';
+      const lines=String(L.lines||'').split('\n').filter(ln=>ln.trim()!=='');
+      let cy=-hh+pad;
+      lines.forEach(ln=>{
+        const idx=ln.indexOf(':');
+        const x=-hw+pad;
+        if(idx>=0){
+          const user=ln.slice(0,idx+1), msg=ln.slice(idx+1);
+          ctx.font=`700 ${fs}px -apple-system,"Malgun Gothic",sans-serif`;
+          ctx.fillStyle='#00d9ff';
+          ctx.fillText(user, x, cy);
+          const uw=ctx.measureText(user).width;
+          ctx.font=`400 ${fs}px -apple-system,"Malgun Gothic",sans-serif`;
+          ctx.fillStyle=L.color||'#e6e9ef';
+          ctx.fillText(msg, x+uw, cy);
+        } else {
+          ctx.font=`400 ${fs}px -apple-system,"Malgun Gothic",sans-serif`;
+          ctx.fillStyle=L.color||'#e6e9ef';
+          ctx.fillText(ln, x, cy);
+        }
+        cy+=lh;
+      });
+      ctx.restore();
+    } else if(L.type==='sticker'){
+      ctx.font = `${L.h||120}px -apple-system,"Malgun Gothic",sans-serif`;
+      ctx.textAlign='center';
+      ctx.textBaseline='middle';
+      ctx.fillText(L.emoji||'🔥',0,0);
+    } else if(L.type==='frame'){
+      ctx.lineWidth=L.thick; ctx.strokeStyle=L.color; ctx.beginPath(); ctx.roundRect(-hw+L.thick/2,-hh+L.thick/2,L.w-L.thick,L.h-L.thick,L.radius); ctx.stroke();
     } else if(L.type==='web'){
       // 캔버스엔 자리표시(합성 불가), 실제 위젯은 프리뷰 오버레이 iframe로 표시
       ctx.fillStyle='rgba(0,217,255,.08)'; ctx.fillRect(-hw,-hh,L.w,L.h);
@@ -774,7 +846,7 @@ document.getElementById('resSel').onchange = e=>{
 };
 
 /* ── 레이어 목록 ── */
-const ICON={camera:'🎥',screen:'🖥️',image:'🖼️',text:'🅣',web:'🌐',solid:'🟦',clock:'🕐',lower3:'▬',countdown:'⏱',video:'🎞️',gauge:'📊'};
+const ICON={camera:'🎥',screen:'🖥️',image:'🖼️',text:'🅣',web:'🌐',solid:'🟦',clock:'🕐',lower3:'▬',countdown:'⏱',video:'🎞️',gauge:'📊',chat:'💬',sticker:'⭐',frame:'🖼'};
 function renderLayers(){
   const box=document.getElementById('layers'); box.innerHTML='';
   [...state.layers].sort((a,b)=>b.z-a.z).forEach(L=>{
@@ -806,6 +878,9 @@ function showProps(){
   document.getElementById('cdProps').style.display=L.type==='countdown'?'block':'none';
   document.getElementById('cameraProps').style.display=L.type==='camera'?'block':'none';
   document.getElementById('gaugeProps').style.display=L.type==='gauge'?'block':'none';
+  document.getElementById('chatProps').style.display=L.type==='chat'?'block':'none';
+  document.getElementById('stickerProps').style.display=L.type==='sticker'?'block':'none';
+  document.getElementById('frameProps').style.display=L.type==='frame'?'block':'none';
   syncProps();
 }
 function syncProps(){
@@ -830,6 +905,9 @@ function syncProps(){
   if(L.type==='lower3'){ pL3Title.value=L.title||''; pL3Sub.value=L.sub||''; pL3Color.value=L.color||'#ffffff'; pL3Bg.value=L.bg||'#0066ff'; pL3Font.value=L.font||48; }
   if(L.type==='countdown'){ pCdMins.value=L.mins!=null?L.mins:5; pCdColor.value=L.color||'#ffffff'; pCdFont.value=L.font||120; }
   if(L.type==='gauge'){ pGaugeLabel.value=L.label!=null?L.label:''; pGaugePct.value=L.pct!=null?L.pct:60; pGaugeColor.value=L.color||'#00c48c'; pGaugeBg.value=L.bg||'#1e2430'; }
+  if(L.type==='chat'){ pChatLines.value=L.lines||''; pChatBg.value=L.bg||'#161a22'; pChatColor.value=L.color||'#e6e9ef'; pChatFont.value=L.font||30; }
+  if(L.type==='sticker'){ pStickerEmoji.value=L.emoji||'🔥'; }
+  if(L.type==='frame'){ pFrameColor.value=L.color; pFrameThick.value=L.thick; pFrameRadius.value=L.radius; }
   if(L.type==='camera'){
     navigator.mediaDevices.enumerateDevices().then(ds=>{
       const cams=ds.filter(d=>d.kind==='videoinput');
@@ -878,6 +956,20 @@ pGaugeLabel.oninput=e=>{ const L=sel(); if(L)L.label=e.target.value; };
 pGaugePct.oninput=e=>{ const L=sel(); if(L)L.pct=Math.max(0,Math.min(100,Number(e.target.value)||0)); };
 pGaugeColor.oninput=e=>{ const L=sel(); if(L)L.color=e.target.value; };
 pGaugeBg.oninput=e=>{ const L=sel(); if(L)L.bg=e.target.value; };
+pChatLines.oninput=e=>{const L=sel();if(L){L.lines=e.target.value;renderLayers();}};
+pChatBg.oninput=e=>{const L=sel();if(L){L.bg=e.target.value;renderLayers();}};
+pChatColor.oninput=e=>{const L=sel();if(L){L.color=e.target.value;renderLayers();}};
+pChatFont.oninput=e=>{const L=sel();if(L){L.font=parseInt(e.target.value,10)||30;renderLayers();}};
+pStickerEmoji.oninput=e=>{const L=sel();if(L){L.emoji=e.target.value;renderLayers();}};
+pFrameColor.oninput=e=>{const L=sel();if(L){L.color=e.target.value;renderLayers();}};
+pFrameThick.oninput=e=>{const L=sel();if(L){L.thick=+e.target.value;renderLayers();}};
+pFrameRadius.oninput=e=>{const L=sel();if(L){L.radius=+e.target.value;renderLayers();}};
+pAlnL.onclick=()=>{const L=sel();if(!L)return;const d=canvasDims();L.x=L.w/2;renderLayers();syncProps();};
+pAlnR.onclick=()=>{const L=sel();if(!L)return;const d=canvasDims();L.x=d.w-L.w/2;renderLayers();syncProps();};
+pAlnCX.onclick=()=>{const L=sel();if(!L)return;const d=canvasDims();L.x=d.w/2;renderLayers();syncProps();};
+pAlnT.onclick=()=>{const L=sel();if(!L)return;const d=canvasDims();L.y=L.h/2;renderLayers();syncProps();};
+pAlnB.onclick=()=>{const L=sel();if(!L)return;const d=canvasDims();L.y=d.h-L.h/2;renderLayers();syncProps();};
+pAlnCY.onclick=()=>{const L=sel();if(!L)return;const d=canvasDims();L.y=d.h/2;renderLayers();syncProps();};
 /* 스냅샷 */
 document.getElementById('snapBtn').onclick = () => {
   const c = document.getElementById('view');
@@ -1143,6 +1235,9 @@ function sceneData(){
         if(L.type==='lower3'){ b.title=L.title; b.sub=L.sub; b.color=L.color; b.bg=L.bg; b.font=L.font; }
         if(L.type==='countdown'){ b.color=L.color; b.font=L.font; b.mins=L.mins; b.endAt=L.endAt; }
         if(L.type==='gauge'){ b.label=L.label; b.pct=L.pct; b.color=L.color; b.bg=L.bg; }
+        if(L.type==='chat'){ b.lines=L.lines; b.bg=L.bg; b.color=L.color; b.font=L.font; }
+        if(L.type==='sticker'){ b.emoji=L.emoji; }
+        if(L.type==='frame'){ b.color=L.color; b.thick=L.thick; b.radius=L.radius; }
         return b;
       }) };
 }
@@ -1166,7 +1261,7 @@ function restoreScene(){
   applyCanvasSize();
   for(const b of (data.layers||[])){
     if(b.type==='image'){ const img=new Image(); img.src=b.src; state.layers.push({...b,id:nextId++,img}); }
-    else if(b.type==='text'||b.type==='solid'||b.type==='clock'||b.type==='lower3'||b.type==='countdown'||b.type==='gauge'){ state.layers.push({...b,id:nextId++}); }
+    else if(b.type==='text'||b.type==='solid'||b.type==='clock'||b.type==='lower3'||b.type==='countdown'||b.type==='gauge'||b.type==='chat'||b.type==='sticker'||b.type==='frame'){ state.layers.push({...b,id:nextId++}); }
     else if(b.type==='web'){
       const iframe=document.createElement('iframe');
       iframe.src=b.url; iframe.style.cssText='position:absolute;border:0;background:transparent';
