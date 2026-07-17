@@ -380,6 +380,17 @@
           <div class="field"><label>트랙색</label><input id="pGaugeBg" type="color" value="#1e2430"></div>
         </div>
       </div>
+      <div id="fxProps" style="display:none">
+        <div class="row2">
+          <div class="field"><label>필터 프리셋</label><select id="pPreset">
+            <option value="none">없음</option><option value="beauty">뷰티</option><option value="vintage">빈티지</option>
+            <option value="cool">쿨</option><option value="warm">웜</option><option value="bw">흑백</option><option value="vivid">비비드</option></select></div>
+          <div class="field"><label>블렌드</label><select id="pBlend">
+            <option value="normal">보통</option><option value="multiply">멀티플라이</option><option value="screen">스크린</option>
+            <option value="overlay">오버레이</option><option value="lighten">라이튼</option><option value="darken">다크</option><option value="difference">디퍼런스</option></select></div>
+        </div>
+        <div class="field"><label>둥근 모서리 <span id="pCornerRVal">0</span>px</label><input id="pCornerR" type="range" min="0" max="200" value="0"></div>
+      </div>
       <div id="chromaProps" style="display:none">
         <div class="field"><label><input type="checkbox" id="pChromaOn"> 크로마키 (배경 제거)</label></div>
         <div class="row2">
@@ -869,8 +880,16 @@ function drawKeyed(L, src, natW, natH, hw, hh){
   } else ctx.drawImage(src, -hw,-hh, L.w, L.h);
 }
 /* ── 렌더 루프 ── */
+const FILTER_PRESETS={
+  none:'', beauty:'brightness(1.06) saturate(1.1) blur(0.6px) contrast(0.98)',
+  vintage:'sepia(0.4) contrast(1.1) saturate(0.85) brightness(1.02)',
+  cool:'saturate(1.15) hue-rotate(-8deg) brightness(1.02)',
+  warm:'saturate(1.1) hue-rotate(8deg) brightness(1.03)',
+  bw:'grayscale(1) contrast(1.1)', vivid:'saturate(1.5) contrast(1.1)'
+};
 function layerFilter(L){
   const p=[];
+  if(L.preset && FILTER_PRESETS[L.preset]) p.push(FILTER_PRESETS[L.preset]);
   if(L.br!=null && L.br!==1) p.push('brightness('+L.br+')');
   if(L.con!=null && L.con!==1) p.push('contrast('+L.con+')');
   if(L.sat!=null && L.sat!==1) p.push('saturate('+L.sat+')');
@@ -897,8 +916,13 @@ function draw(){
     ctx.rotate(L.rot * Math.PI/180);
     ctx.globalAlpha = (L.opacity!=null) ? L.opacity : 1;
     const flt = layerFilter(L); if(flt) ctx.filter = flt;
+    if(L.blend && L.blend!=='normal') ctx.globalCompositeOperation = L.blend;   // 블렌드 모드
     if(L.flipH||L.flipV) ctx.scale(L.flipH?-1:1, L.flipV?-1:1);
     const hw = L.w/2, hh = L.h/2;
+    // 둥근모서리 마스크 (이미지/카메라/비디오/단색)
+    if(L.cornerR>0 && (L.type==='image'||L.type==='camera'||L.type==='screen'||L.type==='video'||L.type==='solid')){
+      ctx.beginPath(); ctx.roundRect(-hw,-hh,L.w,L.h,Math.min(L.cornerR,hw,hh)); ctx.clip();
+    }
     if((L.type==='camera'||L.type==='screen') && L.video.readyState>=2){
       drawKeyed(L, L.video, L.video.videoWidth, L.video.videoHeight, hw, hh);
     } else if(L.type==='image' && L.img.complete){
@@ -1245,6 +1269,8 @@ function showProps(){
   document.getElementById('cdProps').style.display=L.type==='countdown'?'block':'none';
   document.getElementById('cameraProps').style.display=L.type==='camera'?'block':'none';
   document.getElementById('gaugeProps').style.display=L.type==='gauge'?'block':'none';
+  const fxTypes=(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video'||L.type==='solid');
+  document.getElementById('fxProps').style.display=fxTypes?'block':'none';
   document.getElementById('chromaProps').style.display=(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video')?'block':'none';
   document.getElementById('nowplayingProps').style.display=L.type==='nowplaying'?'block':'none';
   document.getElementById('emoteProps').style.display=L.type==='emote'?'block':'none';
@@ -1280,6 +1306,7 @@ function syncProps(){
   if(L.type==='lower3'){ pL3Title.value=L.title||''; pL3Sub.value=L.sub||''; pL3Color.value=L.color||'#ffffff'; pL3Bg.value=L.bg||'#0066ff'; pL3Font.value=L.font||48; }
   if(L.type==='countdown'){ pCdMins.value=L.mins!=null?L.mins:5; pCdColor.value=L.color||'#ffffff'; pCdFont.value=L.font||120; }
   if(L.type==='gauge'){ pGaugeLabel.value=L.label!=null?L.label:''; pGaugePct.value=L.pct!=null?L.pct:60; pGaugeColor.value=L.color||'#00c48c'; pGaugeBg.value=L.bg||'#1e2430'; }
+  if(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video'||L.type==='solid'){ pPreset.value=L.preset||'none'; pBlend.value=L.blend||'normal'; pCornerR.value=L.cornerR||0; pCornerRVal.textContent=L.cornerR||0; }
   if(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video'){ const c=L.chroma||{}; pChromaOn.checked=!!c.on; pChromaColor.value=c.color||'#00ff00'; pChromaThr.value=c.thr||120; pChromaThrVal.textContent=c.thr||120; }
   if(L.type==='nowplaying'){ pNpBg.value=L.bg||'#0f1420'; pNpAccent.value=L.accent||'#00d9ff'; }
   if(L.type==='emote'){ pEmoteEmojis.value=L.emojis||'👍❤️😂🎉'; pEmoteCount.value=L.count||8; pEmoteSize.value=L.size||48; }
@@ -1342,6 +1369,9 @@ pGaugeLabel.oninput=e=>{ const L=sel(); if(L)L.label=e.target.value; };
 pGaugePct.oninput=e=>{ const L=sel(); if(L)L.pct=Math.max(0,Math.min(100,Number(e.target.value)||0)); };
 pGaugeColor.oninput=e=>{ const L=sel(); if(L)L.color=e.target.value; };
 pGaugeBg.oninput=e=>{ const L=sel(); if(L)L.bg=e.target.value; };
+pPreset.onchange=e=>{const L=sel();if(L)L.preset=e.target.value;};
+pBlend.onchange=e=>{const L=sel();if(L)L.blend=e.target.value;};
+pCornerR.oninput=e=>{const L=sel();if(L){L.cornerR=+e.target.value;pCornerRVal.textContent=e.target.value;}};
 function ensureChroma(L){ if(!L.chroma) L.chroma={on:false,color:'#00ff00',thr:120}; return L.chroma; }
 pChromaOn.onchange=e=>{const L=sel();if(L){ensureChroma(L).on=e.target.checked;}};
 pChromaColor.oninput=e=>{const L=sel();if(L){ensureChroma(L).color=e.target.value;}};
@@ -1754,6 +1784,7 @@ function sceneData(){
           locked:L.locked,hidden:L.hidden};
         if(L.type==='image') b.src=L.src;
         if(L.chroma) b.chroma=L.chroma;
+        if(L.preset) b.preset=L.preset; if(L.blend) b.blend=L.blend; if(L.cornerR) b.cornerR=L.cornerR;
         if(L.type==='text'){ b.text=L.text; b.font=L.font; b.color=L.color; b.align=L.align; b.weight=L.weight; b.fontFamily=L.fontFamily; b.anim=L.anim; b.stroke=L.stroke; b.strokeW=L.strokeW; }
         if(L.type==='web') b.url=L.url;
         if(L.type==='solid') b.color=L.color;
