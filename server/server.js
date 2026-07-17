@@ -45,7 +45,7 @@ app.get('/api/destinations', (_, res) => res.json(load()));
 app.get('/api/destinations/:avatar', (req, res) =>
   res.json(load()[req.params.avatar] || []));
 
-// 대상 추가 { platform, name, rtmpUrl, streamKey }
+// 대상 추가 { platform, name, rtmpUrl, streamKey, bitrate?, resolution?, enabled? }
 app.post('/api/destinations/:avatar', (req, res) => {
   const d = load(); const b = req.body || {};
   const dest = {
@@ -55,6 +55,10 @@ app.post('/api/destinations/:avatar', (req, res) => {
     streamKey: String(b.streamKey || ''),
     locked: !!b.locked,
   };
+  // 대상별 프로파일 (203/204): 지정 시 fanout.sh 가 재인코딩, 없으면 -c copy
+  if (b.enabled === false) dest.enabled = false;
+  if (b.bitrate && Number(b.bitrate) > 0) dest.bitrate = Number(b.bitrate);      // kbps
+  if (b.resolution && /^\d{2,4}x\d{2,4}$/.test(b.resolution)) dest.resolution = b.resolution;  // WxH
   (d[req.params.avatar] ||= []).push(dest);
   save(d);
   res.json({ ok: true, index: d[req.params.avatar].length - 1 });
