@@ -18,6 +18,15 @@
     --txt:#e6e9ef; --muted:#8b93a4; --accent:#0066ff; --accent2:#00d9ff;
     --danger:#ff5c5c; --ok:#00c48c;
   }
+  :root[data-theme="light"]{
+    --bg:#eef1f6; --panel:#ffffff; --panel2:#f2f4f8; --line:#d3d9e3;
+    --txt:#1a1f2b; --muted:#5a6475; --danger:#d92c2c; --ok:#0a9c6e;
+  }
+  :root[data-theme="hc"]{
+    --bg:#000000; --panel:#000000; --panel2:#0a0a0a; --line:#ffffff;
+    --txt:#ffffff; --muted:#e0e0e0; --accent:#0a5cff; --accent2:#00e5ff;
+    --danger:#ff2b2b; --ok:#00ff9c;
+  }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Malgun Gothic",sans-serif}
@@ -200,6 +209,12 @@
       <button class="btn" id="aboutBtn" style="padding:4px 8px;font-size:12px" title="정보">ⓘ <span id="verTag"></span></button>
       <button class="btn" id="installBtn" style="padding:4px 8px;font-size:12px;display:none" title="홈화면 설치">⬇ 설치</button>
       <button class="btn" id="fsBtn" style="padding:4px 8px;font-size:12px" title="풀스크린">⛶ 전체화면</button>
+      <select class="btn" id="themeSel" style="padding:4px 6px;font-size:12px" title="테마">
+        <option value="dark">🌙 다크</option>
+        <option value="light">☀️ 라이트</option>
+        <option value="hc">◼ 고대비</option>
+      </select>
+      <label class="bg-pick" title="강조색" style="font-size:12px">🎨<input type="color" id="accentPick" value="#00d9ff"></label>
     </div>
     <h2>소스 추가</h2>
     <div class="addbar">
@@ -1556,6 +1571,16 @@ function initMixer(){
 
 /* ── 브랜딩/PWA (스플래시·버전·About·설치·풀스크린) ── */
 const APP_VERSION='1.0.0';
+/* 테마 + 강조색 (localStorage 지속) */
+function applyTheme(t){ if(t==='dark') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme',t); }
+function applyAccent(c){ document.documentElement.style.setProperty('--accent2',c); document.documentElement.style.setProperty('--accent',c); }
+(function initTheme(){
+  const t=localStorage.getItem('centbeam.theme')||'dark'; const a=localStorage.getItem('centbeam.accent');
+  applyTheme(t); document.getElementById('themeSel').value=t;
+  if(a){ applyAccent(a); document.getElementById('accentPick').value=a; }
+})();
+document.getElementById('themeSel').onchange=e=>{ applyTheme(e.target.value); localStorage.setItem('centbeam.theme',e.target.value); };
+document.getElementById('accentPick').oninput=e=>{ applyAccent(e.target.value); localStorage.setItem('centbeam.accent',e.target.value); };
 document.getElementById('verTag').textContent='v'+APP_VERSION;
 document.getElementById('aboutVer').textContent=APP_VERSION;
 document.getElementById('aboutBtn').onclick=()=>{ document.getElementById('aboutModal').style.display='flex'; };
