@@ -593,6 +593,7 @@
     <div class="note" id="sendStat">송출 대기</div>
     <div class="note" id="connStat">연결: —</div>
     <div class="note" id="fpsStat">렌더: — fps</div>
+    <div class="note" id="netStat">네트워크: — · 배터리: —</div>
     <div class="note" id="dropStat" style="display:none">드롭 프레임: 0</div>
     <label class="field" style="font-size:12px;color:var(--muted)"><input type="checkbox" id="lowPowerChk"> 🔋 저전력 모드(15fps)</label>
     <div class="note">방송 시작 시 이 캔버스가 MediaMTX WHIP로 송출됩니다. 서버가 아래 대상으로 fan-out.</div>
@@ -1343,6 +1344,17 @@ function renderLayers(){
     el.onclick=ev=>{ if(ev.target.dataset.up!==undefined){bump(L,1);ev.stopPropagation();return;}
       if(ev.target.dataset.dn!==undefined){bump(L,-1);ev.stopPropagation();return;}
       if(ev.ctrlKey||ev.metaKey||ev.shiftKey){ toggleMulti(L.id); } else select(L.id); };
+    // 스와이프로 레이어 삭제 (좌우로 밀기)
+    let sw=null;
+    el.addEventListener('pointerdown', ev=>{ sw={x:ev.clientX,id:ev.pointerId}; });
+    el.addEventListener('pointermove', ev=>{ if(!sw)return; const dx=ev.clientX-sw.x;
+      if(Math.abs(dx)>10){ el.style.transform='translateX('+dx+'px)'; el.style.opacity=Math.max(.3,1-Math.abs(dx)/200); } });
+    const swEnd=ev=>{ if(!sw)return; const dx=ev.clientX-sw.x; sw=null;
+      if(Math.abs(dx)>110){ el.style.transform='translateX('+(dx>0?400:-400)+'px)'; el.style.opacity='0';
+        setTimeout(()=>{ if(L.stream) L.stream.getTracks().forEach(t=>t.stop()); if(L.iframe)L.iframe.remove();
+          state.layers=state.layers.filter(x=>x.id!==L.id); if(state.selId===L.id)state.selId=null; normalizeZ(); renderLayers(); showProps(); toast('레이어 삭제'); }, 150); }
+      else { el.style.transform=''; el.style.opacity=''; } };
+    el.addEventListener('pointerup', swEnd); el.addEventListener('pointercancel', swEnd);
     box.appendChild(el);
   });
 }
@@ -2370,6 +2382,29 @@ function updateOnline(){ const bar=document.getElementById('offlineBar'); if(bar
 window.addEventListener('online', ()=>{ updateOnline(); toast('온라인 복구','ok'); });
 window.addEventListener('offline', ()=>{ updateOnline(); toast('오프라인 상태','warn'); });
 updateOnline();
+/* ── 네트워크 종류 + 배터리 + 저속망 안내 ── */
+let _battRef=null, _slowWarned=false, _lowBattWarned=false;
+function renderNetBatt(){
+  const el=document.getElementById('netStat'); if(!el) return;
+  const conn=navigator.connection||navigator.mozConnection||navigator.webkitConnection;
+  const net = conn ? (conn.effectiveType||'?').toUpperCase() : '알수없음';
+  const batt = _battRef ? Math.round(_battRef.level*100)+'%'+(_battRef.charging?'⚡':'') : '—';
+  el.textContent='네트워크: '+net+' · 배터리: '+batt;
+  // 저속망 안내
+  if(conn && /^(slow-2g|2g)$/i.test(conn.effectiveType||'')){ el.style.color='var(--danger)';
+    if(state.live && !_slowWarned){ _slowWarned=true; toast('⚠️ 저속 네트워크 — 비트레이트를 낮추세요','warn'); } }
+  else { el.style.color=''; _slowWarned=false; }
+  // 배터리/발열 경고
+  if(_battRef && _battRef.level<=0.15 && !_battRef.charging){ if(!_lowBattWarned){ _lowBattWarned=true; toast('🔋 배터리 부족('+Math.round(_battRef.level*100)+'%) — 발열/절전 주의','warn'); } }
+  else _lowBattWarned=false;
+}
+(function initNetBatt(){
+  const conn=navigator.connection||navigator.mozConnection||navigator.webkitConnection;
+  if(conn && conn.addEventListener) conn.addEventListener('change', renderNetBatt);
+  if(navigator.getBattery){ navigator.getBattery().then(b=>{ _battRef=b;
+    ['levelchange','chargingchange'].forEach(ev=>b.addEventListener(ev, renderNetBatt)); renderNetBatt(); }).catch(()=>{}); }
+  renderNetBatt(); setInterval(renderNetBatt, 15000);
+})();
 /* 첫 실행 온보딩 팁 */
 (function onboarding(){
   try{ if(localStorage.getItem('centbeam.onboarded')) return;
