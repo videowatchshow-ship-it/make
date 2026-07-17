@@ -406,6 +406,17 @@
     <input type="file" id="bgmFile" accept="audio/*">
     <div class="note">방송 시 이 믹서 출력이 송출됩니다. 마이크가 없으면 무음으로 송출.</div>
 
+    <div class="mix-fx">
+      <canvas id="waveCanvas" width="300" height="48" style="width:100%;height:48px;background:#0c0f16;border:1px solid var(--line);border-radius:6px;display:block;margin-bottom:8px"></canvas>
+      <div class="row2" style="gap:6px">
+        <button class="btn" id="fxComp" title="다이나믹 컴프레서">컴프레서</button>
+        <button class="btn" id="fxLimit" title="피크 리미터(클리핑 방지)">리미터</button>
+      </div>
+      <div class="field" style="margin-top:8px"><label>EQ 저음 <span id="eqLowVal">0</span>dB</label><input type="range" id="eqLow" min="-12" max="12" value="0"></div>
+      <div class="field"><label>EQ 중음 <span id="eqMidVal">0</span>dB</label><input type="range" id="eqMid" min="-12" max="12" value="0"></div>
+      <div class="field"><label>EQ 고음 <span id="eqHighVal">0</span>dB</label><input type="range" id="eqHigh" min="-12" max="12" value="0"></div>
+    </div>
+
     <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
     <h2>씬</h2>
     <div class="row2">
@@ -1332,12 +1343,29 @@ function ensureMixer(){
   const AC = window.AudioContext || window.webkitAudioContext;
   mixer.ctx = new AC();
   mixer.master = mixer.ctx.createGain();
-  mixer.masterAn = mixer.ctx.createAnalyser(); mixer.masterAn.fftSize = 256;
+  mixer.masterAn = mixer.ctx.createAnalyser(); mixer.masterAn.fftSize = 1024;
   mixer.dest = mixer.ctx.createMediaStreamDestination();
-  mixer.master.connect(mixer.masterAn);
-  mixer.master.connect(mixer.dest);
+  // 마스터 DSP 체인: master → EQ(저/중/고) → 컴프레서 → 리미터 → (analyser + dest)
+  const C = mixer.ctx;
+  mixer.eqLow = C.createBiquadFilter(); mixer.eqLow.type='lowshelf'; mixer.eqLow.frequency.value=200; mixer.eqLow.gain.value=0;
+  mixer.eqMid = C.createBiquadFilter(); mixer.eqMid.type='peaking'; mixer.eqMid.frequency.value=1000; mixer.eqMid.Q.value=1; mixer.eqMid.gain.value=0;
+  mixer.eqHigh = C.createBiquadFilter(); mixer.eqHigh.type='highshelf'; mixer.eqHigh.frequency.value=4000; mixer.eqHigh.gain.value=0;
+  mixer.comp = C.createDynamicsCompressor(); setCompBypass(mixer.comp, true);
+  mixer.limiter = C.createDynamicsCompressor(); setLimiterBypass(mixer.limiter, true);
+  mixer.master.connect(mixer.eqLow); mixer.eqLow.connect(mixer.eqMid); mixer.eqMid.connect(mixer.eqHigh);
+  mixer.eqHigh.connect(mixer.comp); mixer.comp.connect(mixer.limiter);
+  mixer.limiter.connect(mixer.masterAn); mixer.limiter.connect(mixer.dest);
+  mixer.fx = { comp:false, limit:false };
   const mv = document.getElementById('masterVol');
   mixer.master.gain.value = mv.value/100;
+}
+function setCompBypass(n, bypass){
+  if(bypass){ n.threshold.value=0; n.knee.value=0; n.ratio.value=1; n.attack.value=0.003; n.release.value=0.25; }
+  else { n.threshold.value=-24; n.knee.value=30; n.ratio.value=4; n.attack.value=0.003; n.release.value=0.25; }
+}
+function setLimiterBypass(n, bypass){
+  if(bypass){ n.threshold.value=0; n.knee.value=0; n.ratio.value=1; n.attack.value=0.001; n.release.value=0.1; }
+  else { n.threshold.value=-1; n.knee.value=0; n.ratio.value=20; n.attack.value=0.001; n.release.value=0.1; }
 }
 function applyGain(s){ s.gain.gain.value = s.muted ? 0 : s.vol; }
 async function addMic(){
@@ -1394,8 +1422,19 @@ function meterLoop(){
     for(const s of mixer.sources){ if(s.meterEl) s.meterEl.style.width=Math.min(100,rmsLevel(s.an)*300)+'%'; }
     const mm=document.getElementById('masterMeter');
     if(mm) mm.style.width=Math.min(100,rmsLevel(mixer.masterAn)*300)+'%';
+    drawWave();
   }
   requestAnimationFrame(meterLoop);
+}
+function drawWave(){
+  const cv=document.getElementById('waveCanvas'); if(!cv||!mixer.masterAn) return;
+  const g=cv.getContext('2d'), W=cv.width, H=cv.height;
+  const buf=new Uint8Array(mixer.masterAn.fftSize); mixer.masterAn.getByteTimeDomainData(buf);
+  g.clearRect(0,0,W,H);
+  g.lineWidth=2; g.strokeStyle='#00d9ff'; g.beginPath();
+  const step=W/buf.length;
+  for(let i=0;i<buf.length;i++){ const y=(buf[i]/255)*H; const x=i*step; if(i===0) g.moveTo(x,y); else g.lineTo(x,y); }
+  g.stroke();
 }
 function initMixer(){
   document.getElementById('addMic').onclick=addMic;
@@ -1403,6 +1442,10 @@ function initMixer(){
   document.getElementById('addBgm').onclick=()=>bgmFile.click();
   bgmFile.onchange=()=>{ const f=bgmFile.files[0]; if(f) addBgm(f); bgmFile.value=''; };
   document.getElementById('masterVol').oninput=e=>{ ensureMixer(); mixer.master.gain.value=e.target.value/100; };
+  document.getElementById('fxComp').onclick=e=>{ ensureMixer(); mixer.fx.comp=!mixer.fx.comp; setCompBypass(mixer.comp,!mixer.fx.comp); e.target.classList.toggle('primary',mixer.fx.comp); };
+  document.getElementById('fxLimit').onclick=e=>{ ensureMixer(); mixer.fx.limit=!mixer.fx.limit; setLimiterBypass(mixer.limiter,!mixer.fx.limit); e.target.classList.toggle('primary',mixer.fx.limit); };
+  const eq={eqLow:'eqLowVal',eqMid:'eqMidVal',eqHigh:'eqHighVal'};
+  Object.keys(eq).forEach(id=>{ document.getElementById(id).oninput=e=>{ ensureMixer(); mixer[id].gain.value=+e.target.value; document.getElementById(eq[id]).textContent=e.target.value; }; });
   requestAnimationFrame(meterLoop);
 }
 
