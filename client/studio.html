@@ -36,9 +36,11 @@
     --danger:#e8820e; --ok:#0072e5;
   }
   *{box-sizing:border-box}
+  html{font-size:clamp(14px, 1.5vw, 16px)}                        /* 유동 기준 폰트 (47) */
   html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Malgun Gothic",sans-serif;
     overscroll-behavior:none;-webkit-overflow-scrolling:touch}   /* 스크롤 바운스 억제 */
+  h2{font-size:clamp(12px, 1.1vw, 14px)}
   .app{display:flex;height:100vh;overflow:hidden}
   button:disabled,select:disabled,input:disabled{opacity:.42;cursor:not-allowed;filter:grayscale(.3)}  /* disabled 스타일 */
   :focus-visible{outline:2px solid var(--accent2);outline-offset:2px;border-radius:4px}   /* 키보드 포커스 링 */
@@ -46,6 +48,7 @@
     padding:9px 12px;font-size:14px;cursor:pointer;border-radius:6px}
   .ctxItem:hover{background:var(--panel2)}
   .app.immersive .side, .app.immersive .props{display:none}   /* 몰입 모드 */
+  .frame{transition:width .28s ease, height .28s ease}   /* 방향/해상도 전환 애니메이션 (46) */
   .drag-handle{cursor:grab;color:var(--muted);padding:0 4px;touch-action:none;user-select:none}
   .resizer{flex:0 0 6px;cursor:col-resize;background:transparent;position:relative;z-index:5}
   .resizer:hover,.resizer.drag{background:var(--accent2)}
@@ -2221,6 +2224,18 @@ document.querySelectorAll('.mobilebar button[data-drawer]').forEach(b=>{
   b.onclick=()=>openDrawer(b.dataset.drawer);
 });
 backdrop.onclick=closeDrawers;
+/* 패널 간 스와이프 전환 (303) — 모바일: 캔버스에서 좌우 스와이프로 드로어 열기 */
+(function drawerSwipe(){
+  const wrap=document.querySelector('.canvas-wrap'); if(!wrap) return;
+  let sx=0, sy=0, active=false;
+  wrap.addEventListener('touchstart', e=>{ if(e.touches.length!==1){active=false;return;} active=true; sx=e.touches[0].clientX; sy=e.touches[0].clientY; }, {passive:true});
+  wrap.addEventListener('touchend', e=>{ if(!active) return; active=false;
+    const t=e.changedTouches[0], dx=t.clientX-sx, dy=t.clientY-sy;
+    if(Math.abs(dx)<70 || Math.abs(dx)<Math.abs(dy)*1.5) return;   // 수평 스와이프만
+    if(innerWidth>820) return;                                     // 모바일에서만
+    if(dx>0) openDrawer('side'); else openDrawer('props');
+  }, {passive:true});
+})();
 document.getElementById('mGoLive').onclick=()=>document.getElementById('goLive').click();
 
 /* ── 씬 저장/복원 (localStorage) ── 카메라·화면공유 스트림은 저장 불가, 재추가 필요 ── */
