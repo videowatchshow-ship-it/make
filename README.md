@@ -66,7 +66,7 @@ node server.js                    # API :3000
 # MediaMTX 는 별도 실행 (server/README.md 참고)
 ```
 
-전체 배포(참교육카지노 서버 `34.104.233.35`에 서브도메인 `studio.<도메인>` + HTTPS)는 → **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
+전체 배포(참교육카지노 서버 `34.104.233.35`에 서브도메인 `studio.xn--9d0bw2fjtyymch7de9d.info` + HTTPS)는 → **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
 
 ---
 
@@ -76,7 +76,7 @@ node server.js                    # API :3000
 |--|--|
 | 클라이언트 | Vanilla JS + Canvas 2D + WebRTC(WHIP) + `getUserMedia`/`getDisplayMedia`. 의존성 0, 단일 HTML. |
 | 서버 | Node 22 (LTS) + Express 5, MediaMTX v1.19.2, FFmpeg, PM2, Caddy(HTTPS) |
-| 배포 | GCP(자카르타), 서브도메인 = Cent Solution 하위 |
+| 배포 | 참교육카지노 서버(34.104.233.35) + Cloudflare DNS, 서브도메인 `studio.참교육카지노.info` + Caddy HTTPS |
 
 버전 근거·검증은 [docs/ARCHITECTURE.md §기술 결정](docs/ARCHITECTURE.md) 참고 (2026-07 실측).
 

@@ -102,7 +102,7 @@ canvas.captureStream(30) + mic → new MediaStream
 → createOffer → POST offer.sdp to WHIP endpoint (Content-Type: application/sdp)
 → setRemoteDescription(answer)
 ```
-- 엔드포인트: 속성 패널의 `WHIP 엔드포인트` (예: `https://studio.<도메인>/whip/tak/whip` 또는 `http://34.104.233.35:8889/tak/whip`).
+- 엔드포인트: 속성 패널의 `WHIP 엔드포인트` (예: `https://studio.xn--9d0bw2fjtyymch7de9d.info/whip/tak/whip` 또는 `http://34.104.233.35:8889/tak/whip`).
 - 미디어는 WebRTC 표준상 DTLS-SRTP로 암호화된다(RFC 8826/8827).
 - **TODO(보안)**: Bearer 토큰 헤더(RFC 9725). 현재 미구현.
 
