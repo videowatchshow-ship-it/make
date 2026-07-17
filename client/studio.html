@@ -281,6 +281,7 @@
       <button id="addPoll">📊 투표</button>
       <button id="addDonors">★ 후원목록</button>
       <button id="addNowPlaying">🎧 BGM정보</button>
+      <button id="addAudioBars">〰 오디오바</button>
       <button id="fillBtn">⤢ 채우기</button>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between">
@@ -435,6 +436,12 @@
         <div class="row2">
           <div class="field"><label>키 색상</label><input id="pChromaColor" type="color" value="#00ff00"></div>
           <div class="field"><label>강도 <span id="pChromaThrVal">120</span></label><input id="pChromaThr" type="range" min="20" max="255" value="120"></div>
+        </div>
+      </div>
+      <div id="audiobarsProps" style="display:none">
+        <div class="row2">
+          <div class="field"><label>막대 색</label><input id="pBarsColor" type="color" value="#00d9ff"></div>
+          <div class="field"><label>막대 수</label><input id="pBarsN" type="number" min="8" max="96" value="32"></div>
         </div>
       </div>
       <div id="nowplayingProps" style="display:none">
@@ -937,6 +944,7 @@ document.getElementById('addEmote').onclick = () => { addLayer('emote',{name:'�
 document.getElementById('addPoll').onclick = () => { addLayer('poll',{name:'투표',question:'다음 방송 주제는?',options:'게임:45\n토크:30\n노래:25',bg:'#161a22',color:'#e6e9ef',accent:'#00d9ff',font:26,w:520,h:320}); };
 document.getElementById('addDonors').onclick = () => { addLayer('donors',{name:'후원목록',title:'최근 후원',lines:'센트 5,000원\ntak 3,000원\ndeni 1,000원',bg:'#141a24',color:'#e6e9ef',accent:'#ffc04d',font:26,w:420,h:320}); };
 document.getElementById('addNowPlaying').onclick = () => { addLayer('nowplaying',{name:'BGM정보',bg:'#0f1420',color:'#e6e9ef',accent:'#00d9ff',font:26,w:420,h:72}); };
+document.getElementById('addAudioBars').onclick = () => { addLayer('audiobars',{name:'오디오바',color:'#00d9ff',bars:32,w:500,h:160}); };
 
 /* 웹 URL */
 document.getElementById('addWeb').onclick = () => {
@@ -1193,6 +1201,14 @@ function draw(){
         ctx.fillText(`${o.name}  ${Math.round(frac*100)}%`, -hw+pad+8, py+barH/2);
         ctx.textBaseline='top'; py+=barH+fs*0.5;
       });
+    } else if(L.type==='audiobars'){
+      const an=(typeof mixer!=='undefined')?mixer.masterAn:null;
+      const n=L.bars||32, bw=L.w/n;
+      if(an){ const data=new Uint8Array(an.frequencyBinCount); an.getByteFrequencyData(data);
+        for(let i=0;i<n;i++){ const v=data[Math.floor(i/n*data.length)]/255; const bh=Math.max(2,v*L.h);
+          ctx.fillStyle=L.color||'#00d9ff'; ctx.fillRect(-hw+i*bw, hh-bh, bw*0.72, bh); } }
+      else { ctx.fillStyle=L.color||'#00d9ff'; ctx.globalAlpha*=0.3;
+        for(let i=0;i<n;i++){ ctx.fillRect(-hw+i*bw, hh-4, bw*0.72, 4); } }
     } else if(L.type==='nowplaying'){
       const bgm=(typeof mixer!=='undefined'&&mixer.sources)?mixer.sources.find(s=>s.kind==='bgm'&&!s.muted):null;
       const label=bgm?bgm.label:'재생 중 아님';
@@ -1392,7 +1408,7 @@ document.getElementById('arSel').onchange = e=>{
 };
 
 /* ── 레이어 목록 ── */
-const ICON={camera:'🎥',screen:'🖥️',image:'🖼️',text:'🅣',web:'🌐',solid:'🟦',clock:'🕐',lower3:'▬',countdown:'⏱',video:'🎞️',gauge:'📊',chat:'💬',sticker:'⭐',frame:'🖼',emote:'💗',poll:'📊',donors:'★',nowplaying:'🎧'};
+const ICON={camera:'🎥',screen:'🖥️',image:'🖼️',text:'🅣',web:'🌐',solid:'🟦',clock:'🕐',lower3:'▬',countdown:'⏱',video:'🎞️',gauge:'📊',chat:'💬',sticker:'⭐',frame:'🖼',emote:'💗',poll:'📊',donors:'★',nowplaying:'🎧',audiobars:'〰'};
 function renderLayers(){
   const box=document.getElementById('layers'); box.innerHTML='';
   [...state.layers].sort((a,b)=>b.z-a.z).forEach(L=>{
@@ -1470,6 +1486,7 @@ function showProps(){
   const fxTypes=(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video'||L.type==='solid');
   document.getElementById('fxProps').style.display=fxTypes?'block':'none';
   document.getElementById('chromaProps').style.display=(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video')?'block':'none';
+  document.getElementById('audiobarsProps').style.display=L.type==='audiobars'?'block':'none';
   document.getElementById('nowplayingProps').style.display=L.type==='nowplaying'?'block':'none';
   document.getElementById('emoteProps').style.display=L.type==='emote'?'block':'none';
   document.getElementById('pollProps').style.display=L.type==='poll'?'block':'none';
@@ -1507,6 +1524,7 @@ function syncProps(){
   if(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video'||L.type==='solid'){ pPreset.value=L.preset||'none'; pBlend.value=L.blend||'normal'; pCornerR.value=L.cornerR||0; pCornerRVal.textContent=L.cornerR||0; pBorderW.value=L.borderW||0; pBorderWVal.textContent=L.borderW||0; pBorderColor.value=L.borderColor||'#ffffff'; pShadow.checked=!!L.shadow; pWb.value=L.wb||0; pWbVal.textContent=L.wb||0; pMosaic.value=L.mosaic||0; pMosaicVal.textContent=L.mosaic||0; pCropX.value=Math.round((L.cropX||0)*100); pCropXVal.textContent=Math.round((L.cropX||0)*100); pCropY.value=Math.round((L.cropY||0)*100); pCropYVal.textContent=Math.round((L.cropY||0)*100); }
   if(L.type==='camera'||L.type==='screen'||L.type==='image'||L.type==='video'){ const c=L.chroma||{}; pChromaOn.checked=!!c.on; pChromaColor.value=c.color||'#00ff00'; pChromaThr.value=c.thr||120; pChromaThrVal.textContent=c.thr||120; }
   if(L.type==='nowplaying'){ pNpBg.value=L.bg||'#0f1420'; pNpAccent.value=L.accent||'#00d9ff'; }
+  if(L.type==='audiobars'){ pBarsColor.value=L.color||'#00d9ff'; pBarsN.value=L.bars||32; }
   if(L.type==='emote'){ pEmoteEmojis.value=L.emojis||'👍❤️😂🎉'; pEmoteCount.value=L.count||8; pEmoteSize.value=L.size||48; }
   if(L.type==='poll'){ pPollQ.value=L.question||''; pPollOpts.value=L.options||''; pPollBg.value=L.bg||'#161a22'; pPollAccent.value=L.accent||'#00d9ff'; }
   if(L.type==='donors'){ pDonorsTitle.value=L.title||'최근 후원'; pDonorsLines.value=L.lines||''; pDonorsBg.value=L.bg||'#141a24'; pDonorsAccent.value=L.accent||'#ffc04d'; }
@@ -1587,6 +1605,8 @@ pChromaColor.oninput=e=>{const L=sel();if(L){ensureChroma(L).color=e.target.valu
 pChromaThr.oninput=e=>{const L=sel();if(L){ensureChroma(L).thr=+e.target.value;pChromaThrVal.textContent=e.target.value;}};
 pNpBg.oninput=e=>{const L=sel();if(L)L.bg=e.target.value;};
 pNpAccent.oninput=e=>{const L=sel();if(L)L.accent=e.target.value;};
+pBarsColor.oninput=e=>{const L=sel();if(L)L.color=e.target.value;};
+pBarsN.oninput=e=>{const L=sel();if(L)L.bars=Math.max(8,Math.min(96,+e.target.value||32));};
 pEmoteEmojis.oninput=e=>{const L=sel();if(L)L.emojis=e.target.value;};
 pEmoteCount.oninput=e=>{const L=sel();if(L)L.count=Math.max(1,Math.min(16,+e.target.value||8));};
 pEmoteSize.oninput=e=>{const L=sel();if(L)L.size=+e.target.value||48;};
@@ -2029,6 +2049,7 @@ function sceneData(){
         if(L.type==='countdown'){ b.color=L.color; b.font=L.font; b.mins=L.mins; b.endAt=L.endAt; }
         if(L.type==='gauge'){ b.label=L.label; b.pct=L.pct; b.color=L.color; b.bg=L.bg; }
         if(L.type==='nowplaying'){ b.bg=L.bg; b.color=L.color; b.accent=L.accent; b.font=L.font; }
+        if(L.type==='audiobars'){ b.color=L.color; b.bars=L.bars; }
         if(L.type==='emote'){ b.emojis=L.emojis; b.count=L.count; b.size=L.size; }
         if(L.type==='poll'){ b.question=L.question; b.options=L.options; b.bg=L.bg; b.color=L.color; b.accent=L.accent; b.font=L.font; }
         if(L.type==='donors'){ b.title=L.title; b.lines=L.lines; b.bg=L.bg; b.color=L.color; b.accent=L.accent; b.font=L.font; }
@@ -2064,7 +2085,7 @@ function restoreScene(){
   applyCanvasSize();
   for(const b of (data.layers||[])){
     if(b.type==='image'){ const img=new Image(); img.src=b.src; state.layers.push({...b,id:nextId++,img}); }
-    else if(b.type==='text'||b.type==='solid'||b.type==='clock'||b.type==='lower3'||b.type==='countdown'||b.type==='gauge'||b.type==='chat'||b.type==='sticker'||b.type==='frame'||b.type==='emote'||b.type==='poll'||b.type==='donors'||b.type==='nowplaying'){ state.layers.push({...b,id:nextId++}); }
+    else if(b.type==='text'||b.type==='solid'||b.type==='clock'||b.type==='lower3'||b.type==='countdown'||b.type==='gauge'||b.type==='chat'||b.type==='sticker'||b.type==='frame'||b.type==='emote'||b.type==='poll'||b.type==='donors'||b.type==='nowplaying'||b.type==='audiobars'){ state.layers.push({...b,id:nextId++}); }
     else if(b.type==='web'){
       const iframe=document.createElement('iframe');
       iframe.src=b.url; iframe.style.cssText='position:absolute;border:0;background:transparent';
@@ -2103,7 +2124,7 @@ function applySnapshot(j){
   applyCanvasSize();
   for(const b of (data.layers||[])){
     if(b.type==='image'){ const img=new Image(); img.src=b.src; state.layers.push({...b,id:nextId++,img}); }
-    else if(['text','solid','clock','lower3','countdown','gauge','chat','sticker','frame','emote','poll','donors','nowplaying'].includes(b.type)){ state.layers.push({...b,id:nextId++}); }
+    else if(['text','solid','clock','lower3','countdown','gauge','chat','sticker','frame','emote','poll','donors','nowplaying','audiobars'].includes(b.type)){ state.layers.push({...b,id:nextId++}); }
     else if(b.type==='web'){ const iframe=document.createElement('iframe'); iframe.src=b.url; iframe.style.cssText='position:absolute;border:0;background:transparent'; iframe.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-forms'); ovl.appendChild(iframe); state.layers.push({...b,id:nextId++,iframe}); }
   }
   normalizeZ(); renderLayers(); histLock=false;
