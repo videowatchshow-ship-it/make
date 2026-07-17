@@ -218,6 +218,10 @@
         <option value="2560x1440">1440p</option>
       </select>
       <label class="bg-pick" title="캔버스 배경색">🎨<input type="color" id="bgColor" value="#000000"></label>
+      <button class="btn" id="gSafe" title="세이프존 가이드">🎯</button>
+      <button class="btn" id="gGrid" title="그리드 오버레이">▦</button>
+      <button class="btn" id="gRuler" title="눈금자">📏</button>
+      <button class="btn" id="gSnap" title="그리드 스냅">🧲</button>
       <div class="spacer"></div>
       <span class="live-dot" id="dot"></span>
       <span id="liveTxt" style="font-size:12px;color:var(--muted)">오프라인</span>
@@ -787,8 +791,33 @@ function draw(){
     ctx.restore();
     if(L.type==='web' && L.iframe){ positionIframe(L); }
   }
+  drawGuides(cw,ch);
   drawHandles();
   requestAnimationFrame(draw);
+}
+const guides = { safe:false, grid:false, ruler:false, snap:false };
+function drawGuides(cw,ch){
+  if(guides.grid){
+    ctx.save(); ctx.strokeStyle='rgba(255,255,255,.12)'; ctx.lineWidth=1;
+    const step=Math.round(cw/12);
+    for(let x=step;x<cw;x+=step){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,ch); ctx.stroke(); }
+    for(let y=step;y<ch;y+=step){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(cw,y); ctx.stroke(); }
+    ctx.restore();
+  }
+  if(guides.safe){
+    ctx.save(); ctx.strokeStyle='rgba(0,217,255,.7)'; ctx.setLineDash([12,8]); ctx.lineWidth=2;
+    // 액션 세이프 90%, 타이틀 세이프 80%
+    [[0.05,0.05],[0.1,0.1]].forEach(([mx,my])=>{ ctx.strokeRect(cw*mx,ch*my,cw*(1-2*mx),ch*(1-2*my)); });
+    ctx.setLineDash([]); ctx.restore();
+  }
+  if(guides.ruler){
+    ctx.save(); ctx.fillStyle='rgba(0,0,0,.5)'; ctx.fillRect(0,0,cw,22); ctx.fillRect(0,0,22,ch);
+    ctx.fillStyle='rgba(255,255,255,.6)'; ctx.font='16px monospace'; ctx.textBaseline='top';
+    const tick=Math.round(cw/10);
+    for(let x=0;x<cw;x+=tick){ ctx.fillRect(x,0,1,8); ctx.fillText(String(x),x+3,2); }
+    for(let y=0;y<ch;y+=tick){ ctx.fillRect(0,y,8,1); }
+    ctx.restore();
+  }
 }
 function positionIframe(L){
   const s = frame.getBoundingClientRect().width / canvasDims().w;
@@ -830,7 +859,8 @@ gripR.addEventListener('pointerdown', e=>{ drag={mode:'size'}; e.target.setPoint
 gripT.addEventListener('pointerdown', e=>{ drag={mode:'rot'}; e.target.setPointerCapture(e.pointerId); e.stopPropagation(); });
 window.addEventListener('pointermove', e=>{
   const L=sel(); if(!L||!drag||L.locked) return; const p=pt(e);
-  if(drag.mode==='move'){ L.x=p.x-drag.ox; L.y=p.y-drag.oy; }
+  if(drag.mode==='move'){ L.x=p.x-drag.ox; L.y=p.y-drag.oy;
+    if(guides.snap){ const d=canvasDims(), step=Math.round(d.w/12); L.x=Math.round(L.x/step)*step; L.y=Math.round(L.y/step)*step; } }
   else if(drag.mode==='size'){
     let nw=Math.max(20,Math.abs(p.x-L.x)*2), nh=Math.max(20,Math.abs(p.y-L.y)*2);
     if(state.aspectLock){ const r=(L.aspect || (L.w/L.h) || 1); nh=nw/r; }
@@ -981,6 +1011,10 @@ pAlnCX.onclick=()=>{const L=sel();if(!L)return;const d=canvasDims();L.x=d.w/2;re
 pAlnT.onclick=()=>{const L=sel();if(!L)return;const d=canvasDims();L.y=L.h/2;renderLayers();syncProps();};
 pAlnB.onclick=()=>{const L=sel();if(!L)return;const d=canvasDims();L.y=d.h-L.h/2;renderLayers();syncProps();};
 pAlnCY.onclick=()=>{const L=sel();if(!L)return;const d=canvasDims();L.y=d.h/2;renderLayers();syncProps();};
+/* 가이드 토글 */
+[['gSafe','safe'],['gGrid','grid'],['gRuler','ruler'],['gSnap','snap']].forEach(([id,k])=>{
+  document.getElementById(id).onclick=e=>{ guides[k]=!guides[k]; e.currentTarget.classList.toggle('primary',guides[k]); };
+});
 /* 스냅샷 */
 document.getElementById('snapBtn').onclick = () => {
   const c = document.getElementById('view');
