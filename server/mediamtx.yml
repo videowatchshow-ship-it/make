@@ -8,6 +8,24 @@ webrtc: yes
 webrtcAddress: :8889     # WHIP 인제스트: http://<host>:8889/<avatar>/whip
 srt: no
 
+# ── 인증 (MediaMTX internal auth) ──────────────────────────────────────────
+# publish(송출)에는 사용자/비번을, read(재생)는 공개. WHIP은 Authorization: Bearer
+# 또는 URL 쿼리(user/pass)로 전달. 환경변수 CB_PUB_USER/CB_PUB_PASS 로 주입.
+# 값 예시는 반드시 배포 시 강한 비밀로 교체하고 저장소에 커밋하지 말 것.
+authMethod: internal
+authInternalUsers:
+  - user: ${CB_PUB_USER}
+    pass: ${CB_PUB_PASS}
+    ips: []
+    permissions:
+      - action: publish
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: read
+      - action: playback
+
 paths:
   all_others:
     runOnReady: /opt/centbeam/server/fanout.sh $MTX_PATH

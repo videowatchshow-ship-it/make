@@ -7,7 +7,28 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '64kb' }));
+
+// 보안 응답 헤더 (OWASP Secure Headers) — 의존성 없이 최소 적용
+app.use((_, res, next) => {
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('X-Frame-Options', 'SAMEORIGIN');
+  res.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
+// 레이트리밋 (OWASP API4:2023 브루트포스 방지) — 인메모리 슬라이딩 윈도우, IP당 분당 60회
+const RL = new Map();
+app.use((req, res, next) => {
+  const now = Date.now(), win = 60000, max = Number(process.env.RATE_MAX || 60);
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const arr = (RL.get(ip) || []).filter(t => now - t < win);
+  arr.push(now); RL.set(ip, arr);
+  if (arr.length > max) return res.status(429).json({ error: 'rate limited' });
+  next();
+});
+// 오래된 항목 주기적 정리 (메모리 누수 방지)
+setInterval(() => { const now = Date.now(); for (const [ip, arr] of RL) { const f = arr.filter(t => now - t < 60000); if (f.length) RL.set(ip, f); else RL.delete(ip); } }, 120000).unref?.();
 
 const DEST = process.env.DEST_FILE || path.join(__dirname, 'data', 'destinations.json');
 const load = () => JSON.parse(fs.readFileSync(DEST, 'utf8'));
