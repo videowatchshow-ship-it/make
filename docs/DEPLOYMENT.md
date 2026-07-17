@@ -1,4 +1,66 @@
-# 배포 — 참교육카지노 서버에 studio 서브도메인 (Apache vhost)
+# 배포 — 센트빔 스튜디오 (Apache vhost)
+
+> **기본 도메인: `panda-avata.cc` (GoDaddy 등록).** 서버 **34.104.233.35** (`my-site-1`, GCP asia-northeast1-a)에 Apache vhost + certbot으로 HTTPS 배포.
+> (구 도메인 `studio.참교육카지노.info`/Cloudflare 경로는 아래 §참교육 절에 그대로 보존.)
+
+---
+
+## 0. panda-avata.cc 연결 (GoDaddy) — 사용자님이 하실 DNS 2줄
+
+**A. GoDaddy DNS** — GoDaddy 계정 → `panda-avata.cc` → DNS 관리에서 A 레코드 추가:
+
+| 타입 | 이름 | 값 | TTL |
+|--|--|--|--|
+| A | `@` | `34.104.233.35` | 600 |
+| A | `www` | `34.104.233.35` | 600 |
+
+또는 GoDaddy Developer API 키가 있으면 (맥 터미널, 키는 커밋 금지):
+```bash
+export GD_KEY='키'; export GD_SECRET='시크릿'
+curl -s -X PUT "https://api.godaddy.com/v1/domains/panda-avata.cc/records/A/@" \
+  -H "Authorization: sso-key $GD_KEY:$GD_SECRET" -H 'Content-Type: application/json' \
+  -d '[{"data":"34.104.233.35","ttl":600}]'
+```
+> ⚠️ GoDaddy는 Cloudflare 같은 프록시가 없으니 그대로 서버 IP로 향한다(WebRTC/certbot 문제 없음).
+
+**B. 전파 확인:**
+```bash
+dig +short panda-avata.cc      # 34.104.233.35 나와야 함 (몇 분~수십분)
+```
+
+**C. 서버 배포** — SSH 후 아래 §2~6 실행하되 도메인만 `panda-avata.cc`로:
+```bash
+sudo tee /etc/apache2/sites-available/panda-avata.conf > /dev/null << 'EOF'
+<VirtualHost *:80>
+  ServerName panda-avata.cc
+  ServerAlias www.panda-avata.cc
+  DocumentRoot /var/www/sites/studio/public
+  <Directory /var/www/sites/studio/public><Require all granted><Options -Indexes></Directory>
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Permissions-Policy "camera=(self), microphone=(self), display-capture=(self)"
+  ProxyPreserveHost On
+  ProxyPass /whip/ http://127.0.0.1:8889/
+  ProxyPassReverse /whip/ http://127.0.0.1:8889/
+  ProxyPass /hls/  http://127.0.0.1:8888/
+  ProxyPassReverse /hls/  http://127.0.0.1:8888/
+  ProxyPass /api/  http://127.0.0.1:3000/
+  ProxyPassReverse /api/  http://127.0.0.1:3000/
+</VirtualHost>
+EOF
+sudo a2enmod proxy proxy_http headers rewrite ssl
+sudo a2ensite panda-avata && sudo apachectl configtest && sudo systemctl reload apache2
+# 파일 배치(§3와 동일): 저장소 client/ 를 /var/www/sites/studio/public 에 복사
+sudo certbot --apache -d panda-avata.cc -d www.panda-avata.cc \
+  --non-interactive --agree-tos -m videowatch.show@gmail.com --redirect
+```
+> 완료 후 폰에서 **`https://panda-avata.cc/studio.html`** → 카메라 허용 → 홈화면 추가(PWA).
+> WHIP 엔드포인트: `https://panda-avata.cc/whip/tak/whip`
+
+---
+
+## (구) 참교육카지노.info 경로 (Cloudflare) — 참고용
 
 > 목표: 참교육카지노 서버(**34.104.233.35**, `my-site-1`, GCP asia-northeast1-a)에 센트빔 스튜디오를 **`studio.참교육카지노.info`** (`studio.xn--9d0bw2fjtyymch7de9d.info`) 로 HTTPS 배포.
 > DNS: Cloudflare (Zone `7e5faed2d3d4d6da7aceb4ddde81a62b`).
