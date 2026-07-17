@@ -319,6 +319,10 @@
       <button class="btn" id="gSnap" title="그리드 스냅">🧲</button>
       <button class="btn" id="gBrb" title="자리비움 화면(BRB)">☕</button>
       <button class="btn" id="gImmersive" title="몰입 모드(패널 숨김)">⛶↔</button>
+      <button class="btn" id="zoomOut" title="축소" style="padding:4px 8px">➖</button>
+      <span id="zoomLbl" style="font-size:12px;color:var(--muted);min-width:38px;text-align:center">100%</span>
+      <button class="btn" id="zoomIn" title="확대" style="padding:4px 8px">➕</button>
+      <button class="btn" id="zoomReset" title="줌 초기화" style="padding:4px 8px">⤢</button>
       <div class="spacer"></div>
       <span class="live-dot" id="dot"></span>
       <span id="liveTxt" style="font-size:12px;color:var(--muted)">오프라인</span>
@@ -751,6 +755,28 @@ function applyCanvasSize(){
   frame.style.height = (h*scale)+'px';
 }
 window.addEventListener('resize', applyCanvasSize);
+/* ── 에디터 줌 (39/62/307) ── */
+let editorZoom=1, panX=0, panY=0;
+function applyZoom(){
+  frame.style.transformOrigin='center center';
+  frame.style.transform=`translate(${panX}px,${panY}px) scale(${editorZoom})`;
+  const lbl=document.getElementById('zoomLbl'); if(lbl) lbl.textContent=Math.round(editorZoom*100)+'%';
+}
+function setZoom(z){ editorZoom=Math.max(0.25, Math.min(4, z)); if(Math.abs(editorZoom-1)<0.02){ editorZoom=1; panX=0; panY=0; } applyZoom(); }
+document.getElementById('zoomIn').onclick=()=>setZoom(editorZoom*1.2);
+document.getElementById('zoomOut').onclick=()=>setZoom(editorZoom/1.2);
+document.getElementById('zoomReset').onclick=()=>{ panX=0; panY=0; setZoom(1); };
+document.querySelector('.canvas-wrap').addEventListener('wheel', e=>{ if(!e.ctrlKey && !e.metaKey && Math.abs(e.deltaY)<4) return;
+  e.preventDefault(); setZoom(editorZoom * (e.deltaY<0?1.1:0.9)); }, {passive:false});
+/* 빈 캔버스 두 손가락 핀치 → 에디터 줌 (39/307) */
+const _zPts=new Map(); let _zBase=null;
+const _wrap=document.querySelector('.canvas-wrap');
+_wrap.addEventListener('pointerdown', e=>{ if(e.target.closest('.hit,.grip')) return; _zPts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(_zPts.size===2){ const [a,b2]=[..._zPts.values()]; _zBase={d:Math.hypot(b2.x-a.x,b2.y-a.y)||1, z:editorZoom}; } });
+_wrap.addEventListener('pointermove', e=>{ if(!_zPts.has(e.pointerId)) return; _zPts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(_zBase && _zPts.size===2){ const [a,b2]=[..._zPts.values()]; const d=Math.hypot(b2.x-a.x,b2.y-a.y)||1; setZoom(_zBase.z*(d/_zBase.d)); } });
+function _zEnd(e){ _zPts.delete(e.pointerId); if(_zPts.size<2) _zBase=null; }
+_wrap.addEventListener('pointerup', _zEnd); _wrap.addEventListener('pointercancel', _zEnd);
 
 /* 캔버스 크기 변경 시(방향/해상도) 레이어 재배치 */
 function refitLayers(oldD, newD){
