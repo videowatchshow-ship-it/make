@@ -29,6 +29,12 @@
     --txt:#ffffff; --muted:#e0e0e0; --accent:#0a5cff; --accent2:#00e5ff;
     --danger:#ff2b2b; --ok:#00ff9c;
   }
+  /* 색약 대응(적록색맹 안전 팔레트: 빨강↔초록 대신 파랑↔주황) */
+  :root[data-theme="cb"]{
+    --bg:#0d0f14; --panel:#161a22; --panel2:#1e2430; --line:#2a3141;
+    --txt:#e6e9ef; --muted:#8b93a4; --accent:#0072e5; --accent2:#33b4ff;
+    --danger:#e8820e; --ok:#0072e5;
+  }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Malgun Gothic",sans-serif;
@@ -153,6 +159,15 @@
   .mobilebar,.drawer-backdrop{display:none}
 
   /* ── 모바일 반응형 (≤820px): 캔버스 최대화 + 하단 탭바 + 드로어 ── */
+  /* 태블릿 (821~1100px): 3패널 유지하되 좁은 사이드/속성 + 터치 타깃 확대 */
+  @media (min-width:821px) and (max-width:1100px){
+    .side{width:230px;flex:0 0 230px}
+    .props{width:224px;flex:0 0 224px}
+    .addbar button{min-height:44px}
+    .field input,.field textarea,.field select{min-height:40px}
+    .toolbar .btn{min-height:40px}
+    .layer{padding:10px}
+  }
   @media (max-width:820px){
     .app{flex-direction:column;height:100dvh}
     /* 스테이지(캔버스)가 화면 대부분 차지 */
@@ -258,6 +273,7 @@
         <option value="dark">🌙 다크</option>
         <option value="light">☀️ 라이트</option>
         <option value="hc">◼ 고대비</option>
+        <option value="cb">👁 색약</option>
       </select>
       <label class="bg-pick" title="강조색" style="font-size:12px">🎨<input type="color" id="accentPick" value="#00d9ff"></label>
     </div>
