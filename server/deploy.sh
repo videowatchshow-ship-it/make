@@ -184,3 +184,6 @@ echo -n "  api/health : "; curl -s "https://$DOMAIN/api/health" 2>/dev/null | he
 echo ""
 echo "✅ 완료 → 폰에서 https://$DOMAIN/studio.html (카메라 허용 → 홈화면 추가로 앱 설치)"
 echo "   WHIP 엔드포인트: https://$DOMAIN/whip/tak/whip"
+echo ""
+echo "ℹ️  MediaMTX 시청/송출 외부인증(로그인 세션 연동)은 아직 비활성 — 활성화하려면(선택, 안전 롤백 포함):"
+echo "     sudo bash $SELF_DIR/server/activate-mediamtx-auth.sh"
