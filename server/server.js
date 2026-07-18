@@ -7,6 +7,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const app = express();
+app.disable('x-powered-by');   // 불필요 노출 헤더 제거 (OWASP Node.js Security)
 // Apache 리버스프록시 뒤에서 실제 클라이언트 IP를 X-Forwarded-For 로 신뢰 (레이트리밋이
 // 모든 클라이언트를 127.0.0.1 로 묶어버리는 문제 방지). loopback 프록시 1홉만 신뢰.
 app.set('trust proxy', 'loopback');
@@ -34,46 +35,88 @@ app.use((req, res, next) => {
 setInterval(() => { const now = Date.now(); for (const [ip, arr] of RL) { const f = arr.filter(t => now - t < 60000); if (f.length) RL.set(ip, f); else RL.delete(ip); } }, 120000).unref?.();
 
 const DEST = process.env.DEST_FILE || path.join(__dirname, 'data', 'destinations.json');
-const load = () => JSON.parse(fs.readFileSync(DEST, 'utf8'));
+const load = () => { try { return JSON.parse(fs.readFileSync(DEST, 'utf8')); } catch (_) { return {}; } };
 const save = (o) => fs.writeFileSync(DEST, JSON.stringify(o, null, 2));
+
+// 인증·결제·엔타이틀먼트 (로그인/결제 게이트, server-is-truth) — /api/auth/* · /api/me · /api/checkout · IPN 등록
+const auth = require('./auth');
+auth.mountAuth(app);
+const requireEntitled = [auth.requireLogin, auth.requirePaid];   // 로그인 + 결제 둘 다 통과해야
+
+// 대상 소유권 (BOLA/IDOR 방지: 아바타 경로의 소유 sub 기록 — 남의 대상 접근 차단)
+const OWN = process.env.OWNERS_FILE || path.join(__dirname, 'data', 'owners.json');
+const loadOwn = () => { try { return JSON.parse(fs.readFileSync(OWN, 'utf8')); } catch (_) { return {}; } };
+const saveOwn = (o) => { try { fs.writeFileSync(OWN, JSON.stringify(o, null, 2)); } catch (_) {} };
+const AVATAR_RE = /^[a-z0-9_-]{1,40}$/i;                             // 경로탐색 방지 (입력검증)
+const maskKey = (k) => { k = String(k || ''); return k ? (k.length > 4 ? '••••' + k.slice(-4) : '••••') : ''; };
+const pubDest = (t) => ({ ...t, streamKey: maskKey(t.streamKey) });  // 응답에서 스트림키 마스킹(평문 미반환)
+// rtmpUrl 검증: rtmp(s)/srt 스킴만, 파일/HTTP/내부주소 차단 (SSRF·파일덮어쓰기 방지)
+function validRtmp(u) {
+  u = String(u || '');
+  if (!/^(rtmps?|srt):\/\//i.test(u)) return false;
+  try { const h = new URL(u).hostname.toLowerCase();
+    if (h === 'localhost' || h === '::1' || /^(127\.|10\.|169\.254\.|192\.168\.)/.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h)) return false;
+  } catch (_) { return false; }
+  return true;
+}
+// 아바타 소유권 확인/주장 미들웨어 — req.user.sub 만 자기 아바타 접근
+function ownAvatar(claim) {
+  return (req, res, next) => {
+    const av = req.params.avatar;
+    if (!AVATAR_RE.test(av)) return res.status(400).json({ error: 'bad_avatar' });
+    const own = loadOwn(); const owner = own[av];
+    if (owner && owner !== req.user.sub) return res.status(403).json({ error: 'forbidden' });
+    if (!owner && claim) { own[av] = req.user.sub; saveOwn(own); }
+    if (!owner && !claim) return res.status(404).json({ error: 'not_found' });
+    next();
+  };
+}
 
 app.get('/api/health', (_, res) => res.json({ ok: true, ts: Date.now() }));
 
-app.get('/api/avatars', (_, res) => {
-  const d = load();
-  res.json(Object.keys(d).map(name => ({ name, count: d[name].length })));
+// 아래 전부 로그인+결제 필수. 스트림키는 평문 미반환(마스킹). 자기 아바타만.
+app.get('/api/avatars', requireEntitled, (req, res) => {
+  const d = load(), own = loadOwn();
+  res.json(Object.keys(d).filter(name => own[name] === req.user.sub).map(name => ({ name, count: (d[name] || []).length })));
 });
 
-app.get('/api/destinations', (_, res) => res.json(load()));
-app.get('/api/destinations/:avatar', (req, res) =>
-  res.json(load()[req.params.avatar] || []));
+app.get('/api/destinations', requireEntitled, (req, res) => {
+  const d = load(), own = loadOwn(), out = {};
+  for (const k of Object.keys(d)) if (own[k] === req.user.sub) out[k] = (d[k] || []).map(pubDest);
+  res.json(out);
+});
+app.get('/api/destinations/:avatar', requireEntitled, ownAvatar(false), (req, res) =>
+  res.json((load()[req.params.avatar] || []).map(pubDest)));
 
 // 대상 추가 { platform, name, rtmpUrl, streamKey, bitrate?, resolution?, enabled? }
-app.post('/api/destinations/:avatar', (req, res) => {
+app.post('/api/destinations/:avatar', requireEntitled, ownAvatar(true), (req, res) => {
   const d = load(); const b = req.body || {};
+  const rtmpUrl = String(b.rtmpUrl || '');
+  if (!validRtmp(rtmpUrl)) return res.status(400).json({ error: 'bad_rtmpUrl' });     // SSRF/파일싱크 차단
+  const streamKey = String(b.streamKey || '');
+  if (streamKey.includes('/') || streamKey.includes('..')) return res.status(400).json({ error: 'bad_streamKey' });
   const dest = {
-    platform: b.platform || 'custom',
-    name: String(b.name || 'unnamed'),
-    rtmpUrl: String(b.rtmpUrl || ''),
-    streamKey: String(b.streamKey || ''),
+    platform: String(b.platform || 'custom').slice(0, 32),
+    name: String(b.name || 'unnamed').slice(0, 80),
+    rtmpUrl, streamKey,
     locked: !!b.locked,
   };
-  // 대상별 프로파일 (203/204): 지정 시 fanout.sh 가 재인코딩, 없으면 -c copy
   if (b.enabled === false) dest.enabled = false;
   if (b.bitrate && Number(b.bitrate) > 0) dest.bitrate = Number(b.bitrate);      // kbps
   if (b.resolution && /^\d{2,4}x\d{2,4}$/.test(b.resolution)) dest.resolution = b.resolution;  // WxH
-  // 인코더 옵션 (193 CBR/VBR · 197 키프레임 간격 · 198 B프레임 · 200 프리셋) — 재인코딩 경로에만 적용
   if (b.preset && /^(ultrafast|superfast|veryfast|faster|fast|medium|slow|slower|veryslow)$/.test(b.preset)) dest.preset = b.preset;
   if (b.gop != null && Number(b.gop) >= 1 && Number(b.gop) <= 10) dest.gop = Number(b.gop);       // 키프레임 간격(초)
   if (b.rateControl === 'cbr' || b.rateControl === 'vbr') dest.rateControl = b.rateControl;        // 레이트 컨트롤
   if (b.bframes != null && Number.isInteger(Number(b.bframes)) && Number(b.bframes) >= 0 && Number(b.bframes) <= 3) dest.bframes = Number(b.bframes);
-  (d[req.params.avatar] ||= []).push(dest);
+  const list = (d[req.params.avatar] ||= []);
+  if (list.length >= 20) return res.status(429).json({ error: 'too_many_destinations' });   // 쿼터(DoS 방지)
+  list.push(dest);
   save(d);
-  res.json({ ok: true, index: d[req.params.avatar].length - 1 });
+  res.json({ ok: true, index: list.length - 1 });
 });
 
 // 대상 삭제 (locked 는 삭제 불가)
-app.delete('/api/destinations/:avatar/:idx', (req, res) => {
+app.delete('/api/destinations/:avatar/:idx', requireEntitled, ownAvatar(false), (req, res) => {
   const d = load(); const list = d[req.params.avatar] || [];
   const t = list[Number(req.params.idx)];
   if (!t) return res.status(404).json({ error: 'not found' });
@@ -165,4 +208,8 @@ app.post('/api/oauth/exchange', async (req, res) => {
 
 app.get('/', (_, res) => res.type('text').send('CENTBEAM relay up'));
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log('web :' + PORT));
+// loopback 바인딩: 오직 Apache 리버스프록시만 접근 (직접 인터넷 노출 방지 — OWASP API8)
+const server = app.listen(PORT, '127.0.0.1', () => console.log('web :' + PORT));
+// slowloris/느린연결 방어 (RFC 9110 · OWASP DoS)
+server.headersTimeout = 20000;
+server.requestTimeout = 30000;
