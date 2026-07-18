@@ -59,6 +59,11 @@ app.post('/api/destinations/:avatar', (req, res) => {
   if (b.enabled === false) dest.enabled = false;
   if (b.bitrate && Number(b.bitrate) > 0) dest.bitrate = Number(b.bitrate);      // kbps
   if (b.resolution && /^\d{2,4}x\d{2,4}$/.test(b.resolution)) dest.resolution = b.resolution;  // WxH
+  // 인코더 옵션 (193 CBR/VBR · 197 키프레임 간격 · 198 B프레임 · 200 프리셋) — 재인코딩 경로에만 적용
+  if (b.preset && /^(ultrafast|superfast|veryfast|faster|fast|medium|slow|slower|veryslow)$/.test(b.preset)) dest.preset = b.preset;
+  if (b.gop != null && Number(b.gop) >= 1 && Number(b.gop) <= 10) dest.gop = Number(b.gop);       // 키프레임 간격(초)
+  if (b.rateControl === 'cbr' || b.rateControl === 'vbr') dest.rateControl = b.rateControl;        // 레이트 컨트롤
+  if (b.bframes != null && Number.isInteger(Number(b.bframes)) && Number(b.bframes) >= 0 && Number(b.bframes) <= 3) dest.bframes = Number(b.bframes);
   (d[req.params.avatar] ||= []).push(dest);
   save(d);
   res.json({ ok: true, index: d[req.params.avatar].length - 1 });

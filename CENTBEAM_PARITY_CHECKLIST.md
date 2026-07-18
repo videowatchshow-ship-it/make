@@ -247,14 +247,14 @@
 |190|커스텀 FPS(60)|✅|60fps 지원|
 |191|비디오 비트레이트 설정|✅|setParameters maxBitrate|
 |192|오디오 비트레이트 설정|✅|Opus SDP 비트레이트 주입|
-|193|CBR/VBR 선택|❌|없음|
+|193|CBR/VBR 선택|✅|대상별 rateControl(cbr/vbr): cbr는 min=max=bufsize+nal-hrd=cbr, vbr는 상한만|
 |194|레이트 컨트롤 모드|✅|degradationPreference(균형/프레임/해상도)|
 |195|최대 비트레이트 상한|✅|maxBitrate 상한|
 |196|적응형 비트레이트(네트워크)|✅|WebRTC 혼잡제어(GCC) 자동|
-|197|키프레임 간격|❌|없음|
-|198|B-프레임 설정|❌|없음|
+|197|키프레임 간격|✅|대상별 gop(초): -force_key_frames expr:gte(t,n_forced*gop)|
+|198|B-프레임 설정|✅|대상별 bframes(0~3): ffmpeg -bf N|
 |199|코덱 선택(H264/HEVC/VP9/AV1)|✅|setCodecPreferences(H264/VP8/VP9/AV1)|
-|200|인코더 프리셋(품질/속도)|❌|없음|
+|200|인코더 프리셋(품질/속도)|✅|대상별 preset(ultrafast~veryslow): libx264 -preset|
 |201|하드웨어 인코딩|⚠️|WebRTC 자동|
 |202|출력 다운스케일(출력≠캔버스)|✅|scaleResolutionDownBy(원본/2·3/1·2)|
 |203|대상별 비트레이트 프로파일|✅|대상별 bitrate 지정 시 fanout 재인코딩|
@@ -446,9 +446,9 @@
 
 | 상태 | 개수 | 비율 |
 |--|--|--|
-| ✅ 통과 | 288 | 82% |
+| ✅ 통과 | 292 | 83% |
 | ⚠️ 부분 | 40 | 11% |
-| ❌ 미구현 | 20 | 6% |
+| ❌ 미구현 | 16 | 5% |
 | ➖ 해당없음 | 2 | 1% |
 | **합계** | **350** | 100% |
 
