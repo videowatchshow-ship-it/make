@@ -43,7 +43,7 @@ PRISM/OBS의 씬 합성 경험을 **브라우저(PWA)** 로 구현했다. 설치
 | `client/studio.html` | **스튜디오** | 브라우저 씬 컴포저 + WHIP 송출. **단일 파일, 의존성 0, 빌드 불필요.** | [client/README.md](client/README.md) |
 | `server/` | **릴레이** | MediaMTX + `fanout.sh` + Express API. RTMP/WHIP 수신 → 다중 대상 fan-out. | [server/README.md](server/README.md) |
 | `server/deploy.sh` | **배포** | 서버 원클릭 배포(멱등): 파일배치 + Apache vhost + certbot SSL. | — |
-| `docs/` | **문서** | ARCHITECTURE / DEPLOYMENT / CLOUDFLARE_API / CONTRIBUTING / GLOSSARY. | [docs/](docs/) |
+| `docs/` | **문서** | ARCHITECTURE / DEPLOYMENT / CLOUDFLARE_API / CONTRIBUTING / GLOSSARY / **MOBILE_UX_PRISM**(폰 실측 30항목). | [docs/](docs/README.md) |
 | `CENTBEAM_PARITY_CHECKLIST.md` | **품질 기준** | PRISM 모바일 동등성 400항목 감사 (현재 ✅343). | — |
 | `legacy/` | 범위 밖 | 피벗 이전 도구, 참고 보관. | [legacy/README.md](legacy/README.md) |
 

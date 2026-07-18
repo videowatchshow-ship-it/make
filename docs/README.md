@@ -9,6 +9,7 @@
 | [CLOUDFLARE_API.md](CLOUDFLARE_API.md) | DNS를 API로 어떻게 바꾸나 — zone/레코드 CRUD curl 레퍼런스(proxied off 필수) | DNS 조작·회색구름 설정 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 어떻게 기여하나 — 브랜치(`claude/*`)·커밋 접두어·헤드리스 검증·PR(draft) 규칙 | 코드 변경 전 |
 | [GLOSSARY.md](GLOSSARY.md) | 용어 — WHIP·fan-out·아바타·릴레이 등 | 낯선 용어 만날 때 |
+| [MOBILE_UX_PRISM.md](MOBILE_UX_PRISM.md) | 폰에서 PRISM처럼 쓸 만한가 — 아이폰 뷰포트 실측 30항목(✅29/⚠️1) | 모바일 UX 상품화 점검 |
 
 ---
 
