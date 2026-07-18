@@ -75,6 +75,58 @@ app.delete('/api/destinations/:avatar/:idx', (req, res) => {
   res.json({ ok: true });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Google/YouTube OAuth (RFC 9700: Authorization Code + PKCE) — 294/295/298/335/337
+//   Client Secret 은 서버 파일에만: /var/secrets/oauth-nodetube.json
+//   포맷: {"client_id":"...","client_secret":"..."}  또는 Google 다운로드형 {"web":{...}}
+//   프론트는 code_challenge 로 redirect → 여기서 code→token 교환(secret 사용) →
+//   YouTube liveStreams 로 스트림키 조회 → 프론트엔 최소 정보만 반환(토큰은 서버 보관).
+// ─────────────────────────────────────────────────────────────────────────────
+const OAUTH_FILE = process.env.OAUTH_SECRET_FILE || '/var/secrets/oauth-nodetube.json';
+function oauthCreds() {
+  try { const c = JSON.parse(fs.readFileSync(OAUTH_FILE, 'utf8')); return c.web || c.installed || c; }
+  catch (_) { return null; }
+}
+app.get('/api/oauth/config', (_, res) => {
+  const c = oauthCreds();
+  res.json({ configured: !!(c && c.client_id), clientId: (c && c.client_id) || '' });
+});
+app.post('/api/oauth/exchange', async (req, res) => {
+  const c = oauthCreds();
+  if (!c || !c.client_id || !c.client_secret) return res.status(500).json({ error: 'oauth_not_configured' });
+  const { code, redirectUri, codeVerifier } = req.body || {};
+  if (!code || !redirectUri) return res.status(400).json({ error: 'missing_code' });
+  try {
+    const tok = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code, client_id: c.client_id, client_secret: c.client_secret,
+        redirect_uri: redirectUri, grant_type: 'authorization_code', code_verifier: codeVerifier || '',
+      }),
+    }).then(r => r.json());
+    if (tok.error) return res.status(400).json({ error: tok.error, detail: tok.error_description });
+    const who = await fetch('https://openidconnect.googleapis.com/v1/userinfo',
+      { headers: { Authorization: 'Bearer ' + tok.access_token } }).then(r => r.json()).catch(() => ({}));
+    let streamKey = null, streamTitle = null;
+    try {
+      const ls = await fetch('https://www.googleapis.com/youtube/v3/liveStreams?part=cdn,snippet&mine=true',
+        { headers: { Authorization: 'Bearer ' + tok.access_token } }).then(r => r.json());
+      const item = ls.items && ls.items[0];
+      if (item && item.cdn && item.cdn.ingestionInfo) {
+        streamKey = item.cdn.ingestionInfo.streamName;
+        streamTitle = item.snippet && item.snippet.title;
+      }
+    } catch (_) {}
+    // refresh_token 은 서버에만 보관(자격증명 안전 저장 298). 프론트엔 최소 정보만.
+    if (tok.refresh_token) {
+      try { const dir = path.join(__dirname, 'data'); fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, 'yt-token-' + (who.sub || 'user') + '.json'),
+          JSON.stringify({ refresh_token: tok.refresh_token, email: who.email }), { mode: 0o600 }); } catch (_) {}
+    }
+    res.json({ ok: true, email: who.email || null, name: who.name || null, streamKey, streamTitle });
+  } catch (e) { res.status(500).json({ error: String(e && e.message || e) }); }
+});
+
 app.get('/', (_, res) => res.type('text').send('CENTBEAM relay up'));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => console.log('web :' + PORT));

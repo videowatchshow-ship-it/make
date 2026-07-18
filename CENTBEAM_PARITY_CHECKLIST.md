@@ -372,11 +372,11 @@
 |291|HTTPS 전용 송출|⚠️|예시 http, https 필요|
 |292|WHIP 인증(Bearer)|✅|WHIP POST Authorization: Bearer(RFC9725)|
 |293|MediaMTX publishUser/pass|✅|authInternalUsers publish 인증|
-|294|YouTube OAuth 로그인|❌|없음|
-|295|YouTube API 스트림키 발급|❌|없음|
+|294|YouTube OAuth 로그인|✅|Auth Code+PKCE 리다이렉트 로그인|
+|295|YouTube API 스트림키 발급|✅|liveStreams cdn.ingestionInfo.streamName(서버)|
 |296|Facebook 로그인/키|❌|없음|
 |297|Twitch 연동|❌|없음|
-|298|자격증명 안전 저장|❌|없음|
+|298|자격증명 안전 저장|✅|refresh_token 서버 0600 파일·프론트 미전달·secret 비커밋|
 |299|랜덤 긴 스트림 경로(보안)|✅|crypto 랜덤 24자 경로 생성|
 |300|CORS/CSP 검토|⚠️|미정리|
 
@@ -423,9 +423,9 @@
 |332|WebRTC 미디어 DTLS-SRTP 암호화|✅|RFC 8827/8826 (WebRTC 암호화 필수)|
 |333|CSP(Content-Security-Policy) 적용|✅|CSP 메타(object-src none·base-uri·frame-src 제한)|
 |334|스트림키·비번 평문 저장 금지|✅|대상/토큰 base64 난독저장(평문 아님)|
-|335|OAuth 2.0 Auth Code + PKCE|❌|RFC 9700 (모든 클라이언트 PKCE 필수)|
-|336|토큰 보안 저장(Keychain/Keystore)|❌|OWASP MASVS-STORAGE|
-|337|최소 권한 OAuth 스코프|❌|RFC 9700 · Google API 정책|
+|335|OAuth 2.0 Auth Code + PKCE|✅|PKCE S256(검증됨) RFC 9700|
+|336|토큰 보안 저장(Keychain/Keystore)|✅|토큰 서버 보관(브라우저 미노출)|
+|337|최소 권한 OAuth 스코프|✅|youtube.readonly + openid email|
 |338|WHIP publish Bearer 인증|✅|WHIP Authorization: Bearer 송신(항목292)|
 |339|MediaMTX publishUser/pass·비밀 경로|✅|authInternalUsers publish 인증 + 랜덤경로|
 |340|레이트리밋/브루트포스 방지|✅|server.js IP당 60/분 레이트리밋(429)|
@@ -446,9 +446,9 @@
 
 | 상태 | 개수 | 비율 |
 |--|--|--|
-| ✅ 통과 | 281 | 80% |
+| ✅ 통과 | 287 | 82% |
 | ⚠️ 부분 | 40 | 11% |
-| ❌ 미구현 | 27 | 8% |
+| ❌ 미구현 | 21 | 6% |
 | ➖ 해당없음 | 2 | 1% |
 | **합계** | **350** | 100% |
 
