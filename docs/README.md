@@ -10,6 +10,7 @@
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 어떻게 기여하나 — 브랜치(`claude/*`)·커밋 접두어·헤드리스 검증·PR(draft) 규칙 | 코드 변경 전 |
 | [GLOSSARY.md](GLOSSARY.md) | 용어 — WHIP·fan-out·아바타·릴레이 등 | 낯선 용어 만날 때 |
 | [MOBILE_UX_PRISM.md](MOBILE_UX_PRISM.md) | 폰에서 PRISM처럼 쓸 만한가 — 아이폰 뷰포트 실측 30항목(✅29/⚠️1) | 모바일 UX 상품화 점검 |
+| [SECURITY_30.md](SECURITY_30.md) | 유료·로그인 게이트 SaaS 보안 30개(해킹·크롤링) — 공식출처 근거 + 적용 위치 | 상품화 전 보안 하드닝 |
 
 ---
 
