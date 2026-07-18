@@ -49,6 +49,7 @@ cat > /etc/apache2/sites-available/panda-avata.conf <<EOF
 
   Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
   Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "SAMEORIGIN"
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
   Header always set Permissions-Policy "camera=(self), microphone=(self), display-capture=(self)"
 

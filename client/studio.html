@@ -663,8 +663,8 @@
         <option value="256">256 kbps</option>
       </select></div>
     <div class="row2">
-      <div class="field"><label>레이트 컨트롤</label>
-        <select id="rcSel" title="화질 저하 시 우선순위">
+      <div class="field"><label>화질 저하 우선순위</label>
+        <select id="rcSel" title="대역폭 부족 시 프레임/해상도 중 무엇을 지킬지 (WebRTC degradationPreference)">
           <option value="balanced" selected>균형</option>
           <option value="maintain-framerate">프레임 우선</option>
           <option value="maintain-resolution">해상도 우선</option>
@@ -676,14 +676,11 @@
           <option value="2">1/2</option>
         </select></div>
     </div>
-    <div class="field"><label>비디오 코덱 선호</label>
-      <select id="codecSel">
-        <option value="">자동</option>
-        <option value="H264">H.264</option>
-        <option value="VP8">VP8</option>
-        <option value="VP9">VP9</option>
-        <option value="AV1">AV1</option>
-      </select></div>
+    <div class="field"><label>비디오 코덱</label>
+      <select id="codecSel" title="RTMP/FLV fan-out은 H.264만 지원하므로 H.264 고정">
+        <option value="H264" selected>H.264 (RTMP 호환)</option>
+      </select>
+      <div class="note" style="margin-top:3px">RTMP fan-out(YouTube/Twitch/FB)은 H.264만 받으므로 고정. VP9/AV1은 재인코딩 없이는 송출 불가.</div></div>
     <label class="field" style="font-size:12px;color:var(--muted)"><input type="checkbox" id="alertSndChk" checked> 방송 시작/종료 알림음</label>
     <label class="field" style="font-size:12px;color:var(--muted)"><input type="checkbox" id="voiceOnlyChk"> 🎙 음성 전용 모드(영상 미송출)</label>
     <div class="row2" style="margin-top:4px">
@@ -1417,10 +1414,15 @@ function draw(){
       });
       ctx.restore();
     } else if(L.type==='web'){
-      // 캔버스엔 자리표시(합성 불가), 실제 위젯은 프리뷰 오버레이 iframe로 표시
+      // ⚠️ 브라우저 한계: 임의 웹페이지는 캔버스에 합성 불가(OBS는 내장 크로뮴). iframe은
+      // 송출자 프리뷰에만 보이고 방송엔 이 자리표시만 나감. 웹 콘텐츠를 방송하려면 화면공유(탭).
       ctx.fillStyle='rgba(0,217,255,.08)'; ctx.fillRect(-hw,-hh,L.w,L.h);
       ctx.strokeStyle='rgba(0,217,255,.5)'; ctx.setLineDash([8,6]); ctx.strokeRect(-hw,-hh,L.w,L.h);
       ctx.setLineDash([]);
+      const _fz=Math.max(11,Math.min(L.h/8,20)); ctx.fillStyle='rgba(0,217,255,.75)';
+      ctx.font=`600 ${_fz}px -apple-system,"Malgun Gothic",sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('웹 소스 · 방송 미표시', 0, -_fz*0.7); ctx.fillText('(화면공유 탭 사용)', 0, _fz*0.7);
+      ctx.textAlign='left'; ctx.textBaseline='alphabetic';
     }
     // 테두리 (클립 안쪽 inset — 잘리지 않게)
     if(L.borderW>0 && _fxType){ const bw=L.borderW; ctx.lineWidth=bw; ctx.strokeStyle=L.borderColor||'#ffffff';
@@ -2076,13 +2078,15 @@ function runCountdown(){
 
 async function startPublish(){
   const fps=Number(document.getElementById('fpsSel').value)||30;
-  const canvasStream = cv.captureStream(fps);
+  let canvasStream;
+  try{ canvasStream = cv.captureStream(fps); }
+  catch(e){ toast('캔버스 캡처 실패(외부 이미지 CORS 오염 가능): '+(e.message||e),'err'); throw e; }   // tainted canvas 방어
   let audioTracks=[];
   if(mixer.dest && mixer.sources.length){
     if(mixer.ctx.state==='suspended') await mixer.ctx.resume();
     audioTracks = mixer.dest.stream.getAudioTracks();
   } else if(tempMicStream){ audioTracks=tempMicStream.getAudioTracks(); }
-  else { try{ tempMicStream=await navigator.mediaDevices.getUserMedia({audio:true});
+  else { try{ tempMicStream=await navigator.mediaDevices.getUserMedia({audio:MIC_AUDIO});
     audioTracks=tempMicStream.getAudioTracks(); }catch(_){} }
   const voiceOnly=document.getElementById('voiceOnlyChk').checked;
   outStream = voiceOnly ? new MediaStream(audioTracks) : new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks]);
@@ -2090,7 +2094,15 @@ async function startPublish(){
   if(!voiceOnly) await applyEncoding();
 }
 
+let whipResource=null;   // RFC 9725 §4.2: 201 응답 Location(리소스 URL) — 종료/재연결 시 DELETE
+async function whipDelete(){
+  if(!whipResource) return; const u=whipResource; whipResource=null;
+  const headers={}; const tok=(document.getElementById('whipToken')||{}).value;
+  if(tok && tok.trim()) headers['Authorization']='Bearer '+tok.trim();
+  try{ await fetch(u,{method:'DELETE',headers}); }catch(_){ }
+}
 async function whipPublish(url, stream){
+  await whipDelete();   // 이전 WHIP 리소스 먼저 정리 (재연결 시 서버 세션 누수 방지)
   if(pc){ try{pc.close();}catch(_){} }
   pc = new RTCPeerConnection();
   stream.getTracks().forEach(t=>pc.addTrack(t, stream));
@@ -2107,6 +2119,8 @@ async function whipPublish(url, stream){
   if(tok && tok.trim()) headers['Authorization']='Bearer '+tok.trim();   // RFC 9725 WHIP 인증
   const res = await fetch(url, {method:'POST', headers, body:offer.sdp});
   if(!res.ok) throw new Error('WHIP '+res.status);
+  const loc=res.headers.get('Location');   // 리소스 URL 보관 (상대경로면 절대화)
+  if(loc){ try{ whipResource=new URL(loc, url).href; }catch(_){ whipResource=loc; } }
   await pc.setRemoteDescription({type:'answer', sdp:await res.text()});
 }
 /* Opus 오디오 비트레이트를 SDP fmtp에 주입 (maxaveragebitrate, bps) */
@@ -2118,13 +2132,17 @@ function setOpusBitrate(sdp, kbps){
     const lines=sdp.split(/\r?\n/); let done=false;
     for(let i=0;i<lines.length;i++){
       if(lines[i].startsWith('a=fmtp:'+pt)){
-        let v=lines[i];
-        v=v.replace(/;?\s*maxaveragebitrate=\d+/g,'').replace(/;?\s*stereo=\d/g,'');
-        lines[i]=v+';maxaveragebitrate='+bps+';stereo=1'; done=true; break;
+        // RFC 4566: 'a=fmtp:<pt> <p1>;<p2>;…'. pt 뒤 파라미터를 토큰화 → 우리가 관리하는 항목만
+        // 교체 → 재조립(공백 구분자 항상 보존). stereo=1(수신 허용)+sprop-stereo=1(로컬 스테레오 송출: RFC 7587 §7.1)+FEC
+        let rest=lines[i].slice(('a=fmtp:'+pt).length).replace(/^\s+/,'')
+          .split(';').map(x=>x.trim())
+          .filter(x=>x && !/^maxaveragebitrate=/i.test(x) && !/^stereo=/i.test(x) && !/^sprop-stereo=/i.test(x) && !/^useinbandfec=/i.test(x));
+        rest.push('maxaveragebitrate='+bps,'stereo=1','sprop-stereo=1','useinbandfec=1');
+        lines[i]='a=fmtp:'+pt+' '+rest.join(';'); done=true; break;
       }
     }
     if(!done){ // fmtp 라인이 없으면 rtpmap 뒤에 추가
-      for(let i=0;i<lines.length;i++){ if(lines[i].startsWith('a=rtpmap:'+pt)){ lines.splice(i+1,0,'a=fmtp:'+pt+' maxaveragebitrate='+bps+';stereo=1'); break; } }
+      for(let i=0;i<lines.length;i++){ if(lines[i].startsWith('a=rtpmap:'+pt)){ lines.splice(i+1,0,'a=fmtp:'+pt+' maxaveragebitrate='+bps+';stereo=1;sprop-stereo=1;useinbandfec=1'); break; } }
     }
     return lines.join('\r\n');
   }catch(_){ return sdp; }
@@ -2142,8 +2160,13 @@ async function applyEncoding(){
   params.encodings[0].maxBitrate=vbr*1000;
   params.encodings[0].maxFramerate=fps;
   params.encodings[0].scaleResolutionDownBy=scale;   // 출력 다운스케일
-  params.degradationPreference=rc;                    // 레이트 컨트롤(화질저하 우선순위)
-  try{ await sender.setParameters(params); }catch(_){}
+  params.degradationPreference=rc;                    // 화질저하 우선순위(maintain-framerate/resolution/balanced)
+  try{ await sender.setParameters(params); }catch(e){ toast('비트레이트 적용 실패: '+(e.message||e),'warn'); }
+  // 오디오 송신자에도 비트레이트 적용 — SDP maxaveragebitrate 는 수신용이라 실제 인코더엔 부족 (RFC 7587)
+  const abr=Number(document.getElementById('abrSel').value)||128;
+  const asnd=pc.getSenders().find(s=>s.track&&s.track.kind==='audio');
+  if(asnd){ try{ const ap=asnd.getParameters(); if(!ap.encodings||!ap.encodings.length) ap.encodings=[{}];
+    ap.encodings[0].maxBitrate=abr*1000; await asnd.setParameters(ap); }catch(_){ } }
 }
 /* 코덱 선호 설정 (transceiver.setCodecPreferences) */
 function applyCodecPref(){
@@ -2159,6 +2182,7 @@ document.getElementById('vbrSel').onchange=()=>{ if(state.live) applyEncoding();
 document.getElementById('fpsSel').onchange=()=>{ if(state.live) applyEncoding(); };
 document.getElementById('scaleSel').onchange=()=>{ if(state.live) applyEncoding(); };
 document.getElementById('rcSel').onchange=()=>{ if(state.live) applyEncoding(); };
+document.getElementById('abrSel').onchange=()=>{ if(state.live) applyEncoding(); };
 /* 랜덤 스트림 경로 생성 (보안: 추측 불가한 긴 경로) */
 document.getElementById('randPathBtn').onclick=()=>{
   const rnd=[...crypto.getRandomValues(new Uint8Array(12))].map(b=>b.toString(16).padStart(2,'0')).join('');
@@ -2241,6 +2265,7 @@ function stopLive(){
     const mb=(lastBytes/1048576).toFixed(1);
     toast(`방송 요약 — 시간 ${mm}:${ss} · 송출 ${mb}MB · 드롭 ${Math.max(0,statPeak.framesEncoded-statPeak.framesSent)}`,'ok');
   }
+  whipDelete();   // RFC 9725: 서버에 세션 종료 통보(DELETE)
   if(pc){pc.close();pc=null;}
   if(tempMicStream){ tempMicStream.getTracks().forEach(t=>t.stop()); tempMicStream=null; }
   stopTimers(); reconnecting=false; reconnectTries=0;
@@ -2371,7 +2396,7 @@ function restoreScene(){
   const arSel=document.getElementById('arSel'); if(arSel){ const near=[...arSel.options].find(o=>Math.abs(Number(o.value)-state.ar)<0.01); arSel.value=near?near.value:'1.7778'; }
   applyCanvasSize();
   for(const b of (data.layers||[])){
-    if(b.type==='image'){ const img=new Image(); img.src=b.src; state.layers.push({...b,id:nextId++,img}); }
+    if(b.type==='image'){ const img=new Image(); img.crossOrigin='anonymous'; img.onerror=()=>toast('이미지 로드 실패(CORS?) — 레이어 확인','warn'); img.src=b.src; state.layers.push({...b,id:nextId++,img}); }
     else if(b.type==='slideshow'){ const imgs=(b.srcs||[]).map(s=>{const i=new Image();i.src=s;return i;}); state.layers.push({...b,id:nextId++,imgs}); }
     else if(b.type==='text'||b.type==='solid'||b.type==='clock'||b.type==='lower3'||b.type==='countdown'||b.type==='gauge'||b.type==='chat'||b.type==='sticker'||b.type==='frame'||b.type==='emote'||b.type==='poll'||b.type==='donors'||b.type==='nowplaying'||b.type==='audiobars'||b.type==='roulette'||b.type==='data'){ state.layers.push({...b,id:nextId++}); }
     else if(b.type==='web'){
@@ -2411,7 +2436,7 @@ function applySnapshot(j){
   const arSel=document.getElementById('arSel'); if(arSel){ const near=[...arSel.options].find(o=>Math.abs(Number(o.value)-state.ar)<0.01); arSel.value=near?near.value:'1.7778'; }
   applyCanvasSize();
   for(const b of (data.layers||[])){
-    if(b.type==='image'){ const img=new Image(); img.src=b.src; state.layers.push({...b,id:nextId++,img}); }
+    if(b.type==='image'){ const img=new Image(); img.crossOrigin='anonymous'; img.onerror=()=>toast('이미지 로드 실패(CORS?) — 레이어 확인','warn'); img.src=b.src; state.layers.push({...b,id:nextId++,img}); }
     else if(b.type==='slideshow'){ const imgs=(b.srcs||[]).map(s=>{const i=new Image();i.src=s;return i;}); state.layers.push({...b,id:nextId++,imgs}); }
     else if(['text','solid','clock','lower3','countdown','gauge','chat','sticker','frame','emote','poll','donors','nowplaying','audiobars','roulette','data'].includes(b.type)){ state.layers.push({...b,id:nextId++}); }
     else if(b.type==='web'){ const iframe=document.createElement('iframe'); iframe.src=b.url; iframe.style.cssText='position:absolute;border:0;background:transparent'; iframe.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-forms'); ovl.appendChild(iframe); state.layers.push({...b,id:nextId++,iframe}); }
@@ -2578,11 +2603,14 @@ function initDestinations(){
 }
 
 /* ── 오디오 믹서 (WebAudio) ── */
+// 방송용 마이크 제약: 브라우저 DSP OFF + 스테레오 (OBS/PRISM 기본값)
+const MIC_AUDIO = { echoCancellation:false, noiseSuppression:false, autoGainControl:false, channelCount:2 };
 const mixer = { ctx:null, master:null, masterAn:null, dest:null, sources:[] };
 function ensureMixer(){
   if(mixer.ctx) return;
   const AC = window.AudioContext || window.webkitAudioContext;
-  mixer.ctx = new AC();
+  // Opus 는 48kHz — 컨텍스트를 48k 로 고정해 불필요한 재샘플 제거
+  try{ mixer.ctx = new AC({ sampleRate:48000, latencyHint:'interactive' }); }catch(_){ mixer.ctx = new AC(); }
   mixer.master = mixer.ctx.createGain();
   mixer.masterAn = mixer.ctx.createAnalyser(); mixer.masterAn.fftSize = 1024;
   mixer.dest = mixer.ctx.createMediaStreamDestination();
@@ -2619,12 +2647,14 @@ async function addMic(){
   ensureMixer();
   if(mixer.ctx.state==='suspended') await mixer.ctx.resume();
   try{
-    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    // 방송용: 브라우저 기본 DSP(에코제거/노이즈억제/AGC) OFF — 음악 펌핑·자체 게이트/컴프 충돌 방지 (OBS/PRISM 기본)
+    const stream = await navigator.mediaDevices.getUserMedia({audio:MIC_AUDIO});
     const src = mixer.ctx.createMediaStreamSource(stream);
     const gain = mixer.ctx.createGain();
     const an = mixer.ctx.createAnalyser(); an.fftSize=256;
+    const detAn = mixer.ctx.createAnalyser(); detAn.fftSize=256; src.connect(detAn);   // 게이트 검출용(게인 이전) — 닫혀도 재개 가능
     src.connect(gain); gain.connect(an); gain.connect(mixer.master);
-    const s = {id:'a'+nextId++, kind:'mic', label:'마이크', gain, an, stream, srcNode:src, muted:false, vol:1};
+    const s = {id:'a'+nextId++, kind:'mic', label:'마이크', gain, an, detAn, stream, srcNode:src, muted:false, vol:1};
     applyGain(s); mixer.sources.push(s); renderMixer();
   }catch(e){ toast('마이크 접근 실패: '+e.message,'err'); }
 }
@@ -2696,9 +2726,11 @@ function meterLoop(){
   if(mixer.ctx){
     let micPeak=0;
     const gateOn=mixer.fx && mixer.fx.gate, gThr=(mixer.fx&&mixer.fx.gateThr)||0.06, aT=mixer.ctx.currentTime;
-    for(const s of mixer.sources){ const lv=rmsLevel(s.an); if(s.meterEl) s.meterEl.style.width=Math.min(100,lv*300)+'%'; if(s.kind==='mic'&&!s.muted) micPeak=Math.max(micPeak,lv);
-      // 노이즈 게이트: 마이크 조용하면 차단
-      if(s.kind==='mic' && gateOn && !s.muted){ const open=lv>gThr; s.gain.gain.setTargetAtTime(open?s.vol:0.0001, aT, open?0.01:0.08); }
+    for(const s of mixer.sources){ const lv=rmsLevel(s.an); if(s.meterEl) s.meterEl.style.width=Math.min(100,lv*300)+'%';
+      const det=(s.kind==='mic')?rmsLevel(s.detAn||s.an):lv;   // 마이크는 게인 이전 신호로 검출(게이트 래치 방지)
+      if(s.kind==='mic'&&!s.muted) micPeak=Math.max(micPeak,det);
+      // 노이즈 게이트: 마이크 조용하면 차단 (검출이 게인 이전이라 닫혀도 다시 열림)
+      if(s.kind==='mic' && gateOn && !s.muted){ const open=det>gThr; s.gain.gain.setTargetAtTime(open?s.vol:0.0001, aT, open?0.01:0.08); }
     }
     // 덕킹: 마이크 말할 때 BGM 자동 감소
     if(mixer.fx && mixer.fx.duck){
@@ -2758,10 +2790,10 @@ function initMixer(){
   refreshMicDevices();
   navigator.mediaDevices.addEventListener&&navigator.mediaDevices.addEventListener('devicechange',refreshMicDevices);
   micSel.onchange=async e=>{ const id=e.target.value; const mic=mixer.sources.find(s=>s.kind==='mic'); if(!mic) return;
-    try{ const ns=await navigator.mediaDevices.getUserMedia({audio: id?{deviceId:{exact:id}}:true});
+    try{ const ns=await navigator.mediaDevices.getUserMedia({audio: id?{...MIC_AUDIO,deviceId:{exact:id}}:MIC_AUDIO});
       mic.stream.getTracks().forEach(t=>t.stop());
       try{ mic.srcNode&&mic.srcNode.disconnect(); }catch(_){}
-      const nsrc=mixer.ctx.createMediaStreamSource(ns); nsrc.connect(mic.gain); mic.srcNode=nsrc; mic.stream=ns; refreshMicDevices();
+      const nsrc=mixer.ctx.createMediaStreamSource(ns); nsrc.connect(mic.gain); if(mic.detAn) nsrc.connect(mic.detAn); mic.srcNode=nsrc; mic.stream=ns; refreshMicDevices();
       toast('마이크 장치 변경됨','ok');
     }catch(err){ toast('장치 변경 실패: '+err.message,'err'); } };
   requestAnimationFrame(meterLoop);

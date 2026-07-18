@@ -7,6 +7,9 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const app = express();
+// Apache 리버스프록시 뒤에서 실제 클라이언트 IP를 X-Forwarded-For 로 신뢰 (레이트리밋이
+// 모든 클라이언트를 127.0.0.1 로 묶어버리는 문제 방지). loopback 프록시 1홉만 신뢰.
+app.set('trust proxy', 'loopback');
 app.use(express.json({ limit: '64kb' }));
 
 // 보안 응답 헤더 (OWASP Secure Headers) — 의존성 없이 최소 적용
