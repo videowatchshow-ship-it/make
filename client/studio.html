@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <!-- 보안: Content-Security-Policy (인라인 스타일/스크립트 허용은 단일파일 구조상 필요, 그 외 최소화) -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; connect-src *; frame-src https: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://accounts.google.com; img-src 'self' data: blob: https:; media-src 'self' blob: data:; connect-src 'self' https:; frame-src https: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>센트빔 CENTBEAM — 라이브 스튜디오</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230066ff'/%3E%3Cpath d='M28 70 L50 26 L72 70 Z' fill='none' stroke='%2300d9ff' stroke-width='7' stroke-linejoin='round'/%3E%3C/svg%3E">
@@ -241,6 +241,29 @@
   <div style="font:700 26px -apple-system,'Malgun Gothic',sans-serif;color:#e6e9ef;letter-spacing:2px">센트빔 <span style="color:#00d9ff">CENTBEAM</span></div>
   <div style="font:13px -apple-system,sans-serif;color:#6b7688">라이브 스튜디오 로딩 중…</div>
 </div>
+<!-- 로그인·결제 게이트 (server-is-truth). 통과 전엔 앱 잠금 -->
+<div id="gate" style="position:fixed;inset:0;z-index:10000;display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:24px;background:radial-gradient(circle at 50% 28%,#101a2e,#05070c);color:#eef1f9;font-family:-apple-system,'Malgun Gothic',sans-serif">
+  <div style="font-size:52px;background:linear-gradient(135deg,#5b6bff,#25d6ff);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 10px #25d6ff88)">◭</div>
+  <div style="font:800 24px sans-serif">센트빔 <span style="color:#25d6ff">CENTBEAM</span></div>
+  <div id="gateLogin" style="display:none;max-width:340px">
+    <p style="color:#c7cdd9;font-size:14px;line-height:1.6">계속하려면 <b>구글 로그인</b>이 필요합니다.<br>로그인·구독 없이는 방송이 동작하지 않습니다.</p>
+    <div id="gBtn" style="display:flex;justify-content:center;margin:14px 0"></div>
+    <div id="gateMsg" style="font-size:12px;color:#8a93a6"></div>
+  </div>
+  <div id="gatePay" style="display:none;max-width:380px">
+    <p id="gateHi" style="color:#25d6ff;font-size:13px;margin:0 0 4px"></p>
+    <p style="color:#c7cdd9;font-size:14px;line-height:1.6">이용하려면 <b>구독</b>이 필요합니다. (USDT 결제)</p>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:12px">
+      <button class="btn primary planBtn" data-plan="monthly" style="min-width:150px;padding:14px">월 <b>$25</b><br><span style="font-size:11px;opacity:.85">1개월 · USDT</span></button>
+      <button class="btn planBtn" data-plan="sixmonth" style="min-width:150px;padding:14px">6개월 <b>$120</b><br><span style="font-size:11px;opacity:.7">약 $20/월 · USDT</span></button>
+    </div>
+    <div id="dummyBox" style="display:none;margin-top:12px"><button class="btn" id="dummyPay" style="padding:10px 14px">🧪 테스트 결제(더미)로 활성화</button></div>
+    <div id="payMsg" style="font-size:12px;color:#8a93a6;margin-top:10px"></div>
+    <button class="btn" id="gateLogout" style="margin-top:12px;font-size:12px;padding:6px 12px">로그아웃</button>
+  </div>
+  <div id="gateSpin" style="width:34px;height:34px;border:3px solid rgba(37,214,255,.25);border-top-color:#25d6ff;border-radius:50%;animation:cbspin .8s linear infinite"></div>
+</div>
+<script>/* 프로덕션(https·비로컬)에서는 게이트를 즉시 표시해 미인증 노출 방지 */if(/^https?:$/.test(location.protocol)&&!/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){try{document.getElementById('gate').style.display='flex';}catch(_){}}</script>
 <div id="offlineBar" data-i18n="net.offline">⚠️ 오프라인 상태입니다 — 네트워크 연결을 확인하세요. (방송은 연결 복구 시 자동 재연결)</div>
 <div id="confirmModal" style="position:fixed;inset:0;z-index:9994;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6)">
   <div style="background:#141a24;border:1px solid #2a3446;border-radius:14px;padding:22px;max-width:340px;text-align:center;font-family:-apple-system,'Malgun Gothic',sans-serif;color:#e6e9ef">
@@ -1610,8 +1633,9 @@ function renderLayers(){
     if(isMulti && L.id!==state.selId) el.style.boxShadow='0 0 0 1px var(--accent) inset';
     el.dataset.lid=L.id;
     el.innerHTML=`<span class="drag-handle" title="드래그로 순서변경">⠿</span><div class="ico">${ICON[L.type]||'▪'}</div>
-      <div class="nm">${L.name}${L.groupId?' 🔗':''}</div>
+      <div class="nm"></div>
       <button class="mini" data-up>▲</button><button class="mini" data-dn>▼</button>`;
+    el.querySelector('.nm').textContent=(L.name||'')+(L.groupId?' 🔗':'');   // XSS 방지: 사용자 레이어명은 textContent 로만
     el.querySelector('.drag-handle').addEventListener('pointerdown', ev=>{ ev.stopPropagation();
       reorderDrag={id:L.id, y0:ev.clientY, el}; el.style.opacity='0.6'; el.style.transition='none';
       try{ ev.target.setPointerCapture(ev.pointerId); }catch(_){} });
@@ -2483,7 +2507,9 @@ function renderSceneTabs(){
   scenes.forEach((sc,i)=>{
     const b=document.createElement('button'); b.className='btn'+(i===activeScene?' primary':'');
     b.style.cssText='padding:4px 8px;font-size:12px;display:flex;align-items:center;gap:6px';
-    if(sc.thumb){ b.innerHTML='<img src="'+sc.thumb+'" style="width:32px;height:18px;border-radius:3px;object-fit:cover" alt="">'; }
+    // XSS 방지: 썸네일은 data:image 만 허용, src 는 프로퍼티로(속성 문자열 주입 차단)
+    if(sc.thumb && /^data:image\//.test(sc.thumb)){ const im=document.createElement('img'); im.src=sc.thumb; im.alt='';
+      im.style.cssText='width:32px;height:18px;border-radius:3px;object-fit:cover'; b.appendChild(im); }
     b.append(document.createTextNode((i+1)+'. '+sc.name));
     b.title='클릭 전환 · 더블클릭 이름변경';
     b.onclick=()=>switchScene(i);
@@ -3001,7 +3027,53 @@ document.getElementById('ytConnect').onclick=()=>oauthConnect('google');
   else if(a==='live'){ setTimeout(()=>{ const w=document.getElementById('whip'); if(w) w.focus(); toast('WHIP 입력 후 방송 시작','ok'); }, 600); }
 })();
 
+/* ── 로그인·결제 게이트 (server-is-truth). file://·localhost 는 개발모드(게이트 없음) ── */
+const GATE_ACTIVE=/^https?:$/.test(location.protocol)&&!/^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+async function checkAccess(){
+  if(!GATE_ACTIVE) return {authed:true,paid:true,dev:true};
+  try{ return await fetch('/api/me',{credentials:'include'}).then(r=>r.json()); }catch(_){ return {authed:false,paid:false,offline:true}; }
+}
+let _gisLoaded=false;
+async function gateSetupLogin(){
+  document.getElementById('gateSpin').style.display='none';
+  const msg=document.getElementById('gateMsg');
+  let cfg={}; try{ cfg=await fetch('/api/auth/config').then(r=>r.json()); }catch(_){ msg.textContent='서버 연결이 필요합니다.'; return; }
+  if(!cfg.googleClientId){ msg.textContent='구글 로그인이 서버에 설정되지 않았습니다.'; return; }
+  window._gsiCb=async(resp)=>{ msg.textContent='로그인 확인 중…';
+    try{ const r=await fetch('/api/auth/google',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({credential:resp.credential})});
+      if(r.ok) runGate(); else msg.textContent='로그인 실패'; }catch(_){ msg.textContent='로그인 오류'; } };
+  const render=()=>{ try{ google.accounts.id.initialize({client_id:cfg.googleClientId,callback:window._gsiCb});
+    google.accounts.id.renderButton(document.getElementById('gBtn'),{theme:'filled_blue',size:'large',type:'standard',shape:'pill'}); }catch(_){ msg.textContent='로그인 위젯 로드 실패'; } };
+  if(_gisLoaded&&window.google){ render(); return; }
+  const s=document.createElement('script'); s.src='https://accounts.google.com/gsi/client'; s.async=true; s.defer=true;
+  s.onload=()=>{ _gisLoaded=true; render(); }; s.onerror=()=>{ msg.textContent='구글 로그인 스크립트 로드 실패(네트워크/CSP)'; };
+  document.head.appendChild(s);
+}
+function gateSetupPay(me){
+  document.getElementById('gateSpin').style.display='none';
+  const payMsg=document.getElementById('payMsg');
+  document.getElementById('dummyBox').style.display=me.dummy?'block':'none';
+  document.querySelectorAll('.planBtn').forEach(b=> b.onclick=async()=>{ payMsg.textContent='결제 시작 중…';
+    try{ const r=await fetch('/api/checkout',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan:b.dataset.plan})}).then(r=>r.json());
+      if(r.invoice_url) location.href=r.invoice_url;
+      else if(r.dummy){ document.getElementById('dummyBox').style.display='block'; document.getElementById('dummyPay').dataset.plan=r.plan; payMsg.textContent='더미 모드 — 아래 버튼으로 활성화하세요.'; }
+      else payMsg.textContent='결제 시작 실패'; }catch(_){ payMsg.textContent='결제 오류'; } });
+  document.getElementById('dummyPay').onclick=async()=>{ const plan=document.getElementById('dummyPay').dataset.plan||'monthly';
+    try{ const r=await fetch('/api/pay/dummy',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan})});
+      if(r.ok) runGate(); else payMsg.textContent='더미 결제 실패'; }catch(_){ payMsg.textContent='오류'; } };
+  document.getElementById('gateLogout').onclick=async()=>{ try{ await fetch('/api/logout',{method:'POST',credentials:'include'}); }catch(_){}; runGate(); };
+}
+async function runGate(){
+  const gate=document.getElementById('gate'), login=document.getElementById('gateLogin'), pay=document.getElementById('gatePay'), spin=document.getElementById('gateSpin');
+  const me=await checkAccess();
+  if(me.paid){ gate.style.display='none'; return; }   // dev 또는 유료 → 앱 해제
+  gate.style.display='flex'; login.style.display='none'; pay.style.display='none'; spin.style.display='block';
+  if(me.authed){ pay.style.display='block'; document.getElementById('gateHi').textContent=(me.email||'')+' 님 — 로그인 완료'; gateSetupPay(me); }
+  else { login.style.display='block'; if(me.offline) document.getElementById('gateMsg').textContent='서버 연결이 필요합니다.'; gateSetupLogin(); }
+}
+
 /* ── init ── */
+runGate();   // 로그인/결제 상태 확인 → 미통과 시 앱 잠금
 if('serviceWorker' in navigator && location.protocol!=='file:'){
   navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
