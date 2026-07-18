@@ -7,7 +7,7 @@
 한 번 송출하면 서버가 여러 플랫폼(YouTube·Facebook·Twitch·자체 사이트 등)으로 동시에 뿌리는(fan-out) 라이브 스튜디오.
 PRISM/OBS의 씬 합성 경험을 **브라우저(PWA)** 로 구현했다. 설치·빌드 없이 폰에서 바로.
 
-![status](https://img.shields.io/badge/parity-83%25%20(292%2F350)-green) ![client](https://img.shields.io/badge/client-PWA%20단일HTML-blue) ![server](https://img.shields.io/badge/relay-MediaMTX%2BFFmpeg-informational) ![deploy](https://img.shields.io/badge/domain-panda--avata.cc-orange)
+![status](https://img.shields.io/badge/parity-84%25%20(294%2F350)-green) ![client](https://img.shields.io/badge/client-PWA%20단일HTML-blue) ![server](https://img.shields.io/badge/relay-MediaMTX%2BFFmpeg-informational) ![deploy](https://img.shields.io/badge/domain-panda--avata.cc-orange)
 
 **라이브: [https://panda-avata.cc/studio.html](https://panda-avata.cc/studio.html)** (배포 후)
 
@@ -44,7 +44,7 @@ PRISM/OBS의 씬 합성 경험을 **브라우저(PWA)** 로 구현했다. 설치
 | `server/` | **릴레이** | MediaMTX + `fanout.sh` + Express API. RTMP/WHIP 수신 → 다중 대상 fan-out. | [server/README.md](server/README.md) |
 | `server/deploy.sh` | **배포** | 서버 원클릭 배포(멱등): 파일배치 + Apache vhost + certbot SSL. | — |
 | `docs/` | **문서** | ARCHITECTURE / DEPLOYMENT / CLOUDFLARE_API / CONTRIBUTING / GLOSSARY. | [docs/](docs/) |
-| `CENTBEAM_PARITY_CHECKLIST.md` | **품질 기준** | PRISM 모바일 동등성 350항목 감사 (현재 ✅292). | — |
+| `CENTBEAM_PARITY_CHECKLIST.md` | **품질 기준** | PRISM 모바일 동등성 350항목 감사 (현재 ✅294). | — |
 | `legacy/` | 범위 밖 | 피벗 이전 도구, 참고 보관. | [legacy/README.md](legacy/README.md) |
 
 > **설계 원칙**: 클라이언트와 서버는 **프로토콜(WHIP/RTMP)로만** 결합. 서버는 어떤 클라이언트(센트빔/OBS/PRISM)든 스트림키만 맞으면 받는다.
@@ -66,7 +66,7 @@ PRISM/OBS의 씬 합성 경험을 **브라우저(PWA)** 로 구현했다. 설치
 마이크/BGM 소스별 볼륨·뮤트·레벨미터 + 마스터 EQ 3밴드·컴프레서·리미터·**덕킹**·노이즈게이트·페이드·파형·클리핑경고·스테레오/모노·모니터링·싱크딜레이·**BGM 플레이리스트**·시스템오디오 캡처·Opus 비트레이트(SDP)·알림음
 
 **송출/인코딩**
-WHIP(WebRTC)·다중대상 fan-out·비트레이트·FPS(30/60)·레이트컨트롤·출력 다운스케일·코덱선호·자동재연결(지수백오프)·**워치독**·연결상태·드롭/재전송 통계·가용대역폭·방송요약·시작 카운트다운·BRB·**방송예약**·음성전용·로컬녹화·스냅샷·**PiP**·대상 on/off·WHIP Bearer 인증·랜덤 스트림경로 · **대상별 재인코딩 프로파일**(비트레이트·해상도·프리셋·키프레임간격·B프레임·**CBR/VBR**)
+WHIP(WebRTC)·다중대상 fan-out·비트레이트·FPS(30/60)·레이트컨트롤·출력 다운스케일·코덱선호·자동재연결(지수백오프)·**워치독**·연결상태·드롭/재전송 통계·가용대역폭·방송요약·시작 카운트다운·BRB·**방송예약**·음성전용·로컬녹화·스냅샷·**PiP**·대상 on/off·WHIP Bearer 인증·랜덤 스트림경로 · **대상별 재인코딩 프로파일**(비트레이트·해상도·프리셋·키프레임간격·B프레임·**CBR/VBR**) · **플랫폼 로그인 연동**(YouTube·Facebook·Twitch OAuth, 스트림키 자동)
 
 **모바일/PWA**
 반응형 셸(하단 탭바·드로어)·태블릿 레이아웃·**Wake Lock**·저전력·방향잠금·스플래시·About·설치유도·풀스크린·몰입모드·라이트/고대비/**색약**/시스템 테마·강조색·햅틱·도움말·온보딩·오프라인 배너·네트워크/배터리 표시·스와이프 삭제·**다국어(한/영 전환·자동감지)**·manifest shortcuts
@@ -74,7 +74,7 @@ WHIP(WebRTC)·다중대상 fan-out·비트레이트·FPS(30/60)·레이트컨트
 **보안**
 CSP·iframe sandbox·WHIP Bearer·랜덤경로·서버 레이트리밋·MediaMTX 인증·보안헤더·npm audit·로그 위생 (근거: RFC 9725 / OWASP / MDN)
 
-> 남은 항목(~16)은 대부분 **외부 인프라 필요**(Facebook/Twitch OAuth 앱, 실시간 시청자수, VOD, 멀티게스트 mesh)이거나 **실기기 검증**(발열/배터리 실측)이라 코드 단독으로는 닫히지 않는다. → [체크리스트](CENTBEAM_PARITY_CHECKLIST.md)
+> 남은 항목(~14)은 대부분 **플랫폼 API/실시간 데이터**(실시간 시청자수, VOD, 멀티게스트 mesh)이거나 **실기기 검증**(발열/배터리 실측)이라 코드 단독으로는 닫히지 않는다. (YouTube·Facebook·Twitch OAuth 연동은 구현 완료 — 서버 시크릿만 넣으면 동작) → [체크리스트](CENTBEAM_PARITY_CHECKLIST.md)
 
 ---
 
@@ -133,7 +133,7 @@ gcloud compute ssh my-site-1 --zone=asia-northeast1-a --command \
 
 ## 7. 완성도 / 개발 규칙
 
-- 완성도: **[CENTBEAM_PARITY_CHECKLIST.md](CENTBEAM_PARITY_CHECKLIST.md)** (350항목, 현재 ✅292 / 83%). 각 항목: 구현 → 헤드리스 Playwright 검증 → 커밋.
+- 완성도: **[CENTBEAM_PARITY_CHECKLIST.md](CENTBEAM_PARITY_CHECKLIST.md)** (350항목, 현재 ✅294 / 84%). 각 항목: 구현 → 헤드리스 Playwright 검증 → 커밋.
 - 브랜치: `claude/*` 피처 브랜치 → PR(draft). 커밋은 파트 접두어(`client:`/`server:`/`docs:`).
 - 상세: [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
 

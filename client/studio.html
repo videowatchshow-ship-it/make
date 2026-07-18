@@ -713,8 +713,12 @@
       <input id="destKey" placeholder="스트림 키">
       <button class="btn" id="destAdd" style="width:100%;margin-top:6px">＋ 대상 추가</button>
     </div>
-    <button class="btn" id="ytConnect" style="width:100%;margin-top:8px">▶ YouTube 연동 (스트림키 자동)</button>
+    <button class="btn" id="ytConnect" style="width:100%;margin-top:8px" data-i18n="oauth.yt">▶ YouTube 연동 (스트림키 자동)</button>
     <div class="note" id="ytStat"></div>
+    <button class="btn" id="twitchConnect" style="width:100%;margin-top:6px" data-i18n="oauth.twitch">🟣 Twitch 연동 (스트림키 자동)</button>
+    <div class="note" id="twitchStat"></div>
+    <button class="btn" id="fbConnect" style="width:100%;margin-top:6px" data-i18n="oauth.fb">🔵 Facebook 연동</button>
+    <div class="note" id="fbStat"></div>
     <div class="note" id="platHint"></div>
 
     <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
@@ -2796,6 +2800,7 @@ const I18N_EN = {
   'btn.install':'⬇ Install','btn.fs':'⛶ Fullscreen','btn.help':'? Help',
   'theme.dark':'🌙 Dark','theme.light':'☀️ Light','theme.hc':'◼ High-contrast','theme.cb':'👁 Color-blind',
   'm.cancel':'Cancel','m.ok':'OK','m.close':'Close','help.title':'⌨ Shortcuts / Help',
+  'oauth.yt':'▶ Connect YouTube (auto stream key)','oauth.twitch':'🟣 Connect Twitch (auto stream key)','oauth.fb':'🔵 Connect Facebook',
   'net.offline':'⚠️ You are offline — check your network. (Broadcast auto-reconnects on recovery)',
   'p.name':'Name','p.w':'Width','p.h':'Height',
   'p.empty':'Select a layer to<br>adjust position · size · rotation.',
@@ -2892,37 +2897,58 @@ function renderNetBatt(){
 function _b64url(buf){ return btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
 async function _pkce(){ const v=_b64url(crypto.getRandomValues(new Uint8Array(32)));
   const c=_b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(v))); return {v,c}; }
-async function youtubeConnect(){
-  let cfg; try{ cfg=await fetch('/api/oauth/config').then(r=>r.json()); }catch(_){ toast('서버(/api) 연결 실패 — 배포 후 사용','warn'); return; }
-  if(!cfg.configured || !cfg.clientId){ toast('서버에 OAuth 미설정(/var/secrets/oauth-nodetube.json)','warn'); return; }
-  const {v,c}=await _pkce(); sessionStorage.setItem('cb.pkce', v);
+/* 다중 플랫폼 OAuth 연동 (294~298/335/337 + 296 Facebook + 297 Twitch)
+   google=YouTube(PKCE), twitch=PKCE, facebook=Auth Code. 서버가 code→token 교환. */
+const OAUTH_STAT={ google:'ytStat', twitch:'twitchStat', facebook:'fbStat' };
+async function oauthConnect(provider){
+  let cfg; try{ cfg=await fetch('/api/oauth/config?provider='+provider).then(r=>r.json()); }
+  catch(_){ toast('서버(/api) 연결 실패 — 배포 후 사용','warn'); return; }
+  if(!cfg.configured || !cfg.clientId){ toast(provider+' OAuth 미설정(서버 시크릿 필요)','warn'); return; }
+  sessionStorage.setItem('cb.oauth.provider', provider);
   const redirectUri=location.origin+location.pathname;
-  const url='https://accounts.google.com/o/oauth2/v2/auth?'+new URLSearchParams({
-    client_id:cfg.clientId, redirect_uri:redirectUri, response_type:'code',
-    scope:'openid email https://www.googleapis.com/auth/youtube.readonly',   // 최소 권한(337)
-    code_challenge:c, code_challenge_method:'S256', access_type:'offline', prompt:'consent', include_granted_scopes:'true' });
+  let url;
+  if(provider==='google'){
+    const {v,c}=await _pkce(); sessionStorage.setItem('cb.pkce', v);
+    url='https://accounts.google.com/o/oauth2/v2/auth?'+new URLSearchParams({
+      client_id:cfg.clientId, redirect_uri:redirectUri, response_type:'code',
+      scope:'openid email https://www.googleapis.com/auth/youtube.readonly',   // 최소 권한(337)
+      code_challenge:c, code_challenge_method:'S256', access_type:'offline', prompt:'consent', include_granted_scopes:'true' });
+  } else if(provider==='twitch'){
+    const {v,c}=await _pkce(); sessionStorage.setItem('cb.pkce', v);
+    url='https://id.twitch.tv/oauth2/authorize?'+new URLSearchParams({
+      client_id:cfg.clientId, redirect_uri:redirectUri, response_type:'code',
+      scope:'user:read:email channel:read:stream_key',
+      code_challenge:c, code_challenge_method:'S256' });
+  } else { // facebook (PKCE 미지원 → 서버 시크릿으로 교환)
+    sessionStorage.removeItem('cb.pkce');
+    url='https://www.facebook.com/v19.0/dialog/oauth?'+new URLSearchParams({
+      client_id:cfg.clientId, redirect_uri:redirectUri, response_type:'code', scope:'public_profile,email' });
+  }
   location.href=url;
 }
 (async function handleOAuthReturn(){
   const q=new URLSearchParams(location.search); const code=q.get('code');
   if(!code) return;
-  const v=sessionStorage.getItem('cb.pkce'); sessionStorage.removeItem('cb.pkce');
+  const provider=sessionStorage.getItem('cb.oauth.provider')||'google';
+  const v=sessionStorage.getItem('cb.pkce'); sessionStorage.removeItem('cb.pkce'); sessionStorage.removeItem('cb.oauth.provider');
   history.replaceState(null,'',location.pathname);   // URL에서 code 제거
-  const st=document.getElementById('ytStat'); if(st) st.textContent='YouTube 인증 처리 중…';
+  const st=document.getElementById(OAUTH_STAT[provider]||'ytStat'); if(st) st.textContent=provider+' 인증 처리 중…';
   try{
     const r=await fetch('/api/oauth/exchange',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({code, redirectUri:location.origin+location.pathname, codeVerifier:v})}).then(r=>r.json());
-    if(r.ok){ toast('YouTube 연동됨: '+(r.name||r.email||''),'ok');
-      if(st) st.textContent='✅ 연동: '+(r.email||'')+(r.streamKey?' · 스트림키 수신':' · 스트림키 없음(라이브 생성 필요)');
-      if(r.streamKey && typeof state!=='undefined'){   // YouTube 대상에 스트림키 자동 채움
-        const yt=state.destinations.find(d=>/youtube/i.test(d.platform||d.name||''));
-        if(yt){ yt.streamKey=r.streamKey; saveDest(); renderDest(); }
-        else { document.getElementById('destKey').value=r.streamKey; toast('스트림키를 대상에 채웠습니다','ok'); }
+      body:JSON.stringify({code, redirectUri:location.origin+location.pathname, codeVerifier:v, provider})}).then(r=>r.json());
+    if(r.ok){ toast(provider+' 연동됨: '+(r.name||r.email||''),'ok');
+      if(st) st.textContent='✅ 연동: '+(r.email||r.name||'')+(r.streamKey?' · 스트림키 수신':'');
+      if(r.streamKey && typeof state!=='undefined'){   // 해당 플랫폼 대상에 스트림키 자동 채움
+        const d=state.destinations.find(x=>new RegExp(provider,'i').test(x.platform||x.name||''));
+        if(d){ d.streamKey=r.streamKey; saveDest(); renderDest(); }
+        else { const dk=document.getElementById('destKey'); if(dk) dk.value=r.streamKey; toast('스트림키를 대상에 채웠습니다','ok'); }
       }
     } else { toast('연동 실패: '+(r.error||''),'err'); if(st) st.textContent='❌ '+(r.detail||r.error||'실패'); }
   }catch(e){ toast('연동 오류(서버 필요)','err'); if(st) st.textContent='❌ 서버 /api/oauth/exchange 필요'; }
 })();
-document.getElementById('ytConnect').onclick=youtubeConnect;
+document.getElementById('ytConnect').onclick=()=>oauthConnect('google');
+{ const _t=document.getElementById('twitchConnect'); if(_t) _t.onclick=()=>oauthConnect('twitch'); }
+{ const _f=document.getElementById('fbConnect'); if(_f) _f.onclick=()=>oauthConnect('facebook'); }
 /* 첫 실행 온보딩 팁 */
 (function onboarding(){
   try{ if(localStorage.getItem('centbeam.onboarded')) return;

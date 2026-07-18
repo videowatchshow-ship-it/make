@@ -374,8 +374,8 @@
 |293|MediaMTX publishUser/pass|✅|authInternalUsers publish 인증|
 |294|YouTube OAuth 로그인|✅|Auth Code+PKCE 리다이렉트 로그인|
 |295|YouTube API 스트림키 발급|✅|liveStreams cdn.ingestionInfo.streamName(서버)|
-|296|Facebook 로그인/키|❌|없음|
-|297|Twitch 연동|❌|없음|
+|296|Facebook 로그인/키|✅|Auth Code 리다이렉트 로그인 + 서버 code→token 교환(Graph /me)|
+|297|Twitch 연동|✅|Auth Code+PKCE 로그인 + Helix /users·/streams/key 로 스트림키 자동(서버)|
 |298|자격증명 안전 저장|✅|refresh_token 서버 0600 파일·프론트 미전달·secret 비커밋|
 |299|랜덤 긴 스트림 경로(보안)|✅|crypto 랜덤 24자 경로 생성|
 |300|CORS/CSP 검토|⚠️|미정리|
@@ -446,9 +446,9 @@
 
 | 상태 | 개수 | 비율 |
 |--|--|--|
-| ✅ 통과 | 292 | 83% |
+| ✅ 통과 | 294 | 84% |
 | ⚠️ 부분 | 40 | 11% |
-| ❌ 미구현 | 16 | 5% |
+| ❌ 미구현 | 14 | 4% |
 | ➖ 해당없음 | 2 | 1% |
 | **합계** | **350** | 100% |
 
