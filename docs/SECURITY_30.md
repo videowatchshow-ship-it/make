@@ -90,9 +90,10 @@
 - **20·21·30(부분)** — requestTimeout/headersTimeout(slowloris), `x-powered-by` 제거, `:3000` loopback 바인딩.
 - **26·27** — NOWPayments IPN HMAC-SHA512 서명검증 + `finished`만 승인 + txid 멱등.
 - **19(부분)** — 대상 20개 쿼터.
+- **2·3(완전)** — **MediaMTX 외부 HTTP 인증**(authMethod http → `/api/mediamtx/auth`): 시청·송출 모두 세션 발급 토큰 필요(경로 스코프). 외부 read 차단(스트림 비공개), 내부 fanout read 만 IP 허용. **감사 CRITICAL #2 해소.** (활성화: MediaMTX 재시작)
 
 **⬜ 남은 항목 (후속):**
-- **2·3(완전)·19** — MediaMTX read/publish 를 세션 연동 인증으로(현재 read 공개 = 감사 CRITICAL #2). 사용자별 WHIP publish 토큰·동시세션 캡. ← 다음 최우선.
+- **19(완전)** — WHIP 동시 세션 캡(사용자별 활성 publish 상한).
 - **4** — 플랫폼 연동(YouTube/Twitch/FB) OAuth `state` 추가.
 - **6·8** — 리프레시 로테이션, CSRF double-submit 토큰(현재 SameSite=Lax 로 1차 방어).
 - **18·24·30** — 사용자별 레이트리밋, 봇/허니팟, fail2ban·방화벽 허용목록 스크립트화.
