@@ -75,3 +75,25 @@
 
 ### 이미 양호(유지)
 `express.json 64kb`, 토큰파일 `0o600`, `trust proxy loopback`, fanout 로그 키 미기록, Permissions-Policy(camera/mic/display-capture=self), X-Frame-Options.
+
+---
+
+## 구현 현황 (2026-07, 인증·결제 도입분)
+
+**✅ 구현 완료 (헤드리스/스모크 검증):**
+- **1·2·25** — Google ID토큰 서버검증(google-auth-library) + HttpOnly/Secure/SameSite 세션쿠키 + `requireLogin`/`requirePaid` 게이트. 클라이언트 'paid' 불신, 서버가 진실(`/api/me`).
+- **3(부분)·16** — `/api/destinations` 아바타 소유권(BOLA 차단, 남의 대상 접근 403) + `^[a-z0-9_-]{1,40}$` 경로검증.
+- **5·7** — `__Host-cb_sess` HttpOnly·Secure·SameSite=Lax 서명쿠키 + `/api/logout` 서버 폐기.
+- **15·17** — rtmpUrl 스킴/내부IP allowlist(SSRF·파일싱크 차단), streamKey 슬래시 금지, 스트림키 평문 반환→마스킹, 임포트 씬 XSS(레이어명 textContent·썸네일 data:image만).
+- **9·11·12·13·23** — HSTS preload·CSP frame-ancestors·COOP/CORP·Permissions-Policy 확장·robots.txt/X-Robots-Tag.
+- **10** — CSP `connect-src *` → `'self' https:` 축소(구글 로그인 허용).
+- **20·21·30(부분)** — requestTimeout/headersTimeout(slowloris), `x-powered-by` 제거, `:3000` loopback 바인딩.
+- **26·27** — NOWPayments IPN HMAC-SHA512 서명검증 + `finished`만 승인 + txid 멱등.
+- **19(부분)** — 대상 20개 쿼터.
+
+**⬜ 남은 항목 (후속):**
+- **2·3(완전)·19** — MediaMTX read/publish 를 세션 연동 인증으로(현재 read 공개 = 감사 CRITICAL #2). 사용자별 WHIP publish 토큰·동시세션 캡. ← 다음 최우선.
+- **4** — 플랫폼 연동(YouTube/Twitch/FB) OAuth `state` 추가.
+- **6·8** — 리프레시 로테이션, CSRF double-submit 토큰(현재 SameSite=Lax 로 1차 방어).
+- **18·24·30** — 사용자별 레이트리밋, 봇/허니팟, fail2ban·방화벽 허용목록 스크립트화.
+- **14** — fanout `execFile` list-form(현재 인젝션은 상류 경로검증+쿼팅+입력 allowlist 로 방어, 심층방어로 전환 권장).
