@@ -15,24 +15,29 @@
 <meta name="apple-mobile-web-app-title" content="센트빔">
 <link rel="apple-touch-icon" href="icon-192.png">
 <style>
+  /* 기본(다크) — 방송 툴 정석 다크 위에 생동감 있는 컬러 강조. --grad = 주요 그라데이션 */
   :root{
-    --bg:#0d0f14; --panel:#161a22; --panel2:#1e2430; --line:#2a3141;
-    --txt:#e6e9ef; --muted:#8b93a4; --accent:#0066ff; --accent2:#00d9ff;
-    --danger:#ff5c5c; --ok:#00c48c;
+    --bg:#0a0d18; --panel:#141a2a; --panel2:#1d2539; --line:#2c3757;
+    --txt:#eef1f9; --muted:#9aa4c4; --accent:#5b6bff; --accent2:#25d6ff; --accent3:#b06bff;
+    --danger:#ff4d6d; --ok:#1fdd9a;
+    --grad:linear-gradient(135deg,var(--accent),var(--accent2));
+    --grad3:linear-gradient(135deg,var(--accent3),var(--accent));
+    --glow:0 0 0 1px color-mix(in srgb,var(--accent2) 55%,transparent), 0 6px 22px -8px color-mix(in srgb,var(--accent) 70%,transparent);
   }
   :root[data-theme="light"]{
     --bg:#eef1f6; --panel:#ffffff; --panel2:#f2f4f8; --line:#d3d9e3;
-    --txt:#1a1f2b; --muted:#5a6475; --danger:#d92c2c; --ok:#0a9c6e;
+    --txt:#1a1f2b; --muted:#5a6475; --accent:#4657ff; --accent2:#0aa5d6; --accent3:#8a4dff;
+    --danger:#d92c2c; --ok:#0a9c6e;
   }
   :root[data-theme="hc"]{
     --bg:#000000; --panel:#000000; --panel2:#0a0a0a; --line:#ffffff;
-    --txt:#ffffff; --muted:#e0e0e0; --accent:#0a5cff; --accent2:#00e5ff;
+    --txt:#ffffff; --muted:#e0e0e0; --accent:#0a5cff; --accent2:#00e5ff; --accent3:#00e5ff;
     --danger:#ff2b2b; --ok:#00ff9c;
   }
-  /* 색약 대응(적록색맹 안전 팔레트: 빨강↔초록 대신 파랑↔주황) */
+  /* 색약 대응(적록색맹 안전 팔레트: 빨강↔초록 대신 파랑↔주황) — 그라데이션도 파랑 계열 유지 */
   :root[data-theme="cb"]{
-    --bg:#0d0f14; --panel:#161a22; --panel2:#1e2430; --line:#2a3141;
-    --txt:#e6e9ef; --muted:#8b93a4; --accent:#0072e5; --accent2:#33b4ff;
+    --bg:#0a0d18; --panel:#141a2a; --panel2:#1d2539; --line:#2c3757;
+    --txt:#eef1f9; --muted:#9aa4c4; --accent:#0072e5; --accent2:#33b4ff; --accent3:#66c8ff;
     --danger:#e8820e; --ok:#0072e5;
   }
   *{box-sizing:border-box}
@@ -61,15 +66,19 @@
   .side{width:280px;flex:0 0 280px;background:var(--panel);border-right:1px solid var(--line);
     display:flex;flex-direction:column}
   .brand{display:flex;align-items:center;gap:9px;padding:14px 16px 6px}
-  .brand-mark{font-size:20px;color:var(--accent2);line-height:1}
-  .brand-name{font-size:16px;font-weight:800;letter-spacing:.01em;color:#fff;display:flex;align-items:baseline;gap:6px}
-  .brand-name b{font-size:10px;font-weight:700;letter-spacing:.14em;color:var(--muted)}
+  .brand-mark{font-size:22px;line-height:1;background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+    filter:drop-shadow(0 0 8px color-mix(in srgb,var(--accent2) 60%,transparent))}
+  .brand-name{font-size:16px;font-weight:800;letter-spacing:.01em;display:flex;align-items:baseline;gap:6px;
+    background:var(--grad3);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:var(--accent2)}
+  .brand-name b{font-size:10px;font-weight:700;letter-spacing:.14em;color:var(--muted);-webkit-text-fill-color:var(--muted)}
   .side h2{font-size:13px;letter-spacing:.04em;color:var(--muted);text-transform:uppercase;
     margin:0;padding:10px 16px 8px}
   .addbar{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 12px 12px}
   .addbar button{background:var(--panel2);border:1px solid var(--line);color:var(--txt);
     padding:10px 8px;border-radius:10px;font-size:13px;cursor:pointer;transition:.12s}
-  .addbar button:hover{border-color:var(--accent);color:#fff}
+  .addbar button:hover{border-color:transparent;color:#fff;
+    background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 32%,var(--panel2)),color-mix(in srgb,var(--accent2) 24%,var(--panel2)));
+    box-shadow:0 0 0 1px color-mix(in srgb,var(--accent2) 60%,transparent) inset}
   .layers{flex:1;overflow:auto;padding:4px 8px 12px}
   .layer{display:flex;align-items:center;gap:8px;background:var(--panel2);
     border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:6px 4px;cursor:pointer}
@@ -85,14 +94,15 @@
     background:var(--panel)}
   .seg{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:10px;overflow:hidden}
   .seg button{background:transparent;border:none;color:var(--muted);padding:8px 14px;cursor:pointer;font-size:13px}
-  .seg button.on{background:var(--accent);color:#fff}
+  .seg button.on{background:var(--grad);color:#fff}
   .spacer{flex:1}
   .live-dot{width:8px;height:8px;border-radius:50%;background:#555}
   .live-dot.on{background:var(--danger);box-shadow:0 0 8px var(--danger);animation:pulse 1.2s infinite}
   @keyframes pulse{50%{opacity:.4}}
   .btn{border:1px solid var(--line);background:var(--panel2);color:var(--txt);padding:9px 16px;
     border-radius:10px;font-size:13px;cursor:pointer}
-  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .btn.primary{background:var(--grad);border:none;color:#fff;font-weight:700;box-shadow:var(--glow)}
+  .btn.primary:hover{filter:brightness(1.08)}
   .btn.stop{background:var(--danger);border-color:var(--danger);color:#fff}
   .canvas-wrap{flex:1;display:grid;place-items:center;overflow:hidden;padding:18px;
     background:radial-gradient(circle at 50% 40%,#12151d,#0a0c11)}
@@ -2806,15 +2816,11 @@ function applyTheme(t){ if(t==='dark') document.documentElement.removeAttribute(
 function applyAccent(c){ document.documentElement.style.setProperty('--accent2',c); document.documentElement.style.setProperty('--accent',c); }
 (function initTheme(){
   const stored=localStorage.getItem('centbeam.theme');
-  // 저장값 없으면 시스템 테마 연동(prefers-color-scheme)
-  const sysLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
-  const t = stored || (sysLight?'light':'dark');
+  // 방송 툴 정석: 기본은 다크. 시스템이 라이트여도 다크 유지, 사용자가 명시적으로 고른 테마만 존중.
+  const t = stored || 'dark';
   const a=localStorage.getItem('centbeam.accent');
   applyTheme(t); document.getElementById('themeSel').value=t;
   if(a){ applyAccent(a); document.getElementById('accentPick').value=a; }
-  // 사용자가 명시 설정 전까지 시스템 변경 따라감
-  if(!stored && window.matchMedia){ window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', ev=>{
-    if(localStorage.getItem('centbeam.theme')) return; const nt=ev.matches?'light':'dark'; applyTheme(nt); document.getElementById('themeSel').value=nt; }); }
 })();
 document.getElementById('themeSel').onchange=e=>{ applyTheme(e.target.value); localStorage.setItem('centbeam.theme',e.target.value); };
 document.getElementById('accentPick').oninput=e=>{ applyAccent(e.target.value); localStorage.setItem('centbeam.accent',e.target.value); };
