@@ -58,8 +58,8 @@ cat > /etc/apache2/sites-available/panda-avata.conf <<EOF
   ProxyPassReverse /whip/ http://127.0.0.1:8889/
   ProxyPass        /hls/  http://127.0.0.1:8888/
   ProxyPassReverse /hls/  http://127.0.0.1:8888/
-  ProxyPass        /api/  http://127.0.0.1:3000/
-  ProxyPassReverse /api/  http://127.0.0.1:3000/
+  ProxyPass        /api/  http://127.0.0.1:3000/api/
+  ProxyPassReverse /api/  http://127.0.0.1:3000/api/
 </VirtualHost>
 EOF
 a2ensite panda-avata >/dev/null 2>&1 || true
