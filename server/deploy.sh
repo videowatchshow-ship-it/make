@@ -36,7 +36,9 @@ fi
 chown -R www-data:www-data "$WEBROOT"
 test -f "$WEBROOT/studio.html" && echo "  studio.html 배치 OK ($(wc -l < "$WEBROOT/studio.html") 줄)"
 
-echo "== [3/7] Apache vhost 작성 =="
+echo "== [3/7] Apache 모듈 + 인증서(certonly) =="
+a2enmod ssl proxy proxy_http headers rewrite >/dev/null 2>&1 || true
+# (a) ACME HTTP-01(webroot) 용 최소 :80 vhost 먼저
 cat > /etc/apache2/sites-available/panda-avata.conf <<EOF
 <VirtualHost *:80>
   ServerName $DOMAIN
@@ -46,19 +48,54 @@ cat > /etc/apache2/sites-available/panda-avata.conf <<EOF
     Require all granted
     Options -Indexes
   </Directory>
+</VirtualHost>
+EOF
+a2ensite panda-avata >/dev/null 2>&1 || true
+# certbot --apache 가 예전에 만든 낡은 SSL vhost(-le-ssl.conf, 옛 ProxyPass 보유) 폐기 → deploy 가 직접 관리
+a2dissite panda-avata-le-ssl >/dev/null 2>&1 || true
+rm -f /etc/apache2/sites-enabled/panda-avata-le-ssl.conf
+apachectl configtest && systemctl reload apache2
+if ! command -v certbot >/dev/null 2>&1; then apt-get update -qq && apt-get install -y -qq certbot; fi
+# --apache 설치기 대신 certonly: vhost 는 우리가 소유(HTTPS 설정 드리프트 방지)
+certbot certonly --webroot -w "$WEBROOT" -d "$DOMAIN" -d "www.$DOMAIN" \
+  --non-interactive --agree-tos -m "$EMAIL" --keep-until-expiring \
+  || echo "  ⚠️ certbot 실패: DNS A레코드(@,www→$IP) 전파 확인 후 재실행."
 
+echo "== [4/7] vhost 작성 (:80→HTTPS 리다이렉트 + :443 프록시/헤더/SSL — HTTP·HTTPS 양쪽 deploy 소유) =="
+CERT="/etc/letsencrypt/live/$DOMAIN"
+if [ -f "$CERT/fullchain.pem" ]; then
+  SSLINC=""; [ -f /etc/letsencrypt/options-ssl-apache.conf ] && SSLINC="Include /etc/letsencrypt/options-ssl-apache.conf"
+  cat > /etc/apache2/sites-available/panda-avata.conf <<EOF
+<VirtualHost *:80>
+  ServerName $DOMAIN
+  ServerAlias www.$DOMAIN
+  DocumentRoot $WEBROOT
+  RewriteEngine On
+  RewriteRule ^/\.well-known/ - [L]
+  RewriteCond %{HTTPS} off
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+</VirtualHost>
+<VirtualHost *:443>
+  ServerName $DOMAIN
+  ServerAlias www.$DOMAIN
+  DocumentRoot $WEBROOT
+  <Directory $WEBROOT>
+    Require all granted
+    Options -Indexes
+  </Directory>
+  SSLEngine on
+  SSLCertificateFile $CERT/fullchain.pem
+  SSLCertificateKeyFile $CERT/privkey.pem
+  $SSLINC
   Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
   Header always set X-Content-Type-Options "nosniff"
   Header always set X-Frame-Options "SAMEORIGIN"
   Header always set Content-Security-Policy "frame-ancestors 'self'"
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
   Header always set Permissions-Policy "camera=(self), microphone=(self), display-capture=(self), geolocation=(), payment=()"
-  # 크로스오리진 격리 (XS-Leaks/Spectre). 구글 로그인 팝업 허용 위해 COOP 는 allow-popups
   Header always set Cross-Origin-Opener-Policy "same-origin-allow-popups"
   Header always set Cross-Origin-Resource-Policy "same-origin"
-  # 안티 크롤링/색인 (RFC 9309 보완)
   Header always set X-Robots-Tag "noindex, nofollow"
-
   ProxyPreserveHost On
   ProxyPass        /whip/ http://127.0.0.1:8889/
   ProxyPassReverse /whip/ http://127.0.0.1:8889/
@@ -68,18 +105,13 @@ cat > /etc/apache2/sites-available/panda-avata.conf <<EOF
   ProxyPassReverse /api/  http://127.0.0.1:3000/api/
 </VirtualHost>
 EOF
+else
+  echo "  ⚠️ 인증서 없음 → HTTP-only 유지(전파 후 재실행)"
+fi
 a2ensite panda-avata >/dev/null 2>&1 || true
 apachectl configtest
 systemctl reload apache2
 echo "  vhost 활성 + reload OK"
-
-echo "== [4/7] SSL 발급 (certbot) =="
-if ! command -v certbot >/dev/null 2>&1; then
-  apt-get update -qq && apt-get install -y -qq certbot python3-certbot-apache
-fi
-certbot --apache -d "$DOMAIN" -d "www.$DOMAIN" \
-  --non-interactive --agree-tos -m "$EMAIL" --redirect --keep-until-expiring || {
-    echo "  ⚠️ certbot 실패: DNS A레코드(@,www→$IP)가 아직 전파 안 됐을 수 있음. dig +short $DOMAIN 확인 후 재실행."; }
 
 echo "== [5/7] 릴레이 API (Node server.js → :3000) 기동 =="
 API_DIR="/opt/centbeam/server"

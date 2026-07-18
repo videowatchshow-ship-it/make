@@ -103,6 +103,21 @@ function requirePaid(req, res, next) {
   next();
 }
 
+// 초기 프로모: 처음 N명(구글 sub 기준)만 1개월 무료 풀사용. N번째 이후는 결제 필요.
+// 데스크톱/모바일 구분 없음 — 같은 구글 계정이면 한 슬롯. 슬롯은 1회성(만료 후 결제).
+const FOUNDERS = path.join(DATA, 'founders.json');
+const FREE_SLOTS = Number(process.env.CB_FREE_SLOTS || 5);
+const loadFounders = () => { try { const o = JSON.parse(fs.readFileSync(FOUNDERS, 'utf8')); o.list = o.list || []; return o; } catch (_) { return { list: [] }; } };
+const saveFounders = (o) => { try { fs.mkdirSync(DATA, { recursive: true }); fs.writeFileSync(FOUNDERS, JSON.stringify(o, null, 2), { mode: 0o600 }); } catch (_) {} };
+function maybeFounderGrant(sub) {
+  const f = loadFounders();
+  if (f.list.includes(sub)) return { founder: true, already: true };   // 이미 슬롯 사용(무료 부여됨)
+  if (f.list.length >= FREE_SLOTS) return { founder: false, full: true }; // 슬롯 마감 → 결제 필요
+  f.list.push(sub); saveFounders(f);
+  grant(sub, 'monthly');                                                 // 1개월 무료 풀사용
+  return { founder: true, slot: f.list.length };
+}
+
 // 멱등 처리된 결제(txid/payment_id) 기록 — 리플레이 방지
 const PAID = path.join(DATA, 'payments.json');
 const loadPaid = () => { try { return JSON.parse(fs.readFileSync(PAID, 'utf8')); } catch (_) { return {}; } };
@@ -142,7 +157,8 @@ function mountAuth(app) {
       const p = ticket.getPayload();  // 서명/iss/aud/exp 는 라이브러리가 검증
       if (!p || !p.email_verified) return res.status(401).json({ error: 'email_not_verified' });
       setSessionCookie(res, makeSession({ sub: p.sub, email: p.email, name: p.name }));
-      res.json({ ok: true, email: p.email, name: p.name });
+      const fg = maybeFounderGrant(p.sub);   // 처음 5명 1개월 무료 자동 부여
+      res.json({ ok: true, email: p.email, name: p.name, founder: fg.founder });
     } catch (e) { res.status(401).json({ error: 'invalid_token' }); }
   });
 
@@ -205,4 +221,4 @@ function mountAuth(app) {
   return { requireLogin, requirePaid, sessionFromReq, isPaid };
 }
 
-module.exports = { mountAuth, requireLogin, requirePaid, sessionFromReq, isPaid, grant, verifySession, makeSession, validSig, sortObject, PLANS };
+module.exports = { mountAuth, requireLogin, requirePaid, sessionFromReq, isPaid, grant, verifySession, makeSession, validSig, sortObject, maybeFounderGrant, PLANS, FREE_SLOTS };
