@@ -7,7 +7,7 @@
 한 번 송출하면 서버가 여러 플랫폼(YouTube·Facebook·Twitch·자체 사이트 등)으로 동시에 뿌리는(fan-out) 라이브 스튜디오.
 PRISM/OBS의 씬 합성 경험을 **브라우저(PWA)** 로 구현했다. 설치·빌드 없이 폰에서 바로.
 
-![status](https://img.shields.io/badge/parity-84%25%20(294%2F350)-green) ![client](https://img.shields.io/badge/client-PWA%20단일HTML-blue) ![server](https://img.shields.io/badge/relay-MediaMTX%2BFFmpeg-informational) ![deploy](https://img.shields.io/badge/domain-panda--avata.cc-orange)
+![status](https://img.shields.io/badge/parity-86%25%20(343%2F400)-green) ![client](https://img.shields.io/badge/client-PWA%20단일HTML-blue) ![server](https://img.shields.io/badge/relay-MediaMTX%2BFFmpeg-informational) ![deploy](https://img.shields.io/badge/domain-panda--avata.cc-orange)
 
 **라이브: [https://panda-avata.cc/studio.html](https://panda-avata.cc/studio.html)** (배포 후)
 
@@ -44,7 +44,7 @@ PRISM/OBS의 씬 합성 경험을 **브라우저(PWA)** 로 구현했다. 설치
 | `server/` | **릴레이** | MediaMTX + `fanout.sh` + Express API. RTMP/WHIP 수신 → 다중 대상 fan-out. | [server/README.md](server/README.md) |
 | `server/deploy.sh` | **배포** | 서버 원클릭 배포(멱등): 파일배치 + Apache vhost + certbot SSL. | — |
 | `docs/` | **문서** | ARCHITECTURE / DEPLOYMENT / CLOUDFLARE_API / CONTRIBUTING / GLOSSARY. | [docs/](docs/) |
-| `CENTBEAM_PARITY_CHECKLIST.md` | **품질 기준** | PRISM 모바일 동등성 350항목 감사 (현재 ✅294). | — |
+| `CENTBEAM_PARITY_CHECKLIST.md` | **품질 기준** | PRISM 모바일 동등성 400항목 감사 (현재 ✅343). | — |
 | `legacy/` | 범위 밖 | 피벗 이전 도구, 참고 보관. | [legacy/README.md](legacy/README.md) |
 
 > **설계 원칙**: 클라이언트와 서버는 **프로토콜(WHIP/RTMP)로만** 결합. 서버는 어떤 클라이언트(센트빔/OBS/PRISM)든 스트림키만 맞으면 받는다.
@@ -124,7 +124,7 @@ gcloud compute ssh my-site-1 --zone=asia-northeast1-a --command \
 | 파트 | 스택 |
 |--|--|
 | 클라이언트 | Vanilla JS + Canvas 2D + WebRTC(WHIP) + WebAudio + `getUserMedia`/`getDisplayMedia`. 의존성 0, 단일 HTML, PWA. |
-| 서버 | Node 22(LTS) + Express 5.2.1, MediaMTX v1.19.2, FFmpeg, PM2 |
+| 서버 | Node 22(LTS) + Express 5.2.1, MediaMTX v1.19.2, FFmpeg. 릴레이 API는 systemd 서비스(`centbeam-api`). |
 | 배포 | 서버 34.104.233.35(Apache) + Cloudflare DNS. `panda-avata.cc` Apache vhost + certbot HTTPS. 원클릭 `deploy.sh`. |
 
 버전 근거(2026-07 실측)는 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -133,7 +133,7 @@ gcloud compute ssh my-site-1 --zone=asia-northeast1-a --command \
 
 ## 7. 완성도 / 개발 규칙
 
-- 완성도: **[CENTBEAM_PARITY_CHECKLIST.md](CENTBEAM_PARITY_CHECKLIST.md)** (350항목, 현재 ✅294 / 84%). 각 항목: 구현 → 헤드리스 Playwright 검증 → 커밋.
+- 완성도: **[CENTBEAM_PARITY_CHECKLIST.md](CENTBEAM_PARITY_CHECKLIST.md)** (400항목, 현재 ✅343 / 86%). 각 항목: 구현 → 헤드리스 Playwright 검증 → 커밋.
 - 브랜치: `claude/*` 피처 브랜치 → PR(draft). 커밋은 파트 접두어(`client:`/`server:`/`docs:`).
 - 상세: [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
 

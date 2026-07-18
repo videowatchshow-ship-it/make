@@ -1,4 +1,4 @@
-# 센트빔 CENTBEAM — PRISM 모바일 동등성 체크리스트 (350)
+# 센트빔 CENTBEAM — PRISM 모바일 동등성 체크리스트 (400)
 
 > 구성: 코어 300 (A–Q) + 모바일 UI/UX 심화 30 (S) + 해킹·보안 20 (R, 공식 표준 기반)
 
@@ -442,19 +442,96 @@
 
 ---
 
+## 감사 검증 (351~400) — 공식문서/OBS·PRISM 대조, 대기업식 QA
+
+> 4개 병렬 감사팀이 **MDN·W3C WebRTC·RFC 9725(WHIP)·RFC 7587(Opus)·RFC 4566(SDP)·FFmpeg·MediaMTX** 공식 문서와 코드를 1:1 대조. 각 항목 헤드리스/구문 검증. (신규)=이번 감사에서 수정.
+
+### WHIP · RFC 9725
+|번호|항목|상태|근거|
+|--|--|--|--|
+|351|POST Content-Type application/sdp|✅|RFC 9725 §4.1|
+|352|201 응답 처리|✅|res.ok(=2xx) 허용, MediaMTX 201|
+|353|201 Location 리소스 URL 캡처|✅|신규: `whipResource=new URL(loc,url)`|
+|354|종료 시 DELETE|✅|신규: stopLive→whipDelete (RFC 9725 §4.2)|
+|355|재연결 전 이전 리소스 DELETE(세션 누수 방지)|✅|신규: whipPublish 진입 시 whipDelete|
+|356|Authorization Bearer(user:pass)|✅|MediaMTX internal auth 호환|
+
+### Opus/오디오 · RFC 7587 / RFC 4566
+|번호|항목|상태|근거|
+|--|--|--|--|
+|357|Opus 48kHz payload 탐지|✅|rtpmap opus/48000 정규식|
+|358|stereo=1 (수신 허용)|✅|fmtp 주입|
+|359|sprop-stereo=1 (스테레오 실제 송출)|✅|신규: RFC 7587 §7.1 — 없으면 모노 muxing|
+|360|maxaveragebitrate 주입|✅|fmtp|
+|361|useinbandfec=1 (손실복원)|✅|신규|
+|362|fmtp 재조립 RFC 4566 적합(공백 구분자 보존)|✅|신규: 토큰화 방식, 3케이스 검증|
+|363|AudioContext 48kHz 고정|✅|신규: 불필요 재샘플 제거|
+|364|마이크 echoCancellation OFF|✅|신규: 펌핑 방지 (OBS 기본)|
+|365|마이크 noiseSuppression OFF|✅|신규|
+|366|마이크 autoGainControl OFF|✅|신규|
+|367|마이크 channelCount 2(스테레오)|✅|신규|
+|368|노이즈 게이트 게인-이전 검출(영구닫힘 방지)|✅|신규: detAn 별도 탭|
+|369|장치 전환 시 게이트 검출기 재연결|✅|신규|
+|370|믹싱된 버스 송출(생마이크 아님)|✅|mixer.dest.stream addTrack 검증|
+
+### 비트레이트/인코딩 · W3C WebRTC / FFmpeg
+|번호|항목|상태|근거|
+|--|--|--|--|
+|371|비디오 maxBitrate bps 단위|✅|kbps*1000|
+|372|scaleResolutionDownBy ≥1|✅|1/1.5/2|
+|373|maxFramerate 적용|✅|encodings + captureStream(fps)|
+|374|degradationPreference 유효값|✅|라벨 '화질 저하 우선순위'로 정정|
+|375|오디오 송신자 maxBitrate 적용|✅|신규: 비트레이트 선택기 실효화|
+|376|setParameters 실패 토스트|✅|신규|
+|377|CBR nal-hrd=cbr:force-cfr=1|✅|OBS 동등 recipe|
+|378|키프레임 force_key_frames expr 문법|✅|초 단위|
+|379|키프레임 -g 상한 + sc_threshold 0(고정 GOP)|✅|신규: keyint 250 제한 회피|
+|380|B-프레임 -bf|✅|서버 0~3 검증|
+|381|preset 유효|✅|서버 enum 검증|
+|382|rateControl-무-bitrate CRF23 폴백 방지|✅|신규: 기본 비트레이트 강제|
+|383|라이브 입력 -re 제거|✅|신규: FFmpeg 공식 경고|
+|384|-c copy 패스스루(H.264/AAC 전제)|✅|무손실|
+|385|코덱 H.264 고정(RTMP/FLV 호환)|✅|신규|
+|386|비H264 선택 출력깨짐 차단|✅|신규|
+
+### 캔버스/CORS · WHATWG HTML
+|번호|항목|상태|근거|
+|--|--|--|--|
+|387|로컬 이미지 data: URL(오염 없음)|✅|FileReader|
+|388|임포트 이미지 crossOrigin+onerror|✅|신규: 오염 대신 실패|
+|389|captureStream tainted 방어 try/catch|✅|신규: 방송 중단 대신 명시 오류|
+|390|웹소스 '방송 미표시' 정직 라벨|✅|신규: 캔버스 고지|
+|391|웹소스 임의 페이지 합성|➖|브라우저 한계(OBS는 CEF), 화면공유로 대체|
+|392|CSP img-src 'self' data: blob:(원격 차단)|✅|다층 방어|
+
+### 보안/인프라/버전 · OWASP / 공식 릴리스
+|번호|항목|상태|근거|
+|--|--|--|--|
+|393|trust proxy(프록시 뒤 실 IP 레이트리밋)|✅|신규|
+|394|X-Frame-Options SAMEORIGIN|✅|신규: 정적 페이지 클릭재킹|
+|395|MediaMTX auth env 오버라이드(치환버그 제거)|✅|신규: ${} 리터럴 버그|
+|396|refresh_token 0600 서버 보관|✅|프론트 미전달|
+|397|HSTS/nosniff/Referrer/Permissions-Policy|✅|vhost|
+|398|릴레이 API systemd 상시기동|✅|신규: /api 503 해결|
+|399|의존성 최신(Express 5.2.1·MediaMTX 1.19.2·playwright-core 1.61.1)|✅|2026-07 실측|
+|400|Node 22 LTS + fetch 내장|✅|NodeSource|
+
+---
+
 ## 요약
 
 | 상태 | 개수 | 비율 |
 |--|--|--|
-| ✅ 통과 | 294 | 84% |
-| ⚠️ 부분 | 40 | 11% |
-| ❌ 미구현 | 14 | 4% |
-| ➖ 해당없음 | 2 | 1% |
-| **합계** | **350** | 100% |
+| ✅ 통과 | 343 | 86% |
+| ⚠️ 부분 | 40 | 10% |
+| ❌ 미구현 | 14 | 3% |
+| ➖ 해당없음 | 3 | 1% |
+| **합계** | **400** | 100% |
 
-> 진행: 모바일 셸 → 플랫폼 → 오디오 → 인코딩/방송 → 화면조정 → PWA → 소스 조작/씬 → 텍스트 개선 + 단색·시계 소스 → **채팅·스티커·프레임 소스 + 정렬 버튼 6종** 배치 완료 → 미구현 175. ✅126/350(36%).
+> 진행: 1~350 기능 패리티(✅294) + **351~400 대기업식 감사(공식문서/OBS·PRISM 대조, ✅49/➖1)** = 총 400문항 ✅343.
+> 감사에서 BLOCKER 1 + MAJOR 9 + MINOR 다수를 코드로 수정·헤드리스 검증 완료.
 
-> 현재 studio.html은 "합성 엔진"으로는 견고하나, PRISM 모바일 앱 수준의 완성품까지는 **미구현 71%**. 특히 오디오(음성 조절)·인코딩(비트레이트)·모바일 반응형·보안이 대량 미달.
+> 남은 ❌ 14는 대부분 **플랫폼 API/실시간 데이터**(실시간 시청자수·VOD·멀티게스트 mesh)·**실기기 검증**(발열/배터리)·**브라우저 원천 한계**(임의 웹페이지 캔버스 합성 = OBS의 내장 크로뮴 불가)라 코드 단독으로는 닫히지 않는다.
 
 ### 결론
 - **엔진(합성·송출·저장)은 견고** — 캔버스 컴포지팅, 다중 소스, WHIP 송출, 리핏, 씬 저장 동작 검증됨.
