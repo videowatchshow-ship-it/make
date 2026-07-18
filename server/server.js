@@ -24,6 +24,8 @@ app.use((_, res, next) => {
 // 레이트리밋 (OWASP API4:2023 브루트포스 방지) — 인메모리 슬라이딩 윈도우, IP당 분당 60회
 const RL = new Map();
 app.use((req, res, next) => {
+  // MediaMTX 외부인증 콜백은 HLS 세그먼트마다 호출되므로 레이트리밋 제외(로컬 전용 경로)
+  if (req.path === '/api/mediamtx/auth') return next();
   const now = Date.now(), win = 60000, max = Number(process.env.RATE_MAX || 60);
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   const arr = (RL.get(ip) || []).filter(t => now - t < win);
@@ -124,6 +126,11 @@ app.delete('/api/destinations/:avatar/:idx', requireEntitled, ownAvatar(false), 
   list.splice(Number(req.params.idx), 1);
   save(d);
   res.json({ ok: true });
+});
+
+// WHIP 발행 토큰 (자기 아바타만) — 클라가 WHIP Bearer 로 사용, MediaMTX 가 /api/mediamtx/auth 로 검증
+app.post('/api/whip-token/:avatar', ...requireEntitled, ownAvatar(true), (req, res) => {
+  res.json({ token: auth.mintMtxToken(req.user.sub, req.params.avatar, 'publish', 6 * 3600), path: req.params.avatar });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

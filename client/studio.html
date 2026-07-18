@@ -2124,11 +2124,15 @@ async function startPublish(){
     audioTracks=tempMicStream.getAudioTracks(); }catch(_){} }
   const voiceOnly=document.getElementById('voiceOnlyChk').checked;
   outStream = voiceOnly ? new MediaStream(audioTracks) : new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks]);
+  // 유료 세션의 WHIP 발행 토큰을 서버에서 발급받아 사용 (MediaMTX 외부인증). 게이트 활성 시에만.
+  if(GATE_ACTIVE){ try{ const _m=String(currentWhip||'').match(/\/whip\/([^/]+)\/whip\/?$/); const _p=_m?_m[1]:'';
+    if(_p){ const _t=await fetch('/api/whip-token/'+encodeURIComponent(_p),{method:'POST',credentials:'include'}).then(r=>r.ok?r.json():null).catch(()=>null); _mtxToken=(_t&&_t.token)||null; } }catch(_){ } }
   await whipPublish(currentWhip, outStream);
   if(!voiceOnly) await applyEncoding();
 }
 
 let whipResource=null;   // RFC 9725 §4.2: 201 응답 Location(리소스 URL) — 종료/재연결 시 DELETE
+let _mtxToken=null;      // 서버가 발급한 WHIP 발행 토큰(MediaMTX 외부인증). 게이트 활성 시 채워짐
 async function whipDelete(){
   if(!whipResource) return; const u=whipResource; whipResource=null;
   const headers={}; const tok=(document.getElementById('whipToken')||{}).value;
@@ -2149,7 +2153,7 @@ async function whipPublish(url, stream){
   offer.sdp = setOpusBitrate(offer.sdp, Number(document.getElementById('abrSel').value)||128);
   await pc.setLocalDescription(offer);
   const headers={'Content-Type':'application/sdp'};
-  const tok=(document.getElementById('whipToken')||{}).value;
+  const tok=_mtxToken||(document.getElementById('whipToken')||{}).value;   // 서버발급 발행토큰 우선
   if(tok && tok.trim()) headers['Authorization']='Bearer '+tok.trim();   // RFC 9725 WHIP 인증
   const res = await fetch(url, {method:'POST', headers, body:offer.sdp});
   if(!res.ok) throw new Error('WHIP '+res.status);

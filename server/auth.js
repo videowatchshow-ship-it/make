@@ -138,6 +138,28 @@ function validSig(params, received) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+// ── MediaMTX 외부 인증 토큰 (authMethod: http) — 시청/송출을 세션에 묶음 ──
+// 토큰 = base64url(payload) + "." + base64url(HMAC-SHA256).  payload={u,p,act,exp}.
+// ⚠️ 콜론(:) 금지 — MediaMTX 가 Bearer 를 ':' 로 분리해 user:pass 로 오인함(공식 소스 확인). base64url 은 콜론 없음.
+function mintMtxToken(userId, pathName, act, ttlSec) {
+  const payload = { u: userId, p: pathName, act, exp: Math.floor(Date.now() / 1000) + (ttlSec || 6 * 3600) };
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const sig = crypto.createHmac('sha256', SECRET).update(body).digest('base64url');
+  return body + '.' + sig;
+}
+function verifyMtxToken(tok) {
+  if (!tok || tok.includes(':')) return null;
+  const dot = tok.lastIndexOf('.'); if (dot < 0) return null;
+  const body = tok.slice(0, dot), sig = tok.slice(dot + 1);
+  const expect = crypto.createHmac('sha256', SECRET).update(body).digest('base64url');
+  const a = Buffer.from(sig), b = Buffer.from(expect);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  let p; try { p = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')); } catch (_) { return null; }
+  if (p.exp && Date.now() / 1000 > p.exp) return null;
+  return p;
+}
+const isLoopback = (ip) => !ip || ip === '::1' || ip === '::ffff:127.0.0.1' || String(ip).startsWith('127.');
+
 const gclient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 
 function mountAuth(app) {
@@ -218,7 +240,21 @@ function mountAuth(app) {
     res.status(200).send('OK'); // 수신 확인 → NOWPayments 재시도 중단
   });
 
+  // MediaMTX 외부 인증 콜백 — 매 publish/read/playback 요청마다 호출. 2xx=허용, 그 외=거부.
+  // (api/metrics/pprof 는 mediamtx.yml authHTTPExclude 로 제외되어 여기 안 옴)
+  app.post('/api/mediamtx/auth', (req, res) => {
+    const b = req.body || {}; const action = b.action, pth = b.path;
+    // 내부 fanout(로컬 루프백)의 read 는 허용 — 같은 서버가 재송출하려고 rtmp://127.0.0.1 로 읽음
+    if ((action === 'read' || action === 'playback') && isLoopback(b.ip)) return res.status(204).end();
+    let tok = b.token; if (!tok && b.query) { try { tok = new URLSearchParams(b.query).get('token') || ''; } catch (_) {} }
+    const c = verifyMtxToken(tok);
+    if (!c || c.p !== pth) return res.status(401).end();                    // 토큰 무효 or 경로 불일치 → 거부
+    const ok = (action === 'publish' && c.act === 'publish')
+      || ((action === 'read' || action === 'playback') && (c.act === 'read' || c.act === 'publish'));
+    return ok ? res.status(204).end() : res.status(401).end();
+  });
+
   return { requireLogin, requirePaid, sessionFromReq, isPaid };
 }
 
-module.exports = { mountAuth, requireLogin, requirePaid, sessionFromReq, isPaid, grant, verifySession, makeSession, validSig, sortObject, maybeFounderGrant, PLANS, FREE_SLOTS };
+module.exports = { mountAuth, requireLogin, requirePaid, sessionFromReq, isPaid, grant, verifySession, makeSession, validSig, sortObject, maybeFounderGrant, mintMtxToken, verifyMtxToken, PLANS, FREE_SLOTS };
