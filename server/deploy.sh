@@ -47,11 +47,17 @@ cat > /etc/apache2/sites-available/panda-avata.conf <<EOF
     Options -Indexes
   </Directory>
 
-  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
   Header always set X-Content-Type-Options "nosniff"
   Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set Content-Security-Policy "frame-ancestors 'self'"
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
-  Header always set Permissions-Policy "camera=(self), microphone=(self), display-capture=(self)"
+  Header always set Permissions-Policy "camera=(self), microphone=(self), display-capture=(self), geolocation=(), payment=()"
+  # 크로스오리진 격리 (XS-Leaks/Spectre). 구글 로그인 팝업 허용 위해 COOP 는 allow-popups
+  Header always set Cross-Origin-Opener-Policy "same-origin-allow-popups"
+  Header always set Cross-Origin-Resource-Policy "same-origin"
+  # 안티 크롤링/색인 (RFC 9309 보완)
+  Header always set X-Robots-Tag "noindex, nofollow"
 
   ProxyPreserveHost On
   ProxyPass        /whip/ http://127.0.0.1:8889/
@@ -108,6 +114,11 @@ After=network.target
 WorkingDirectory=$API_DIR
 Environment=PORT=3000
 Environment=DEST_FILE=$API_DIR/data/destinations.json
+Environment=APP_URL=https://$DOMAIN
+Environment=OAUTH_SECRET_FILE=/var/secrets/oauth-nodetube.json
+# 결제·세션 비밀은 여기(0600). 없으면 결제는 더미모드, 세션키는 자동생성.
+#   NOWPAYMENTS_API_KEY=...  NOWPAYMENTS_IPN_SECRET=...  SESSION_SECRET=...  GOOGLE_CLIENT_ID=...
+EnvironmentFile=-/var/secrets/centbeam.env
 ExecStart=$(command -v node) $API_DIR/server.js
 Restart=always
 RestartSec=3
