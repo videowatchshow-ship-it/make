@@ -231,13 +231,13 @@
   <div style="font:700 26px -apple-system,'Malgun Gothic',sans-serif;color:#e6e9ef;letter-spacing:2px">센트빔 <span style="color:#00d9ff">CENTBEAM</span></div>
   <div style="font:13px -apple-system,sans-serif;color:#6b7688">라이브 스튜디오 로딩 중…</div>
 </div>
-<div id="offlineBar">⚠️ 오프라인 상태입니다 — 네트워크 연결을 확인하세요. (방송은 연결 복구 시 자동 재연결)</div>
+<div id="offlineBar" data-i18n="net.offline">⚠️ 오프라인 상태입니다 — 네트워크 연결을 확인하세요. (방송은 연결 복구 시 자동 재연결)</div>
 <div id="confirmModal" style="position:fixed;inset:0;z-index:9994;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6)">
   <div style="background:#141a24;border:1px solid #2a3446;border-radius:14px;padding:22px;max-width:340px;text-align:center;font-family:-apple-system,'Malgun Gothic',sans-serif;color:#e6e9ef">
     <div id="confirmMsg" style="font-size:15px;line-height:1.6;margin-bottom:18px"></div>
     <div style="display:flex;gap:8px">
-      <button class="btn" id="confirmCancel" style="flex:1;padding:10px">취소</button>
-      <button class="btn primary" id="confirmOk" style="flex:1;padding:10px">확인</button>
+      <button class="btn" id="confirmCancel" style="flex:1;padding:10px" data-i18n="m.cancel">취소</button>
+      <button class="btn primary" id="confirmOk" style="flex:1;padding:10px" data-i18n="m.ok">확인</button>
     </div>
   </div>
 </div>
@@ -261,12 +261,12 @@
     <div style="font:700 20px sans-serif;margin:6px 0">센트빔 CENTBEAM</div>
     <div style="color:#8a93a6;font-size:13px;margin-bottom:4px">버전 <span id="aboutVer"></span></div>
     <div style="color:#8a93a6;font-size:13px;line-height:1.6">브라우저 캔버스 멀티스트리밍 스튜디오.<br>WHIP → 릴레이 → 다중 플랫폼 fan-out.</div>
-    <button class="btn primary" id="aboutClose" style="margin-top:16px;width:100%">닫기</button>
+    <button class="btn primary" id="aboutClose" style="margin-top:16px;width:100%" data-i18n="m.close">닫기</button>
   </div>
 </div>
 <div id="helpModal" style="position:fixed;inset:0;z-index:9998;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6)">
   <div style="background:#121722;border:1px solid #26304a;border-radius:14px;padding:24px;max-width:400px;font-family:-apple-system,'Malgun Gothic',sans-serif;color:#e6e9ef">
-    <div style="font:700 18px sans-serif;margin-bottom:12px">⌨ 단축키 / 도움말</div>
+    <div style="font:700 18px sans-serif;margin-bottom:12px" data-i18n="help.title">⌨ 단축키 / 도움말</div>
     <table style="width:100%;font-size:13px;color:#c7cdd9;border-collapse:collapse">
       <tr><td style="padding:4px 8px;color:#00d9ff">Ctrl+Z / Ctrl+Y</td><td>되돌리기 / 다시 실행</td></tr>
       <tr><td style="padding:4px 8px;color:#00d9ff">숫자키 1-9</td><td>씬 전환</td></tr>
@@ -276,7 +276,7 @@
       <tr><td style="padding:4px 8px;color:#00d9ff">Delete</td><td>선택 레이어 삭제</td></tr>
     </table>
     <div style="font-size:12px;color:#8a93a6;margin-top:12px;line-height:1.6">소스 추가 → 드래그로 배치 → 오디오 믹서 확인 → WHIP 입력 → 방송 시작. 씬을 여러 개 만들어 숫자키로 전환하세요.</div>
-    <button class="btn primary" id="helpClose" style="margin-top:16px;width:100%">닫기</button>
+    <button class="btn primary" id="helpClose" style="margin-top:16px;width:100%" data-i18n="m.close">닫기</button>
   </div>
 </div>
 <div class="app">
@@ -288,45 +288,49 @@
     </div>
     <div class="row2" style="margin:-4px 0 10px;gap:6px;flex-wrap:wrap">
       <button class="btn" id="aboutBtn" style="padding:4px 8px;font-size:12px" title="정보">ⓘ <span id="verTag"></span></button>
-      <button class="btn" id="installBtn" style="padding:4px 8px;font-size:12px;display:none" title="홈화면 설치">⬇ 설치</button>
-      <button class="btn" id="fsBtn" style="padding:4px 8px;font-size:12px" title="풀스크린" aria-label="전체화면">⛶ 전체화면</button>
-      <button class="btn" id="helpBtn" style="padding:4px 8px;font-size:12px" title="도움말/단축키" aria-label="도움말">? 도움말</button>
+      <button class="btn" id="installBtn" style="padding:4px 8px;font-size:12px;display:none" title="홈화면 설치" data-i18n="btn.install">⬇ 설치</button>
+      <button class="btn" id="fsBtn" style="padding:4px 8px;font-size:12px" title="풀스크린" aria-label="전체화면" data-i18n="btn.fs">⛶ 전체화면</button>
+      <button class="btn" id="helpBtn" style="padding:4px 8px;font-size:12px" title="도움말/단축키" aria-label="도움말" data-i18n="btn.help">? 도움말</button>
+      <select class="btn" id="langSel" style="padding:4px 6px;font-size:12px" title="언어 / Language" aria-label="언어 선택">
+        <option value="ko">🌐 한국어</option>
+        <option value="en">🌐 English</option>
+      </select>
       <select class="btn" id="themeSel" style="padding:4px 6px;font-size:12px" title="테마">
-        <option value="dark">🌙 다크</option>
-        <option value="light">☀️ 라이트</option>
-        <option value="hc">◼ 고대비</option>
-        <option value="cb">👁 색약</option>
+        <option value="dark" data-i18n="theme.dark">🌙 다크</option>
+        <option value="light" data-i18n="theme.light">☀️ 라이트</option>
+        <option value="hc" data-i18n="theme.hc">◼ 고대비</option>
+        <option value="cb" data-i18n="theme.cb">👁 색약</option>
       </select>
       <label class="bg-pick" title="강조색" style="font-size:12px">🎨<input type="color" id="accentPick" value="#00d9ff"></label>
     </div>
-    <h2>소스 추가</h2>
+    <h2 data-i18n="h.sources">소스 추가</h2>
     <div class="addbar">
-      <button id="addCam">🎥 카메라</button>
-      <button id="addScreen">🖥️ 화면공유</button>
-      <button id="addImg">🖼️ 이미지</button>
-      <button id="addText">🅣 텍스트</button>
-      <button id="addWeb">🌐 웹 URL</button>
-      <button id="addSolid">🟦 단색</button>
-      <button id="addClock">🕐 시계</button>
-      <button id="addLower3">▬ 로워서드</button>
-      <button id="addCountdown">⏱ 카운트다운</button>
-      <button id="addVideo">🎞️ 비디오</button>
-      <button id="addGauge">📊 게이지</button>
-      <button id="addChat">💬 채팅</button>
-      <button id="addSticker">⭐ 스티커</button>
-      <button id="addFrame">🖼 프레임</button>
-      <button id="addEmote">💗 이모지플로팅</button>
-      <button id="addPoll">📊 투표</button>
-      <button id="addDonors">★ 후원목록</button>
-      <button id="addNowPlaying">🎧 BGM정보</button>
-      <button id="addData">🔢 데이터</button>
-      <button id="addAudioBars">〰 오디오바</button>
-      <button id="addRoulette">🎡 룰렛</button>
-      <button id="addSlideshow">🖽 슬라이드</button>
-      <button id="fillBtn">⤢ 채우기</button>
+      <button id="addCam" data-i18n="src.cam">🎥 카메라</button>
+      <button id="addScreen" data-i18n="src.screen">🖥️ 화면공유</button>
+      <button id="addImg" data-i18n="src.img">🖼️ 이미지</button>
+      <button id="addText" data-i18n="src.text">🅣 텍스트</button>
+      <button id="addWeb" data-i18n="src.web">🌐 웹 URL</button>
+      <button id="addSolid" data-i18n="src.solid">🟦 단색</button>
+      <button id="addClock" data-i18n="src.clock">🕐 시계</button>
+      <button id="addLower3" data-i18n="src.lower3">▬ 로워서드</button>
+      <button id="addCountdown" data-i18n="src.count">⏱ 카운트다운</button>
+      <button id="addVideo" data-i18n="src.video">🎞️ 비디오</button>
+      <button id="addGauge" data-i18n="src.gauge">📊 게이지</button>
+      <button id="addChat" data-i18n="src.chat">💬 채팅</button>
+      <button id="addSticker" data-i18n="src.sticker">⭐ 스티커</button>
+      <button id="addFrame" data-i18n="src.frame">🖼 프레임</button>
+      <button id="addEmote" data-i18n="src.emote">💗 이모지플로팅</button>
+      <button id="addPoll" data-i18n="src.poll">📊 투표</button>
+      <button id="addDonors" data-i18n="src.donors">★ 후원목록</button>
+      <button id="addNowPlaying" data-i18n="src.now">🎧 BGM정보</button>
+      <button id="addData" data-i18n="src.data">🔢 데이터</button>
+      <button id="addAudioBars" data-i18n="src.bars">〰 오디오바</button>
+      <button id="addRoulette" data-i18n="src.roulette">🎡 룰렛</button>
+      <button id="addSlideshow" data-i18n="src.slide">🖽 슬라이드</button>
+      <button id="fillBtn" data-i18n="src.fill">⤢ 채우기</button>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between">
-      <h2 style="margin:14px 0 6px">레이어 (위 = 앞)</h2>
+      <h2 style="margin:14px 0 6px" data-i18n="h.layers">레이어 (위 = 앞)</h2>
       <div class="row2" style="gap:4px">
         <button class="btn" id="undoBtn" style="padding:3px 8px" title="되돌리기 (Ctrl+Z)">↶</button>
         <button class="btn" id="redoBtn" style="padding:3px 8px" title="다시 실행 (Ctrl+Y)">↷</button>
@@ -343,8 +347,8 @@
   <main class="stage">
     <div class="toolbar">
       <div class="seg" id="orient">
-        <button data-o="landscape" class="on">가로 16:9</button>
-        <button data-o="portrait">세로 9:16</button>
+        <button data-o="landscape" class="on" data-i18n="o.land">가로 16:9</button>
+        <button data-o="portrait" data-i18n="o.port">세로 9:16</button>
       </div>
       <select id="arSel" class="btn" style="padding:8px" title="화면비">
         <option value="1.7778">16:9</option>
@@ -355,7 +359,7 @@
         <option value="1080">1080p</option>
         <option value="720">720p</option>
         <option value="1440">1440p</option>
-        <option value="custom">커스텀…</option>
+        <option value="custom" data-i18n="res.custom">커스텀…</option>
       </select>
       <label class="bg-pick" title="캔버스 배경색">🎨<input type="color" id="bgColor" value="#000000"></label>
       <button class="btn" id="bgImgBtn" title="캔버스 배경 이미지" style="padding:4px 8px">🏞</button>
@@ -373,8 +377,8 @@
       <button class="btn" id="zoomReset" title="줌 초기화" style="padding:4px 8px">⤢</button>
       <div class="spacer"></div>
       <span class="live-dot" id="dot"></span>
-      <span id="liveTxt" style="font-size:12px;color:var(--muted)">오프라인</span>
-      <button class="btn primary" id="goLive">🔴 방송 시작</button>
+      <span id="liveTxt" style="font-size:12px;color:var(--muted)" data-i18n="live.off">오프라인</span>
+      <button class="btn primary" id="goLive" data-i18n="btn.golive">🔴 방송 시작</button>
     </div>
     <div class="canvas-wrap">
       <div class="frame" id="frame">
@@ -388,17 +392,17 @@
 
   <!-- PROPERTIES -->
   <aside class="props" id="props">
-    <h2>속성</h2>
-    <div class="empty" id="propsEmpty">레이어를 선택하면<br>위치·크기·회전을 조정합니다.</div>
+    <h2 data-i18n="h.props">속성</h2>
+    <div class="empty" id="propsEmpty" data-i18n-html="p.empty">레이어를 선택하면<br>위치·크기·회전을 조정합니다.</div>
     <div id="propsBody" style="display:none">
-      <div class="field"><label>이름</label><input id="pName"></div>
+      <div class="field"><label data-i18n="p.name">이름</label><input id="pName"></div>
       <div class="row2">
         <div class="field"><label>X</label><input id="pX" type="number"></div>
         <div class="field"><label>Y</label><input id="pY" type="number"></div>
       </div>
       <div class="row2">
-        <div class="field"><label>너비</label><input id="pW" type="number"></div>
-        <div class="field"><label>높이</label><input id="pH" type="number"></div>
+        <div class="field"><label data-i18n="p.w">너비</label><input id="pW" type="number"></div>
+        <div class="field"><label data-i18n="p.h">높이</label><input id="pH" type="number"></div>
       </div>
       <div class="field"><label>회전 (°)</label><input id="pR" type="number" step="1"></div>
       <div class="field"><label>불투명도 <span id="pOpVal">100%</span></label>
@@ -2778,6 +2782,42 @@ function applyAccent(c){ document.documentElement.style.setProperty('--accent2',
 })();
 document.getElementById('themeSel').onchange=e=>{ applyTheme(e.target.value); localStorage.setItem('centbeam.theme',e.target.value); };
 document.getElementById('accentPick').oninput=e=>{ applyAccent(e.target.value); localStorage.setItem('centbeam.accent',e.target.value); };
+/* ── 다국어 i18n (영/한, 270) — data-i18n 요소를 스냅샷(원문=한국어) 후 언어 전환 ── */
+const I18N_EN = {
+  'src.cam':'🎥 Camera','src.screen':'🖥️ Screen','src.img':'🖼️ Image','src.text':'🅣 Text',
+  'src.web':'🌐 Web URL','src.solid':'🟦 Solid','src.clock':'🕐 Clock','src.lower3':'▬ Lower-third',
+  'src.count':'⏱ Countdown','src.video':'🎞️ Video','src.gauge':'📊 Gauge','src.chat':'💬 Chat',
+  'src.sticker':'⭐ Sticker','src.frame':'🖼 Frame','src.emote':'💗 Emotes','src.poll':'📊 Poll',
+  'src.donors':'★ Donors','src.now':'🎧 Now Playing','src.data':'🔢 Data','src.bars':'〰 Audio bars',
+  'src.roulette':'🎡 Roulette','src.slide':'🖽 Slideshow','src.fill':'⤢ Fill',
+  'h.sources':'Add source','h.layers':'Layers (top = front)','h.props':'Properties',
+  'o.land':'Landscape 16:9','o.port':'Portrait 9:16','res.custom':'Custom…',
+  'live.off':'Offline','btn.golive':'🔴 Go Live',
+  'btn.install':'⬇ Install','btn.fs':'⛶ Fullscreen','btn.help':'? Help',
+  'theme.dark':'🌙 Dark','theme.light':'☀️ Light','theme.hc':'◼ High-contrast','theme.cb':'👁 Color-blind',
+  'm.cancel':'Cancel','m.ok':'OK','m.close':'Close','help.title':'⌨ Shortcuts / Help',
+  'net.offline':'⚠️ You are offline — check your network. (Broadcast auto-reconnects on recovery)',
+  'p.name':'Name','p.w':'Width','p.h':'Height',
+  'p.empty':'Select a layer to<br>adjust position · size · rotation.',
+};
+function applyLang(l){
+  document.querySelectorAll('[data-i18n],[data-i18n-html]').forEach(el=>{
+    const htmlKey=el.getAttribute('data-i18n-html'), useHtml=!!htmlKey;
+    const key=htmlKey||el.getAttribute('data-i18n');
+    if(el._i18nKo===undefined) el._i18nKo = useHtml ? el.innerHTML : el.textContent;
+    const en=I18N_EN[key];
+    const val=(l==='en' && en!=null) ? en : el._i18nKo;
+    if(useHtml) el.innerHTML=val; else el.textContent=val;
+  });
+  try{ document.documentElement.lang=(l==='en')?'en':'ko'; }catch(_){}
+}
+(function initLang(){
+  let l=null; try{ l=localStorage.getItem('centbeam.lang'); }catch(_){}
+  if(!l) l=(navigator.language||'ko').toLowerCase().startsWith('en')?'en':'ko';
+  const sel=document.getElementById('langSel'); if(sel){ sel.value=l;
+    sel.onchange=e=>{ const v=e.target.value; try{ localStorage.setItem('centbeam.lang',v); }catch(_){} applyLang(v); }; }
+  applyLang(l);
+})();
 document.getElementById('verTag').textContent='v'+APP_VERSION;
 document.getElementById('aboutVer').textContent=APP_VERSION;
 document.getElementById('aboutBtn').onclick=()=>{ document.getElementById('aboutModal').style.display='flex'; };
