@@ -1,6 +1,6 @@
 # 센트빔(CENTBEAM) 보안 30 — 공식 출처 기반 하드닝 체크리스트
 
-> 대상: **유료 · Google 로그인 필수 · 브라우저 + WHIP 릴레이** 스트리밍 SaaS.
+> 대상: **유료화 예정 · 브라우저 + WHIP 릴레이** 스트리밍 SaaS. (로그인/결제 게이트는 2026-07-18 원복, 재작업 예정 — 하단 "구현 현황" 참고)
 > 파일: `client/studio.html`, `server/server.js`, `server/fanout.sh`, `server/mediamtx.yml`, `server/deploy.sh`(Apache vhost).
 > 상태: ✅ 구현 · 🟡 부분 · ⬜ 예정. 각 항목은 **공식 문서(OWASP ASVS/API Top10/Cheat Sheets · MDN · RFC · Google Identity)** 근거.
 
@@ -78,23 +78,29 @@
 
 ---
 
-## 구현 현황 (2026-07, 인증·결제 도입분)
+## 구현 현황 (2026-07)
 
-**✅ 구현 완료 (헤드리스/스모크 검증):**
-- **1·2·25** — Google ID토큰 서버검증(google-auth-library) + HttpOnly/Secure/SameSite 세션쿠키 + `requireLogin`/`requirePaid` 게이트. 클라이언트 'paid' 불신, 서버가 진실(`/api/me`).
-- **3(부분)·16** — `/api/destinations` 아바타 소유권(BOLA 차단, 남의 대상 접근 403) + `^[a-z0-9_-]{1,40}$` 경로검증.
-- **5·7** — `__Host-cb_sess` HttpOnly·Secure·SameSite=Lax 서명쿠키 + `/api/logout` 서버 폐기.
-- **15·17** — rtmpUrl 스킴/내부IP allowlist(SSRF·파일싱크 차단), streamKey 슬래시 금지, 스트림키 평문 반환→마스킹, 임포트 씬 XSS(레이어명 textContent·썸네일 data:image만).
+> **A(로그인 게이트)·G(결제 무결성) 계열은 2026-07-18 요청으로 전면 롤백, 추후 재작업 예정.**
+> 짧게 붙였다 뗀 이유: 로그인·결제 게이트가 테스트/개발 흐름을 막아서 우선 원복. 서버는 다시
+> 무인증(로그인 이전) 상태로 돌아갔다 — **B(BOLA)는 로그인 전까지 다시 열려있음**을 인지할 것.
+> 재도입 시 이 문서의 A/B/G 항목(1~8, 25~27)과 `git log` 상 `feat(auth+pay)` 계열 커밋을 참고.
+
+**✅ 구현 완료 · 유지 중 (헤드리스/스모크 검증, 로그인과 무관하게 독립적으로 유효):**
+- **16·17** — 아바타 이름 `^[a-z0-9_-]{1,40}$` 경로검증, 임포트 씬 XSS 수정(레이어명 textContent·썸네일 data:image만).
+- **15** — rtmpUrl 스킴/내부IP allowlist(SSRF·파일덮어쓰기 차단), streamKey 슬래시/상위경로 금지.
 - **9·11·12·13·23** — HSTS preload·CSP frame-ancestors·COOP/CORP·Permissions-Policy 확장·robots.txt/X-Robots-Tag.
-- **10** — CSP `connect-src *` → `'self' https:` 축소(구글 로그인 허용).
+- **10** — CSP `connect-src *` → `'self' https:` 축소, `img-src`도 캔버스-오염 방지용 원래 제한(`self data: blob:`)으로 유지.
 - **20·21·30(부분)** — requestTimeout/headersTimeout(slowloris), `x-powered-by` 제거, `:3000` loopback 바인딩.
-- **26·27** — NOWPayments IPN HMAC-SHA512 서명검증 + `finished`만 승인 + txid 멱등.
-- **19(부분)** — 대상 20개 쿼터.
-- **2·3(완전)** — **MediaMTX 외부 HTTP 인증**(authMethod http → `/api/mediamtx/auth`): 시청·송출 모두 세션 발급 토큰 필요(경로 스코프). 외부 read 차단(스트림 비공개), 내부 fanout read 만 IP 허용. **감사 CRITICAL #2 해소.** (활성화: MediaMTX 재시작)
+- **19(부분)** — 대상 20개 쿼터(계정 없이도 서버 전체에 적용되는 자원 상한).
 
-**⬜ 남은 항목 (후속):**
-- **19(완전)** — WHIP 동시 세션 캡(사용자별 활성 publish 상한).
-- **4** — 플랫폼 연동(YouTube/Twitch/FB) OAuth `state` 추가.
-- **6·8** — 리프레시 로테이션, CSRF double-submit 토큰(현재 SameSite=Lax 로 1차 방어).
-- **18·24·30** — 사용자별 레이트리밋, 봇/허니팟, fail2ban·방화벽 허용목록 스크립트화.
-- **14** — fanout `execFile` list-form(현재 인젝션은 상류 경로검증+쿼팅+입력 allowlist 로 방어, 심층방어로 전환 권장).
+**⬜ 롤백됨 — 재작업 예정 (나중에):**
+- **1·2·25** — Google ID토큰 로그인 게이트 + `requireLogin`/`requirePaid`. (`server/auth.js` 삭제됨, 필요시 git history `feat(auth+pay)` 커밋에서 복구)
+- **3** — `/api/destinations` 아바타 소유권(BOLA) — 로그인 없이는 "내 것만" 구분할 신원이 없어 현재 다시 전체 공개.
+- **5·7** — 세션 쿠키·로그아웃 — 로그인 자체가 없으므로 해당 없음.
+- **26·27** — NOWPayments IPN 서명검증·결제 멱등 — 결제 게이트 자체 보류.
+- **2(MediaMTX)** — 외부 인증 롤백, `authMethod: internal`(공개 read + 환경변수 publish 비번)로 복귀.
+- **4·6·8·18·24·30** — 기존과 동일하게 후속 예정.
+- **14** — fanout `execFile` list-form 전환 권장(현재도 안전하지만 심층방어용).
+
+> 재도입 우선순위 제안: 먼저 로그인(1) → BOLA(3) → 세션(5·7) → 결제(25~27) 순. MediaMTX 외부인증(2)은
+> 로그인이 돌아온 뒤 동일한 패턴(`server/mediamtx.yml` `authMethod: http`)으로 다시 켤 수 있다.

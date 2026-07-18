@@ -8,17 +8,27 @@ webrtc: yes
 webrtcAddress: :8889     # WHIP 인제스트: http://<host>:8889/<avatar>/whip
 srt: no
 
-# ── 인증 (MediaMTX 외부 HTTP 인증) ──────────────────────────────────────────
-# 릴레이 API(/api/mediamtx/auth)가 매 publish/read/playback 요청을 세션 발급 토큰으로
-# 허용/거부한다(응답 2xx=허용). 시청·송출 모두 인증됨 = 공개 아님(감사 CRITICAL #2 해소).
-# api/metrics/pprof 만 제외. 내부 fanout(로컬 루프백)의 read 는 API 가 IP 로 허용.
-# 활성화: MediaMTX 를 이 설정으로 (재)시작. 롤백은 authMethod: internal 로 되돌리면 됨.
-authMethod: http
-authHTTPAddress: http://127.0.0.1:3000/api/mediamtx/auth
-authHTTPExclude:
-  - action: api
-  - action: metrics
-  - action: pprof
+# ── 인증 (MediaMTX internal auth) ──────────────────────────────────────────
+# publish(송출)에는 사용자/비번을, read(재생)는 공개. WHIP은 Authorization: Bearer
+# (user:pass) 또는 URL 쿼리로 전달.
+# ⚠️ MediaMTX 는 YAML 안의 ${VAR} 치환을 지원하지 않는다(리터럴 문자열로 읽힘).
+#    비밀은 반드시 환경변수 오버라이드로 주입한다 (MediaMTX 문서: MTX_ 접두어):
+#      MTX_AUTHINTERNALUSERS_0_USER=<publisher>
+#      MTX_AUTHINTERNALUSERS_0_PASS=<강한 비밀>
+#    아래 값은 env 미설정 시의 로컬 기본값일 뿐, 프로덕션은 반드시 env 로 덮어쓸 것.
+authMethod: internal
+authInternalUsers:
+  - user: publisher
+    pass: change-me-via-MTX_AUTHINTERNALUSERS_0_PASS
+    ips: []
+    permissions:
+      - action: publish
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: read
+      - action: playback
 
 paths:
   all_others:

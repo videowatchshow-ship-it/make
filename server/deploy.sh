@@ -146,11 +146,7 @@ After=network.target
 WorkingDirectory=$API_DIR
 Environment=PORT=3000
 Environment=DEST_FILE=$API_DIR/data/destinations.json
-Environment=APP_URL=https://$DOMAIN
 Environment=OAUTH_SECRET_FILE=/var/secrets/oauth-nodetube.json
-# 결제·세션 비밀은 여기(0600). 없으면 결제는 더미모드, 세션키는 자동생성.
-#   NOWPAYMENTS_API_KEY=...  NOWPAYMENTS_IPN_SECRET=...  SESSION_SECRET=...  GOOGLE_CLIENT_ID=...
-EnvironmentFile=-/var/secrets/centbeam.env
 ExecStart=$(command -v node) $API_DIR/server.js
 Restart=always
 RestartSec=3
@@ -184,6 +180,3 @@ echo -n "  api/health : "; curl -s "https://$DOMAIN/api/health" 2>/dev/null | he
 echo ""
 echo "✅ 완료 → 폰에서 https://$DOMAIN/studio.html (카메라 허용 → 홈화면 추가로 앱 설치)"
 echo "   WHIP 엔드포인트: https://$DOMAIN/whip/tak/whip"
-echo ""
-echo "ℹ️  MediaMTX 시청/송출 외부인증(로그인 세션 연동)은 아직 비활성 — 활성화하려면(선택, 안전 롤백 포함):"
-echo "     sudo bash $SELF_DIR/server/activate-mediamtx-auth.sh"

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <!-- 보안: Content-Security-Policy (인라인 스타일/스크립트 허용은 단일파일 구조상 필요, 그 외 최소화) -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://accounts.google.com; img-src 'self' data: blob: https:; media-src 'self' blob: data:; connect-src 'self' https:; frame-src https: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; connect-src 'self' https:; frame-src https: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>센트빔 CENTBEAM — 라이브 스튜디오</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230066ff'/%3E%3Cpath d='M28 70 L50 26 L72 70 Z' fill='none' stroke='%2300d9ff' stroke-width='7' stroke-linejoin='round'/%3E%3C/svg%3E">
@@ -241,29 +241,6 @@
   <div style="font:700 26px -apple-system,'Malgun Gothic',sans-serif;color:#e6e9ef;letter-spacing:2px">센트빔 <span style="color:#00d9ff">CENTBEAM</span></div>
   <div style="font:13px -apple-system,sans-serif;color:#6b7688">라이브 스튜디오 로딩 중…</div>
 </div>
-<!-- 로그인·결제 게이트 (server-is-truth). 통과 전엔 앱 잠금 -->
-<div id="gate" style="position:fixed;inset:0;z-index:10000;display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:24px;background:radial-gradient(circle at 50% 28%,#101a2e,#05070c);color:#eef1f9;font-family:-apple-system,'Malgun Gothic',sans-serif">
-  <div style="font-size:52px;background:linear-gradient(135deg,#5b6bff,#25d6ff);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 10px #25d6ff88)">◭</div>
-  <div style="font:800 24px sans-serif">센트빔 <span style="color:#25d6ff">CENTBEAM</span></div>
-  <div id="gateLogin" style="display:none;max-width:340px">
-    <p style="color:#c7cdd9;font-size:14px;line-height:1.6">계속하려면 <b>구글 로그인</b>이 필요합니다.<br>로그인·구독 없이는 방송이 동작하지 않습니다.</p>
-    <div id="gBtn" style="display:flex;justify-content:center;margin:14px 0"></div>
-    <div id="gateMsg" style="font-size:12px;color:#8a93a6"></div>
-  </div>
-  <div id="gatePay" style="display:none;max-width:380px">
-    <p id="gateHi" style="color:#25d6ff;font-size:13px;margin:0 0 4px"></p>
-    <p style="color:#c7cdd9;font-size:14px;line-height:1.6">이용하려면 <b>구독</b>이 필요합니다. (USDT 결제)</p>
-    <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:12px">
-      <button class="btn primary planBtn" data-plan="monthly" style="min-width:150px;padding:14px">월 <b>$25</b><br><span style="font-size:11px;opacity:.85">1개월 · USDT</span></button>
-      <button class="btn planBtn" data-plan="sixmonth" style="min-width:150px;padding:14px">6개월 <b>$120</b><br><span style="font-size:11px;opacity:.7">약 $20/월 · USDT</span></button>
-    </div>
-    <div id="dummyBox" style="display:none;margin-top:12px"><button class="btn" id="dummyPay" style="padding:10px 14px">🧪 테스트 결제(더미)로 활성화</button></div>
-    <div id="payMsg" style="font-size:12px;color:#8a93a6;margin-top:10px"></div>
-    <button class="btn" id="gateLogout" style="margin-top:12px;font-size:12px;padding:6px 12px">로그아웃</button>
-  </div>
-  <div id="gateSpin" style="width:34px;height:34px;border:3px solid rgba(37,214,255,.25);border-top-color:#25d6ff;border-radius:50%;animation:cbspin .8s linear infinite"></div>
-</div>
-<script>/* 프로덕션(https·비로컬)에서는 게이트를 즉시 표시해 미인증 노출 방지 */if(/^https?:$/.test(location.protocol)&&!/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){try{document.getElementById('gate').style.display='flex';}catch(_){}}</script>
 <div id="offlineBar" data-i18n="net.offline">⚠️ 오프라인 상태입니다 — 네트워크 연결을 확인하세요. (방송은 연결 복구 시 자동 재연결)</div>
 <div id="confirmModal" style="position:fixed;inset:0;z-index:9994;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6)">
   <div style="background:#141a24;border:1px solid #2a3446;border-radius:14px;padding:22px;max-width:340px;text-align:center;font-family:-apple-system,'Malgun Gothic',sans-serif;color:#e6e9ef">
@@ -417,6 +394,11 @@
       <div class="frame" id="frame">
         <canvas id="view"></canvas>
         <div class="overlay" id="ovl"></div>
+        <button id="floatCamFlip" title="전/후면 전환" aria-label="카메라 전/후면 전환"
+          style="display:none;position:absolute;top:12px;right:12px;z-index:60;width:48px;height:48px;
+          border-radius:50%;border:none;background:rgba(10,13,24,.55);backdrop-filter:blur(4px);
+          color:#fff;font-size:22px;align-items:center;justify-content:center;
+          box-shadow:0 4px 16px rgba(0,0,0,.4)">🔄</button>
       </div>
     </div>
   </main>
@@ -1711,6 +1693,8 @@ function showProps(){
   const L=sel();
   document.getElementById('propsEmpty').style.display=L?'none':'block';
   document.getElementById('propsBody').style.display=L?'block':'none';
+  // 캔버스 위 원터치 전/후면 전환 — 속성 드로어까지 안 열어도 카메라 선택하면 바로 보임 (모바일 접근성)
+  document.getElementById('floatCamFlip').style.display=(L&&L.type==='camera')?'flex':'none';
   if(!L)return;
   document.getElementById('textProps').style.display=L.type==='text'?'block':'none';
   document.getElementById('webProps').style.display=L.type==='web'?'block':'none';
@@ -1827,9 +1811,11 @@ pCdMins.oninput=e=>{ const L=sel(); if(L)L.mins=Number(e.target.value)||0; };
 pCdColor.oninput=e=>{ const L=sel(); if(L)L.color=e.target.value; };
 pCdFont.oninput=e=>{ const L=sel(); if(L)L.font=Number(e.target.value)||120; };
 document.getElementById('pCdStart').onclick=()=>{ const L=sel(); if(L)L.endAt=Date.now()+(L.mins||0)*60000; };
-document.getElementById('pCamFlip').onclick=()=>{ const L=sel(); if(!L||L.type!=='camera')return;
+function flipSelectedCamera(){ const L=sel(); if(!L||L.type!=='camera')return;
   L.facing=(L.facing==='environment')?'user':'environment'; L.flipH=(L.facing==='user'); // 전면=미러
-  reacquireCamera(L,{facingMode:{ideal:L.facing}}); syncProps(); };
+  reacquireCamera(L,{facingMode:{ideal:L.facing}}); syncProps(); }
+document.getElementById('pCamFlip').onclick=flipSelectedCamera;
+document.getElementById('floatCamFlip').onclick=flipSelectedCamera;   // 캔버스 위 원터치(속성 드로어 안 열어도 됨)
 document.getElementById('pCamDevice').onchange=e=>{ const L=sel(); if(!L||L.type!=='camera'||!e.target.value)return;
   reacquireCamera(L,{deviceId:{exact:e.target.value}}); };
 pGaugeLabel.oninput=e=>{ const L=sel(); if(L)L.label=e.target.value; };
@@ -2124,15 +2110,11 @@ async function startPublish(){
     audioTracks=tempMicStream.getAudioTracks(); }catch(_){} }
   const voiceOnly=document.getElementById('voiceOnlyChk').checked;
   outStream = voiceOnly ? new MediaStream(audioTracks) : new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks]);
-  // 유료 세션의 WHIP 발행 토큰을 서버에서 발급받아 사용 (MediaMTX 외부인증). 게이트 활성 시에만.
-  if(GATE_ACTIVE){ try{ const _m=String(currentWhip||'').match(/\/whip\/([^/]+)\/whip\/?$/); const _p=_m?_m[1]:'';
-    if(_p){ const _t=await fetch('/api/whip-token/'+encodeURIComponent(_p),{method:'POST',credentials:'include'}).then(r=>r.ok?r.json():null).catch(()=>null); _mtxToken=(_t&&_t.token)||null; } }catch(_){ } }
   await whipPublish(currentWhip, outStream);
   if(!voiceOnly) await applyEncoding();
 }
 
 let whipResource=null;   // RFC 9725 §4.2: 201 응답 Location(리소스 URL) — 종료/재연결 시 DELETE
-let _mtxToken=null;      // 서버가 발급한 WHIP 발행 토큰(MediaMTX 외부인증). 게이트 활성 시 채워짐
 async function whipDelete(){
   if(!whipResource) return; const u=whipResource; whipResource=null;
   const headers={}; const tok=(document.getElementById('whipToken')||{}).value;
@@ -2153,7 +2135,7 @@ async function whipPublish(url, stream){
   offer.sdp = setOpusBitrate(offer.sdp, Number(document.getElementById('abrSel').value)||128);
   await pc.setLocalDescription(offer);
   const headers={'Content-Type':'application/sdp'};
-  const tok=_mtxToken||(document.getElementById('whipToken')||{}).value;   // 서버발급 발행토큰 우선
+  const tok=(document.getElementById('whipToken')||{}).value;
   if(tok && tok.trim()) headers['Authorization']='Bearer '+tok.trim();   // RFC 9725 WHIP 인증
   const res = await fetch(url, {method:'POST', headers, body:offer.sdp});
   if(!res.ok) throw new Error('WHIP '+res.status);
@@ -2340,26 +2322,45 @@ async function requestWakeLock(){
 function releaseWakeLock(){ try{ if(_wakeLock){ _wakeLock.release(); _wakeLock=null; } }catch(_){} }
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden && state.live && !_wakeLock) requestWakeLock(); });
 
-/* ── 모바일 하단 탭바: 드로어 토글 ── */
-const drawers={ side:document.querySelector('.side'), props:document.querySelector('.props') };
-const backdrop=document.getElementById('backdrop');
-function closeDrawers(){
+/* ── 뒤로가기로 모달/드로어만 닫기 (사이트 이탈 방지) ──────────────────────────
+   PWA 는 브라우저 크롬(뒤로가기 버튼)이 없고(W3C 매니페스트 display:standalone),
+   모달이 열린 채로 뒤로가기(하드웨어/제스처)를 누르면 히스토리에 쌓인 게 없어
+   앱을 그대로 벗어나 버린다. 열 때 History 엔트리를 하나 쌓고(pushState), 닫을 때는
+   그 엔트리를 되돌려(history.back()) popstate 로 UI만 닫는다 — 표준 SPA 모달 패턴.
+   근거: MDN History.pushState / popstate event. ── */
+let _ovOpen=false;
+// ⚠️ 전역 `history`는 이 파일 하단의 되돌리기(Undo) 스택(let history=[])이 가리므로,
+// 브라우저 History API는 반드시 window.history 로 명시 접근한다.
+function pushOverlayState(){ if(!_ovOpen && typeof window.history.pushState==='function'){
+  try{ window.history.pushState({cbOverlay:1},''); _ovOpen=true; }catch(_){ } } }
+function closeAllOverlaysUI(){
   Object.values(drawers).forEach(d=>d.classList.remove('open'));
   backdrop.classList.remove('show');
   document.querySelectorAll('.mobilebar button[data-drawer]').forEach(b=>b.classList.remove('on'));
+  document.getElementById('aboutModal').style.display='none';
+  document.getElementById('helpModal').style.display='none';
 }
+function requestCloseOverlay(){   // UI에서 닫기 액션(X·배경 탭) → 뒤로가기와 동일 경로로 통일
+  if(_ovOpen){ try{ window.history.back(); return; }catch(_){ } }
+  closeAllOverlaysUI();
+}
+window.addEventListener('popstate', ()=>{ if(_ovOpen){ _ovOpen=false; closeAllOverlaysUI(); } });
+
+/* ── 모바일 하단 탭바: 드로어 토글 ── */
+const drawers={ side:document.querySelector('.side'), props:document.querySelector('.props') };
+const backdrop=document.getElementById('backdrop');
 function openDrawer(name){
   const willOpen=!drawers[name].classList.contains('open');
-  closeDrawers();
-  if(willOpen){
-    drawers[name].classList.add('open'); backdrop.classList.add('show');
-    document.querySelector(`.mobilebar button[data-drawer="${name}"]`).classList.add('on');
-  }
+  if(!willOpen){ requestCloseOverlay(); return; }   // 같은 탭 재탭 = 닫기: history.back() 로 엔트리까지 정리
+  closeAllOverlaysUI();
+  drawers[name].classList.add('open'); backdrop.classList.add('show');
+  document.querySelector(`.mobilebar button[data-drawer="${name}"]`).classList.add('on');
+  pushOverlayState();
 }
 document.querySelectorAll('.mobilebar button[data-drawer]').forEach(b=>{
   b.onclick=()=>openDrawer(b.dataset.drawer);
 });
-backdrop.onclick=closeDrawers;
+backdrop.onclick=requestCloseOverlay;
 /* 패널 간 스와이프 전환 (303) — 모바일: 캔버스에서 좌우 스와이프로 드로어 열기 */
 (function drawerSwipe(){
   const wrap=document.querySelector('.canvas-wrap'); if(!wrap) return;
@@ -2893,12 +2894,12 @@ function applyLang(l){
 })();
 document.getElementById('verTag').textContent='v'+APP_VERSION;
 document.getElementById('aboutVer').textContent=APP_VERSION;
-document.getElementById('aboutBtn').onclick=()=>{ document.getElementById('aboutModal').style.display='flex'; };
-document.getElementById('aboutClose').onclick=()=>{ document.getElementById('aboutModal').style.display='none'; };
-document.getElementById('aboutModal').onclick=e=>{ if(e.target.id==='aboutModal') e.currentTarget.style.display='none'; };
-document.getElementById('helpBtn').onclick=()=>{ document.getElementById('helpModal').style.display='flex'; };
-document.getElementById('helpClose').onclick=()=>{ document.getElementById('helpModal').style.display='none'; };
-document.getElementById('helpModal').onclick=e=>{ if(e.target.id==='helpModal') e.currentTarget.style.display='none'; };
+document.getElementById('aboutBtn').onclick=()=>{ document.getElementById('aboutModal').style.display='flex'; pushOverlayState(); };
+document.getElementById('aboutClose').onclick=requestCloseOverlay;
+document.getElementById('aboutModal').onclick=e=>{ if(e.target.id==='aboutModal') requestCloseOverlay(); };
+document.getElementById('helpBtn').onclick=()=>{ document.getElementById('helpModal').style.display='flex'; pushOverlayState(); };
+document.getElementById('helpClose').onclick=requestCloseOverlay;
+document.getElementById('helpModal').onclick=e=>{ if(e.target.id==='helpModal') requestCloseOverlay(); };
 /* 햅틱 피드백 */
 function haptic(ms){ try{ if(navigator.vibrate) navigator.vibrate(ms||10); }catch(_){} }
 /* 일관된 확인/취소 다이얼로그 (272) — Promise 반환 */
@@ -3031,53 +3032,7 @@ document.getElementById('ytConnect').onclick=()=>oauthConnect('google');
   else if(a==='live'){ setTimeout(()=>{ const w=document.getElementById('whip'); if(w) w.focus(); toast('WHIP 입력 후 방송 시작','ok'); }, 600); }
 })();
 
-/* ── 로그인·결제 게이트 (server-is-truth). file://·localhost 는 개발모드(게이트 없음) ── */
-const GATE_ACTIVE=/^https?:$/.test(location.protocol)&&!/^(localhost|127\.0\.0\.1)$/.test(location.hostname);
-async function checkAccess(){
-  if(!GATE_ACTIVE) return {authed:true,paid:true,dev:true};
-  try{ return await fetch('/api/me',{credentials:'include'}).then(r=>r.json()); }catch(_){ return {authed:false,paid:false,offline:true}; }
-}
-let _gisLoaded=false;
-async function gateSetupLogin(){
-  document.getElementById('gateSpin').style.display='none';
-  const msg=document.getElementById('gateMsg');
-  let cfg={}; try{ cfg=await fetch('/api/auth/config').then(r=>r.json()); }catch(_){ msg.textContent='서버 연결이 필요합니다.'; return; }
-  if(!cfg.googleClientId){ msg.textContent='구글 로그인이 서버에 설정되지 않았습니다.'; return; }
-  window._gsiCb=async(resp)=>{ msg.textContent='로그인 확인 중…';
-    try{ const r=await fetch('/api/auth/google',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({credential:resp.credential})});
-      if(r.ok) runGate(); else msg.textContent='로그인 실패'; }catch(_){ msg.textContent='로그인 오류'; } };
-  const render=()=>{ try{ google.accounts.id.initialize({client_id:cfg.googleClientId,callback:window._gsiCb});
-    google.accounts.id.renderButton(document.getElementById('gBtn'),{theme:'filled_blue',size:'large',type:'standard',shape:'pill'}); }catch(_){ msg.textContent='로그인 위젯 로드 실패'; } };
-  if(_gisLoaded&&window.google){ render(); return; }
-  const s=document.createElement('script'); s.src='https://accounts.google.com/gsi/client'; s.async=true; s.defer=true;
-  s.onload=()=>{ _gisLoaded=true; render(); }; s.onerror=()=>{ msg.textContent='구글 로그인 스크립트 로드 실패(네트워크/CSP)'; };
-  document.head.appendChild(s);
-}
-function gateSetupPay(me){
-  document.getElementById('gateSpin').style.display='none';
-  const payMsg=document.getElementById('payMsg');
-  document.getElementById('dummyBox').style.display=me.dummy?'block':'none';
-  document.querySelectorAll('.planBtn').forEach(b=> b.onclick=async()=>{ payMsg.textContent='결제 시작 중…';
-    try{ const r=await fetch('/api/checkout',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan:b.dataset.plan})}).then(r=>r.json());
-      if(r.invoice_url) location.href=r.invoice_url;
-      else if(r.dummy){ document.getElementById('dummyBox').style.display='block'; document.getElementById('dummyPay').dataset.plan=r.plan; payMsg.textContent='더미 모드 — 아래 버튼으로 활성화하세요.'; }
-      else payMsg.textContent='결제 시작 실패'; }catch(_){ payMsg.textContent='결제 오류'; } });
-  document.getElementById('dummyPay').onclick=async()=>{ const plan=document.getElementById('dummyPay').dataset.plan||'monthly';
-    try{ const r=await fetch('/api/pay/dummy',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan})});
-      if(r.ok) runGate(); else payMsg.textContent='더미 결제 실패'; }catch(_){ payMsg.textContent='오류'; } };
-  document.getElementById('gateLogout').onclick=async()=>{ try{ await fetch('/api/logout',{method:'POST',credentials:'include'}); }catch(_){}; runGate(); };
-}
-async function runGate(){
-  const gate=document.getElementById('gate'), login=document.getElementById('gateLogin'), pay=document.getElementById('gatePay'), spin=document.getElementById('gateSpin');
-  const me=await checkAccess();
-  if(me.paid){ gate.style.display='none'; return; }   // dev 또는 유료 → 앱 해제
-  gate.style.display='flex'; login.style.display='none'; pay.style.display='none'; spin.style.display='block';
-  if(me.authed){ pay.style.display='block'; document.getElementById('gateHi').textContent=(me.email||'')+' 님 — 로그인 완료'; gateSetupPay(me); }
-  else { login.style.display='block'; if(me.offline) document.getElementById('gateMsg').textContent='서버 연결이 필요합니다.'; gateSetupLogin(); }
-}
-
 /* ── init ── */
-runGate();   // 로그인/결제 상태 확인 → 미통과 시 앱 잠금
 if('serviceWorker' in navigator && location.protocol!=='file:'){
   navigator.serviceWorker.register('sw.js').catch(()=>{});
 }

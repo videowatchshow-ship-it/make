@@ -40,19 +40,9 @@ const DEST = process.env.DEST_FILE || path.join(__dirname, 'data', 'destinations
 const load = () => { try { return JSON.parse(fs.readFileSync(DEST, 'utf8')); } catch (_) { return {}; } };
 const save = (o) => fs.writeFileSync(DEST, JSON.stringify(o, null, 2));
 
-// 인증·결제·엔타이틀먼트 (로그인/결제 게이트, server-is-truth) — /api/auth/* · /api/me · /api/checkout · IPN 등록
-const auth = require('./auth');
-auth.mountAuth(app);
-const requireEntitled = [auth.requireLogin, auth.requirePaid];   // 로그인 + 결제 둘 다 통과해야
-
-// 대상 소유권 (BOLA/IDOR 방지: 아바타 경로의 소유 sub 기록 — 남의 대상 접근 차단)
-const OWN = process.env.OWNERS_FILE || path.join(__dirname, 'data', 'owners.json');
-const loadOwn = () => { try { return JSON.parse(fs.readFileSync(OWN, 'utf8')); } catch (_) { return {}; } };
-const saveOwn = (o) => { try { fs.writeFileSync(OWN, JSON.stringify(o, null, 2)); } catch (_) {} };
-const AVATAR_RE = /^[a-z0-9_-]{1,40}$/i;                             // 경로탐색 방지 (입력검증)
-const maskKey = (k) => { k = String(k || ''); return k ? (k.length > 4 ? '••••' + k.slice(-4) : '••••') : ''; };
-const pubDest = (t) => ({ ...t, streamKey: maskKey(t.streamKey) });  // 응답에서 스트림키 마스킹(평문 미반환)
-// rtmpUrl 검증: rtmp(s)/srt 스킴만, 파일/HTTP/내부주소 차단 (SSRF·파일덮어쓰기 방지)
+// 경로탐색 방지 (입력검증) — 아바타 이름 화이트리스트
+const AVATAR_RE = /^[a-z0-9_-]{1,40}$/i;
+// rtmpUrl 검증: rtmp(s)/srt 스킴만, 파일/HTTP/내부주소 차단 (SSRF·파일덮어쓰기 방지) — 로그인과 무관한 입력검증이라 유지
 function validRtmp(u) {
   u = String(u || '');
   if (!/^(rtmps?|srt):\/\//i.test(u)) return false;
@@ -61,37 +51,23 @@ function validRtmp(u) {
   } catch (_) { return false; }
   return true;
 }
-// 아바타 소유권 확인/주장 미들웨어 — req.user.sub 만 자기 아바타 접근
-function ownAvatar(claim) {
-  return (req, res, next) => {
-    const av = req.params.avatar;
-    if (!AVATAR_RE.test(av)) return res.status(400).json({ error: 'bad_avatar' });
-    const own = loadOwn(); const owner = own[av];
-    if (owner && owner !== req.user.sub) return res.status(403).json({ error: 'forbidden' });
-    if (!owner && claim) { own[av] = req.user.sub; saveOwn(own); }
-    if (!owner && !claim) return res.status(404).json({ error: 'not_found' });
-    next();
-  };
-}
 
 app.get('/api/health', (_, res) => res.json({ ok: true, ts: Date.now() }));
 
-// 아래 전부 로그인+결제 필수. 스트림키는 평문 미반환(마스킹). 자기 아바타만.
-app.get('/api/avatars', requireEntitled, (req, res) => {
-  const d = load(), own = loadOwn();
-  res.json(Object.keys(d).filter(name => own[name] === req.user.sub).map(name => ({ name, count: (d[name] || []).length })));
+app.get('/api/avatars', (_, res) => {
+  const d = load();
+  res.json(Object.keys(d).map(name => ({ name, count: (d[name] || []).length })));
 });
 
-app.get('/api/destinations', requireEntitled, (req, res) => {
-  const d = load(), own = loadOwn(), out = {};
-  for (const k of Object.keys(d)) if (own[k] === req.user.sub) out[k] = (d[k] || []).map(pubDest);
-  res.json(out);
+app.get('/api/destinations', (_, res) => res.json(load()));
+app.get('/api/destinations/:avatar', (req, res) => {
+  if (!AVATAR_RE.test(req.params.avatar)) return res.status(400).json({ error: 'bad_avatar' });
+  res.json(load()[req.params.avatar] || []);
 });
-app.get('/api/destinations/:avatar', requireEntitled, ownAvatar(false), (req, res) =>
-  res.json((load()[req.params.avatar] || []).map(pubDest)));
 
 // 대상 추가 { platform, name, rtmpUrl, streamKey, bitrate?, resolution?, enabled? }
-app.post('/api/destinations/:avatar', requireEntitled, ownAvatar(true), (req, res) => {
+app.post('/api/destinations/:avatar', (req, res) => {
+  if (!AVATAR_RE.test(req.params.avatar)) return res.status(400).json({ error: 'bad_avatar' });
   const d = load(); const b = req.body || {};
   const rtmpUrl = String(b.rtmpUrl || '');
   if (!validRtmp(rtmpUrl)) return res.status(400).json({ error: 'bad_rtmpUrl' });     // SSRF/파일싱크 차단
@@ -118,7 +94,7 @@ app.post('/api/destinations/:avatar', requireEntitled, ownAvatar(true), (req, re
 });
 
 // 대상 삭제 (locked 는 삭제 불가)
-app.delete('/api/destinations/:avatar/:idx', requireEntitled, ownAvatar(false), (req, res) => {
+app.delete('/api/destinations/:avatar/:idx', (req, res) => {
   const d = load(); const list = d[req.params.avatar] || [];
   const t = list[Number(req.params.idx)];
   if (!t) return res.status(404).json({ error: 'not found' });
@@ -126,11 +102,6 @@ app.delete('/api/destinations/:avatar/:idx', requireEntitled, ownAvatar(false), 
   list.splice(Number(req.params.idx), 1);
   save(d);
   res.json({ ok: true });
-});
-
-// WHIP 발행 토큰 (자기 아바타만) — 클라가 WHIP Bearer 로 사용, MediaMTX 가 /api/mediamtx/auth 로 검증
-app.post('/api/whip-token/:avatar', ...requireEntitled, ownAvatar(true), (req, res) => {
-  res.json({ token: auth.mintMtxToken(req.user.sub, req.params.avatar, 'publish', 6 * 3600), path: req.params.avatar });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

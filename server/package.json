@@ -10,7 +10,6 @@
     "audit:fix": "npm audit fix"
   },
   "dependencies": {
-    "express": "^5.2.1",
-    "google-auth-library": "^10.9.0"
+    "express": "^5.2.1"
   }
 }
