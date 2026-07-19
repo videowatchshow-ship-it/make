@@ -6,27 +6,22 @@ hls: yes
 hlsAddress: :8888
 webrtc: yes
 webrtcAddress: :8889     # WHIP 인제스트: http://<host>:8889/<avatar>/whip
+# 공인 IP 를 ICE 후보로 알려야 함 — 없으면 "연결은 되는데 화면이 안 나오는" 증상 발생
+# (docs/DEPLOYMENT.md §6). 서버가 34.104.233.35 이외 주소로 바뀌면 같이 바꿀 것.
+webrtcAdditionalHosts: [34.104.233.35]
 srt: no
 
 # ── 인증 (MediaMTX internal auth) ──────────────────────────────────────────
-# publish(송출)에는 사용자/비번을, read(재생)는 공개. WHIP은 Authorization: Bearer
-# (user:pass) 또는 URL 쿼리로 전달.
-# ⚠️ MediaMTX 는 YAML 안의 ${VAR} 치환을 지원하지 않는다(리터럴 문자열로 읽힘).
-#    비밀은 반드시 환경변수 오버라이드로 주입한다 (MediaMTX 문서: MTX_ 접두어):
-#      MTX_AUTHINTERNALUSERS_0_USER=<publisher>
-#      MTX_AUTHINTERNALUSERS_0_PASS=<강한 비밀>
-#    아래 값은 env 미설정 시의 로컬 기본값일 뿐, 프로덕션은 반드시 env 로 덮어쓸 것.
+# 로그인 게이트가 없는 지금은(2026-07-18 롤백) publish 도 read 처럼 공개.
+# ⚠️ 로그인/결제 게이트를 다시 붙일 때 반드시 여기도 잠글 것 — 그 전까지는
+#    이 URL(경로 이름)을 아는 사람은 누구나 이 방송으로 송출할 수 있음.
 authMethod: internal
 authInternalUsers:
-  - user: publisher
-    pass: change-me-via-MTX_AUTHINTERNALUSERS_0_PASS
-    ips: []
-    permissions:
-      - action: publish
   - user: any
     pass:
     ips: []
     permissions:
+      - action: publish
       - action: read
       - action: playback
 

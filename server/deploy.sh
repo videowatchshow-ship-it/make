@@ -165,7 +165,48 @@ else
   echo "  ⚠️ API :3000 응답 없음 — 'journalctl -u centbeam-api -n 40' 확인"
 fi
 
-echo "== [6/7] MediaMTX 상태 확인 =="
+echo "== [6/7] MediaMTX 설정 동기화 (아무 방송 이름이나 받아주게) =="
+# deploy.sh 는 지금까지 mediamtx 포트만 확인하고 실제 설정 파일은 건드리지 않았음.
+# 그래서 서버에 실제로 떠 있는 mediamtx.yml 이 저장소의 것과 달라(경로 목록에
+# all_others 캐치올이 없는 등) "path 'xxx' is not configured" 로 방송이 전부 거부됨.
+# 여기서 실행 중인 프로세스의 실제 설정 파일을 찾아 저장소 버전으로 동기화하고,
+# 문제 있으면(포트 미기동) 자동으로 백업 복원한다.
+MTX_PID="$(pgrep -x mediamtx | head -1 || true)"
+if [ -n "$MTX_PID" ]; then
+  MTX_YML="$(tr '\0' '\n' < /proc/$MTX_PID/cmdline 2>/dev/null | grep -E '\.ya?ml$' | head -1)"
+  if [ -z "$MTX_YML" ]; then
+    MTX_CWD="$(readlink -f /proc/$MTX_PID/cwd 2>/dev/null || true)"
+    [ -n "$MTX_CWD" ] && [ -f "$MTX_CWD/mediamtx.yml" ] && MTX_YML="$MTX_CWD/mediamtx.yml"
+  fi
+  if [ -n "$MTX_YML" ] && [ -f "$MTX_YML" ]; then
+    if grep -q 'all_others' "$MTX_YML" 2>/dev/null; then
+      echo "  이미 동기화됨(all_others 캐치올 존재) — 건드리지 않음: $MTX_YML"
+    else
+      MTX_BAK="${MTX_YML}.bak.$(date +%Y%m%d%H%M%S)"
+      cp "$MTX_YML" "$MTX_BAK"
+      cp "$SELF_DIR/server/mediamtx.yml" "$MTX_YML"
+      echo "  설정 교체: $MTX_YML (백업: $MTX_BAK)"
+      if systemctl is-active --quiet mediamtx 2>/dev/null; then systemctl restart mediamtx
+      elif [ -x /etc/init.d/mediamtx ]; then service mediamtx restart
+      else MTX_EXE="$(readlink -f /proc/$MTX_PID/exe 2>/dev/null || command -v mediamtx)"
+        kill "$MTX_PID" 2>/dev/null; sleep 1
+        nohup "$MTX_EXE" "$MTX_YML" >/var/log/mediamtx.log 2>&1 & disown
+      fi
+      sleep 2
+      if ss -ltnup 2>/dev/null | grep -qE ':8889\s'; then
+        echo "  ✅ MediaMTX 재시작 성공 — 이제 아무 방송 이름이나 받음"
+      else
+        echo "  ⚠️ 재시작 후 포트 응답 없음 → 자동 롤백"
+        cp "$MTX_BAK" "$MTX_YML"
+        if systemctl is-active --quiet mediamtx 2>/dev/null; then systemctl restart mediamtx; fi
+      fi
+    fi
+  else
+    echo "  ⚠️ mediamtx 설정 파일 경로를 못 찾음(pid=$MTX_PID) — 수동 확인 필요: ps -p $MTX_PID -o args="
+  fi
+else
+  echo "  ⚠️ mediamtx 프로세스가 안 보임 — 별도로 기동 필요"
+fi
 if command -v ss >/dev/null 2>&1; then
   ss -ltnup 2>/dev/null | grep -E ':(1935|8888|8889)' && echo "  MediaMTX 포트(1935/8888/8889) 리슨 중" \
     || echo "  ⚠️ MediaMTX 포트가 안 보임 — mediamtx 실행 여부 확인(server/mediamtx.yml)."
