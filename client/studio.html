@@ -2639,6 +2639,7 @@ function initDestinations(){
     state.destinations.push({id:'d'+nextId++, platform:p.id, name:p.name, rtmpUrl:base, streamKey:key, locked:false});
     document.getElementById('destKey').value=''; document.getElementById('destServer').value='';
     saveDest(); renderDest();
+    toast('✅ '+p.name+' 대상 등록 완료 — 아래 목록 확인','ok');   // 성공 피드백(예전엔 조용히 끝나서 등록됐는지 알 수 없었음)
   };
   loadDest(); renderDest();
 }
