@@ -1009,8 +1009,18 @@ document.getElementById('addScreen').onclick = () => addVideoSource('screen');
 /* 카메라 스트림 재획득 (전/후면 전환 · 장치 선택) */
 async function reacquireCamera(L, videoConstraints){
   try{
-    const stream = await navigator.mediaDevices.getUserMedia({video: videoConstraints, audio:false});
+    // 새 카메라를 요청하기 전에 기존 스트림부터 정지 — 켜둔 채로 요청하면 카메라를 배타적으로
+    // 점유하는 기기(iOS Safari 등)에서 전환이 실패하거나 같은 카메라가 그대로 반환될 수 있음.
     if(L.stream) L.stream.getTracks().forEach(t=>t.stop());
+    let stream;
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({video: videoConstraints, audio:false});
+    }catch(e){
+      // facingMode:exact 가 기기에서 지원 안 되면(OverconstrainedError 등) ideal 로 한 번 더 시도
+      if(videoConstraints && videoConstraints.facingMode && videoConstraints.facingMode.exact){
+        stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:videoConstraints.facingMode.exact}}, audio:false});
+      } else throw e;
+    }
     L.stream = stream; L.video.srcObject = stream; await L.video.play();
     const v=L.video; if(v.videoWidth&&v.videoHeight){ L.aspect=v.videoWidth/v.videoHeight; if(L.fill) coverFit(L,canvasDims()); }
   }catch(e){ toast('카메라 전환 실패: '+e.message,'err'); }
@@ -1832,7 +1842,7 @@ pCdFont.oninput=e=>{ const L=sel(); if(L)L.font=Number(e.target.value)||120; };
 document.getElementById('pCdStart').onclick=()=>{ const L=sel(); if(L)L.endAt=Date.now()+(L.mins||0)*60000; };
 function flipSelectedCamera(){ const L=sel(); if(!L||L.type!=='camera')return;
   L.facing=(L.facing==='environment')?'user':'environment'; L.flipH=(L.facing==='user'); // 전면=미러
-  reacquireCamera(L,{facingMode:{ideal:L.facing}}); syncProps(); }
+  reacquireCamera(L,{facingMode:{exact:L.facing}}); syncProps(); }
 document.getElementById('pCamFlip').onclick=flipSelectedCamera;
 document.getElementById('floatCamFlip').onclick=flipSelectedCamera;   // 캔버스 위 원터치(속성 드로어 안 열어도 됨)
 document.getElementById('pCamDevice').onchange=e=>{ const L=sel(); if(!L||L.type!=='camera'||!e.target.value)return;
