@@ -250,6 +250,11 @@
   <div style="font:13px -apple-system,sans-serif;color:#6b7688">라이브 스튜디오 로딩 중…</div>
 </div>
 <div id="offlineBar" data-i18n="net.offline">⚠️ 오프라인 상태입니다 — 네트워크 연결을 확인하세요. (방송은 연결 복구 시 자동 재연결)</div>
+<button id="floatBack" title="뒤로가기" aria-label="뒤로가기(현재 창 닫기)"
+  style="display:none;position:fixed;top:12px;left:12px;z-index:100000;width:44px;height:44px;
+  border-radius:50%;border:none;background:rgba(10,13,24,.72);backdrop-filter:blur(4px);
+  color:#fff;font-size:22px;align-items:center;justify-content:center;
+  box-shadow:0 4px 16px rgba(0,0,0,.4)">←</button>
 <div id="confirmModal" style="position:fixed;inset:0;z-index:9994;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6)">
   <div style="background:#141a24;border:1px solid #2a3446;border-radius:14px;padding:22px;max-width:340px;text-align:center;font-family:-apple-system,'Malgun Gothic',sans-serif;color:#e6e9ef">
     <div id="confirmMsg" style="font-size:15px;line-height:1.6;margin-bottom:18px"></div>
@@ -2357,12 +2362,19 @@ document.addEventListener('visibilitychange', ()=>{ if(!document.hidden && state
    모달이 열린 채로 뒤로가기(하드웨어/제스처)를 누르면 히스토리에 쌓인 게 없어
    앱을 그대로 벗어나 버린다. 열 때 History 엔트리를 하나 쌓고(pushState), 닫을 때는
    그 엔트리를 되돌려(history.back()) popstate 로 UI만 닫는다 — 표준 SPA 모달 패턴.
-   근거: MDN History.pushState / popstate event. ── */
+   근거: MDN History.pushState / popstate event.
+   iOS Safari의 홈화면 설치(standalone) 앱은 스와이프 뒤로가기 제스처 자체가 없어서
+   (WebKit이 standalone 모드에서 내비게이션 제스처를 제공하지 않음 — Apple Human
+   Interface Guidelines/WebKit 알려진 동작) 하드웨어·제스처 뒤로가기에만 의존하면
+   iPhone에서는 모달을 닫을 방법이 없다. 그래서 페이지 내용과 무관하게 항상 떠있는
+   플로팅 버튼(#floatBack, position:fixed)을 두고 동일한 requestCloseOverlay() 경로로
+   연결한다 — 열려있는 오버레이가 있을 때만 보이고, 동작은 하드웨어 뒤로가기와 100% 동일. ── */
 let _ovOpen=false;
 // ⚠️ 전역 `history`는 이 파일 하단의 되돌리기(Undo) 스택(let history=[])이 가리므로,
 // 브라우저 History API는 반드시 window.history 로 명시 접근한다.
+function setFloatBackVisible(show){ const b=document.getElementById('floatBack'); if(b) b.style.display = show?'flex':'none'; }
 function pushOverlayState(){ if(!_ovOpen && typeof window.history.pushState==='function'){
-  try{ window.history.pushState({cbOverlay:1},''); _ovOpen=true; }catch(_){ } } }
+  try{ window.history.pushState({cbOverlay:1},''); _ovOpen=true; setFloatBackVisible(true); }catch(_){ } } }
 function closeAllOverlaysUI(){
   Object.values(drawers).forEach(d=>d.classList.remove('open'));
   backdrop.classList.remove('show');
@@ -2374,7 +2386,8 @@ function requestCloseOverlay(){   // UI에서 닫기 액션(X·배경 탭) → �
   if(_ovOpen){ try{ window.history.back(); return; }catch(_){ } }
   closeAllOverlaysUI();
 }
-window.addEventListener('popstate', ()=>{ if(_ovOpen){ _ovOpen=false; closeAllOverlaysUI(); } });
+window.addEventListener('popstate', ()=>{ if(_ovOpen){ _ovOpen=false; setFloatBackVisible(false); closeAllOverlaysUI(); } });
+document.getElementById('floatBack').onclick=requestCloseOverlay;
 
 /* ── 모바일 하단 탭바: 드로어 토글 ── */
 const drawers={ side:document.querySelector('.side'), props:document.querySelector('.props') };
