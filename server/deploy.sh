@@ -96,6 +96,11 @@ if [ -f "$CERT/fullchain.pem" ]; then
   Header always set Cross-Origin-Opener-Policy "same-origin-allow-popups"
   Header always set Cross-Origin-Resource-Policy "same-origin"
   Header always set X-Robots-Tag "noindex, nofollow"
+  # sw.js/HTML/manifest 는 항상 서버에 재확인 — 캐시 서비스워커 갱신 지연(최대 24h) 방지
+  # (W3C Service Workers spec §Update algorithm 권고, MDN "Service worker caching and HTTP caching")
+  <FilesMatch "(\.html|sw\.js|\.webmanifest)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
   ProxyPreserveHost On
   ProxyPass        /whip/ http://127.0.0.1:8889/
   ProxyPassReverse /whip/ http://127.0.0.1:8889/
