@@ -99,6 +99,14 @@
   .live-dot{width:8px;height:8px;border-radius:50%;background:#555}
   .live-dot.on{background:var(--danger);box-shadow:0 0 8px var(--danger);animation:pulse 1.2s infinite}
   @keyframes pulse{50%{opacity:.4}}
+  /* 방송 시작 필수 순서 — 빨갛게 강조 + 번호 배지(::before, data-i18n textContent 교체와 충돌 안 나게 실제 자식이 아닌 가상요소 사용).
+     그 단계를 마치면 JS 가 클래스를 빼서 자동으로 사라짐 */
+  @keyframes cbReqPulse{50%{box-shadow:0 0 0 6px rgba(255,59,59,0)}}
+  .cb-req{position:relative;background:var(--danger)!important;border-color:var(--danger)!important;color:#fff!important;
+    box-shadow:0 0 0 0 rgba(255,59,59,.55);animation:cbReqPulse 1.4s infinite}
+  .cb-req::before{content:attr(data-cb-num);position:absolute;top:-8px;left:-8px;width:20px;height:20px;border-radius:50%;
+    background:#fff;color:var(--danger);font:800 12px/20px -apple-system,sans-serif;text-align:center;
+    box-shadow:0 2px 6px rgba(0,0,0,.4);z-index:5;pointer-events:none}
   .btn{border:1px solid var(--line);background:var(--panel2);color:var(--txt);padding:9px 16px;
     border-radius:10px;font-size:13px;cursor:pointer}
   .btn.primary{background:var(--grad);border:none;color:#fff;font-weight:700;box-shadow:var(--glow)}
@@ -315,7 +323,7 @@
     </div>
     <h2 data-i18n="h.sources">소스 추가</h2>
     <div class="addbar">
-      <button id="addCam" data-i18n="src.cam">🎥 카메라</button>
+      <button id="addCam" data-i18n="src.cam" class="cb-req" data-cb-num="2">🎥 카메라</button>
       <button id="addScreen" data-i18n="src.screen">🖥️ 화면공유</button>
       <button id="addImg" data-i18n="src.img">🖼️ 이미지</button>
       <button id="addText" data-i18n="src.text">🅣 텍스트</button>
@@ -358,7 +366,7 @@
     <div class="toolbar">
       <div class="seg" id="orient">
         <button data-o="landscape" class="on" data-i18n="o.land">가로 16:9</button>
-        <button data-o="portrait" data-i18n="o.port">세로 9:16</button>
+        <button data-o="portrait" data-i18n="o.port" class="cb-req" data-cb-num="3">세로 9:16</button>
       </div>
       <select id="arSel" class="btn" style="padding:8px" title="화면비">
         <option value="1.7778">16:9</option>
@@ -388,7 +396,7 @@
       <div class="spacer"></div>
       <span class="live-dot" id="dot"></span>
       <span id="liveTxt" style="font-size:12px;color:var(--muted)" data-i18n="live.off">오프라인</span>
-      <button class="btn primary" id="goLive" data-i18n="btn.golive">🔴 방송 시작</button>
+      <button class="btn primary cb-req" id="goLive" data-i18n="btn.golive" data-cb-num="6">🔴 방송 시작</button>
     </div>
     <div class="canvas-wrap">
       <div class="frame" id="frame">
@@ -723,7 +731,7 @@
       <select id="platSel" class="field"></select>
       <input id="destServer" placeholder="서버 URL (세션별 플랫폼)" style="display:none">
       <input id="destKey" placeholder="스트림 키">
-      <button class="btn" id="destAdd" style="width:100%;margin-top:6px">＋ 대상 추가</button>
+      <button class="btn cb-req" id="destAdd" style="width:100%;margin-top:6px" data-cb-num="5">＋ 대상 추가</button>
     </div>
     <button class="btn" id="ytConnect" style="width:100%;margin-top:8px" data-i18n="oauth.yt">▶ YouTube 연동 (스트림키 자동)</button>
     <div class="note" id="ytStat"></div>
@@ -800,9 +808,9 @@
   <!-- 모바일 전용: 하단 탭바 + 드로어 백드롭 -->
   <div class="drawer-backdrop" id="backdrop"></div>
   <nav class="mobilebar" id="mobilebar">
-    <button data-drawer="side">🧩<span>소스·레이어</span></button>
-    <button data-drawer="props">⚙️<span>속성</span></button>
-    <button id="mGoLive" class="m-live">🔴<span>방송</span></button>
+    <button data-drawer="side" class="cb-req" data-cb-num="1">🧩<span>소스·레이어</span></button>
+    <button data-drawer="props" class="cb-req" data-cb-num="4">⚙️<span>속성</span></button>
+    <button id="mGoLive" class="m-live cb-req" data-cb-num="6">🔴<span>방송</span></button>
   </nav>
   <div id="toast" class="toast"></div>
 </div>
@@ -1588,6 +1596,7 @@ document.getElementById('orient').addEventListener('click', e=>{
   [...e.currentTarget.children].forEach(x=>x.classList.remove('on'));
   b.classList.add('on'); state.orient=b.dataset.o;
   applyCanvasSize(); refitLayers(old, canvasDims());
+  updateQuickStart();
 });
 document.getElementById('resSel').onchange = e=>{
   const old=canvasDims();
@@ -1606,6 +1615,15 @@ document.getElementById('arSel').onchange = e=>{
 
 /* ── 레이어 목록 ── */
 const ICON={camera:'🎥',screen:'🖥️',image:'🖼️',text:'🅣',web:'🌐',solid:'🟦',clock:'🕐',lower3:'▬',countdown:'⏱',video:'🎞️',gauge:'📊',chat:'💬',sticker:'⭐',frame:'🖼',emote:'💗',poll:'📊',donors:'★',nowplaying:'🎧',audiobars:'〰',roulette:'🎡',slideshow:'🖽',data:'🔢'};
+/* 방송 시작 필수 순서 강조(빨강+번호) — 그 단계가 끝나면 해당 버튼에서 자동으로 뗌 */
+function updateQuickStart(){
+  try{
+    if(state.layers.some(l=>l.type==='camera')) document.getElementById('addCam')?.classList.remove('cb-req');
+    if(state.orient==='portrait') document.querySelectorAll('#orient button.cb-req').forEach(b=>b.classList.remove('cb-req'));
+    if((state.destinations||[]).some(d=>!d.locked)) document.getElementById('destAdd')?.classList.remove('cb-req');
+    if(state.live){ document.getElementById('goLive')?.classList.remove('cb-req'); document.getElementById('mGoLive')?.classList.remove('cb-req'); }
+  }catch(_){}
+}
 function renderLayers(){
   const box=document.getElementById('layers'); box.innerHTML='';
   [...state.layers].sort((a,b)=>b.z-a.z).forEach(L=>{
@@ -1637,6 +1655,7 @@ function renderLayers(){
     el.addEventListener('pointerup', swEnd); el.addEventListener('pointercancel', swEnd);
     box.appendChild(el);
   });
+  updateQuickStart();
 }
 function bump(L,dir){ L.z+=dir*1.5; normalizeZ(); renderLayers(); }
 function normalizeZ(){ [...state.layers].sort((a,b)=>a.z-b.z).forEach((l,i)=>l.z=i); }
@@ -2312,6 +2331,7 @@ function setLive(v){
     else if(!v && screen.orientation && screen.orientation.unlock){ screen.orientation.unlock(); }
   }catch(_){}
   if(v) requestWakeLock(); else releaseWakeLock();   // 방송 중 화면 꺼짐 방지
+  updateQuickStart();
 }
 /* ── Wake Lock (방송 중 화면 꺼짐 방지) ── */
 let _wakeLock=null;
@@ -2351,10 +2371,12 @@ const drawers={ side:document.querySelector('.side'), props:document.querySelect
 const backdrop=document.getElementById('backdrop');
 function openDrawer(name){
   const willOpen=!drawers[name].classList.contains('open');
+  const tabBtn=document.querySelector(`.mobilebar button[data-drawer="${name}"]`);
+  tabBtn?.classList.remove('cb-req');   // 필수 순서 탭을 열어봤으면 강조 해제(안의 실제 작업 여부는 updateQuickStart 가 별도 체크)
   if(!willOpen){ requestCloseOverlay(); return; }   // 같은 탭 재탭 = 닫기: history.back() 로 엔트리까지 정리
   closeAllOverlaysUI();
   drawers[name].classList.add('open'); backdrop.classList.add('show');
-  document.querySelector(`.mobilebar button[data-drawer="${name}"]`).classList.add('on');
+  tabBtn.classList.add('on');
   pushOverlayState();
 }
 document.querySelectorAll('.mobilebar button[data-drawer]').forEach(b=>{
@@ -2617,6 +2639,7 @@ function renderDest(){
     }
     box.appendChild(el);
   });
+  updateQuickStart();
 }
 function initDestinations(){
   const sel=document.getElementById('platSel');
@@ -3062,6 +3085,7 @@ renderSceneTabs();
 initDestinations();
 initMixer();
 applyCanvasSize();
+updateQuickStart();   // 복원된 씬/방향 등 이미 완료된 단계는 시작부터 강조 해제
 requestAnimationFrame(draw);
 setInterval(saveScene, 2500);
 </script>
