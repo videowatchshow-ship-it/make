@@ -3038,6 +3038,12 @@ if('serviceWorker' in navigator && location.protocol!=='file:'){
   navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
 restoreScene();
+// WHIP 엔드포인트 기본값 채우기 — placeholder(회색 예시글자)는 실제 값이 아니라서
+// 신규 사용자가 안 채우면 방송이 아무데도 안 나가는데 원인을 알기 어려웠음.
+(function fillDefaultWhip(){
+  const w=document.getElementById('whip');
+  if(w && !w.value.trim()) w.value='https://panda-avata.cc/whip/tak/whip';
+})();
 pushHistory();          // 초기 스냅샷(되돌리기 기준점)
 if(loadScenes()){ applySnapshot(scenes[activeScene].data); }  // 저장된 다중 씬 복원
 /* 모바일 최초 실행은 세로(9:16) 기본 — 폰에서 캔버스가 화면을 채우도록 (PRISM 모바일 패턴).
