@@ -50,13 +50,13 @@ flowchart TD
 ### 3.1 클라이언트 (`client/studio.html`)
 - **책임**: 화면 합성(씬), 소스 관리, 변형(이동/크기/회전), 송출(WHIP), 씬 저장.
 - **비책임**: fan-out, 대상 관리의 영속화, 인증서버.
-- 내부 모듈 구조는 [client/README.md](../client/README.md) 참고.
+- 내부 모듈 구조는 루트 [README.md §5](../README.md#5-클라이언트-상세--studiohtml) 참고.
 
 ### 3.2 릴레이 서버 (`server/`)
 - **MediaMTX**: RTMP/WHIP 수신, HLS/WebRTC 재생 엔드포인트, publish 훅.
 - **fanout.sh**: 대상별 FFmpeg fan-out.
 - **server.js (Express)**: `destinations.json` CRUD + 헬스체크. (미디어는 안 건드림)
-- 상세는 [server/README.md](../server/README.md) 참고.
+- 상세는 루트 [README.md §6](../README.md#6-서버-상세--릴레이) 참고.
 
 ---
 
