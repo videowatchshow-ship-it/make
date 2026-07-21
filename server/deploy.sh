@@ -171,6 +171,19 @@ else
 fi
 
 echo "== [6/7] MediaMTX 설정 동기화 (아무 방송 이름이나 받아주게) =="
+# fanout.sh(publish 감지 시 유튜브 등으로 실제 재전송하는 스크립트)는 매 줄 jq 로
+# destinations.json 을 파싱하고 ffmpeg 로 RTMP 재전송한다 — 이 둘이 서버에 없으면
+# destinations.json 이 아무리 정확해도 fanout.sh 가 조용히 전부 실패해 어디에도 안 나간다.
+# deploy.sh 가 지금까지 이 둘을 설치한 적이 없었음(certbot/node 만 설치).
+if ! command -v jq >/dev/null 2>&1 || ! command -v ffmpeg >/dev/null 2>&1; then
+  echo "  jq/ffmpeg 설치 중..."
+  apt-get update -qq && apt-get install -y -qq jq ffmpeg
+fi
+command -v jq >/dev/null 2>&1 && command -v ffmpeg >/dev/null 2>&1 \
+  && echo "  ✅ jq $(jq --version 2>/dev/null), ffmpeg $(ffmpeg -version 2>/dev/null | head -1 | awk '{print $3}') 확인됨" \
+  || echo "  ⚠️ jq/ffmpeg 설치 실패 — fan-out 이 절대 작동 안 함, 수동 설치 필요: apt-get install -y jq ffmpeg"
+chmod +x "$API_DIR/fanout.sh" 2>/dev/null || true   # mediamtx.yml 이 실제로 실행하는 배포 위치
+
 # deploy.sh 는 지금까지 mediamtx 포트만 확인하고 실제 설정 파일은 건드리지 않았음.
 # 그래서 서버에 실제로 떠 있는 mediamtx.yml 이 저장소의 것과 달라(경로 목록에
 # all_others 캐치올이 없는 등) "path 'xxx' is not configured" 로 방송이 전부 거부됨.
