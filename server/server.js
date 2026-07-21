@@ -65,14 +65,13 @@ app.get('/api/destinations/:avatar', (req, res) => {
   res.json(load()[req.params.avatar] || []);
 });
 
-// 대상 추가 { platform, name, rtmpUrl, streamKey, bitrate?, resolution?, enabled? }
-app.post('/api/destinations/:avatar', (req, res) => {
-  if (!AVATAR_RE.test(req.params.avatar)) return res.status(400).json({ error: 'bad_avatar' });
-  const d = load(); const b = req.body || {};
+// 대상 객체 검증+정규화 — POST(단건 추가)/PUT(통짜 치환) 공용
+function sanitizeDest(b) {
+  b = b || {};
   const rtmpUrl = String(b.rtmpUrl || '');
-  if (!validRtmp(rtmpUrl)) return res.status(400).json({ error: 'bad_rtmpUrl' });     // SSRF/파일싱크 차단
+  if (!validRtmp(rtmpUrl)) return null;     // SSRF/파일싱크 차단
   const streamKey = String(b.streamKey || '');
-  if (streamKey.includes('/') || streamKey.includes('..')) return res.status(400).json({ error: 'bad_streamKey' });
+  if (streamKey.includes('/') || streamKey.includes('..')) return null;
   const dest = {
     platform: String(b.platform || 'custom').slice(0, 32),
     name: String(b.name || 'unnamed').slice(0, 80),
@@ -86,11 +85,39 @@ app.post('/api/destinations/:avatar', (req, res) => {
   if (b.gop != null && Number(b.gop) >= 1 && Number(b.gop) <= 10) dest.gop = Number(b.gop);       // 키프레임 간격(초)
   if (b.rateControl === 'cbr' || b.rateControl === 'vbr') dest.rateControl = b.rateControl;        // 레이트 컨트롤
   if (b.bframes != null && Number.isInteger(Number(b.bframes)) && Number(b.bframes) >= 0 && Number(b.bframes) <= 3) dest.bframes = Number(b.bframes);
+  return dest;
+}
+
+// 대상 추가 { platform, name, rtmpUrl, streamKey, bitrate?, resolution?, enabled? }
+app.post('/api/destinations/:avatar', (req, res) => {
+  if (!AVATAR_RE.test(req.params.avatar)) return res.status(400).json({ error: 'bad_avatar' });
+  const dest = sanitizeDest(req.body);
+  if (!dest) return res.status(400).json({ error: 'bad_rtmpUrl_or_streamKey' });
+  const d = load();
   const list = (d[req.params.avatar] ||= []);
   if (list.length >= 20) return res.status(429).json({ error: 'too_many_destinations' });   // 쿼터(DoS 방지)
   list.push(dest);
   save(d);
   res.json({ ok: true, index: list.length - 1 });
+});
+
+// 대상 목록 통짜 치환 — 브라우저(localStorage)와 서버(destinations.json)를 한 번에 맞춤.
+// 프론트는 지금까지 대상 추가를 localStorage 에만 저장하고 서버엔 전달하지 않아, 실제
+// fan-out(fanout.sh)이 참조하는 destinations.json 이 항상 비어있던 문제(방송은 릴레이
+// 서버까지만 연결되고 유튜브 등으로는 안 나감)를 이 엔드포인트로 해소한다.
+app.put('/api/destinations/:avatar', (req, res) => {
+  if (!AVATAR_RE.test(req.params.avatar)) return res.status(400).json({ error: 'bad_avatar' });
+  const body = req.body;
+  if (!Array.isArray(body)) return res.status(400).json({ error: 'bad_body' });
+  if (body.length > 20) return res.status(429).json({ error: 'too_many_destinations' });   // 쿼터(DoS 방지)
+  const list = [];
+  for (const b of body) {
+    const dest = sanitizeDest(b);
+    if (!dest) return res.status(400).json({ error: 'bad_rtmpUrl_or_streamKey' });
+    list.push(dest);
+  }
+  const d = load(); d[req.params.avatar] = list; save(d);
+  res.json({ ok: true, count: list.length });
 });
 
 // 대상 삭제 (locked 는 삭제 불가)

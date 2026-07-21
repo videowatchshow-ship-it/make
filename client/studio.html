@@ -2093,6 +2093,8 @@ document.getElementById('goLive').onclick = async function(){
     toast('⚠️ 대상 채널을 먼저 추가하세요(스트림 키 입력) — 없으면 어디에도 안 나갑니다','warn');
     return;
   }
+  // 방송 시작 직전, 서버 쪽 대상 목록이 지금 화면과 확실히 같은 상태인지 마지막으로 한 번 더 맞춤
+  if(!await syncDestToServer()){ toast('⚠️ 대상 목록을 서버에 반영하지 못했습니다 — 네트워크 확인 후 다시 시도하세요','err'); return; }
   await runCountdown();
   showLoading('송출 연결 중…');
   try{ await startPublish(); setLive(true); startTimers(); alertSound('start'); toast('방송 시작','ok'); }
@@ -2638,7 +2640,29 @@ function seedMandatory(){
 /* 스트림키 평문 저장 금지 (334) — base64 난독화(암호화 아님. 브라우저는 진짜 시크릿 저장소가 없음) */
 function obf(s){ try{ return 'b64:'+btoa(unescape(encodeURIComponent(s))); }catch(_){ return s; } }
 function deobf(s){ try{ return s && s.startsWith('b64:') ? decodeURIComponent(escape(atob(s.slice(4)))) : s; }catch(_){ return s; } }
-function saveDest(){ try{ localStorage.setItem(DKEY, obf(JSON.stringify(state.destinations))); }catch(_){} }
+// WHIP 주소(예: https://host/whip/tak/whip)에서 아바타(경로 이름) 추출.
+// 서버의 실제 fan-out(fanout.sh)은 이 이름으로 destinations.json 을 조회하므로,
+// 대상 목록을 어느 아바타로 동기화할지는 반드시 이 값과 일치해야 한다.
+function currentAvatar(){
+  try{
+    const v=(document.getElementById('whip')||{}).value||'';
+    const m=v.match(/\/whip\/([a-z0-9_-]+)\/whip/i);
+    return m ? m[1] : 'tak';
+  }catch(_){ return 'tak'; }
+}
+// 대상 목록을 서버에도 반영 — 지금까지 saveDest() 가 localStorage 에만 저장하고
+// 서버(destinations.json)엔 전달하지 않아, 방송을 시작해도 실제 fan-out 대상이
+// 서버 쪽엔 하나도 없는 상태였다(그래서 릴레이 연결은 되는데 유튜브 등엔 안 나감).
+// PUT 으로 서버 쪽 해당 아바타 목록을 통짜 치환해 항상 최신 상태로 맞춘다.
+async function syncDestToServer(){
+  try{
+    const avatar=currentAvatar();
+    const res=await fetch('/api/destinations/'+encodeURIComponent(avatar),{
+      method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(state.destinations)});
+    return res.ok;
+  }catch(_){ return false; }
+}
+function saveDest(){ try{ localStorage.setItem(DKEY, obf(JSON.stringify(state.destinations))); }catch(_){} syncDestToServer(); }
 function loadDest(){
   try{ const raw=localStorage.getItem(DKEY); const s=raw?JSON.parse(deobf(raw)):null; if(Array.isArray(s)) state.destinations=s; }catch(_){}
   seedMandatory();
