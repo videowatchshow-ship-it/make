@@ -173,7 +173,7 @@
   .mix-add .btn{min-height:0;padding:9px}
 
   /* 토스트 */
-  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);
+  .toast{position:fixed;left:50%;bottom:calc(24px + var(--kb,0px));transform:translateX(-50%) translateY(20px);
     background:var(--panel2);border:1px solid var(--line);color:var(--txt);padding:10px 16px;
     border-radius:10px;font-size:13px;z-index:80;opacity:0;pointer-events:none;transition:.2s;
     box-shadow:0 8px 30px rgba(0,0,0,.5);max-width:80vw}
@@ -428,7 +428,7 @@
       <input id="destDesc" placeholder="설명 (선택 · 트위치는 지원 안 함)" maxlength="500">
       <input id="destServer" placeholder="서버 URL (세션별 플랫폼)" style="display:none">
       <input id="destKey" placeholder="스트림 키" class="cb-req" data-cb-num="6">
-      <button class="btn cb-req" id="destAdd" style="width:100%;margin-top:6px" data-cb-num="7">＋ 대상 추가</button>
+      <button class="btn primary cb-req" id="destAdd" style="width:100%;margin-top:6px;font-weight:700" data-cb-num="7">💾 저장 (대상 추가)</button>
     </div>
     <button class="btn" id="ytConnect" style="width:100%;margin-top:8px" data-i18n="oauth.yt">▶ YouTube 연동 (스트림키+제목 자동)</button>
     <div class="note" id="ytStat"></div>
