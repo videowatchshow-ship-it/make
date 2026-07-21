@@ -2086,6 +2086,13 @@ document.getElementById('goLive').onclick = async function(){
   if(state.live){ if(!await cbConfirm('방송을 종료할까요?')) return; stopLive(); toast('방송 종료'); return; }
   currentWhip=document.getElementById('whip').value.trim();
   if(!currentWhip){ toast('WHIP 엔드포인트를 입력하세요','warn'); return; }
+  // WHIP 연결(서버까지 도달)과 실제 fan-out(유튜브 등으로 나가는 것)은 별개 — 스트림 키가
+  // 하나도 없으면 서버까지는 연결돼서 "방송 시작"이 뜨지만 정작 어디에도 안 나간다.
+  // 필수 순서 5번(대상 추가)을 실제로 마쳤는지 여기서도 확인해야 6번이 의미가 있다.
+  if(!(state.destinations||[]).some(d=>!d.locked && d.streamKey && d.streamKey.trim())){
+    toast('⚠️ 대상 채널을 먼저 추가하세요(스트림 키 입력) — 없으면 어디에도 안 나갑니다','warn');
+    return;
+  }
   await runCountdown();
   showLoading('송출 연결 중…');
   try{ await startPublish(); setLive(true); startTimers(); alertSound('start'); toast('방송 시작','ok'); }
