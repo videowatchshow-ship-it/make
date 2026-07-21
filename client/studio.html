@@ -41,7 +41,7 @@
     --danger:#e8820e; --ok:#0072e5;
   }
   *{box-sizing:border-box}
-  html{font-size:clamp(14px, 1.5vw, 16px)}                        /* 유동 기준 폰트 (47) */
+  html{font-size:clamp(15px, 1.5vw, 17px)}                        /* 유동 기준 폰트 (47) — 가독성 요청으로 상향 */
   html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Malgun Gothic",sans-serif;
     overscroll-behavior:none;-webkit-overflow-scrolling:touch}   /* 스크롤 바운스 억제 */
@@ -91,9 +91,11 @@
   /* ── center: canvas ── */
   .stage{flex:1;display:flex;flex-direction:column;min-width:0}
   .toolbar{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);
-    background:var(--panel)}
+    background:var(--panel);position:relative}
+  .tb-more{display:contents}   /* 데스크톱: 그냥 툴바 안에 나란히(기존과 동일) */
+  #tbMoreBtn{display:none}     /* 데스크톱: 공간 넉넉해서 더보기 버튼 자체가 불필요 */
   .seg{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:10px;overflow:hidden}
-  .seg button{background:transparent;border:none;color:var(--muted);padding:8px 14px;cursor:pointer;font-size:13px}
+  .seg button{background:transparent;border:none;color:var(--muted);padding:8px 14px;cursor:pointer;font-size:15px}
   .seg button.on{background:var(--grad);color:#fff}
   .spacer{flex:1}
   .live-dot{width:8px;height:8px;border-radius:50%;background:#555}
@@ -108,7 +110,7 @@
     background:#fff;color:var(--danger);font:800 12px/20px -apple-system,sans-serif;text-align:center;
     box-shadow:0 2px 6px rgba(0,0,0,.4);z-index:5;pointer-events:none}
   .btn{border:1px solid var(--line);background:var(--panel2);color:var(--txt);padding:9px 16px;
-    border-radius:10px;font-size:13px;cursor:pointer}
+    border-radius:10px;font-size:15px;cursor:pointer}
   .btn.primary{background:var(--grad);border:none;color:#fff;font-weight:700;box-shadow:var(--glow)}
   .btn.primary:hover{filter:brightness(1.08)}
   .btn.stop{background:var(--danger);border-color:var(--danger);color:#fff}
@@ -208,6 +210,14 @@
     .toolbar .seg button{padding:10px 14px;font-size:14px}
     .toolbar .btn{min-height:44px}
     #goLive{display:none}            /* 데스크톱 방송버튼 숨기고 하단바로 대체 */
+    /* 배경·가이드류 9개 버튼을 "더보기"로 접어서 툴바 높이를 확 줄임 —
+       비디오 미리보기가 화면 대부분을 차지하게(예전엔 툴바만 190px, 화면의
+       22%를 차지해 영상이 잘 안 보인다는 지적의 원인) */
+    #tbMoreBtn{display:inline-flex}
+    .tb-more{display:none;position:absolute;top:100%;left:8px;right:8px;margin-top:4px;
+      background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px;
+      flex-wrap:wrap;gap:6px;z-index:45;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+    .tb-more.show{display:flex}
 
     /* 사이드·속성 → 하단에서 올라오는 시트 */
     .side,.props{position:fixed;left:0;right:0;bottom:0;width:auto;flex:none;
@@ -384,16 +394,19 @@
         <option value="1440">1440p</option>
         <option value="custom" data-i18n="res.custom">커스텀…</option>
       </select>
-      <label class="bg-pick" title="캔버스 배경색">🎨<input type="color" id="bgColor" value="#000000"></label>
-      <button class="btn" id="bgImgBtn" title="캔버스 배경 이미지" style="padding:4px 8px">🏞</button>
-      <input type="file" id="bgImgFile" accept="image/*" style="display:none">
-      <button class="btn" id="gSafe" title="세이프존 가이드">🎯</button>
-      <button class="btn" id="gGrid" title="그리드 오버레이">▦</button>
-      <button class="btn" id="gRuler" title="눈금자">📏</button>
-      <button class="btn" id="gSnap" title="그리드 스냅">🧲</button>
-      <button class="btn" id="gBrb" title="자리비움 화면(BRB)" aria-label="BRB 화면">☕</button>
-      <button class="btn" id="gRotLock" title="화면 회전 잠금" aria-label="화면 회전 잠금">🔓↻</button>
-      <button class="btn" id="gImmersive" title="몰입 모드(패널 숨김)" aria-label="몰입 모드">⛶↔</button>
+      <button class="btn" id="tbMoreBtn" title="더보기(배경·가이드)" aria-label="더보기" aria-expanded="false">⋯ 더보기</button>
+      <div class="tb-more" id="tbMore">
+        <label class="bg-pick" title="캔버스 배경색">🎨<input type="color" id="bgColor" value="#000000"></label>
+        <button class="btn" id="bgImgBtn" title="캔버스 배경 이미지" style="padding:4px 8px">🏞</button>
+        <input type="file" id="bgImgFile" accept="image/*" style="display:none">
+        <button class="btn" id="gSafe" title="세이프존 가이드">🎯</button>
+        <button class="btn" id="gGrid" title="그리드 오버레이">▦</button>
+        <button class="btn" id="gRuler" title="눈금자">📏</button>
+        <button class="btn" id="gSnap" title="그리드 스냅">🧲</button>
+        <button class="btn" id="gBrb" title="자리비움 화면(BRB)" aria-label="BRB 화면">☕</button>
+        <button class="btn" id="gRotLock" title="화면 회전 잠금" aria-label="화면 회전 잠금">🔓↻</button>
+        <button class="btn" id="gImmersive" title="몰입 모드(패널 숨김)" aria-label="몰입 모드">⛶↔</button>
+      </div>
       <button class="btn" id="zoomOut" title="축소" style="padding:4px 8px">➖</button>
       <span id="zoomLbl" style="font-size:12px;color:var(--muted);min-width:38px;text-align:center">100%</span>
       <button class="btn" id="zoomIn" title="확대" style="padding:4px 8px">➕</button>
@@ -883,9 +896,16 @@ function canvasDims(){
 function applyCanvasSize(){
   const {w,h} = canvasDims();
   cv.width = w; cv.height = h;
-  // 프리뷰 프레임을 화면에 맞게 스케일
-  const wrap = frame.parentElement.getBoundingClientRect();
-  const maxW = wrap.width - 36, maxH = wrap.height - 36;
+  // 프리뷰 프레임을 화면에 맞게 스케일 — wrap의 실제 padding을 읽어서 뺀다.
+  // 예전엔 데스크톱 padding(18px×2=36)만 가정한 고정값을 썼는데, 모바일은
+  // padding이 비대칭(10px 10px 64px — 하단은 하단 탭바 자리)이라 36만 빼면
+  // 실제 여백보다 덜 빠져서 캔버스가 하단 탭바 밑으로 파고들었다(약 38px).
+  const wrapEl = frame.parentElement;
+  const cs = getComputedStyle(wrapEl);
+  const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+  const wrap = wrapEl.getBoundingClientRect();
+  const maxW = wrap.width - padX, maxH = wrap.height - padY;
   const scale = Math.min(maxW / w, maxH / h);
   frame.style.width = (w*scale)+'px';
   frame.style.height = (h*scale)+'px';
@@ -1928,6 +1948,14 @@ document.querySelectorAll('.toolbar button, .layers .mini').forEach(b=>{ if(!b.g
 /* 몰입 모드 (패널 숨김) */
 document.getElementById('gImmersive').onclick=e=>{ const app=document.querySelector('.app'); app.classList.toggle('immersive');
   e.currentTarget.classList.toggle('primary', app.classList.contains('immersive')); setTimeout(applyCanvasSize,50); };
+/* 모바일 툴바 "더보기" 드롭다운(배경·가이드류) — 바깥 탭하면 닫힘 */
+(function tbMoreToggle(){
+  const btn=document.getElementById('tbMoreBtn'), panel=document.getElementById('tbMore'); if(!btn||!panel) return;
+  btn.onclick=e=>{ e.stopPropagation(); const show=!panel.classList.contains('show');
+    panel.classList.toggle('show', show); btn.setAttribute('aria-expanded', String(show)); };
+  document.addEventListener('click', e=>{ if(panel.classList.contains('show') && !panel.contains(e.target) && e.target!==btn){
+    panel.classList.remove('show'); btn.setAttribute('aria-expanded','false'); } });
+})();
 /* 더블탭 → 캔버스 맞춤 (306) */
 let _lastTap=0;
 hit.addEventListener('pointerup', e=>{ const nowT=(typeof performance!=='undefined'?performance.now():0);
