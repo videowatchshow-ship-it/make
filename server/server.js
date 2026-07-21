@@ -85,6 +85,11 @@ function sanitizeDest(b) {
   if (b.gop != null && Number(b.gop) >= 1 && Number(b.gop) <= 10) dest.gop = Number(b.gop);       // 키프레임 간격(초)
   if (b.rateControl === 'cbr' || b.rateControl === 'vbr') dest.rateControl = b.rateControl;        // 레이트 컨트롤
   if (b.bframes != null && Number.isInteger(Number(b.bframes)) && Number(b.bframes) >= 0 && Number(b.bframes) <= 3) dest.bframes = Number(b.bframes);
+  // fullUrl:true — 페이스북 Live Video API 처럼 rtmpUrl 자체가 이미 완전한 1회성 URL이라
+  // streamKey 를 따로 붙이면 안 되는 대상(fanout.sh 가 이 플래그로 분기)
+  if (b.fullUrl === true) dest.fullUrl = true;
+  if (b.title) dest.title = String(b.title).slice(0, 100);
+  if (b.desc) dest.desc = String(b.desc).slice(0, 500);
   return dest;
 }
 
@@ -160,10 +165,13 @@ app.get('/api/oauth/config', (req, res) => {
   res.json({ provider: p, configured: !!(c && c.client_id), clientId: (c && c.client_id) || '' });
 });
 app.post('/api/oauth/exchange', async (req, res) => {
-  const { code, redirectUri, codeVerifier, provider = 'google' } = req.body || {};
+  const { code, redirectUri, codeVerifier, provider = 'google', title, description } = req.body || {};
   const c = oauthCreds(provider);
   if (!c || !c.client_id || !c.client_secret) return res.status(500).json({ error: 'oauth_not_configured' });
   if (!code || !redirectUri || !TOKEN_URL[provider]) return res.status(400).json({ error: 'missing_code' });
+  // 방송 제목/설명(있을 때만) — 각 플랫폼 공식 API로 실제 반영 시도(316: 없으면 조용히 스킵)
+  const bTitle = String(title || '').trim().slice(0, 100);
+  const bDesc = String(description || '').trim().slice(0, 5000);
   try {
     const form = new URLSearchParams({
       code, client_id: c.client_id, client_secret: c.client_secret,
@@ -175,16 +183,40 @@ app.post('/api/oauth/exchange', async (req, res) => {
     }).then(r => r.json());
     if (tok.error) return res.status(400).json({ error: tok.error, detail: tok.error_description || tok.message });
     let email = null, name = null, sub = 'user', streamKey = null, streamTitle = null;
+    let rtmpUrl = null, broadcastCreated = false, broadcastError = null;
     if (provider === 'google') {
       const who = await fetch('https://openidconnect.googleapis.com/v1/userinfo',
         { headers: { Authorization: 'Bearer ' + tok.access_token } }).then(r => r.json()).catch(() => ({}));
       email = who.email || null; name = who.name || null; sub = who.sub || 'user';
+      let streamId = null;
       try {
         const ls = await fetch('https://www.googleapis.com/youtube/v3/liveStreams?part=cdn,snippet&mine=true',
           { headers: { Authorization: 'Bearer ' + tok.access_token } }).then(r => r.json());
         const item = ls.items && ls.items[0];
-        if (item && item.cdn && item.cdn.ingestionInfo) { streamKey = item.cdn.ingestionInfo.streamName; streamTitle = item.snippet && item.snippet.title; }
+        if (item && item.cdn && item.cdn.ingestionInfo) {
+          streamKey = item.cdn.ingestionInfo.streamName; streamTitle = item.snippet && item.snippet.title; streamId = item.id;
+        }
       } catch (_) {}
+      // liveBroadcasts.insert(제목/설명) + bind(기존 영구 스트림) — 공식문서: YouTube Live Streaming API
+      // (developers.google.com/youtube/v3/live/docs/liveBroadcasts/insert · .../bind). 쓰기 권한(youtube
+      // 또는 youtube.force-ssl) 없으면 insert 자체가 403 나므로 실패해도 스트림키 발급 자체는 그대로 진행.
+      if (bTitle && streamId) {
+        try {
+          const bc = await fetch('https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status,contentDetails', {
+            method: 'POST', headers: { Authorization: 'Bearer ' + tok.access_token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              snippet: { title: bTitle, description: bDesc, scheduledStartTime: new Date().toISOString() },
+              status: { privacyStatus: 'unlisted' },
+              contentDetails: { enableAutoStart: true, enableAutoStop: true },
+            }),
+          }).then(r => r.json());
+          if (bc.id) {
+            const bind = await fetch(`https://www.googleapis.com/youtube/v3/liveBroadcasts/bind?id=${bc.id}&streamId=${streamId}&part=id`,
+              { method: 'POST', headers: { Authorization: 'Bearer ' + tok.access_token } }).then(r => r.json());
+            if (bind.id) broadcastCreated = true; else broadcastError = 'bind_실패';
+          } else broadcastError = (bc.error && bc.error.message) || 'broadcast_생성_실패(쓰기 권한 필요)';
+        } catch (e) { broadcastError = String(e && e.message || e); }
+      }
     } else if (provider === 'twitch') {
       const who = await fetch('https://api.twitch.tv/helix/users',
         { headers: { Authorization: 'Bearer ' + tok.access_token, 'Client-Id': c.client_id } }).then(r => r.json()).catch(() => ({}));
@@ -195,11 +227,36 @@ app.post('/api/oauth/exchange', async (req, res) => {
             { headers: { Authorization: 'Bearer ' + tok.access_token, 'Client-Id': c.client_id } }).then(r => r.json());
           streamKey = k.data && k.data[0] && k.data[0].stream_key;
         } catch (_) {}
+        // 채널 타이틀 변경 — 공식문서: Twitch Helix "Modify Channel Information" (PATCH /helix/channels,
+        // scope channel:manage:broadcast). 트위치는 방송별 제목이 아니라 채널 자체의 제목이라 설명(description)
+        // 항목은 없음 — 지원 안 되는 걸 있는 척 만들지 않음.
+        if (bTitle) {
+          try {
+            const patch = await fetch('https://api.twitch.tv/helix/channels?broadcaster_id=' + u.id, {
+              method: 'PATCH',
+              headers: { Authorization: 'Bearer ' + tok.access_token, 'Client-Id': c.client_id, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ title: bTitle }),
+            });
+            broadcastCreated = patch.ok;
+            if (!patch.ok) broadcastError = '제목_변경_실패_' + patch.status + '(쓰기 권한 필요)';
+          } catch (e) { broadcastError = String(e && e.message || e); }
+        }
       }
     } else if (provider === 'facebook') {
       const who = await fetch('https://graph.facebook.com/v19.0/me?fields=id,name,email&access_token=' + encodeURIComponent(tok.access_token))
         .then(r => r.json()).catch(() => ({}));
       name = who.name || null; email = who.email || null; sub = who.id || 'user';
+      // 라이브 비디오 생성 — 공식문서: Meta Live Video API (POST /me/live_videos, status=LIVE_NOW,
+      // scope publish_video). 페이스북은 유튜브/트위치처럼 고정 스트림키가 아니라, 방송마다 새로
+      // 발급되는 하나의 완전한 URL(쿼리스트링 포함)을 그대로 써야 함 — rtmpUrl/streamKey 로 못 쪼갬.
+      if (bTitle) {
+        try {
+          const form2 = new URLSearchParams({ title: bTitle, description: bDesc, status: 'LIVE_NOW', access_token: tok.access_token });
+          const lv = await fetch('https://graph.facebook.com/v19.0/me/live_videos', { method: 'POST', body: form2 }).then(r => r.json());
+          if (lv.secure_stream_url) { rtmpUrl = lv.secure_stream_url; broadcastCreated = true; }
+          else broadcastError = (lv.error && lv.error.message) || 'live_video_생성_실패(쓰기 권한/앱 심사 필요)';
+        } catch (e) { broadcastError = String(e && e.message || e); }
+      }
     }
     // refresh_token 은 서버에만 보관(자격증명 안전 저장 298). 프론트엔 최소 정보만.
     if (tok.refresh_token) {
@@ -207,7 +264,7 @@ app.post('/api/oauth/exchange', async (req, res) => {
         fs.writeFileSync(path.join(dir, provider + '-token-' + sub + '.json'),
           JSON.stringify({ refresh_token: tok.refresh_token, email }), { mode: 0o600 }); } catch (_) {}
     }
-    res.json({ ok: true, provider, email, name, streamKey, streamTitle });
+    res.json({ ok: true, provider, email, name, streamKey, streamTitle, rtmpUrl, broadcastCreated, broadcastError });
   } catch (e) { res.status(500).json({ error: String(e && e.message || e) }); }
 });
 

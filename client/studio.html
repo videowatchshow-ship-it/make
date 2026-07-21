@@ -424,15 +424,17 @@
     <div id="destList"></div>
     <div class="dest-add">
       <select id="platSel" class="field"></select>
+      <input id="destTitle" placeholder="방송 제목 (연동 버튼 누르면 유튜브/트위치에 실제 반영)" maxlength="100">
+      <input id="destDesc" placeholder="설명 (선택 · 트위치는 지원 안 함)" maxlength="500">
       <input id="destServer" placeholder="서버 URL (세션별 플랫폼)" style="display:none">
       <input id="destKey" placeholder="스트림 키" class="cb-req" data-cb-num="6">
       <button class="btn cb-req" id="destAdd" style="width:100%;margin-top:6px" data-cb-num="7">＋ 대상 추가</button>
     </div>
-    <button class="btn" id="ytConnect" style="width:100%;margin-top:8px" data-i18n="oauth.yt">▶ YouTube 연동 (스트림키 자동)</button>
+    <button class="btn" id="ytConnect" style="width:100%;margin-top:8px" data-i18n="oauth.yt">▶ YouTube 연동 (스트림키+제목 자동)</button>
     <div class="note" id="ytStat"></div>
-    <button class="btn" id="twitchConnect" style="width:100%;margin-top:6px" data-i18n="oauth.twitch">🟣 Twitch 연동 (스트림키 자동)</button>
+    <button class="btn" id="twitchConnect" style="width:100%;margin-top:6px" data-i18n="oauth.twitch">🟣 Twitch 연동 (스트림키+제목 자동)</button>
     <div class="note" id="twitchStat"></div>
-    <button class="btn" id="fbConnect" style="width:100%;margin-top:6px" data-i18n="oauth.fb">🔵 Facebook 연동</button>
+    <button class="btn" id="fbConnect" style="width:100%;margin-top:6px" data-i18n="oauth.fb">🔵 Facebook 연동 (제목 입력 시 새 라이브 생성)</button>
     <div class="note" id="fbStat"></div>
     <div class="note" id="platHint"></div>
 
@@ -2684,8 +2686,8 @@ function renderDest(){
     el.className='dest'+(d.locked?' locked':'')+(off?' off':'');
     if(off) el.style.opacity='.45';
     el.innerHTML=`<span class="badge">${d.platform}</span>
-      <span class="dname">${d.locked?'<span class="lock">🔒</span> ':''}${d.name}</span>
-      <span class="dkey">${maskKey(d.streamKey)}</span>`;
+      <span class="dname">${d.locked?'<span class="lock">🔒</span> ':''}${d.name}${d.title?' · '+d.title:''}</span>
+      <span class="dkey">${d.fullUrl?'(URL에 포함됨)':maskKey(d.streamKey)}</span>`;
     // on/off 토글 (videowatch 강제 대상은 항상 on)
     const tg=document.createElement('button'); tg.className='dtoggle';
     tg.textContent=off?'⭘':'⏻'; tg.title=off?'대상 켜기':'대상 끄기';
@@ -2718,10 +2720,12 @@ function initDestinations(){
   document.getElementById('destAdd').onclick=()=>{
     const p=platById(sel.value);
     const key=document.getElementById('destKey').value.trim();
+    const title=document.getElementById('destTitle').value.trim();
+    const desc=document.getElementById('destDesc').value.trim();
     const base=p.session?document.getElementById('destServer').value.trim():p.ingestUrl;
     if(!base){ toast('서버 URL을 입력하세요.','warn'); return; }
     if(!key){ toast('스트림 키를 입력하세요.','warn'); return; }
-    state.destinations.push({id:'d'+nextId++, platform:p.id, name:p.name, rtmpUrl:base, streamKey:key, locked:false});
+    state.destinations.push({id:'d'+nextId++, platform:p.id, name:p.name, rtmpUrl:base, streamKey:key, title, desc, locked:false});
     document.getElementById('destKey').value=''; document.getElementById('destServer').value='';
     saveDest(); renderDest();
     toast('✅ '+p.name+' 대상 등록 완료 — 아래 목록 확인','ok');   // 성공 피드백(예전엔 조용히 끝나서 등록됐는지 알 수 없었음)
@@ -3060,43 +3064,71 @@ async function oauthConnect(provider){
   catch(_){ toast('서버(/api) 연결 실패 — 배포 후 사용','warn'); return; }
   if(!cfg.configured || !cfg.clientId){ toast(provider+' OAuth 미설정(서버 시크릿 필요)','warn'); return; }
   sessionStorage.setItem('cb.oauth.provider', provider);
+  // 리다이렉트로 페이지를 벗어나기 전에 제목/설명을 챙겨둠 — 돌아왔을 때 이 값으로
+  // 실제 유튜브/트위치/페이스북에 방송 제목을 반영(서버 /api/oauth/exchange 로 전달).
+  const titleVal=(document.getElementById('destTitle')||{}).value||'';
+  const descVal=(document.getElementById('destDesc')||{}).value||'';
+  if(titleVal.trim()) sessionStorage.setItem('cb.oauth.title', titleVal); else sessionStorage.removeItem('cb.oauth.title');
+  if(descVal.trim()) sessionStorage.setItem('cb.oauth.desc', descVal); else sessionStorage.removeItem('cb.oauth.desc');
   const redirectUri=location.origin+location.pathname;
   let url;
   if(provider==='google'){
     const {v,c}=await _pkce(); sessionStorage.setItem('cb.pkce', v);
     url='https://accounts.google.com/o/oauth2/v2/auth?'+new URLSearchParams({
       client_id:cfg.clientId, redirect_uri:redirectUri, response_type:'code',
-      scope:'openid email https://www.googleapis.com/auth/youtube.readonly',   // 최소 권한(337)
+      // 제목/설명을 실제로 반영하려면 liveBroadcasts.insert/bind 가 필요해 쓰기 권한이 필수
+      // (읽기전용 youtube.readonly 로는 403) — 공식문서: YouTube Live Streaming API 인증 가이드.
+      scope:'openid email https://www.googleapis.com/auth/youtube',
       code_challenge:c, code_challenge_method:'S256', access_type:'offline', prompt:'consent', include_granted_scopes:'true' });
   } else if(provider==='twitch'){
     const {v,c}=await _pkce(); sessionStorage.setItem('cb.pkce', v);
     url='https://id.twitch.tv/oauth2/authorize?'+new URLSearchParams({
       client_id:cfg.clientId, redirect_uri:redirectUri, response_type:'code',
-      scope:'user:read:email channel:read:stream_key',
+      // channel:manage:broadcast — 채널 제목 변경(Helix "Modify Channel Information")에 필요
+      scope:'user:read:email channel:read:stream_key channel:manage:broadcast',
       code_challenge:c, code_challenge_method:'S256' });
   } else { // facebook (PKCE 미지원 → 서버 시크릿으로 교환)
     sessionStorage.removeItem('cb.pkce');
     url='https://www.facebook.com/v19.0/dialog/oauth?'+new URLSearchParams({
-      client_id:cfg.clientId, redirect_uri:redirectUri, response_type:'code', scope:'public_profile,email' });
+      client_id:cfg.clientId, redirect_uri:redirectUri, response_type:'code',
+      // publish_video — Live Video API(POST /live_videos)로 실제 라이브 생성에 필요(앱 심사 대상 권한)
+      scope:'public_profile,email,publish_video' });
   }
   location.href=url;
+}
+// OAuth 연동으로 받은 결과(스트림키 또는 완전한 URL)를 대상 목록에 실제로 반영
+function upsertOAuthDestination(provider, r){
+  const platId = provider==='google' ? 'youtube-live' : provider==='twitch' ? 'twitch' : 'facebook-live';
+  const p = platById(platId); if(!p) return;
+  let d = state.destinations.find(x=>x.platform===platId && !x.locked);
+  if(!d){ d={id:'d'+nextId++, platform:platId, name:p.name, rtmpUrl:p.ingestUrl, streamKey:'', locked:false}; state.destinations.push(d); }
+  if(r.streamKey) d.streamKey=r.streamKey;
+  if(r.rtmpUrl){ d.rtmpUrl=r.rtmpUrl; d.fullUrl=true; d.streamKey=''; }   // 페이스북: 완전한 1회성 URL
+  if(r.title) d.title=r.title;
+  if(r.desc) d.desc=r.desc;
+  saveDest(); renderDest();
 }
 (async function handleOAuthReturn(){
   const q=new URLSearchParams(location.search); const code=q.get('code');
   if(!code) return;
   const provider=sessionStorage.getItem('cb.oauth.provider')||'google';
   const v=sessionStorage.getItem('cb.pkce'); sessionStorage.removeItem('cb.pkce'); sessionStorage.removeItem('cb.oauth.provider');
+  const titleVal=sessionStorage.getItem('cb.oauth.title')||''; sessionStorage.removeItem('cb.oauth.title');
+  const descVal=sessionStorage.getItem('cb.oauth.desc')||''; sessionStorage.removeItem('cb.oauth.desc');
   history.replaceState(null,'',location.pathname);   // URL에서 code 제거
   const st=document.getElementById(OAUTH_STAT[provider]||'ytStat'); if(st) st.textContent=provider+' 인증 처리 중…';
   try{
     const r=await fetch('/api/oauth/exchange',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({code, redirectUri:location.origin+location.pathname, codeVerifier:v, provider})}).then(r=>r.json());
+      body:JSON.stringify({code, redirectUri:location.origin+location.pathname, codeVerifier:v, provider, title:titleVal, description:descVal})}).then(r=>r.json());
     if(r.ok){ toast(provider+' 연동됨: '+(r.name||r.email||''),'ok');
-      if(st) st.textContent='✅ 연동: '+(r.email||r.name||'')+(r.streamKey?' · 스트림키 수신':'');
-      if(r.streamKey && typeof state!=='undefined'){   // 해당 플랫폼 대상에 스트림키 자동 채움
-        const d=state.destinations.find(x=>new RegExp(provider,'i').test(x.platform||x.name||''));
-        if(d){ d.streamKey=r.streamKey; saveDest(); renderDest(); }
-        else { const dk=document.getElementById('destKey'); if(dk) dk.value=r.streamKey; toast('스트림키를 대상에 채웠습니다','ok'); }
+      if(st) st.textContent='✅ 연동: '+(r.email||r.name||'')+(r.streamKey||r.rtmpUrl?' · 스트림키 수신':'');
+      if((r.streamKey || r.rtmpUrl) && typeof state!=='undefined'){
+        upsertOAuthDestination(provider, {streamKey:r.streamKey, rtmpUrl:r.rtmpUrl, title:titleVal, desc:descVal});
+      }
+      // 제목을 실제로 반영하려던 경우에만 성공/실패를 별도로 알림(제목 없이 그냥 연동만 한 경우는 조용히 넘어감)
+      if(titleVal.trim()){
+        if(r.broadcastCreated) toast('📢 방송 제목이 '+provider+'에 실제로 반영됐습니다','ok');
+        else if(r.broadcastError) toast('⚠️ 제목 반영 실패: '+r.broadcastError,'warn');
       }
     } else { toast('연동 실패: '+(r.error||''),'err'); if(st) st.textContent='❌ '+(r.detail||r.error||'실패'); }
   }catch(e){ toast('연동 오류(서버 필요)','err'); if(st) st.textContent='❌ 서버 /api/oauth/exchange 필요'; }

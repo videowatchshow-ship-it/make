@@ -11,10 +11,18 @@ jq -c --arg p "$PATH_NAME" '.[$p][]?' "$DEST" 2>/dev/null | while read -r ROW; d
   KEY=$(echo "$ROW" | jq -r '.streamKey')
   TAG=$(echo "$ROW" | jq -r '.name' | tr -c 'A-Za-z0-9_-' '_')
   ENABLED=$(echo "$ROW" | jq -r '.enabled')
-  case "$KEY" in ""|*PUT_KEY_HERE*) continue;; esac
+  FULLURL=$(echo "$ROW" | jq -r '.fullUrl')
+  # fullUrl:true — 페이스북 Live Video API 처럼 rtmpUrl 자체가 이미 완전한 1회성 URL(쿼리스트링
+  # 포함, /streamKey 를 못 붙임)인 경우. 이땐 streamKey 가 비어있는 게 정상이라 스킵하면 안 됨.
+  if [ "$FULLURL" = "true" ]; then
+    case "$URL" in "") continue;; esac
+    FULL="$URL"
+  else
+    case "$KEY" in ""|*PUT_KEY_HERE*) continue;; esac
+    FULL="${URL%/}/${KEY}"
+  fi
   # enabled:false 대상은 건너뜀 (UI 토글 off). 미지정(null)/true 는 송출.
   case "$ENABLED" in false) echo "[$(date -Is)] skip ${TAG} (disabled)" >> "$LOG"; continue;; esac
-  FULL="${URL%/}/${KEY}"
   # 대상별 프로파일: bitrate(kbps)·resolution(WxH)·preset·gop·rateControl·bframes 중 하나라도 있으면
   # 재인코딩, 아무것도 없으면 -c copy(무손실 패스스루). (193/197/198/200/203/204)
   BR=$(echo "$ROW" | jq -r '.bitrate // empty')
