@@ -9,7 +9,7 @@ PRISM/OBS의 씬 합성 경험을 **브라우저(PWA)** 로 구현했다. 설치
 
 ![status](https://img.shields.io/badge/parity-93%25%20(375%2F400·이행률96%25)-brightgreen) ![client](https://img.shields.io/badge/client-PWA%20단일HTML-blue) ![server](https://img.shields.io/badge/relay-MediaMTX%2BFFmpeg-informational) ![deploy](https://img.shields.io/badge/domain-panda--avata.cc-orange)
 
-**라이브: [https://panda-avata.cc/studio.html](https://panda-avata.cc/studio.html)** (배포 후)
+**라이브: [https://cent-solutions.info/studio.html](https://cent-solutions.info/studio.html)** (배포 후)
 
 </div>
 
@@ -25,7 +25,7 @@ PRISM/OBS의 씬 합성 경험을 **브라우저(PWA)** 로 구현했다. 설치
 4. [빠른 시작](#4-빠른-시작)
 5. [클라이언트 상세 — `studio.html`](#5-클라이언트-상세--studiohtml)
 6. [서버 상세 — 릴레이](#6-서버-상세--릴레이)
-7. [배포 (도메인: panda-avata.cc)](#7-배포-도메인-panda-avatacc)
+7. [배포 (도메인: cent-solutions.info)](#7-배포-도메인-panda-avatacc)
 8. [문서 모음 (`docs/`)](#8-문서-모음-docs)
 9. [기술 스택](#9-기술-스택)
 10. [완성도 / 개발 규칙](#10-완성도--개발-규칙)
@@ -42,7 +42,7 @@ PRISM/OBS의 씬 합성 경험을 **브라우저(PWA)** 로 구현했다. 설치
 ```
 [폰/PC 브라우저: 센트빔 스튜디오]
    카메라+화면+이미지+텍스트+위젯 → 캔버스 합성 + WebAudio 믹서
-              │  WHIP (WebRTC)  ·  https://panda-avata.cc/whip/<아바타>/whip
+              │  WHIP (WebRTC)  ·  https://cent-solutions.info/whip/<아바타>/whip
               ▼
       [CENTBEAM 릴레이 서버  34.104.233.35]
         MediaMTX → fanout.sh (FFmpeg -c copy, 재인코딩 없음)
@@ -126,7 +126,7 @@ open client/studio.html          # 또는 브라우저에 드래그
 ```
 - 로컬 파일(`file://`)은 보안 컨텍스트라 카메라/마이크가 동작한다.
 - **폰에서 네트워크 접속 시 HTTPS 필수**(HTTP는 브라우저가 `getUserMedia` 차단). → 배포: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
-- 라이브: **https://panda-avata.cc/studio.html** (카메라 허용 → 홈화면 추가 = 앱 설치).
+- 라이브: **https://cent-solutions.info/studio.html** (카메라 허용 → 홈화면 추가 = 앱 설치).
 
 ### 5.2 화면 구성 (반응형)
 
@@ -308,7 +308,7 @@ gcloud compute ssh my-site-1 --zone=asia-northeast1-a --command \
 ```
 
 - API는 `systemctl status centbeam-api` / 로그 `journalctl -u centbeam-api` 로 관리(Restart=always, 재부팅 자동기동).
-- Apache가 80/443 선점 → **Caddy 쓰지 말 것**. `deploy.sh`가 `panda-avata.cc` vhost만 추가(보안헤더·HSTS·X-Frame-Options 포함).
+- Apache가 80/443 선점 → **Caddy 쓰지 말 것**. `deploy.sh`가 `cent-solutions.info` vhost만 추가(보안헤더·HSTS·X-Frame-Options 포함).
 - `fanout.sh`는 `jq`+`ffmpeg`가 없으면 아무 것도 하지 않고 조용히 실패한다 — `deploy.sh`가 매 배포마다 설치 여부를 확인·설치한다.
 - WebRTC 미디어(UDP 8189)는 GCP 방화벽에서 개방:
   `gcloud compute firewall-rules create centbeam-webrtc --allow udp:8189 --source-ranges 0.0.0.0/0`
@@ -398,9 +398,9 @@ POST/PUT 바디(항목):
 
 ---
 
-## 7. 배포 (도메인: **panda-avata.cc**)
+## 7. 배포 (도메인: **cent-solutions.info**)
 
-서버 `34.104.233.35`(GCP `my-site-1`, Apache 기존 호스팅)에 `panda-avata.cc` HTTPS 배포.
+서버 `34.104.233.35`(GCP `my-site-1`, Apache 기존 호스팅)에 `cent-solutions.info` HTTPS 배포.
 DNS: 도메인은 GoDaddy 등록 → 네임서버 Cloudflare(zone active).
 
 **① DNS A레코드** (Cloudflare, API가 열린 곳에서 — proxied **off** 필수):
@@ -414,7 +414,7 @@ gcloud compute ssh my-site-1 --zone=asia-northeast1-a --command \
  'rm -rf /tmp/cb && git clone -b claude/sleepy-goodall-per69w https://github.com/videowatchshow-ship-it/make.git /tmp/cb && sudo bash /tmp/cb/server/deploy.sh'
 ```
 
-→ 폰에서 **`https://panda-avata.cc/studio.html`** · WHIP `https://panda-avata.cc/whip/tak/whip`
+→ 폰에서 **`https://cent-solutions.info/studio.html`** · WHIP `https://cent-solutions.info/whip/tak/whip`
 전체 절차(vhost·certbot·방화벽): **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
 
 > 🚨 Caddy 쓰지 말 것 — 80/443은 Apache가 선점 중. panda-avata vhost만 추가(`deploy.sh` 가 처리).
@@ -428,7 +428,7 @@ gcloud compute ssh my-site-1 --zone=asia-northeast1-a --command \
 | 문서 | 무엇을 답하나 | 언제 읽나 |
 |--|--|--|
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | 왜 이 구조인가 — WHIP→MediaMTX→fan-out 설계, 컴포넌트 경계, 버전 근거(2026-07 실측) | 전체 그림·기술 결정 이해 |
-| [DEPLOYMENT.md](docs/DEPLOYMENT.md) | 어떻게 배포하나 — `panda-avata.cc`(GoDaddy→Cloudflare) DNS·Apache vhost·certbot·systemd·방화벽 전체 절차 | 서버에 올릴 때 |
+| [DEPLOYMENT.md](docs/DEPLOYMENT.md) | 어떻게 배포하나 — `cent-solutions.info`(GoDaddy→Cloudflare) DNS·Apache vhost·certbot·systemd·방화벽 전체 절차 | 서버에 올릴 때 |
 | [CLOUDFLARE_API.md](docs/CLOUDFLARE_API.md) | DNS를 API로 어떻게 바꾸나 — zone/레코드 CRUD curl 레퍼런스(proxied off 필수) | DNS 조작·회색구름 설정 |
 | [CONTRIBUTING.md](docs/CONTRIBUTING.md) | 어떻게 기여하나 — 브랜치(`claude/*`)·커밋 접두어·헤드리스 검증·PR(draft) 규칙 | 코드 변경 전 |
 | [GLOSSARY.md](docs/GLOSSARY.md) | 용어 — WHIP·fan-out·아바타·릴레이 등 | 낯선 용어 만날 때 |
@@ -451,7 +451,7 @@ gcloud compute ssh my-site-1 --zone=asia-northeast1-a --command \
 |--|--|
 | 클라이언트 | Vanilla JS + Canvas 2D + WebRTC(WHIP) + WebAudio + `getUserMedia`/`getDisplayMedia`. 의존성 0, 단일 HTML, PWA. |
 | 서버 | Node 22(LTS) + Express 5.2.1, MediaMTX v1.19.2, FFmpeg, jq. 릴레이 API는 systemd 서비스(`centbeam-api`). |
-| 배포 | 서버 34.104.233.35(Apache) + Cloudflare DNS. `panda-avata.cc` Apache vhost + certbot HTTPS. 원클릭 `deploy.sh`. |
+| 배포 | 서버 34.104.233.35(Apache) + Cloudflare DNS. `cent-solutions.info` Apache vhost + certbot HTTPS. 원클릭 `deploy.sh`. |
 
 버전 근거(2026-07 실측)는 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

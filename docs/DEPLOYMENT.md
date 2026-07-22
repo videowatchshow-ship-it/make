@@ -1,13 +1,13 @@
 # 배포 — 센트빔 스튜디오 (Apache vhost)
 
-> **기본 도메인: `panda-avata.cc` (GoDaddy 등록).** 서버 **34.104.233.35** (`my-site-1`, GCP asia-northeast1-a)에 Apache vhost + certbot으로 HTTPS 배포.
+> **기본 도메인: `cent-solutions.info` (GoDaddy 등록).** 서버 **34.104.233.35** (`my-site-1`, GCP asia-northeast1-a)에 Apache vhost + certbot으로 HTTPS 배포.
 > (구 도메인 `studio.참교육카지노.info`/Cloudflare 경로는 아래 §참교육 절에 그대로 보존.)
 
 ---
 
-## 0. panda-avata.cc 연결 (GoDaddy) — 사용자님이 하실 DNS 2줄
+## 0. cent-solutions.info 연결 (GoDaddy) — 사용자님이 하실 DNS 2줄
 
-**A. GoDaddy DNS** — GoDaddy 계정 → `panda-avata.cc` → DNS 관리에서 A 레코드 추가:
+**A. GoDaddy DNS** — GoDaddy 계정 → `cent-solutions.info` → DNS 관리에서 A 레코드 추가:
 
 | 타입 | 이름 | 값 | TTL |
 |--|--|--|--|
@@ -17,7 +17,7 @@
 또는 GoDaddy Developer API 키가 있으면 (맥 터미널, 키는 커밋 금지):
 ```bash
 export GD_KEY='키'; export GD_SECRET='시크릿'
-curl -s -X PUT "https://api.godaddy.com/v1/domains/panda-avata.cc/records/A/@" \
+curl -s -X PUT "https://api.godaddy.com/v1/domains/cent-solutions.info/records/A/@" \
   -H "Authorization: sso-key $GD_KEY:$GD_SECRET" -H 'Content-Type: application/json' \
   -d '[{"data":"34.104.233.35","ttl":600}]'
 ```
@@ -25,15 +25,15 @@ curl -s -X PUT "https://api.godaddy.com/v1/domains/panda-avata.cc/records/A/@" \
 
 **B. 전파 확인:**
 ```bash
-dig +short panda-avata.cc      # 34.104.233.35 나와야 함 (몇 분~수십분)
+dig +short cent-solutions.info      # 34.104.233.35 나와야 함 (몇 분~수십분)
 ```
 
-**C. 서버 배포** — SSH 후 아래 §2~6 실행하되 도메인만 `panda-avata.cc`로:
+**C. 서버 배포** — SSH 후 아래 §2~6 실행하되 도메인만 `cent-solutions.info`로:
 ```bash
 sudo tee /etc/apache2/sites-available/panda-avata.conf > /dev/null << 'EOF'
 <VirtualHost *:80>
-  ServerName panda-avata.cc
-  ServerAlias www.panda-avata.cc
+  ServerName cent-solutions.info
+  ServerAlias www.cent-solutions.info
   DocumentRoot /var/www/sites/studio/public
   <Directory /var/www/sites/studio/public><Require all granted><Options -Indexes></Directory>
   Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
@@ -52,11 +52,11 @@ EOF
 sudo a2enmod proxy proxy_http headers rewrite ssl
 sudo a2ensite panda-avata && sudo apachectl configtest && sudo systemctl reload apache2
 # 파일 배치(§3와 동일): 저장소 client/ 를 /var/www/sites/studio/public 에 복사
-sudo certbot --apache -d panda-avata.cc -d www.panda-avata.cc \
+sudo certbot --apache -d cent-solutions.info -d www.cent-solutions.info \
   --non-interactive --agree-tos -m videowatch.show@gmail.com --redirect
 ```
-> 완료 후 폰에서 **`https://panda-avata.cc/studio.html`** → 카메라 허용 → 홈화면 추가(PWA).
-> WHIP 엔드포인트: `https://panda-avata.cc/whip/tak/whip`
+> 완료 후 폰에서 **`https://cent-solutions.info/studio.html`** → 카메라 허용 → 홈화면 추가(PWA).
+> WHIP 엔드포인트: `https://cent-solutions.info/whip/tak/whip`
 
 ---
 

@@ -765,7 +765,7 @@
     <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
     <h2>송출 (릴레이)</h2>
     <div class="field"><label>WHIP 엔드포인트</label>
-      <input id="whip" placeholder="https://panda-avata.cc/whip/tak/whip"></div><!-- http 예시 제거: 전구간 HTTPS(체크리스트 291) -->
+      <input id="whip" placeholder="https://cent-solutions.info/whip/tak/whip"></div><!-- http 예시 제거: 전구간 HTTPS(체크리스트 291) -->
 
     <div class="row2">
       <div class="field" style="flex:1"><label>WHIP 토큰 (Bearer, 선택)</label><input id="whipToken" type="password" placeholder="publish 토큰"></div>
@@ -1234,7 +1234,7 @@ setInterval(refreshDataLayers, 2000);
 document.getElementById('addAudioBars').onclick = () => { addLayer('audiobars',{name:'오디오바',color:'#00d9ff',bars:32,w:500,h:160}); };
 document.getElementById('addRoulette').onclick = () => { addLayer('roulette',{name:'룰렛',options:'꽝,당첨,한번더,꽝,당첨,꽝',angle:0,vel:0,w:360,h:360,aspect:1}); };
 document.getElementById('addQr').onclick = () => {
-  const url = prompt('QR코드에 담을 URL/텍스트:', 'https://panda-avata.cc');
+  const url = prompt('QR코드에 담을 URL/텍스트:', 'https://cent-solutions.info');
   if(!url || !url.trim()) return;
   if(!QR.make(url.trim())){ toast('내용이 너무 깁니다(최대 약 106바이트)','warn'); return; }
   addLayer('qr',{name:'QR코드', url:url.trim(), w:300, h:300, aspect:1});
@@ -3587,7 +3587,7 @@ restoreScene();
 // 신규 사용자가 안 채우면 방송이 아무데도 안 나가는데 원인을 알기 어려웠음.
 (function fillDefaultWhip(){
   const w=document.getElementById('whip');
-  if(w && !w.value.trim()) w.value='https://panda-avata.cc/whip/tak/whip';
+  if(w && !w.value.trim()) w.value='https://cent-solutions.info/whip/tak/whip';
 })();
 pushHistory();          // 초기 스냅샷(되돌리기 기준점)
 if(loadScenes()){ applySnapshot(scenes[activeScene].data); }  // 저장된 다중 씬 복원

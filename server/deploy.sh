@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# CENTBEAM 원클릭 서버 배포 — panda-avata.cc (Apache vhost + certbot)
+# CENTBEAM 원클릭 서버 배포 — cent-solutions.info (Apache vhost + certbot)
 #
 # 서버(34.104.233.35 / my-site-1)에서 sudo 로 1회 실행. 멱등(여러 번 돌려도 안전).
 # 기존 Apache/참교육카지노.info vhost 는 건드리지 않고 panda-avata vhost 만 추가.
@@ -13,7 +13,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-DOMAIN="panda-avata.cc"
+DOMAIN="cent-solutions.info"
 IP="34.104.233.35"
 EMAIL="videowatch.show@gmail.com"
 WEBROOT="/var/www/sites/studio/public"

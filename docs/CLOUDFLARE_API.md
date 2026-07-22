@@ -1,4 +1,4 @@
-# Cloudflare API — 복붙 레퍼런스 (panda-avata.cc / CENTBEAM)
+# Cloudflare API — 복붙 레퍼런스 (cent-solutions.info / CENTBEAM)
 
 > 🔐 **토큰은 절대 이 파일/저장소에 넣지 말 것.** 셸 환경변수 `$CF_TOKEN` 으로만 사용.
 > 계정: `videowatch.show@gmail.com` · 대시보드: https://dash.cloudflare.com
@@ -10,14 +10,14 @@ export CF_TOKEN='본인_토큰'      # DNS Edit (all zones). 실행 후 rotate �
 
 ---
 
-## 0) panda-avata.cc 최초 연결 (한 번만)
+## 0) cent-solutions.info 최초 연결 (한 번만)
 
 토큰으로 **zone 생성이 안 되므로** 이 순서로:
 
-1. **Cloudflare 대시보드** → `Add a Site` → `panda-avata.cc` → Free → 계속
+1. **Cloudflare 대시보드** → `Add a Site` → `cent-solutions.info` → Free → 계속
 2. 뜨는 **네임서버 2개** 복사 (예: `xxx.ns.cloudflare.com`, `yyy.ns.cloudflare.com`)
-3. **GoDaddy** → `panda-avata.cc` → Nameservers → Change → "내 네임서버 사용" → 위 2개 입력 → Save
-4. zone 이 **Active** 될 때까지 대기 (`dig +short NS panda-avata.cc` 에 cloudflare 나오면 완료)
+3. **GoDaddy** → `cent-solutions.info` → Nameservers → Change → "내 네임서버 사용" → 위 2개 입력 → Save
+4. zone 이 **Active** 될 때까지 대기 (`dig +short NS cent-solutions.info` 에 cloudflare 나오면 완료)
 5. 그 다음 아래 curl 로 A 레코드 추가
 
 ---
@@ -33,7 +33,7 @@ curl -s -H "Authorization: Bearer $CF_TOKEN" \
 특정 도메인의 Zone ID만:
 ```bash
 ZONE_ID=$(curl -s -H "Authorization: Bearer $CF_TOKEN" \
-  "https://api.cloudflare.com/client/v4/zones?name=panda-avata.cc" \
+  "https://api.cloudflare.com/client/v4/zones?name=cent-solutions.info" \
   | python3 -c "import sys,json;r=json.load(sys.stdin)['result'];print(r[0]['id'] if r else 'NOT_FOUND')")
 echo "ZONE_ID=$ZONE_ID"
 ```
@@ -51,7 +51,7 @@ curl -s -H "Authorization: Bearer $CF_TOKEN" \
 특정 이름만 (예: A 레코드):
 ```bash
 curl -s -H "Authorization: Bearer $CF_TOKEN" \
-  "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=A&name=panda-avata.cc"
+  "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=A&name=cent-solutions.info"
 ```
 
 ---
@@ -64,7 +64,7 @@ curl -s -H "Authorization: Bearer $CF_TOKEN" \
 ```bash
 curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
   -H "Authorization: Bearer $CF_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"type":"A","name":"panda-avata.cc","content":"34.104.233.35","ttl":300,"proxied":false,"comment":"CENTBEAM studio"}'
+  -d '{"type":"A","name":"cent-solutions.info","content":"34.104.233.35","ttl":300,"proxied":false,"comment":"CENTBEAM studio"}'
 ```
 
 www:
@@ -83,12 +83,12 @@ curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records
 먼저 레코드 ID 조회 후 PUT:
 ```bash
 REC_ID=$(curl -s -H "Authorization: Bearer $CF_TOKEN" \
-  "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=A&name=panda-avata.cc" \
+  "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=A&name=cent-solutions.info" \
   | python3 -c "import sys,json;r=json.load(sys.stdin)['result'];print(r[0]['id'] if r else '')")
 
 curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$REC_ID" \
   -H "Authorization: Bearer $CF_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"type":"A","name":"panda-avata.cc","content":"34.104.233.35","ttl":300,"proxied":false}'
+  -d '{"type":"A","name":"cent-solutions.info","content":"34.104.233.35","ttl":300,"proxied":false}'
 ```
 > 일부 필드만 바꾸려면 `PATCH` 사용 가능 (같은 URL, 바꿀 필드만 body에).
 
@@ -106,13 +106,13 @@ curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_recor
 ## 확인
 
 ```bash
-dig +short panda-avata.cc          # 34.104.233.35
+dig +short cent-solutions.info          # 34.104.233.35
 curl -s -H "Authorization: Bearer $CF_TOKEN" \
   "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=A" \
   | python3 -c "import sys,json;[print(r['name'], r['content'], 'proxied='+str(r['proxied'])) for r in json.load(sys.stdin)['result']]"
 ```
 
-DNS 전파 후 → 서버에서 `docs/DEPLOYMENT.md §0.C` (Apache vhost + certbot) → 폰에서 `https://panda-avata.cc/studio.html`.
+DNS 전파 후 → 서버에서 `docs/DEPLOYMENT.md §0.C` (Apache vhost + certbot) → 폰에서 `https://cent-solutions.info/studio.html`.
 
 ---
 

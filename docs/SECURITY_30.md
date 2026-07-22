@@ -24,7 +24,7 @@
 | # | 조치 | 상태 | 근거 · 적용 |
 |--|--|--|--|
 |9|HSTS `preload`|🟡|[MDN HSTS](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Strict-Transport-Security) — vhost에 `; preload` 추가 + hstspreload.org 등록|
-|10|CSP `connect-src *` 제거 → 실제 오리진만|⬜|[MDN CSP](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CSP) — `connect-src 'self' https://panda-avata.cc https://accounts.google.com https://oauth2.googleapis.com`|
+|10|CSP `connect-src *` 제거 → 실제 오리진만|⬜|[MDN CSP](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CSP) — `connect-src 'self' https://cent-solutions.info https://accounts.google.com https://oauth2.googleapis.com`|
 |11|`frame-ancestors 'self'`(응답헤더) + X-Frame-Options|🟡|[MDN frame-ancestors](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/frame-ancestors) — X-Frame-Options는 있음, vhost에 CSP `frame-ancestors` 헤더 추가(meta로는 무효)|
 |12|COOP + CORP(크로스오리진 격리)|⬜|[MDN COOP](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cross-Origin-Opener-Policy)·[CORP](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cross-Origin-Resource-Policy) — vhost 헤더 추가(OAuth 팝업이면 COOP=`same-origin-allow-popups`)|
 |13|Permissions-Policy 최소권한|🟡|[MDN Permissions-Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Permissions-Policy) — camera/mic/display-capture=self 양호, `geolocation=(),payment=()` 등 추가 차단|

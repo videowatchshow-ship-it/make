@@ -13,20 +13,20 @@ jobs:
       - name: curl studio.html (헤더 + 앞부분)
         run: |
           echo "=== HTTP 상태/헤더 ==="
-          curl -sSI https://panda-avata.cc/studio.html || echo "FAILED"
+          curl -sSI https://cent-solutions.info/studio.html || echo "FAILED"
           echo
           echo "=== HTML title/버전 표시 검색 ==="
-          curl -sS https://panda-avata.cc/studio.html -o /tmp/page.html || echo "FAILED"
+          curl -sS https://cent-solutions.info/studio.html -o /tmp/page.html || echo "FAILED"
           wc -l /tmp/page.html
           grep -o '<title>[^<]*</title>' /tmp/page.html || true
           grep -n 'verTag\|v1\.0\.0\|APP_VERSION\|addbar-main\|h.widgets' /tmp/page.html | head -10 || true
 
       - name: API health
-        run: curl -sS https://panda-avata.cc/api/health || echo "API FAILED"
+        run: curl -sS https://cent-solutions.info/api/health || echo "API FAILED"
 
       - name: destinations (tak 아바타, 서버가 실제로 뭐을 갖고 있는지 — 키는 서버가 자체 마스킹 안 하니 여기선 platform/enabled만 추출)
         run: |
-          curl -sS https://panda-avata.cc/api/destinations/tak -o /tmp/dest.json || echo "FAILED"
+          curl -sS https://cent-solutions.info/api/destinations/tak -o /tmp/dest.json || echo "FAILED"
           python3 -c "
 import json
 try:
@@ -50,7 +50,7 @@ except Exception as e:
           const errs = [];
           page.on('pageerror', e => errs.push(e.message));
           page.on('console', m => { if (m.type()==='error') errs.push(m.text()); });
-          await page.goto('https://panda-avata.cc/studio.html', { waitUntil: 'networkidle', timeout: 20000 });
+          await page.goto('https://cent-solutions.info/studio.html', { waitUntil: 'networkidle', timeout: 20000 });
           await page.waitForTimeout(1500);
           await page.screenshot({ path: '/tmp/live-shot.png' });
           console.log('콘솔 에러:', errs.length ? errs.join(' | ') : '없음');
