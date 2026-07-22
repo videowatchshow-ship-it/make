@@ -1,21 +1,18 @@
 name: cloudflare-dns
 
-# panda-avata.cc DNS 를 WebRTC/certbot 가 되도록 교정한다.
+# cent-solutions.info DNS 를 WebRTC/certbot 가 되도록 교정한다.
 #   - A(@, www) -> 원본 서버 IP, proxied:false (그레이클라우드 = DNS only)
-#   - AAAA(@, www) 삭제 (원본에 공인 IPv6 없음 → IPv6 522 방지)
+#   - AAAA(@, www) 삭제 (원본에 공인 IPv6 없음 → IPv6 522/certbot 실패 방지)
 # 이 컨테이너에서는 Cloudflare 로 아웃바운드가 정책상 막혀 있어(403),
 # 인터넷이 열린 GitHub 러너에서 대신 실행한다. 토큰은 리포 시크릿 CF_API_TOKEN.
-#
-# 실행 방법(둘 중 아무거나):
-#   1) 수동 버튼: Actions 탭 → cloudflare-dns → Run workflow
-#   2) 트리거 파일: .github/cf-dns.run 을 수정해서 push (Claude 가 이 방식으로 자동 실행)
+# zone 은 ID 하드코딩 대신 도메인 이름으로 조회(도메인 바뀌어도 동작).
 
 on:
   workflow_dispatch:
     inputs:
-      zone_id:
-        description: 'Cloudflare Zone ID'
-        default: '2d8aba1f3f2a8e11042821ebbcfcdefe'
+      zone_name:
+        description: 'Cloudflare zone (도메인)'
+        default: 'cent-solutions.info'
         required: false
       ip:
         description: '원본 서버 IPv4'
@@ -30,35 +27,38 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-      ZONE: ${{ github.event.inputs.zone_id || '2d8aba1f3f2a8e11042821ebbcfcdefe' }}
+      ZONE_NAME: ${{ github.event.inputs.zone_name || 'cent-solutions.info' }}
       IP: ${{ github.event.inputs.ip || '34.104.233.35' }}
     steps:
-      - name: Preflight (token present?)
+      - name: Preflight (token present + verify)
         run: |
           if [ -z "$CF_API_TOKEN" ]; then
-            echo "::error::리포 시크릿 CF_API_TOKEN 이 없습니다. Settings → Secrets and variables → Actions → New repository secret 로 추가하세요 (이름: CF_API_TOKEN)."
+            echo "::error::리포 시크릿 CF_API_TOKEN 이 없습니다. Settings → Secrets and variables → Actions → New repository secret (이름: CF_API_TOKEN)."
             exit 1
           fi
           code=$(curl -s -o /tmp/verify.json -w '%{http_code}' \
             -H "Authorization: Bearer $CF_API_TOKEN" \
             https://api.cloudflare.com/client/v4/user/tokens/verify)
-          echo "verify http=$code"
-          cat /tmp/verify.json
+          echo "verify http=$code"; cat /tmp/verify.json; echo
           [ "$code" = "200" ] || { echo "::error::토큰 검증 실패"; exit 1; }
 
-      - name: Apply DNS (grey-cloud A, delete AAAA)
+      - name: Resolve zone id + apply DNS
         run: |
           set -euo pipefail
           api() { curl -s -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" "$@"; }
+
+          ZONE=$(api "https://api.cloudflare.com/client/v4/zones?name=$ZONE_NAME" | jq -r '.result[0].id // empty')
+          [ -n "$ZONE" ] || { echo "::error::zone '$ZONE_NAME' 를 못 찾음. 이 토큰이 해당 zone 접근권한이 있는지, 도메인이 이 Cloudflare 계정에 추가돼 있는지 확인."; exit 1; }
+          echo "zone_name=$ZONE_NAME zone_id=$ZONE"
           BASE="https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records"
 
+          echo "=== 교정 전 A/AAAA/CNAME ==="
+          api "$BASE?per_page=100" | jq -r '.result[] | select(.type=="A" or .type=="AAAA" or .type=="CNAME") | "\(.type)\t\(.name)\t\(.content)\tproxied=\(.proxied)"'
+
           upsert_A() {
-            local NAME="$1"
-            local ID
+            local NAME="$1" ID BODY
             ID=$(api "$BASE?type=A&name=$NAME" | jq -r '.result[0].id // empty')
-            local BODY
-            BODY=$(jq -n --arg n "$NAME" --arg c "$IP" \
-              '{type:"A",name:$n,content:$c,ttl:1,proxied:false}')
+            BODY=$(jq -n --arg n "$NAME" --arg c "$IP" '{type:"A",name:$n,content:$c,ttl:1,proxied:false}')
             if [ -n "$ID" ]; then
               echo ">> update A $NAME ($ID) -> $IP proxied:false"
               api -X PUT "$BASE/$ID" --data "$BODY" | jq -r '.success, (.errors // [])'
@@ -67,29 +67,27 @@ jobs:
               api -X POST "$BASE" --data "$BODY" | jq -r '.success, (.errors // [])'
             fi
           }
-
           delete_type() {
-            local NAME="$1" TYPE="$2"
+            local NAME="$1" TYPE="$2" ID
             for ID in $(api "$BASE?type=$TYPE&name=$NAME" | jq -r '.result[].id'); do
               echo ">> delete $TYPE $NAME ($ID)"
               api -X DELETE "$BASE/$ID" | jq -r '.success'
             done
           }
+          # CNAME(@/www)이 있으면 A 를 못 만들므로 먼저 제거
+          delete_type "$ZONE_NAME" CNAME
+          delete_type "www.$ZONE_NAME" CNAME
 
-          ROOT=$(api "https://api.cloudflare.com/client/v4/zones/$ZONE" | jq -r '.result.name')
-          echo "zone=$ROOT"
-          [ -n "$ROOT" ] && [ "$ROOT" != "null" ] || { echo "::error::zone 조회 실패"; exit 1; }
+          upsert_A "$ZONE_NAME"
+          upsert_A "www.$ZONE_NAME"
+          delete_type "$ZONE_NAME" AAAA
+          delete_type "www.$ZONE_NAME" AAAA
 
-          upsert_A "$ROOT"
-          upsert_A "www.$ROOT"
-          delete_type "$ROOT" AAAA
-          delete_type "www.$ROOT" AAAA
-
-          echo "=== 최종 레코드 (A/AAAA/CNAME) ==="
+          echo "=== 교정 후 A/AAAA/CNAME ==="
           api "$BASE?per_page=100" | jq -r '.result[] | select(.type=="A" or .type=="AAAA" or .type=="CNAME") | "\(.type)\t\(.name)\t\(.content)\tproxied=\(.proxied)"'
 
       - name: Next steps
         run: |
-          echo "DNS 교정 완료. 다음: 서버에서 certbot 재실행"
-          echo "  gcloud compute ssh my-site-1 --zone=asia-northeast1-a --command='sudo bash /tmp/cb/server/deploy.sh'"
-          echo "그러면 https://panda-avata.cc/studio.html 이 라이브가 됩니다."
+          echo "DNS 교정 완료(회색구름 A + AAAA 삭제). 전파 1~3분 후 서버에서 certbot 재실행:"
+          echo "  gcloud compute ssh my-site-1 --zone=asia-northeast1-a --command \\"
+          echo "   'rm -rf /tmp/cb && git clone -b claude/sleepy-goodall-per69w https://github.com/videowatchshow-ship-it/make.git /tmp/cb && sudo bash /tmp/cb/server/deploy.sh'"
