@@ -170,7 +170,7 @@ else
   echo "  ⚠️ API :3000 응답 없음 — 'journalctl -u centbeam-api -n 40' 확인"
 fi
 
-echo "== [6/7] MediaMTX 설정 동기화 (아무 방송 이름이나 받아주게) =="
+echo "== [6/7] MediaMTX 설치 + systemd 상시 기동 =="
 # fanout.sh(publish 감지 시 유튜브 등으로 실제 재전송하는 스크립트)는 매 줄 jq 로
 # destinations.json 을 파싱하고 ffmpeg 로 RTMP 재전송한다 — 이 둘이 서버에 없으면
 # destinations.json 이 아무리 정확해도 fanout.sh 가 조용히 전부 실패해 어디에도 안 나간다.
@@ -184,50 +184,59 @@ command -v jq >/dev/null 2>&1 && command -v ffmpeg >/dev/null 2>&1 \
   || echo "  ⚠️ jq/ffmpeg 설치 실패 — fan-out 이 절대 작동 안 함, 수동 설치 필요: apt-get install -y jq ffmpeg"
 chmod +x "$API_DIR/fanout.sh" 2>/dev/null || true   # mediamtx.yml 이 실제로 실행하는 배포 위치
 
-# deploy.sh 는 지금까지 mediamtx 포트만 확인하고 실제 설정 파일은 건드리지 않았음.
-# 그래서 서버에 실제로 떠 있는 mediamtx.yml 이 저장소의 것과 달라(경로 목록에
-# all_others 캐치올이 없는 등) "path 'xxx' is not configured" 로 방송이 전부 거부됨.
-# 여기서 실행 중인 프로세스의 실제 설정 파일을 찾아 저장소 버전으로 동기화하고,
-# 문제 있으면(포트 미기동) 자동으로 백업 복원한다.
-MTX_PID="$(pgrep -x mediamtx | head -1 || true)"
-if [ -n "$MTX_PID" ]; then
-  MTX_YML="$(tr '\0' '\n' < /proc/$MTX_PID/cmdline 2>/dev/null | grep -E '\.ya?ml$' | head -1)"
-  if [ -z "$MTX_YML" ]; then
-    MTX_CWD="$(readlink -f /proc/$MTX_PID/cwd 2>/dev/null || true)"
-    [ -n "$MTX_CWD" ] && [ -f "$MTX_CWD/mediamtx.yml" ] && MTX_YML="$MTX_CWD/mediamtx.yml"
-  fi
-  if [ -n "$MTX_YML" ] && [ -f "$MTX_YML" ]; then
-    if grep -q 'all_others' "$MTX_YML" 2>/dev/null; then
-      echo "  이미 동기화됨(all_others 캐치올 존재) — 건드리지 않음: $MTX_YML"
-    else
-      MTX_BAK="${MTX_YML}.bak.$(date +%Y%m%d%H%M%S)"
-      cp "$MTX_YML" "$MTX_BAK"
-      cp "$SELF_DIR/server/mediamtx.yml" "$MTX_YML"
-      echo "  설정 교체: $MTX_YML (백업: $MTX_BAK)"
-      if systemctl is-active --quiet mediamtx 2>/dev/null; then systemctl restart mediamtx
-      elif [ -x /etc/init.d/mediamtx ]; then service mediamtx restart
-      else MTX_EXE="$(readlink -f /proc/$MTX_PID/exe 2>/dev/null || command -v mediamtx)"
-        kill "$MTX_PID" 2>/dev/null; sleep 1
-        nohup "$MTX_EXE" "$MTX_YML" >/var/log/mediamtx.log 2>&1 & disown
-      fi
-      sleep 2
-      if ss -ltnup 2>/dev/null | grep -qE ':8889\s'; then
-        echo "  ✅ MediaMTX 재시작 성공 — 이제 아무 방송 이름이나 받음"
-      else
-        echo "  ⚠️ 재시작 후 포트 응답 없음 → 자동 롤백"
-        cp "$MTX_BAK" "$MTX_YML"
-        if systemctl is-active --quiet mediamtx 2>/dev/null; then systemctl restart mediamtx; fi
-      fi
-    fi
+# mediamtx.yml 은 위 [5/7]의 "cp -r server/." 로 이미 $API_DIR/mediamtx.yml 에 최신본이 있음.
+MTX_VERSION="v1.19.2"   # server/README.md 로컬 실행 안내와 동일 버전(공식 GitHub 릴리스)
+if ! command -v mediamtx >/dev/null 2>&1; then
+  echo "  MediaMTX 미설치 → 공식 릴리스 $MTX_VERSION 설치"
+  MTX_TMP="$(mktemp -d)"
+  if curl -fsSL "https://github.com/bluenviron/mediamtx/releases/download/${MTX_VERSION}/mediamtx_${MTX_VERSION}_linux_amd64.tar.gz" \
+      | tar xz -C "$MTX_TMP" 2>/dev/null; then
+    mv "$MTX_TMP/mediamtx" /usr/local/bin/mediamtx
+    chmod +x /usr/local/bin/mediamtx
+    echo "  ✅ /usr/local/bin/mediamtx 설치됨"
   else
-    echo "  ⚠️ mediamtx 설정 파일 경로를 못 찾음(pid=$MTX_PID) — 수동 확인 필요: ps -p $MTX_PID -o args="
+    echo "  ⚠️ MediaMTX 다운로드 실패 — 수동 설치 필요(server/README.md §3 참고)"
   fi
-else
-  echo "  ⚠️ mediamtx 프로세스가 안 보임 — 별도로 기동 필요"
+  rm -rf "$MTX_TMP"
+fi
+# 예전엔 mediamtx 를 systemd 없이 수동/nohup 으로만 띄워놔서, 서버가 재부팅되거나
+# 프로세스가 죽으면(메모리 부족 등) 아무 것도 자동으로 안 살아나 방송이 영구적으로
+# 안 나가는데도 deploy.sh 는 경고 문구만 찍고 아무 조치를 안 했다. centbeam-api 와
+# 동일하게 systemd 서비스(Restart=always)로 등록해 재부팅/크래시 자동복구를 보장한다.
+if command -v mediamtx >/dev/null 2>&1; then
+  MTX_BIN="$(command -v mediamtx)"
+  # 기존에 systemd 로 관리되던 게 아니면(수동/nohup 프로세스) 포트 충돌 방지를 위해 먼저 정리
+  if ! systemctl is-active --quiet mediamtx 2>/dev/null; then
+    OLD_PID="$(pgrep -x mediamtx | head -1 || true)"
+    [ -n "$OLD_PID" ] && { echo "  기존 수동 실행 mediamtx(pid $OLD_PID) 정리"; kill "$OLD_PID" 2>/dev/null; sleep 1; }
+  fi
+  cat > /etc/systemd/system/mediamtx.service <<UNIT
+[Unit]
+Description=MediaMTX (CENTBEAM WHIP/RTMP relay)
+After=network.target
+
+[Service]
+WorkingDirectory=$API_DIR
+ExecStart=$MTX_BIN $API_DIR/mediamtx.yml
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  systemctl daemon-reload
+  systemctl enable --now mediamtx >/dev/null 2>&1 || true
+  systemctl restart mediamtx || true
+  sleep 2
+  if ss -ltnup 2>/dev/null | grep -qE ':8889\s'; then
+    echo "  ✅ MediaMTX systemd 기동 성공(재부팅/크래시 자동복구) — 아무 방송 이름이나 받음"
+  else
+    echo "  ⚠️ MediaMTX 재시작 후 포트 응답 없음 — 'journalctl -u mediamtx -n 40' 확인"
+  fi
 fi
 if command -v ss >/dev/null 2>&1; then
   ss -ltnup 2>/dev/null | grep -E ':(1935|8888|8889)' && echo "  MediaMTX 포트(1935/8888/8889) 리슨 중" \
-    || echo "  ⚠️ MediaMTX 포트가 안 보임 — mediamtx 실행 여부 확인(server/mediamtx.yml)."
+    || echo "  ⚠️ MediaMTX 포트가 안 보임 — 'systemctl status mediamtx' 확인."
 fi
 echo "  ℹ️ WebRTC 미디어(UDP 8189)는 GCP 방화벽에서 열어야 함:"
 echo "     gcloud compute firewall-rules create centbeam-webrtc --allow udp:8189 --source-ranges 0.0.0.0/0"
