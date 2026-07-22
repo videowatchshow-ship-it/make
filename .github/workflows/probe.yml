@@ -1,0 +1,15 @@
+name: probe
+on:
+  push:
+    branches: [claude/sleepy-goodall-per69w]
+    paths: ['.github/workflows/probe.yml']
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: env check
+        run: |
+          echo "runner OK"
+          curl -sS -o /dev/null -w "youtube rtmps tcp: %{http_code}\n" --connect-timeout 5 https://a.rtmps.youtube.com/ || true
+          which ffmpeg || echo "ffmpeg 없음(설치 필요)"
