@@ -20,6 +20,10 @@
     --bg:#0a0d18; --panel:#141a2a; --panel2:#1d2539; --line:#2c3757;
     --txt:#eef1f9; --muted:#9aa4c4; --accent:#5b6bff; --accent2:#25d6ff; --accent3:#b06bff;
     --danger:#ff4d6d; --ok:#1fdd9a;
+    /* --danger-bg: 흰 글자를 올리는 "배경"용 빨강. --danger(#ff4d6d)는 밝아서 흰 글자와
+       3.21:1밖에 안 나와 WCAG 1.4.3(4.5:1) 미달 — 실측 감사에서 적발. 텍스트용 빨강(--danger,
+       어두운 배경 위에서 5.3:1 통과)과 분리해 배경용만 어둡게. #e11d48 = 흰 글자 4.7:1 통과. */
+    --danger-bg:#e11d48;
     --grad:linear-gradient(135deg,var(--accent),var(--accent2));
     --grad3:linear-gradient(135deg,var(--accent3),var(--accent));
     --glow:0 0 0 1px color-mix(in srgb,var(--accent2) 55%,transparent), 0 6px 22px -8px color-mix(in srgb,var(--accent) 70%,transparent);
@@ -27,18 +31,18 @@
   :root[data-theme="light"]{
     --bg:#eef1f6; --panel:#ffffff; --panel2:#f2f4f8; --line:#d3d9e3;
     --txt:#1a1f2b; --muted:#5a6475; --accent:#4657ff; --accent2:#0aa5d6; --accent3:#8a4dff;
-    --danger:#d92c2c; --ok:#0a9c6e;
+    --danger:#d92c2c; --danger-bg:#c62828; --ok:#0a9c6e;
   }
   :root[data-theme="hc"]{
     --bg:#000000; --panel:#000000; --panel2:#0a0a0a; --line:#ffffff;
     --txt:#ffffff; --muted:#e0e0e0; --accent:#0a5cff; --accent2:#00e5ff; --accent3:#00e5ff;
-    --danger:#ff2b2b; --ok:#00ff9c;
+    --danger:#ff2b2b; --danger-bg:#d90429; --ok:#00ff9c;
   }
   /* 색약 대응(적록색맹 안전 팔레트: 빨강↔초록 대신 파랑↔주황) — 그라데이션도 파랑 계열 유지 */
   :root[data-theme="cb"]{
     --bg:#0a0d18; --panel:#141a2a; --panel2:#1d2539; --line:#2c3757;
     --txt:#eef1f9; --muted:#9aa4c4; --accent:#0072e5; --accent2:#33b4ff; --accent3:#66c8ff;
-    --danger:#e8820e; --ok:#0072e5;
+    --danger:#e8820e; --danger-bg:#a34e00; --ok:#0072e5;
   }
   *{box-sizing:border-box}
   html{font-size:clamp(15px, 1.5vw, 17px)}                        /* 유동 기준 폰트 (47) — 가독성 요청으로 상향 */
@@ -104,16 +108,16 @@
   /* 방송 시작 필수 순서 — 빨갛게 강조 + 번호 배지(::before, data-i18n textContent 교체와 충돌 안 나게 실제 자식이 아닌 가상요소 사용).
      그 단계를 마치면 JS 가 클래스를 빼서 자동으로 사라짐 */
   @keyframes cbReqPulse{50%{box-shadow:0 0 0 6px rgba(255,59,59,0)}}
-  .cb-req{position:relative;background:var(--danger)!important;border-color:var(--danger)!important;color:#fff!important;
+  .cb-req{position:relative;background:var(--danger-bg)!important;border-color:var(--danger-bg)!important;color:#fff!important;
     box-shadow:0 0 0 0 rgba(255,59,59,.55);animation:cbReqPulse 1.4s infinite}
   .cb-req::before{content:attr(data-cb-num);position:absolute;top:-8px;left:-8px;width:20px;height:20px;border-radius:50%;
-    background:#fff;color:var(--danger);font:800 12px/20px -apple-system,sans-serif;text-align:center;
+    background:#fff;color:var(--danger-bg);font:800 12px/20px -apple-system,sans-serif;text-align:center;
     box-shadow:0 2px 6px rgba(0,0,0,.4);z-index:5;pointer-events:none}
   .btn{border:1px solid var(--line);background:var(--panel2);color:var(--txt);padding:9px 16px;
     border-radius:10px;font-size:15px;cursor:pointer}
   .btn.primary{background:var(--grad);border:none;color:#fff;font-weight:700;box-shadow:var(--glow)}
   .btn.primary:hover{filter:brightness(1.08)}
-  .btn.stop{background:var(--danger);border-color:var(--danger);color:#fff}
+  .btn.stop{background:var(--danger-bg);border-color:var(--danger-bg);color:#fff}
   .canvas-wrap{flex:1;display:grid;place-items:center;overflow:hidden;padding:18px;
     background:radial-gradient(circle at 50% 40%,#12151d,#0a0c11)}
   .frame{position:relative;box-shadow:0 10px 40px rgba(0,0,0,.6);background:#000;outline:1px solid var(--line)}
@@ -207,8 +211,9 @@
     .stage{order:0;flex:1;min-height:0}
     .canvas-wrap{padding:10px;padding-bottom:calc(64px + env(safe-area-inset-bottom))}
     .toolbar{flex-wrap:wrap;gap:8px;padding:calc(8px + env(safe-area-inset-top)) 12px 8px}
-    .toolbar .seg button{padding:10px 14px;font-size:14px}
+    .toolbar .seg button{padding:13px 16px;font-size:14px;min-height:44px}  /* Apple HIG 44pt */
     .toolbar .btn{min-height:44px}
+    .tb-more .btn{min-width:44px;min-height:44px}                           /* 줌·배경 아이콘버튼도 44 */
     #goLive{display:none}            /* 데스크톱 방송버튼 숨기고 하단바로 대체 */
     /* 배경·가이드류 9개 버튼을 "더보기"로 접어서 툴바 높이를 확 줄임 —
        비디오 미리보기가 화면 대부분을 차지하게(예전엔 툴바만 190px, 화면의
@@ -232,11 +237,17 @@
       opacity:0;pointer-events:none;transition:opacity .2s}
     .drawer-backdrop.show{display:block;opacity:1;pointer-events:auto}
 
-    /* 터치 타깃·폰트 확대 */
+    /* 터치 타깃·폰트 확대 — WCAG 2.5.8 최소 24px / Apple HIG 44pt 기준 실측 감사로 보강 */
     .addbar button{min-height:48px;font-size:14px}
     .layer{padding:12px 12px}
-    .layer .mini{font-size:18px;padding:6px 8px}
+    .layer .mini{font-size:18px;padding:6px 8px;min-width:40px;min-height:40px}
     .field input,.field textarea,.field select{font-size:16px;min-height:44px}  /* 16px=iOS 확대 방지 */
+    .side .row2 .btn,.side .row2 select,.side .row2 label.bg-pick{min-height:44px}  /* 정보/전체화면/도움말/언어/테마 */
+    .side .row2 select{font-size:16px!important}  /* 인라인 12px 덮어씀 — iOS는 16px 미만 입력 포커스 시 강제 확대(WebKit) */
+    .props .btn,.props button:not(.mini):not(.dtoggle):not(.rm){min-height:44px}    /* 저장·연결 버튼들 */
+    .props select,.props input:not([type=checkbox]):not([type=color]){min-height:44px;font-size:16px}  /* platSel 19px 높이 적발건 */
+    .dest{min-height:44px}
+    .dest .dtoggle,.dest .rm{min-width:40px;min-height:40px}                        /* ⏻ 23.9x20px 적발건 */
     .brand{padding-top:6px}
 
     /* 하단 탭바 */
@@ -244,9 +255,9 @@
       background:var(--panel);border-top:1px solid var(--line);
       padding:6px 8px calc(6px + env(safe-area-inset-bottom));gap:8px}
     .mobilebar button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
-      background:transparent;border:none;color:var(--muted);font-size:11px;
+      background:transparent;border:none;color:var(--muted);font-size:12px;
       min-height:52px;border-radius:12px;cursor:pointer}
-    .mobilebar button span{font-size:11px}
+    .mobilebar button span{font-size:12px}   /* 11px는 모바일 최소가독(12px) 미달 — 실측 감사 적발 */
     .mobilebar button.on{color:#fff;background:var(--panel2)}
     .mobilebar .m-live{color:#fff}
     .mobilebar .m-live.live{color:var(--danger)}
