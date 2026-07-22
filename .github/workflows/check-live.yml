@@ -2,68 +2,40 @@ name: check-live-site
 on:
   push:
     branches: [claude/sleepy-goodall-per69w]
-    paths:
-      - '.github/workflows/check-live.yml'
+    paths: ['.github/workflows/check-live.yml']
   workflow_dispatch: {}
 
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - name: curl studio.html (헤더 + 앞부분)
+      - name: DNS 진단 (A/AAAA — 34.104.233.35 직결 여부)
         run: |
-          echo "=== HTTP 상태/헤더 ==="
-          curl -sSI https://cent-solutions.info/studio.html || echo "FAILED"
+          echo "=== A 레코드 ==="
+          dig +short A cent-solutions.info || true
+          dig +short A www.cent-solutions.info || true
+          echo "=== AAAA 레코드(있으면 클라우드플레어 프록시 의심) ==="
+          dig +short AAAA cent-solutions.info || true
+          echo "=== NS ==="
+          dig +short NS cent-solutions.info || true
+
+      - name: HTTPS 인증서 진단
+        run: |
+          echo | openssl s_client -connect cent-solutions.info:443 -servername cent-solutions.info 2>/dev/null | openssl x509 -noout -subject -issuer -dates || echo "TLS 연결 실패"
+
+      - name: 페이지/API 응답 진단
+        run: |
+          echo "=== studio.html 헤더 ==="
+          curl -sSI --max-time 15 https://cent-solutions.info/studio.html || echo FAILED
+          echo "=== api/health ==="
+          curl -sS --max-time 15 https://cent-solutions.info/api/health || echo FAILED
           echo
-          echo "=== HTML title/버전 표시 검색 ==="
-          curl -sS https://cent-solutions.info/studio.html -o /tmp/page.html || echo "FAILED"
-          wc -l /tmp/page.html
-          grep -o '<title>[^<]*</title>' /tmp/page.html || true
-          grep -n 'verTag\|v1\.0\.0\|APP_VERSION\|addbar-main\|h.widgets' /tmp/page.html | head -10 || true
-
-      - name: API health
-        run: curl -sS https://cent-solutions.info/api/health || echo "API FAILED"
-
-      - name: destinations (tak 아바타, 서버가 실제로 뭐을 갖고 있는지 — 키는 서버가 자체 마스킹 안 하니 여기선 platform/enabled만 추출)
-        run: |
-          curl -sS https://cent-solutions.info/api/destinations/tak -o /tmp/dest.json || echo "FAILED"
-          python3 -c "
-import json
-try:
-  d=json.load(open('/tmp/dest.json'))
-  for x in d:
-    key=x.get('streamKey','')
-    masked=(key[:3]+'...'+key[-2:]) if len(key)>6 else ('(없음)' if not key else '***')
-    print(f\"platform={x.get('platform')} name={x.get('name')} enabled={x.get('enabled', True)} locked={x.get('locked', False)} fullUrl={x.get('fullUrl', False)} streamKey={masked}\")
-except Exception as e:
-  print('파싱 실패:', e, open('/tmp/dest.json').read()[:300])
-"
-
-      - name: Playwright 스크린샷 (실제 렌더링 확인)
-        run: |
-          pip install --quiet playwright 2>/dev/null || npm install -g playwright@1.48.0 --silent
-          npx --yes playwright@1.48.0 install --with-deps chromium >/dev/null 2>&1
-          cat > /tmp/shot.mjs << 'EOF'
-          import { chromium } from 'playwright';
-          const browser = await chromium.launch();
-          const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
-          const errs = [];
-          page.on('pageerror', e => errs.push(e.message));
-          page.on('console', m => { if (m.type()==='error') errs.push(m.text()); });
-          await page.goto('https://cent-solutions.info/studio.html', { waitUntil: 'networkidle', timeout: 20000 });
-          await page.waitForTimeout(1500);
-          await page.screenshot({ path: '/tmp/live-shot.png' });
-          console.log('콘솔 에러:', errs.length ? errs.join(' | ') : '없음');
-          await browser.close();
-          EOF
-          node /tmp/shot.mjs || echo "playwright 실패"
-        continue-on-error: true
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: live-check
-          path: |
-            /tmp/live-shot.png
-            /tmp/page.html
-          if-no-files-found: ignore
+          echo "=== 서버 IP로 직접(Host 헤더) — DNS 문제와 서버 문제 분리 ==="
+          curl -sSI --max-time 15 -k --resolve cent-solutions.info:443:34.104.233.35 https://cent-solutions.info/studio.html || echo "DIRECT-443 FAILED"
+          curl -sS --max-time 15 --resolve cent-solutions.info:80:34.104.233.35 http://cent-solutions.info/api/health || echo "DIRECT-80 FAILED"
+          echo
+          echo "=== studio.html 버전 확인(직결) ==="
+          curl -sS --max-time 15 -k --resolve cent-solutions.info:443:34.104.233.35 https://cent-solutions.info/studio.html -o /tmp/p.html || true
+          wc -l /tmp/p.html 2>/dev/null || true
+          grep -o '<title>[^<]*</title>' /tmp/p.html 2>/dev/null || true
+          grep -c 'loginGate\|drawer-grip\|danger-bg' /tmp/p.html 2>/dev/null || true
