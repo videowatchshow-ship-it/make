@@ -2144,6 +2144,19 @@ document.getElementById('goLive').onclick = async function(){
   // 필수 순서 5번(대상 추가)을 실제로 마쳤는지 여기서도 확인해야 6번이 의미가 있다.
   if(!(state.destinations||[]).some(d=>!d.locked && d.streamKey && d.streamKey.trim())){
     toast('⚠️ 대상 채널을 먼저 추가하세요(스트림 키 입력) — 없으면 어디에도 안 나갑니다','warn');
+    // 토스트만으로는 화면 하단에 잠깐 떴다 사라져서 놓치기 쉽다(실사용자 피드백: "시작 버튼이
+    // 아무 반응이 없다"는 게 사실 이 경고를 못 본 것이었음) — alert()로 확실히 막고, 스트림 키
+    // 입력창까지 자동으로 열어서 포커스·스크롤·강조 표시해 뭘 해야 하는지 바로 보여준다.
+    alert('아직 저장된 스트림 키가 없습니다.\n\n"속성" 탭에서 스트림 키를 입력하고 "💾 저장" 버튼을 눌러야 방송이 시작됩니다.');
+    try{
+      if(typeof openDrawer==='function') openDrawer('props');
+      setTimeout(()=>{
+        const k=document.getElementById('destKey');
+        if(k){ k.focus(); k.scrollIntoView({behavior:'smooth', block:'center'});
+          k.style.outline='3px solid #ff3b5c'; k.style.outlineOffset='2px';
+          setTimeout(()=>{ k.style.outline=''; k.style.outlineOffset=''; }, 3000); }
+      }, 350);
+    }catch(_){}
     return;
   }
   // 방송 시작 직전, 서버 쪽 대상 목록이 지금 화면과 확실히 같은 상태인지 마지막으로 한 번 더 맞춤
