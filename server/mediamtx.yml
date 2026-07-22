@@ -1,0 +1,32 @@
+# CENTBEAM relay — MediaMTX 설정
+logLevel: info
+rtmp: yes
+rtmpAddress: :1935
+hls: yes
+hlsAddress: :8888
+webrtc: yes
+webrtcAddress: :8889     # WHIP 인제스트: http://<host>:8889/<avatar>/whip
+# 공인 IP 를 ICE 후보로 알려야 함 — 없으면 "연결은 되는데 화면이 안 나오는" 증상 발생
+# (docs/DEPLOYMENT.md §6). 서버가 34.104.233.35 이외 주소로 바뀌면 같이 바꿀 것.
+webrtcAdditionalHosts: [34.104.233.35]
+srt: no
+
+# ── 인증 (MediaMTX internal auth) ──────────────────────────────────────────
+# 로그인 게이트가 없는 지금은(2026-07-18 롤백) publish 도 read 처럼 공개.
+# ⚠️ 로그인/결제 게이트를 다시 붙일 때 반드시 여기도 잠글 것 — 그 전까지는
+#    이 URL(경로 이름)을 아는 사람은 누구나 이 방송으로 송출할 수 있음.
+authMethod: internal
+authInternalUsers:
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: publish
+      - action: read
+      - action: playback
+
+paths:
+  all_others:
+    runOnReady: /opt/centbeam/server/fanout.sh $MTX_PATH
+    runOnReadyRestart: yes
+    runOnNotReady: pkill -f "fanout-$MTX_PATH" || true

@@ -1,0 +1,3 @@
+# 센트빔 CENTBEAM — 로그인 필수 유료 앱. 크롤러/색인 차단 (RFC 9309)
+User-agent: *
+Disallow: /

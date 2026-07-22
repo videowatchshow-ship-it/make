@@ -1,0 +1,21 @@
+{
+  "name": "센트빔 CENTBEAM",
+  "short_name": "센트빔",
+  "description": "하나의 방송을 모든 곳으로 — 멀티스트리밍 스튜디오",
+  "start_url": "./studio.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0d0f14",
+  "theme_color": "#0066ff",
+  "categories": ["entertainment", "photo", "productivity"],
+  "lang": "ko",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    { "name": "바로 방송 시작", "short_name": "방송", "description": "스튜디오를 열고 방송 준비", "url": "./studio.html?action=live", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
+    { "name": "카메라만 빠르게", "short_name": "카메라", "description": "카메라 소스로 바로 시작", "url": "./studio.html?action=camera", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] }
+  ]
+}
