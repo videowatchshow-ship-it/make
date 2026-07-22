@@ -7,7 +7,7 @@
 한 번 송출하면 서버가 여러 플랫폼(YouTube·Facebook·Twitch·자체 사이트 등)으로 동시에 뿌리는(fan-out) 라이브 스튜디오.
 PRISM/OBS의 씬 합성 경험을 **브라우저(PWA)** 로 구현했다. 설치·빌드 없이 폰에서 바로.
 
-![status](https://img.shields.io/badge/parity-86%25%20(343%2F400)-green) ![client](https://img.shields.io/badge/client-PWA%20단일HTML-blue) ![server](https://img.shields.io/badge/relay-MediaMTX%2BFFmpeg-informational) ![deploy](https://img.shields.io/badge/domain-panda--avata.cc-orange)
+![status](https://img.shields.io/badge/parity-93%25%20(375%2F400·이행률96%25)-brightgreen) ![client](https://img.shields.io/badge/client-PWA%20단일HTML-blue) ![server](https://img.shields.io/badge/relay-MediaMTX%2BFFmpeg-informational) ![deploy](https://img.shields.io/badge/domain-panda--avata.cc-orange)
 
 **라이브: [https://panda-avata.cc/studio.html](https://panda-avata.cc/studio.html)** (배포 후)
 
@@ -62,7 +62,7 @@ PRISM/OBS의 씬 합성 경험을 **브라우저(PWA)** 로 구현했다. 설치
 | `server/` | **릴레이** | MediaMTX + `fanout.sh` + Express API. RTMP/WHIP 수신 → 다중 대상 fan-out. 상세: [§6](#6-서버-상세--릴레이) |
 | `server/deploy.sh` | **배포** | 서버 원클릭 배포(멱등): 파일배치 + Apache vhost + certbot SSL + jq/ffmpeg 설치. |
 | `docs/` | **주제별 문서** | ARCHITECTURE / DEPLOYMENT / CLOUDFLARE_API / CONTRIBUTING / GLOSSARY / MOBILE_UX_PRISM / SECURITY_30. 색인: [§8](#8-문서-모음-docs) |
-| `CENTBEAM_PARITY_CHECKLIST.md` | **품질 기준** | PRISM 모바일 동등성 400항목 감사 (현재 ✅343). |
+| `CENTBEAM_PARITY_CHECKLIST.md` | **품질 기준** | PRISM 모바일 동등성 400항목 감사 (현재 ✅375/93%, 이행률 96%). |
 | `legacy/` | 범위 밖 | 피벗 이전 도구, 참고 보관 (자체 README 보유, 이 문서 범위 밖). |
 
 > **설계 원칙**: 클라이언트와 서버는 **프로토콜(WHIP/RTMP)로만** 결합. 서버는 어떤 클라이언트(센트빔/OBS/PRISM)든 스트림키만 맞으면 받는다.
@@ -90,7 +90,7 @@ WHIP(WebRTC)·다중대상 fan-out·비트레이트·FPS(30/60)·레이트컨트
 반응형 셸(하단 탭바·드로어)·태블릿 레이아웃·**Wake Lock**·저전력·방향잠금·스플래시·About·설치유도·풀스크린·몰입모드·라이트/고대비/**색약**/시스템 테마·강조색·햅틱·도움말·온보딩·오프라인 배너·네트워크/배터리 표시·스와이프 삭제·**다국어(한/영 전환·자동감지)**·manifest shortcuts
 
 **보안**
-CSP·iframe sandbox·WHIP Bearer·랜덤경로·서버 레이트리밋·MediaMTX 인증·보안헤더·npm audit·로그 위생 (근거: RFC 9725 / OWASP / MDN)
+**구글 의무 로그인(180일 롤링 세션)**·CSP·iframe sandbox·WHIP Bearer·랜덤경로·서버 레이트리밋·MediaMTX 인증·보안헤더·npm audit·로그 위생·시크릿 스캔 (근거: RFC 9725 / OWASP / MDN)
 
 > 남은 항목(~14)은 대부분 **플랫폼 API/실시간 데이터**(실시간 시청자수, VOD, 멀티게스트 mesh)이거나 **실기기 검증**(발열/배터리 실측)이라 코드 단독으로는 닫히지 않는다. → [체크리스트](CENTBEAM_PARITY_CHECKLIST.md)
 
@@ -326,6 +326,13 @@ gcloud compute ssh my-site-1 --zone=asia-northeast1-a --command \
 | POST | `/api/destinations/:avatar` | 대상 1건 추가(아래 바디) |
 | PUT | `/api/destinations/:avatar` | 아바타 대상 **전체 교체**(클라이언트 저장 버튼이 호출, 최대 20건) |
 | DELETE | `/api/destinations/:avatar/:idx` | 대상 삭제 (`locked:true`면 403) |
+| GET/PUT/POST | `/api/scenes/:avatar` | 씬 클라우드 동기화(2MB 한도, POST는 sendBeacon용) |
+| GET | `/api/auth/me` | 세션 확인(+180일 롤링 연장). 게이트 비활성 환경은 `{open:true}` |
+| POST | `/api/auth/logout` | 세션 폐기 |
+
+> 🔐 **의무 로그인**: 서버에 구글 OAuth 시크릿이 설정된 환경(프로덕션)에서는 위 destinations/scenes/avatars
+> API 전체가 세션(Bearer `cbs_…`) 필수이고, 스튜디오도 구글 로그인 게이트가 뜬다. 세션은 180일 + 사용 시
+> 자동 연장(프리즘 방식 — 직접 로그아웃 전엔 안 풀림). 시크릿 없는 개발 환경은 개방 모드로 동작.
 
 POST/PUT 바디(항목):
 ```jsonc
@@ -452,7 +459,7 @@ gcloud compute ssh my-site-1 --zone=asia-northeast1-a --command \
 
 ## 10. 완성도 / 개발 규칙
 
-- 완성도: **[CENTBEAM_PARITY_CHECKLIST.md](CENTBEAM_PARITY_CHECKLIST.md)** (400항목, 현재 ✅343 / 86%). 각 항목: 구현 → 헤드리스 Playwright 검증 → 커밋.
+- 완성도: **[CENTBEAM_PARITY_CHECKLIST.md](CENTBEAM_PARITY_CHECKLIST.md)** (400항목, 현재 ✅375 / 93% · 이행률 ✅+➖ 96%). 각 항목: 구현 → 헤드리스 Playwright 검증 → 커밋.
 - 브랜치: `claude/*` 피처 브랜치 → PR(draft). 커밋은 파트 접두어(`client:`/`server:`/`docs:`).
 - 상세: [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
 

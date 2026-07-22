@@ -45,7 +45,10 @@
     --danger:#e8820e; --danger-bg:#a34e00; --ok:#0072e5;
   }
   *{box-sizing:border-box}
-  html{font-size:clamp(15px, 1.5vw, 17px)}                        /* 유동 기준 폰트 (47) — 가독성 요청으로 상향 */
+  html{font-size:clamp(15px, 0.55em + 0.55vw, 24px)}  /* 유동 기준 폰트 (47) — em 항 덕분에 OS/브라우저 '큰 글씨'
+     설정(동적 타입, 체크리스트 326)이 루트에 반영됨: 사용자가 기본 글꼴을 키우면 em 기준값이 커져 전체가 비례 확대 */
+  *{touch-action:manipulation}  /* 더블탭 300ms 클릭지연 제거 (MDN touch-action, 체크리스트 328) — 핀치줌 제스처 캔버스는 아래에서 개별 재정의 */
+  .canvas-wrap,#frame,#view{touch-action:none}  /* 캔버스는 자체 핀치/드래그 제스처 처리 */
   html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Malgun Gothic",sans-serif;
     overscroll-behavior:none;-webkit-overflow-scrolling:touch}   /* 스크롤 바운스 억제 */
@@ -127,8 +130,13 @@
   .grip{position:absolute;width:12px;height:12px;background:#fff;border:1.5px solid var(--accent);
     border-radius:50%;pointer-events:auto;cursor:nwse-resize}
   .grip.rot{background:var(--accent2);cursor:grab;border-radius:50%}
-  @media (pointer:coarse){ .grip::after{content:'';position:absolute;inset:-16px} }  /* 터치 타깃 ≥44px */
+  /* 터치 기기: 그립을 시각적으로도 크게(12→18px, PRISM 수준) + 히트존 44px 유지 */
+  @media (pointer:coarse){
+    .grip{width:18px;height:18px;border-width:2px}
+    .grip::after{content:'';position:absolute;inset:-13px}   /* 18+26=44px 터치존 */
+  }
   .hit{position:absolute;pointer-events:auto;cursor:move}
+  .drawer-grip{display:none}   /* 데스크톱: 시트 아님 → 숨김. 모바일 블록에서 표시 */
   /* ── right: properties ── */
   .props{width:260px;flex:0 0 260px;container-type:inline-size;background:var(--panel);border-left:1px solid var(--line);
     padding:14px 16px;overflow:auto}
@@ -139,7 +147,7 @@
     color:var(--txt);border-radius:8px;padding:8px;font-size:13px}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .empty{color:var(--muted);font-size:13px;line-height:1.6;margin-top:20px}
-  .note{font-size:11px;color:var(--muted);line-height:1.5;margin-top:6px}
+  .note{font-size:13px;color:var(--muted);line-height:1.5;margin-top:6px}  /* 11px→13px: 모바일 최소가독(체크리스트 113) */
   input[type=file]{display:none}
 
   /* 대상 채널 목록 */
@@ -147,7 +155,7 @@
     border-radius:10px;padding:8px 10px;margin:6px 0}
   .dest .badge{font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px;background:#0b0e14;color:var(--accent2);white-space:nowrap}
   .dest .dname{flex:1;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .dest .dkey{font-size:11px;color:var(--muted);font-family:monospace}
+  .dest .dkey{font-size:12px;color:var(--muted);font-family:monospace}
   .dest .lock{color:var(--accent2);font-size:13px}
   .dest .rm{border:none;background:transparent;color:var(--danger);cursor:pointer;font-size:15px;padding:2px 4px}
   .dest.locked{border-color:var(--accent2)}
@@ -233,6 +241,8 @@
     .side.open,.props.open{transform:translateY(0)}
     .side::before,.props::before{content:"";display:block;width:40px;height:4px;border-radius:3px;
       background:var(--line);margin:10px auto 4px}
+    .drawer-grip{display:block;position:absolute;top:0;left:0;right:0;height:34px;
+      touch-action:none;z-index:5;cursor:grab}   /* 드래그로 닫기 전용 스트립(시각적 그립바 ::before 위) */
     .drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:35;
       opacity:0;pointer-events:none;transition:opacity .2s}
     .drawer-backdrop.show{display:block;opacity:1;pointer-events:auto}
@@ -269,6 +279,21 @@
   <div style="font-size:64px;color:#00d9ff;text-shadow:0 0 40px #00d9ff88">◭</div>
   <div style="font:700 26px -apple-system,'Malgun Gothic',sans-serif;color:#e6e9ef;letter-spacing:2px">센트빔 <span style="color:#00d9ff">CENTBEAM</span></div>
   <div style="font:13px -apple-system,sans-serif;color:#6b7688">라이브 스튜디오 로딩 중…</div>
+</div>
+<!-- 의무 로그인 게이트 — 서버에 구글 OAuth가 설정된 환경(프로덕션)에서는 로그인 없이 스튜디오 사용 불가.
+     한 번 로그인하면 180일 세션 + 사용할 때마다 자동 연장(프리즘 방식: 직접 로그아웃 전엔 안 풀림). -->
+<div id="loginGate" style="display:none;position:fixed;inset:0;z-index:9998;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:radial-gradient(circle at 50% 40%,#101725,#05070c)">
+  <div style="font-size:56px;color:#00d9ff;text-shadow:0 0 40px #00d9ff88">◭</div>
+  <div style="font:700 24px -apple-system,'Malgun Gothic',sans-serif;color:#e6e9ef">센트빔 <span style="color:#00d9ff">CENTBEAM</span></div>
+  <div style="font:15px -apple-system,'Malgun Gothic',sans-serif;color:#9aa4c4;text-align:center;line-height:1.6;max-width:300px">
+    방송 스튜디오를 사용하려면<br><b style="color:#e6e9ef">구글 로그인</b>이 필요합니다</div>
+  <button id="loginGoogle" style="display:flex;align-items:center;gap:10px;padding:14px 28px;border:none;border-radius:12px;
+    background:#fff;color:#1a1f2b;font:700 16px -apple-system,'Malgun Gothic',sans-serif;cursor:pointer;min-height:52px;
+    box-shadow:0 8px 30px rgba(0,217,255,.25)">
+    <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+    구글로 로그인
+  </button>
+  <div style="font:12px -apple-system,sans-serif;color:#6b7688">한 번 로그인하면 이 기기에서 계속 유지됩니다 (180일 자동 연장)</div>
 </div>
 <div id="offlineBar" data-i18n="net.offline">⚠️ 오프라인 상태입니다 — 네트워크 연결을 확인하세요. (방송은 연결 복구 시 자동 재연결)</div>
 <button id="floatBack" title="뒤로가기" aria-label="뒤로가기(현재 창 닫기)"
@@ -377,6 +402,7 @@
       <button id="addData" data-i18n="src.data">🔢 데이터</button>
       <button id="addAudioBars" data-i18n="src.bars">〰 오디오바</button>
       <button id="addRoulette" data-i18n="src.roulette">🎡 룰렛</button>
+      <button id="addQr" data-i18n="src.qr">🔳 QR코드</button>
       <button id="addSlideshow" data-i18n="src.slide">🖽 슬라이드</button>
       <button id="fillBtn" data-i18n="src.fill">⤢ 채우기</button>
     </div>
@@ -424,6 +450,7 @@
         <button class="btn" id="gBrb" title="자리비움 화면(BRB)" aria-label="BRB 화면">☕</button>
         <button class="btn" id="gRotLock" title="화면 회전 잠금" aria-label="화면 회전 잠금">🔓↻</button>
         <button class="btn" id="gImmersive" title="몰입 모드(패널 숨김)" aria-label="몰입 모드">⛶↔</button>
+        <button class="btn" id="gWmClear" title="로고(워터마크) 해제" aria-label="로고 해제">📌✕</button>
         <!-- 줌 컨트롤도 여기로: 이 4개가 툴바에 그대로 남아있으면 폭 355px 안팎의 흔한 폰(iPhone SE/14,
              갤럭시 S22 등, 375~393px)에서 한 줄에 다 안 들어가 3줄로 접혀 툴바가 165px까지 다시 늘어나고,
              그만큼 세로 캔버스 미리보기 폭이 좁아진다(실측: 화면폭의 64%만 사용). display:contents인
@@ -521,7 +548,9 @@
             <option value="'Georgia',serif">Georgia</option>
             <option value="'Courier New',monospace">모노스페이스</option>
             <option value="'Impact','Haettenschweiler',sans-serif">임팩트</option>
-          </select></div>
+          </select>
+          <button class="btn" id="fontUpBtn" style="width:100%;margin-top:4px;padding:6px" title="브랜드 폰트 파일(.ttf/.otf/.woff/.woff2) 불러오기">📁 폰트 파일…</button>
+          <input type="file" id="fontUpFile" accept=".ttf,.otf,.woff,.woff2,font/*" style="display:none"></div>
           <div class="field"><label>애니메이션</label><select id="pTextAnim">
             <option value="none">없음</option><option value="fade">페이드</option><option value="blink">깜빡임</option><option value="type">타이핑</option><option value="slide">슬라이드</option></select></div>
         </div>
@@ -715,12 +744,14 @@
         <button class="btn" id="pLock">🔓 잠금</button>
       </div>
       <button class="btn" id="pHide" style="width:100%;margin-top:6px">👁 숨김</button>
+      <button class="btn" id="pWatermark" style="width:100%;margin-top:6px;display:none">📌 로고(워터마크)로 고정 — 모든 씬 항상 위</button>
       <button class="btn stop" id="pDel" style="width:100%;margin-top:8px">삭제</button>
     </div>
     <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
     <h2>송출 (릴레이)</h2>
     <div class="field"><label>WHIP 엔드포인트</label>
-      <input id="whip" placeholder="https://panda-avata.cc/whip/tak/whip 또는 http://34.104.233.35:8889/tak/whip"></div>
+      <input id="whip" placeholder="https://panda-avata.cc/whip/tak/whip"></div><!-- http 예시 제거: 전구간 HTTPS(체크리스트 291) -->
+
     <div class="row2">
       <div class="field" style="flex:1"><label>WHIP 토큰 (Bearer, 선택)</label><input id="whipToken" type="password" placeholder="publish 토큰"></div>
       <button class="btn" id="randPathBtn" title="랜덤 스트림 경로 생성(보안)" style="align-self:flex-end;padding:8px">🎲 랜덤경로</button>
@@ -771,6 +802,8 @@
     </div>
     <div class="note" id="schedStat" style="display:none"></div>
     <div class="note" id="sendStat">송출 대기</div>
+    <canvas id="brGraph" width="280" height="44" aria-label="실시간 비트레이트 그래프"
+      style="width:100%;height:44px;background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:8px;margin-top:4px"></canvas>
     <div class="note" id="connStat">연결: —</div>
     <div class="note" id="fpsStat">렌더: — fps</div>
     <div class="note" id="netStat">네트워크: — · 배터리: —</div>
@@ -817,6 +850,13 @@
       <div class="row2" style="margin-top:6px">
         <div class="field"><label>출력 채널</label><select id="chanSel"><option value="stereo">스테레오</option><option value="mono">모노</option></select></div>
         <div class="field"><label>마이크 장치</label><select id="micDevice"><option value="">기본</option></select></div>
+      </div>
+      <!-- 브라우저 내장 DSP 토글(체크리스트 150/152/165) — 방송 기본은 전부 OFF(음악 펌핑 방지, OBS/PRISM 관행).
+           말소리 위주 방송이면 켜는 게 유리. 토글 시 마이크 스트림을 새 제약으로 재획득. -->
+      <div class="row2" style="margin-top:6px;flex-wrap:wrap;gap:4px 12px">
+        <label class="chk" style="margin:2px 0"><input type="checkbox" id="micNs"> 노이즈 억제</label>
+        <label class="chk" style="margin:2px 0"><input type="checkbox" id="micEc"> 에코 제거</label>
+        <label class="chk" style="margin:2px 0"><input type="checkbox" id="micAgc"> 자동 게인(AGC)</label>
       </div>
       <div class="row2" style="margin-top:6px;align-items:center">
         <button class="btn" id="fxMonitor" title="이어폰으로 모니터링(에코 주의)">🎧 모니터링</button>
@@ -1087,14 +1127,33 @@ imgFile.onchange = () => {
     img.onload = () => {
       const {w:cw} = canvasDims();
       const scale = (cw*0.4)/img.width;
-      addLayer('image', {name:f.name, img, src:reader.result, aspect:img.width/img.height,
+      const L = addLayer('image', {name:f.name, img, src:reader.result, aspect:img.width/img.height,
         w:img.width*scale, h:img.height*scale});
+      // GIF 움짤(체크리스트 72): canvas drawImage는 첫 프레임만 그림(HTML 스펙) —
+      // WebCodecs ImageDecoder(Chrome 94+)로 전 프레임 디코딩해 draw()에서 시간 따라 넘김.
+      // 미지원 브라우저/디코딩 실패는 기존처럼 정지 이미지 폴백.
+      if(f.type==='image/gif' && 'ImageDecoder' in window && L) decodeGifFrames(L, f);
     };
     img.src = reader.result;
   };
   reader.readAsDataURL(f);
   imgFile.value = '';
 };
+async function decodeGifFrames(L, file){
+  try{
+    const dec = new ImageDecoder({ data: await file.arrayBuffer(), type:'image/gif' });
+    await dec.tracks.ready;
+    const track = dec.tracks.selectedTrack; if(!track || track.frameCount<=1) return;
+    const frames=[], durs=[];
+    for(let i=0;i<track.frameCount;i++){
+      const {image} = await dec.decode({frameIndex:i});
+      frames.push(await createImageBitmap(image));
+      durs.push(Math.max(20,(image.duration||100000)/1000));  // µs→ms, 0이면 100ms(GIF 관행)
+      image.close();
+    }
+    L.gif={frames, durs, idx:0, _t:performance.now()};
+  }catch(_){/* 폴백: 정지 이미지 유지 */}
+}
 
 /* 텍스트 */
 document.getElementById('addText').onclick = () => {
@@ -1158,6 +1217,90 @@ async function refreshDataLayers(){
 setInterval(refreshDataLayers, 2000);
 document.getElementById('addAudioBars').onclick = () => { addLayer('audiobars',{name:'오디오바',color:'#00d9ff',bars:32,w:500,h:160}); };
 document.getElementById('addRoulette').onclick = () => { addLayer('roulette',{name:'룰렛',options:'꽝,당첨,한번더,꽝,당첨,꽝',angle:0,vel:0,w:360,h:360,aspect:1}); };
+document.getElementById('addQr').onclick = () => {
+  const url = prompt('QR코드에 담을 URL/텍스트:', 'https://panda-avata.cc');
+  if(!url || !url.trim()) return;
+  if(!QR.make(url.trim())){ toast('내용이 너무 깁니다(최대 약 106바이트)','warn'); return; }
+  addLayer('qr',{name:'QR코드', url:url.trim(), w:300, h:300, aspect:1});
+};
+
+/* ── QR 인코더 (ISO/IEC 18004) — 바이트 모드, 단일 RS블록 구성(1-M/2-M/3-M/4-L/5-L), 마스크 0 고정.
+   외부 라이브러리 없이 완전 자체 구현(CSP self-contained). zbarimg 왕복 디코딩으로 실측 검증됨. ── */
+const QR=(()=>{
+  const EXP=new Array(512), LOG=new Array(256);
+  { let x=1; for(let i=0;i<255;i++){ EXP[i]=x; LOG[x]=i; x<<=1; if(x&0x100) x^=0x11d; } for(let i=255;i<512;i++) EXP[i]=EXP[i-255]; }
+  const gmul=(a,b)=> (a&&b) ? EXP[(LOG[a]+LOG[b])%255] : 0;
+  function rsGen(n){ let g=[1];
+    for(let i=0;i<n;i++){ const a=g.concat([0]); const b=[0].concat(g.map(c=>gmul(c,EXP[i])));
+      g=a.map((v,k)=>v^b[k]); }
+    return g; }
+  function rsEC(data, ecLen){
+    const gen=rsGen(ecLen); const buf=data.concat(new Array(ecLen).fill(0));
+    for(let i=0;i<data.length;i++){ const c=buf[i]; if(!c) continue; const l=LOG[c];
+      for(let j=1;j<gen.length;j++) if(gen[j]) buf[i+j]^=EXP[(l+LOG[gen[j]])%255];
+      buf[i]=0; }
+    return buf.slice(data.length); }
+  // 단일 RS블록 구성만 사용(멀티블록 인터리빙 회피): {버전, 데이터코드워드수, EC코드워드수, EC레벨}
+  const CFG=[ {v:1,dcw:16,ecw:10,ecl:'M'},{v:2,dcw:28,ecw:16,ecl:'M'},{v:3,dcw:44,ecw:26,ecl:'M'},
+              {v:4,dcw:80,ecw:20,ecl:'L'},{v:5,dcw:108,ecw:26,ecl:'L'} ];
+  const ALIGN={2:18,3:22,4:26,5:30};
+  function bch15(data){ let d=data<<10; const g=0x537;
+    for(let i=14;i>=10;i--) if((d>>i)&1) d^=g<<(i-10);
+    return ((data<<10)|d)^0x5412; }
+  function make(text){
+    const bytes=[...new TextEncoder().encode(text)];
+    const cfg=CFG.find(c=>bytes.length<=c.dcw-2); if(!cfg) return null;
+    // 비트 조립: 모드 0100 + 길이(8bit, v1-9) + 데이터 + 종결자 + 패딩
+    const bits=[]; const push=(val,n)=>{ for(let i=n-1;i>=0;i--) bits.push((val>>i)&1); };
+    push(4,4); push(bytes.length,8); bytes.forEach(b=>push(b,8));
+    const cap=cfg.dcw*8;
+    push(0, Math.min(4, cap-bits.length));
+    while(bits.length%8) bits.push(0);
+    const pads=[0xEC,0x11]; let pi=0;
+    while(bits.length<cap){ push(pads[pi%2],8); pi++; }
+    const dcw=[]; for(let i=0;i<bits.length;i+=8){ let b=0; for(let j=0;j<8;j++) b=(b<<1)|bits[i+j]; dcw.push(b); }
+    const all=dcw.concat(rsEC(dcw,cfg.ecw));
+    // 매트릭스
+    const size=cfg.v*4+17;
+    const m=Array.from({length:size},()=>new Array(size).fill(null));
+    const setF=(r,c,v)=>{ if(r>=0&&r<size&&c>=0&&c<size) m[r][c]=v; };
+    function finder(r,c){ for(let dr=-1;dr<=7;dr++) for(let dc=-1;dc<=7;dc++){
+      const rr=r+dr, cc=c+dc; if(rr<0||rr>=size||cc<0||cc>=size) continue;
+      const inRing=dr>=0&&dr<=6&&dc>=0&&dc<=6;
+      const on=inRing&&(dr===0||dr===6||dc===0||dc===6||(dr>=2&&dr<=4&&dc>=2&&dc<=4));
+      setF(rr,cc,on?1:0); } }
+    finder(0,0); finder(0,size-7); finder(size-7,0);
+    for(let i=8;i<size-8;i++){ if(m[6][i]===null) m[6][i]=i%2===0?1:0; if(m[i][6]===null) m[i][6]=i%2===0?1:0; }
+    if(ALIGN[cfg.v]){ const p=ALIGN[cfg.v];
+      for(let dr=-2;dr<=2;dr++) for(let dc=-2;dc<=2;dc++){
+        const on=Math.max(Math.abs(dr),Math.abs(dc))!==1;
+        setF(p+dr,p+dc,on?1:0); } }
+    m[size-8][8]=1;   // 다크 모듈
+    // 포맷정보 자리 예약(placeholder 0)
+    for(let i=0;i<9;i++){ if(m[8][i]===null) m[8][i]=0; if(m[i][8]===null) m[i][8]=0; }
+    for(let i=0;i<8;i++){ if(m[8][size-1-i]===null) m[8][size-1-i]=0; if(m[size-1-i][8]===null) m[size-1-i][8]=0; }
+    // 데이터 배치(지그재그) + 마스크0((r+c)%2==0 반전)
+    const dbits=[]; all.forEach(b=>{ for(let i=7;i>=0;i--) dbits.push((b>>i)&1); });
+    let idx=0, inc=-1, row=size-1;
+    for(let col=size-1; col>0; col-=2){
+      if(col===6) col--;
+      while(true){
+        for(let c2=0;c2<2;c2++){ const cc=col-c2;
+          if(m[row][cc]===null){ let bit=idx<dbits.length?dbits[idx]:0; idx++;
+            if((row+cc)%2===0) bit^=1; m[row][cc]=bit; } }
+        row+=inc;
+        if(row<0||row>=size){ row-=inc; inc=-inc; break; }
+      }
+    }
+    // 포맷정보 기록 (EC표시: L=1, M=0 · 마스크0) — kazuhikoarase/qrcode-generator와 동일 배치
+    const fmt=bch15(((cfg.ecl==='L'?1:0)<<3)|0);
+    for(let i=0;i<15;i++){ const bit=(fmt>>i)&1;
+      if(i<6) m[i][8]=bit; else if(i<8) m[i+1][8]=bit; else m[size-15+i][8]=bit;
+      if(i<8) m[8][size-1-i]=bit; else if(i<9) m[8][15-i]=bit; else m[8][14-i]=bit; }
+    return m;
+  }
+  return {make};
+})();
 document.getElementById('addSlideshow').onclick = () => { document.getElementById('slideFile').click(); };
 function loadSlideImages(files, L){
   const srcs=L.srcs||[], imgs=L.imgs||[]; let pending=files.length;
@@ -1280,6 +1423,12 @@ function draw(){
     }
     if((L.type==='camera'||L.type==='screen') && L.video.readyState>=2){
       drawKeyed(L, L.video, L.video.videoWidth, L.video.videoHeight, hw, hh);
+    } else if(L.type==='image' && L.gif && L.gif.frames.length){
+      // GIF 움짤: 프레임별 지속시간 따라 진행 (체크리스트 72)
+      const g=L.gif, now=performance.now();
+      if(now-g._t > g.durs[g.idx]){ g.idx=(g.idx+1)%g.frames.length; g._t=now; }
+      const fr=g.frames[g.idx];
+      drawKeyed(L, fr, fr.width, fr.height, hw, hh);
     } else if(L.type==='image' && L.img.complete){
       drawKeyed(L, L.img, L.img.naturalWidth, L.img.naturalHeight, hw, hh);
     } else if(L.type==='text'){
@@ -1385,6 +1534,18 @@ function draw(){
         cy+=lh;
       });
       ctx.restore();
+    } else if(L.type==='qr'){
+      // QR 위젯(체크리스트 82) — 여백(콰이엇존) 4모듈 포함 흰 배경 + 검정 모듈
+      if(!L.qrm && L.url){ L.qrm = QR.make(L.url) || 'err'; }
+      if(L.qrm && L.qrm!=='err'){
+        const n=L.qrm.length, quiet=4, total=n+quiet*2;
+        const cell=Math.min(L.w,L.h)/total;
+        const ox=-cell*total/2, oy=-cell*total/2;
+        ctx.fillStyle='#ffffff'; ctx.fillRect(ox,oy,cell*total,cell*total);
+        ctx.fillStyle='#000000';
+        for(let r=0;r<n;r++) for(let c=0;c<n;c++)
+          if(L.qrm[r][c]) ctx.fillRect(ox+(c+quiet)*cell, oy+(r+quiet)*cell, cell+0.5, cell+0.5);
+      }
     } else if(L.type==='sticker'){
       ctx.font = `${L.h||120}px -apple-system,"Malgun Gothic",sans-serif`;
       ctx.textAlign='center';
@@ -1512,6 +1673,13 @@ function draw(){
     ctx.restore();
     if(L.type==='web' && L.iframe){ positionIframe(L); }
   }
+  // 로고(워터마크) — 모든 레이어/씬 위에 항상 그림. 상대좌표라 방향전환에도 위치 유지 (체크리스트 232)
+  if(watermark && watermark.img && watermark.img.complete){
+    const ww=watermark.wr*cw, wh=ww*(watermark.img.naturalHeight/Math.max(1,watermark.img.naturalWidth));
+    ctx.save(); ctx.globalAlpha=watermark.opacity!=null?watermark.opacity:1;
+    ctx.drawImage(watermark.img, watermark.xr*cw-ww/2, watermark.yr*ch-wh/2, ww, wh);
+    ctx.restore();
+  }
   drawGuides(cw,ch);
   if(guides.brb){
     ctx.save(); ctx.fillStyle='#0a0d14'; ctx.fillRect(0,0,cw,ch);
@@ -1525,6 +1693,35 @@ function draw(){
   drawHandles();
 }
 const guides = { safe:false, grid:false, ruler:false, snap:false, brb:false };
+/* ── 로고(워터마크) 고정 (체크리스트 232) — 씬과 무관하게 항상 최상단에 그려지는 이미지.
+   상대좌표(xr/yr/wr: 캔버스 대비 0~1)로 저장해 가로/세로 전환에도 같은 위치 유지. localStorage 지속. ── */
+let watermark=null;
+function loadWatermark(){
+  try{ const raw=localStorage.getItem('centbeam.watermark'); if(!raw) return;
+    const d=JSON.parse(raw); const img=new Image(); img.src=d.src;
+    watermark={...d, img};
+  }catch(_){}
+}
+function saveWatermark(){
+  try{
+    if(!watermark){ localStorage.removeItem('centbeam.watermark'); return; }
+    const {img, ...d}=watermark; localStorage.setItem('centbeam.watermark', JSON.stringify(d));
+  }catch(e){ toast('로고 저장 실패(용량 초과 가능): '+e.message,'warn'); }
+}
+document.getElementById('pWatermark').onclick=()=>{
+  const L=sel(); if(!L||L.type!=='image'||!L.src) return;
+  const d=canvasDims();
+  const img=new Image(); img.src=L.src;
+  watermark={ src:L.src, xr:L.x/d.w, yr:L.y/d.h, wr:L.w/d.w, opacity:L.opacity!=null?L.opacity:1, img };
+  state.layers=state.layers.filter(x=>x.id!==L.id); state.selId=null;
+  renderLayers(); syncProps(); saveWatermark();
+  toast('📌 로고로 고정됨 — 모든 씬에서 항상 위에 표시. 해제: 툴바 ⋯ 더보기 → 로고 해제','ok');
+};
+document.getElementById('gWmClear').onclick=()=>{
+  if(!watermark){ toast('고정된 로고가 없습니다','warn'); return; }
+  watermark=null; saveWatermark(); toast('로고 해제됨','ok');
+};
+loadWatermark();
 function drawGuides(cw,ch){
   if(guides.grid){
     ctx.save(); ctx.strokeStyle='rgba(255,255,255,.12)'; ctx.lineWidth=1;
@@ -1575,8 +1772,9 @@ function drawHandles(){
   const t = `translate(${px}px,${py}px) rotate(${L.rot}deg)`;
   box.style.cssText = `position:absolute;left:0;top:0;width:${pw}px;height:${ph}px;transform:${t} translate(${-pw/2}px,${-ph/2}px);transform-origin:top left;border:1.5px solid var(--accent2);pointer-events:none`;
   hit.style.cssText = box.style.cssText.replace('pointer-events:none','pointer-events:auto;cursor:move');
-  gripR.style.cssText = `position:absolute;left:0;top:0;transform:${t} translate(${pw/2-6}px,${ph/2-6}px);pointer-events:auto`;
-  gripT.style.cssText = `position:absolute;left:0;top:0;transform:${t} translate(-6px,${-ph/2-28}px);pointer-events:auto`;
+  const gr = (gripR.offsetWidth||12)/2;   // 그립 실제 크기 기준 중심정렬(터치기기는 18px로 커짐)
+  gripR.style.cssText = `position:absolute;left:0;top:0;transform:${t} translate(${pw/2-gr}px,${ph/2-gr}px);pointer-events:auto`;
+  gripT.style.cssText = `position:absolute;left:0;top:0;transform:${t} translate(${-gr}px,${-ph/2-28}px);pointer-events:auto`;
 }
 
 let drag=null;
@@ -1680,7 +1878,7 @@ document.getElementById('arSel').onchange = e=>{
 };
 
 /* ── 레이어 목록 ── */
-const ICON={camera:'🎥',screen:'🖥️',image:'🖼️',text:'🅣',web:'🌐',solid:'🟦',clock:'🕐',lower3:'▬',countdown:'⏱',video:'🎞️',gauge:'📊',chat:'💬',sticker:'⭐',frame:'🖼',emote:'💗',poll:'📊',donors:'★',nowplaying:'🎧',audiobars:'〰',roulette:'🎡',slideshow:'🖽',data:'🔢'};
+const ICON={camera:'🎥',screen:'🖥️',image:'🖼️',text:'🅣',web:'🌐',solid:'🟦',clock:'🕐',lower3:'▬',countdown:'⏱',video:'🎞️',gauge:'📊',chat:'💬',sticker:'⭐',frame:'🖼',emote:'💗',poll:'📊',donors:'★',nowplaying:'🎧',audiobars:'〰',roulette:'🎡',qr:'🔳',slideshow:'🖽',data:'🔢'};
 /* 방송 시작 필수 순서 강조(빨강+번호) — 그 단계가 끝나면 해당 버튼에서 자동으로 뗌 */
 function updateQuickStart(){
   try{
@@ -1850,6 +2048,9 @@ function syncProps(){
       pCamDevice.innerHTML=cams.map((c,i)=>`<option value="${c.deviceId}">${c.label||('카메라 '+(i+1))}</option>`).join('') || '<option>장치 없음</option>';
     }).catch(()=>{});
   }
+  // 로고(워터마크) 고정 버튼 — 이미지 레이어에서만 표시(체크리스트 232)
+  const wmBtn=document.getElementById('pWatermark');
+  if(wmBtn) wmBtn.style.display = (L.type==='image') ? 'block' : 'none';
 }
 ['pX','pY','pW','pH','pR'].forEach(id=>{
   document.getElementById(id).oninput=e=>{ const L=sel(); if(!L)return;
@@ -1881,6 +2082,23 @@ pWebPreset.onchange=e=>{ const v=e.target.value; if(!v) return; const L=sel(); i
 pAlign.onchange=e=>{ const L=sel(); if(L)L.align=e.target.value; };
 pWeight.onchange=e=>{ const L=sel(); if(L)L.weight=Number(e.target.value); };
 pFontFamily.onchange=e=>{ const L=sel(); if(L)L.fontFamily=e.target.value; };
+/* 브랜드 폰트 업로드(체크리스트 8) — FontFace API로 세션에 등록해 텍스트 레이어에서 사용.
+   폰트 파일은 용량이 커서(수백KB~MB) localStorage에 저장하지 않음 — 리로드 후엔 재업로드 필요(UI에 안내). */
+document.getElementById('fontUpBtn').onclick=()=>document.getElementById('fontUpFile').click();
+document.getElementById('fontUpFile').onchange=async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  try{
+    const name='커스텀-'+f.name.replace(/\.(ttf|otf|woff2?)$/i,'').replace(/[^\w가-힣-]/g,'_');
+    const face=new FontFace(name, await f.arrayBuffer());
+    await face.load(); document.fonts.add(face);
+    const sel2=document.getElementById('pFontFamily');
+    const opt=document.createElement('option'); opt.value=`'${name}',sans-serif`; opt.textContent='📁 '+name+' (세션 한정)';
+    sel2.appendChild(opt); sel2.value=opt.value;
+    const L=sel(); if(L&&L.type==='text'){ L.fontFamily=opt.value; }
+    toast('폰트 등록됨: '+name+' — 리로드 후엔 다시 불러와야 합니다','ok');
+  }catch(err){ toast('폰트 로드 실패: '+err.message,'err'); }
+  e.target.value='';
+};
 pTextAnim.onchange=e=>{ const L=sel(); if(L)L.anim=e.target.value; };
 pTextStroke.oninput=e=>{ const L=sel(); if(L)L.stroke=e.target.value; };
 pTextStrokeW.oninput=e=>{ const L=sel(); if(L){L.strokeW=+e.target.value; pTextStrokeWVal.textContent=e.target.value;} };
@@ -2226,7 +2444,7 @@ async function startPublish(){
     if(mixer.ctx.state==='suspended') await mixer.ctx.resume();
     audioTracks = mixer.dest.stream.getAudioTracks();
   } else if(tempMicStream){ audioTracks=tempMicStream.getAudioTracks(); }
-  else { try{ tempMicStream=await navigator.mediaDevices.getUserMedia({audio:MIC_AUDIO});
+  else { try{ tempMicStream=await navigator.mediaDevices.getUserMedia({audio:micConstraints()});
     audioTracks=tempMicStream.getAudioTracks(); }catch(_){} }
   const voiceOnly=document.getElementById('voiceOnlyChk').checked;
   outStream = voiceOnly ? new MediaStream(audioTracks) : new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks]);
@@ -2381,7 +2599,8 @@ async function pollStats(){
       if(r.type==='candidate-pair' && r.nominated && r.availableOutgoingBitrate){ _availBw=r.availableOutgoingBitrate; }
       if(r.type==='outbound-rtp' && (r.kind==='video'||r.mediaType==='video')){
         if(lastStatsTs){ const kbps=Math.round((r.bytesSent-lastBytes)*8/(r.timestamp-lastStatsTs));
-          document.getElementById('sendStat').textContent='송출 '+kbps+' kbps'; }
+          document.getElementById('sendStat').textContent='송출 '+kbps+' kbps';
+          pushBitrateSample(kbps); }   // 실시간 비트레이트 그래프(체크리스트 209)
         lastBytes=r.bytesSent; lastStatsTs=r.timestamp;
         if(r.framesEncoded!=null) statPeak.framesEncoded=r.framesEncoded;
         if(r.framesSent!=null) statPeak.framesSent=r.framesSent;
@@ -2395,6 +2614,23 @@ async function pollStats(){
   }catch(_){}
 }
 const statPeak={framesEncoded:0,framesSent:0};
+/* ── 실시간 비트레이트 스파크라인(체크리스트 209) — 최근 60샘플(약 1분)을 작은 캔버스에 그림 ── */
+const _brHist=[];
+function pushBitrateSample(kbps){
+  _brHist.push(kbps); if(_brHist.length>60) _brHist.shift();
+  const c=document.getElementById('brGraph'); if(!c) return;
+  const g=c.getContext('2d'); const W=c.width, H=c.height;
+  g.clearRect(0,0,W,H);
+  const max=Math.max(1000, ...(_brHist.length?_brHist:[0]));
+  g.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--accent2')||'#25d6ff';
+  g.lineWidth=1.5; g.beginPath();
+  _brHist.forEach((v,i)=>{ const x=i/(59)*W, y=H-(v/max)*(H-4)-2; i?g.lineTo(x,y):g.moveTo(x,y); });
+  g.stroke();
+  // 기준선(현재 목표 비트레이트)
+  const target=Number(document.getElementById('vbrSel')?.value)||0;
+  if(target){ g.strokeStyle='rgba(255,255,255,.25)'; g.setLineDash([3,3]); g.beginPath();
+    const ty=H-(target/max)*(H-4)-2; g.moveTo(0,ty); g.lineTo(W,ty); g.stroke(); g.setLineDash([]); }
+}
 
 function stopLive(){
   if(state.live) alertSound('stop');
@@ -2492,6 +2728,36 @@ document.querySelectorAll('.mobilebar button[data-drawer]').forEach(b=>{
   b.onclick=()=>openDrawer(b.dataset.drawer);
 });
 backdrop.onclick=requestCloseOverlay;
+/* 하단 시트 드래그로 닫기(체크리스트 302) — 시트 상단 그립 스트립을 아래로 끌면 닫힘.
+   iOS/안드로이드 바텀시트 표준 제스처. 80px 이상 끌면 닫기, 미만이면 원위치 복귀.
+   그립 스트립은 touch-action:none 전용 요소(스크롤 제스처와 충돌 방지) — 모바일에서만 표시(CSS). */
+(function drawerDragClose(){
+  for(const name of ['side','props']){
+    const el=drawers[name]; if(!el) continue;
+    const strip=document.createElement('div');
+    strip.className='drawer-grip'; strip.setAttribute('aria-hidden','true');
+    el.prepend(strip);
+    let startY=null, curY=0;
+    strip.addEventListener('pointerdown', e=>{
+      if(!el.classList.contains('open')) return;
+      startY=e.clientY; curY=0; el.style.transition='none';
+      try{ strip.setPointerCapture(e.pointerId); }catch(_){}
+      e.preventDefault();
+    });
+    strip.addEventListener('pointermove', e=>{
+      if(startY===null) return;
+      curY=Math.max(0, e.clientY-startY);
+      el.style.transform=`translateY(${curY}px)`;
+    });
+    const end=()=>{ if(startY===null) return;
+      el.style.transition='';
+      el.style.transform='';                       // 인라인 transform 제거 — .open 클래스가 위치 결정(닫힘 애니메이션 안 깨짐)
+      if(curY>80) requestCloseOverlay();
+      startY=null; };
+    strip.addEventListener('pointerup', end);
+    strip.addEventListener('pointercancel', end);
+  }
+})();
 /* 패널 간 스와이프 전환 (303) — 모바일: 캔버스에서 좌우 스와이프로 드로어 열기 */
 (function drawerSwipe(){
   const wrap=document.querySelector('.canvas-wrap'); if(!wrap) return;
@@ -2522,6 +2788,7 @@ function sceneData(){
         if(L.wb) b.wb=L.wb; if(L.mosaic) b.mosaic=L.mosaic; if(L.cropX) b.cropX=L.cropX; if(L.cropY) b.cropY=L.cropY;
         if(L.type==='text'){ b.text=L.text; b.font=L.font; b.color=L.color; b.align=L.align; b.weight=L.weight; b.fontFamily=L.fontFamily; b.anim=L.anim; b.stroke=L.stroke; b.strokeW=L.strokeW; }
         if(L.type==='web') b.url=L.url;
+        if(L.type==='qr') b.url=L.url;   // qrm(매트릭스)은 저장 안 함 — 복원 시 url로 재생성(draw()의 lazy 생성)
         if(L.type==='solid') b.color=L.color;
         if(L.type==='clock'){ b.color=L.color; b.font=L.font; b.fmt=L.fmt; }
         if(L.type==='lower3'){ b.title=L.title; b.sub=L.sub; b.color=L.color; b.bg=L.bg; b.font=L.font; }
@@ -2568,7 +2835,7 @@ function restoreScene(){
   for(const b of (data.layers||[])){
     if(b.type==='image'){ const img=new Image(); img.crossOrigin='anonymous'; img.onerror=()=>toast('이미지 로드 실패(CORS?) — 레이어 확인','warn'); img.src=b.src; state.layers.push({...b,id:nextId++,img}); }
     else if(b.type==='slideshow'){ const imgs=(b.srcs||[]).map(s=>{const i=new Image();i.src=s;return i;}); state.layers.push({...b,id:nextId++,imgs}); }
-    else if(b.type==='text'||b.type==='solid'||b.type==='clock'||b.type==='lower3'||b.type==='countdown'||b.type==='gauge'||b.type==='chat'||b.type==='sticker'||b.type==='frame'||b.type==='emote'||b.type==='poll'||b.type==='donors'||b.type==='nowplaying'||b.type==='audiobars'||b.type==='roulette'||b.type==='data'){ state.layers.push({...b,id:nextId++}); }
+    else if(b.type==='text'||b.type==='solid'||b.type==='clock'||b.type==='lower3'||b.type==='countdown'||b.type==='gauge'||b.type==='chat'||b.type==='sticker'||b.type==='frame'||b.type==='emote'||b.type==='poll'||b.type==='donors'||b.type==='nowplaying'||b.type==='audiobars'||b.type==='roulette'||b.type==='qr'||b.type==='data'){ state.layers.push({...b,id:nextId++}); }
     else if(b.type==='web'){
       const iframe=document.createElement('iframe');
       iframe.src=b.url; iframe.style.cssText='position:absolute;border:0;background:transparent';
@@ -2735,7 +3002,7 @@ async function syncDestToServer(){
   try{
     const avatar=currentAvatar();
     const res=await fetch('/api/destinations/'+encodeURIComponent(avatar),{
-      method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(state.destinations)});
+      method:'PUT', headers:authHeaders({'Content-Type':'application/json'}), body:JSON.stringify(state.destinations)});
     return res.ok;
   }catch(_){ return false; }
 }
@@ -2753,9 +3020,15 @@ function renderDest(){
     const off=d.enabled===false;
     el.className='dest'+(d.locked?' locked':'')+(off?' off':'');
     if(off) el.style.opacity='.45';
-    el.innerHTML=`<span class="badge">${d.platform}</span>
-      <span class="dname">${d.locked?'<span class="lock">🔒</span> ':''}${d.name}${d.title?' · '+d.title:''}</span>
-      <span class="dkey">${d.fullUrl?'(URL에 포함됨)':maskKey(d.streamKey)}</span>`;
+    // XSS 방지: name(커스텀 RTMP는 사용자 입력)·title(사용자 입력)은 innerHTML에 절대 넣지 않고
+    // textContent로만 — OWASP ASVS §5.3 / 체크리스트 342. (기존엔 title이 innerHTML로 들어가
+    // <img onerror=…> 같은 마크업이 그대로 해석될 수 있었음)
+    el.innerHTML=`<span class="badge"></span>
+      <span class="dname">${d.locked?'<span class="lock">🔒</span> ':''}<span class="dnm"></span></span>
+      <span class="dkey"></span>`;
+    el.querySelector('.badge').textContent=d.platform;
+    el.querySelector('.dnm').textContent=d.name+(d.title?' · '+d.title:'');
+    el.querySelector('.dkey').textContent=d.fullUrl?'(URL에 포함됨)':maskKey(d.streamKey);
     // on/off 토글 (videowatch 강제 대상은 항상 on)
     const tg=document.createElement('button'); tg.className='dtoggle';
     tg.textContent=off?'⭘':'⏻'; tg.title=off?'대상 켜기':'대상 끄기';
@@ -2804,6 +3077,15 @@ function initDestinations(){
 /* ── 오디오 믹서 (WebAudio) ── */
 // 방송용 마이크 제약: 브라우저 DSP OFF + 스테레오 (OBS/PRISM 기본값)
 const MIC_AUDIO = { echoCancellation:false, noiseSuppression:false, autoGainControl:false, channelCount:2 };
+/* 사용자 DSP 토글 반영 제약 — 기본은 위 MIC_AUDIO(전부 OFF)와 동일, 체크 시 해당 항목만 ON */
+function micConstraints(deviceId){
+  const c={ echoCancellation:!!document.getElementById('micEc')?.checked,
+            noiseSuppression:!!document.getElementById('micNs')?.checked,
+            autoGainControl:!!document.getElementById('micAgc')?.checked,
+            channelCount:2 };
+  if(deviceId) c.deviceId={exact:deviceId};
+  return c;
+}
 const mixer = { ctx:null, master:null, masterAn:null, dest:null, sources:[] };
 function ensureMixer(){
   if(mixer.ctx) return;
@@ -2846,8 +3128,9 @@ async function addMic(){
   ensureMixer();
   if(mixer.ctx.state==='suspended') await mixer.ctx.resume();
   try{
-    // 방송용: 브라우저 기본 DSP(에코제거/노이즈억제/AGC) OFF — 음악 펌핑·자체 게이트/컴프 충돌 방지 (OBS/PRISM 기본)
-    const stream = await navigator.mediaDevices.getUserMedia({audio:MIC_AUDIO});
+    // 방송용 기본: 브라우저 DSP(에코제거/노이즈억제/AGC) OFF — 음악 펌핑·자체 게이트/컴프 충돌 방지 (OBS/PRISM 기본).
+    // 사용자가 믹서의 토글을 켜면 micConstraints()가 해당 항목만 ON으로 반영.
+    const stream = await navigator.mediaDevices.getUserMedia({audio:micConstraints()});
     const src = mixer.ctx.createMediaStreamSource(stream);
     const gain = mixer.ctx.createGain();
     const an = mixer.ctx.createAnalyser(); an.fftSize=256;
@@ -2988,13 +3271,22 @@ function initMixer(){
     micSel.innerHTML='<option value="">기본</option>'+mics.map((d,i)=>`<option value="${d.deviceId}">${d.label||('마이크 '+(i+1))}</option>`).join(''); }catch(_){} }
   refreshMicDevices();
   navigator.mediaDevices.addEventListener&&navigator.mediaDevices.addEventListener('devicechange',refreshMicDevices);
-  micSel.onchange=async e=>{ const id=e.target.value; const mic=mixer.sources.find(s=>s.kind==='mic'); if(!mic) return;
-    try{ const ns=await navigator.mediaDevices.getUserMedia({audio: id?{...MIC_AUDIO,deviceId:{exact:id}}:MIC_AUDIO});
+  // 마이크 재획득(장치 변경/DSP 토글 공용) — 기존 게인/미터 노드는 유지하고 소스 스트림만 교체
+  async function reacquireMic(id, okMsg){
+    const mic=mixer.sources.find(s=>s.kind==='mic'); if(!mic) return;
+    try{ const ns=await navigator.mediaDevices.getUserMedia({audio: micConstraints(id)});
       mic.stream.getTracks().forEach(t=>t.stop());
       try{ mic.srcNode&&mic.srcNode.disconnect(); }catch(_){}
       const nsrc=mixer.ctx.createMediaStreamSource(ns); nsrc.connect(mic.gain); if(mic.detAn) nsrc.connect(mic.detAn); mic.srcNode=nsrc; mic.stream=ns; refreshMicDevices();
-      toast('마이크 장치 변경됨','ok');
-    }catch(err){ toast('장치 변경 실패: '+err.message,'err'); } };
+      toast(okMsg,'ok');
+    }catch(err){ toast('마이크 재설정 실패: '+err.message,'err'); }
+  }
+  micSel.onchange=e=>reacquireMic(e.target.value,'마이크 장치 변경됨');
+  // DSP 토글(노이즈억제/에코제거/AGC) — 변경 즉시 현재 장치 그대로 새 제약으로 재획득 (체크리스트 150/152/165)
+  for(const tid of ['micNs','micEc','micAgc']){
+    const el=document.getElementById(tid);
+    if(el) el.onchange=()=>reacquireMic(micSel.value, 'DSP 설정 적용됨 (노이즈억제 '+(document.getElementById('micNs').checked?'ON':'OFF')+' · 에코제거 '+(document.getElementById('micEc').checked?'ON':'OFF')+' · AGC '+(document.getElementById('micAgc').checked?'ON':'OFF')+')');
+  }
   requestAnimationFrame(meterLoop);
 }
 
@@ -3020,7 +3312,7 @@ const I18N_EN = {
   'src.count':'⏱ Countdown','src.video':'🎞️ Video','src.gauge':'📊 Gauge','src.chat':'💬 Chat',
   'src.sticker':'⭐ Sticker','src.frame':'🖼 Frame','src.emote':'💗 Emotes','src.poll':'📊 Poll',
   'src.donors':'★ Donors','src.now':'🎧 Now Playing','src.data':'🔢 Data','src.bars':'〰 Audio bars',
-  'src.roulette':'🎡 Roulette','src.slide':'🖽 Slideshow','src.fill':'⤢ Fill',
+  'src.roulette':'🎡 Roulette','src.qr':'🔳 QR code','src.slide':'🖽 Slideshow','src.fill':'⤢ Fill',
   'h.sources':'Add source','h.widgets':'Widgets (optional)','h.layers':'Layers (top = front)','h.props':'Properties',
   'o.land':'Landscape 16:9','o.port':'Portrait 9:16','res.custom':'Custom…',
   'live.off':'Offline','btn.golive':'🔴 Go Live',
@@ -3128,7 +3420,8 @@ async function _pkce(){ const v=_b64url(crypto.getRandomValues(new Uint8Array(32
    google=YouTube(PKCE), twitch=PKCE, facebook=Auth Code. 서버가 code→token 교환. */
 const OAUTH_STAT={ google:'ytStat', twitch:'twitchStat', facebook:'fbStat' };
 async function oauthConnect(provider){
-  let cfg; try{ cfg=await fetch('/api/oauth/config?provider='+provider).then(r=>r.json()); }
+  const cfgProvider = provider==='google-login' ? 'google' : provider;   // 로그인 전용도 구글 앱 공유
+  let cfg; try{ cfg=await fetch('/api/oauth/config?provider='+cfgProvider).then(r=>r.json()); }
   catch(_){ toast('서버(/api) 연결 실패 — 배포 후 사용','warn'); return; }
   if(!cfg.configured || !cfg.clientId){ toast(provider+' OAuth 미설정(서버 시크릿 필요)','warn'); return; }
   sessionStorage.setItem('cb.oauth.provider', provider);
@@ -3140,7 +3433,13 @@ async function oauthConnect(provider){
   if(descVal.trim()) sessionStorage.setItem('cb.oauth.desc', descVal); else sessionStorage.removeItem('cb.oauth.desc');
   const redirectUri=location.origin+location.pathname;
   let url;
-  if(provider==='google'){
+  if(provider==='google-login'){
+    // 의무 로그인 게이트용 — 유튜브 권한 없이 신원(openid/email)만. 세션 토큰 발급이 목적.
+    const {v,c}=await _pkce(); sessionStorage.setItem('cb.pkce', v);
+    url='https://accounts.google.com/o/oauth2/v2/auth?'+new URLSearchParams({
+      client_id:cfg.clientId, redirect_uri:redirectUri, response_type:'code',
+      scope:'openid email profile', code_challenge:c, code_challenge_method:'S256', prompt:'select_account' });
+  } else if(provider==='google'){
     const {v,c}=await _pkce(); sessionStorage.setItem('cb.pkce', v);
     url='https://accounts.google.com/o/oauth2/v2/auth?'+new URLSearchParams({
       client_id:cfg.clientId, redirect_uri:redirectUri, response_type:'code',
@@ -3188,7 +3487,12 @@ function upsertOAuthDestination(provider, r){
   try{
     const r=await fetch('/api/oauth/exchange',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({code, redirectUri:location.origin+location.pathname, codeVerifier:v, provider, title:titleVal, description:descVal})}).then(r=>r.json());
-    if(r.ok){ toast(provider+' 연동됨: '+(r.name||r.email||''),'ok');
+    if(r.ok){
+      // 세션 토큰 수신(구글 로그인/연동 공통) → 저장 + 게이트 해제 (프리즘 방식 영구 로그인)
+      if(r.session){ try{ localStorage.setItem('centbeam.session', r.session); }catch(_){}
+        const g=document.getElementById('loginGate'); if(g) g.style.display='none'; }
+      if(provider==='google-login'){ toast('✅ 로그인됨: '+(r.email||r.name||''),'ok'); return; }
+      toast(provider+' 연동됨: '+(r.name||r.email||''),'ok');
       if(st) st.textContent='✅ 연동: '+(r.email||r.name||'')+(r.streamKey||r.rtmpUrl?' · 스트림키 수신':'');
       if((r.streamKey || r.rtmpUrl) && typeof state!=='undefined'){
         upsertOAuthDestination(provider, {streamKey:r.streamKey, rtmpUrl:r.rtmpUrl, title:titleVal, desc:descVal});
@@ -3202,6 +3506,25 @@ function upsertOAuthDestination(provider, r){
   }catch(e){ toast('연동 오류(서버 필요)','err'); if(st) st.textContent='❌ 서버 /api/oauth/exchange 필요'; }
 })();
 document.getElementById('ytConnect').onclick=()=>oauthConnect('google');
+/* ── 의무 로그인 게이트 — 서버에 구글 OAuth가 설정돼 있으면(프로덕션) 로그인 없이 사용 불가.
+   세션은 서버에서 180일 + 사용 시 자동연장(rolling)이라 직접 로그아웃 전엔 안 풀림(프리즘 방식).
+   시크릿 없는 개발/로컬 환경은 게이트 비활성(로그인 자체가 불가능한 환경을 잠그면 아무도 못 씀). ── */
+function sessionToken(){ try{ return localStorage.getItem('centbeam.session')||''; }catch(_){ return ''; } }
+function authHeaders(extra){ const t=sessionToken(); const h=extra||{}; if(t) h['Authorization']='Bearer '+t; return h; }
+(async function loginGate(){
+  try{
+    const cfg=await fetch('/api/oauth/config?provider=google').then(r=>r.json()).catch(()=>null);
+    if(!cfg || !cfg.configured) return;   // 게이트 비활성 환경(개발/시크릿 미설정)
+    const t=sessionToken();
+    if(t){
+      const me=await fetch('/api/auth/me',{headers:{Authorization:'Bearer '+t}}).catch(()=>null);
+      if(me && me.ok) return;             // 유효 세션 → 통과(서버가 만료 자동연장)
+      try{ localStorage.removeItem('centbeam.session'); }catch(_){}
+    }
+    document.getElementById('loginGate').style.display='flex';
+  }catch(_){}
+})();
+document.getElementById('loginGoogle').onclick=()=>oauthConnect('google-login');
 { const _t=document.getElementById('twitchConnect'); if(_t) _t.onclick=()=>oauthConnect('twitch'); }
 { const _f=document.getElementById('fbConnect'); if(_f) _f.onclick=()=>oauthConnect('facebook'); }
 /* 첫 실행 온보딩 팁 */
@@ -3254,6 +3577,33 @@ applyCanvasSize();
 updateQuickStart();   // 복원된 씬/방향 등 이미 완료된 단계는 시작부터 강조 해제
 requestAnimationFrame(draw);
 setInterval(saveScene, 2500);
+/* ── 씬 클라우드 동기화 (체크리스트 224) — 30초마다+언로드 직전 서버에 저장, 로드 시
+   로컬 씬이 비어있으면(새 기기/브라우저) 서버 사본으로 복원. 실패는 조용히 무시(로컬이 우선). ── */
+async function syncSceneToServer(){
+  try{
+    const body=JSON.stringify({ scene: sceneData(), scenes: scenes.length?scenes.map(s=>({name:s.name,data:s.data})):null, ts:Date.now() });
+    if(body.length>2*1024*1024) return;   // 서버 한도(2MB) 초과 시 스킵(이미지 과다)
+    await fetch('/api/scenes/'+encodeURIComponent(currentAvatar()),{
+      method:'PUT', headers:authHeaders({'Content-Type':'application/json'}), body});
+  }catch(_){}
+}
+(async function restoreSceneFromServerIfEmpty(){
+  try{
+    // 로컬에 아무 씬도 없을 때(신규 기기)만 서버 사본 복원 — 로컬 작업을 서버가 덮지 않게
+    if(localStorage.getItem('prisent.scene')||localStorage.getItem(SCKEY)) return;
+    const r=await fetch('/api/scenes/'+encodeURIComponent(currentAvatar()),{headers:authHeaders()});
+    if(!r.ok) return; const d=await r.json(); if(!d||!d.scene) return;
+    localStorage.setItem('prisent.scene', JSON.stringify(d.scene));
+    restoreScene(); applyCanvasSize();
+    toast('☁️ 서버에 저장된 씬을 불러왔습니다','ok');
+  }catch(_){}
+})();
+setInterval(syncSceneToServer, 30000);
+window.addEventListener('pagehide', ()=>{ try{
+  const body=JSON.stringify({ scene: sceneData(), ts:Date.now() });
+  // sendBeacon은 헤더를 못 붙임 → 세션은 ?s= 쿼리로 (서버 checkSession이 지원, HTTPS 전용)
+  if(body.length<=2*1024*1024) navigator.sendBeacon&&navigator.sendBeacon('/api/scenes/'+encodeURIComponent(currentAvatar())+'?s='+encodeURIComponent(sessionToken()), new Blob([body],{type:'application/json'}));
+}catch(_){} });
 </script>
 </body>
 </html>

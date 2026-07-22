@@ -6,11 +6,15 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const app = express();
 app.disable('x-powered-by');   // 불필요 노출 헤더 제거 (OWASP Node.js Security)
 // Apache 리버스프록시 뒤에서 실제 클라이언트 IP를 X-Forwarded-For 로 신뢰 (레이트리밋이
 // 모든 클라이언트를 127.0.0.1 로 묶어버리는 문제 방지). loopback 프록시 1홉만 신뢰.
 app.set('trust proxy', 'loopback');
+// 씬 동기화만 큰 바디 허용(이미지 dataURL 포함 가능) — 전역 64kb 파서보다 먼저 등록해야
+// 이 경로가 2mb 한도로 파싱되고, 이후 전역 파서는 이미 파싱된 바디를 건너뜀(body-parser 동작)
+app.use('/api/scenes', express.json({ limit: '2mb' }));
 app.use(express.json({ limit: '64kb' }));
 
 // 보안 응답 헤더 (OWASP Secure Headers) — 의존성 없이 최소 적용
@@ -53,6 +57,58 @@ function validRtmp(u) {
 }
 
 app.get('/api/health', (_, res) => res.json({ ok: true, ts: Date.now() }));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 로그인 세션 (구글 연동 로그인 의무화) — 프리즘 방식: 한 번 로그인하면 사실상 안 풀림.
+//   · 세션 180일 + 사용할 때마다 자동 연장(rolling) → 직접 로그아웃 전엔 유지
+//   · 토큰: crypto.randomBytes(32) — 추측 불가(OWASP Session Management)
+//   · 게이트는 구글 OAuth 시크릿이 설정된 환경에서만 강제(개발/테스트 환경은 개방 모드로
+//     동작하고 경고만 출력 — 로그인 자체가 불가능한 환경을 잠그면 아무도 못 쓰므로)
+// ─────────────────────────────────────────────────────────────────────────────
+const SESS_FILE = process.env.SESS_FILE || path.join(__dirname, 'data', 'sessions.json');
+const SESS_TTL = 180 * 24 * 3600 * 1000;   // 180일(rolling — me/API 호출 때마다 연장)
+const loadSessions = () => { try { return JSON.parse(fs.readFileSync(SESS_FILE, 'utf8')); } catch (_) { return {}; } };
+const saveSessions = (s) => { try { fs.mkdirSync(path.dirname(SESS_FILE), { recursive: true }); fs.writeFileSync(SESS_FILE, JSON.stringify(s), { mode: 0o600 }); } catch (_) {} };
+function createSession(email, name) {
+  const token = 'cbs_' + crypto.randomBytes(32).toString('hex');
+  const s = loadSessions();
+  // 만료 세션 청소
+  const now = Date.now();
+  for (const k of Object.keys(s)) if (s[k].expires < now) delete s[k];
+  s[token] = { email, name, created: now, expires: now + SESS_TTL };
+  saveSessions(s);
+  return token;
+}
+function checkSession(req) {
+  const h = String(req.get('authorization') || '');
+  const token = h.startsWith('Bearer cbs_') ? h.slice(7) : String(req.query.s || '');   // ?s= : sendBeacon(헤더 불가) 전용
+  if (!token.startsWith('cbs_')) return null;
+  const s = loadSessions(); const sess = s[token];
+  if (!sess || sess.expires < Date.now()) return null;
+  sess.expires = Date.now() + SESS_TTL;   // rolling 연장 — 쓰는 동안은 절대 안 풀림
+  saveSessions(s);
+  return sess;
+}
+const authEnforced = () => { const c = oauthCreds('google'); return !!(c && c.client_id && c.client_secret); };
+app.use(['/api/avatars', '/api/destinations', '/api/scenes'], (req, res, next) => {
+  if (!authEnforced()) return next();   // 개발 환경(시크릿 없음): 개방 — 프로덕션에선 항상 강제됨
+  const sess = checkSession(req);
+  if (!sess) return res.status(401).json({ error: 'login_required' });
+  req.user = sess;
+  next();
+});
+app.get('/api/auth/me', (req, res) => {
+  if (!authEnforced()) return res.json({ open: true });   // 게이트 비활성 환경 표시
+  const sess = checkSession(req);
+  if (!sess) return res.status(401).json({ error: 'login_required' });
+  res.json({ email: sess.email, name: sess.name });
+});
+app.post('/api/auth/logout', (req, res) => {
+  const h = String(req.get('authorization') || '');
+  const token = h.startsWith('Bearer ') ? h.slice(7) : '';
+  const s = loadSessions(); if (s[token]) { delete s[token]; saveSessions(s); }
+  res.json({ ok: true });
+});
 
 app.get('/api/avatars', (_, res) => {
   const d = load();
@@ -125,6 +181,28 @@ app.put('/api/destinations/:avatar', (req, res) => {
   res.json({ ok: true, count: list.length });
 });
 
+// ── 씬 클라우드 동기화 (체크리스트 224) — 브라우저 localStorage에만 있던 씬(레이아웃)을
+//    서버에도 저장해 기기를 바꿔도 이어서 사용. 미디어 스트림(카메라/화면)은 직렬화 불가라
+//    클라이언트 sceneData()가 이미 제외함. 용량 상한 2MB(이미지 dataURL 포함 가능성). ──
+const SCENES = process.env.SCENES_FILE || path.join(path.dirname(DEST), 'scenes.json');
+const loadScenesFile = () => { try { return JSON.parse(fs.readFileSync(SCENES, 'utf8')); } catch (_) { return {}; } };
+app.get('/api/scenes/:avatar', (req, res) => {
+  if (!AVATAR_RE.test(req.params.avatar)) return res.status(400).json({ error: 'bad_avatar' });
+  res.json(loadScenesFile()[req.params.avatar] || null);
+});
+function putScene(req, res) {
+  if (!AVATAR_RE.test(req.params.avatar)) return res.status(400).json({ error: 'bad_avatar' });
+  const body = req.body;
+  if (!body || typeof body !== 'object') return res.status(400).json({ error: 'bad_body' });
+  const raw = JSON.stringify(body);
+  if (raw.length > 2 * 1024 * 1024) return res.status(413).json({ error: 'too_large' });
+  const all = loadScenesFile(); all[req.params.avatar] = body;
+  fs.writeFileSync(SCENES, JSON.stringify(all));
+  res.json({ ok: true, bytes: raw.length });
+}
+app.put('/api/scenes/:avatar', putScene);
+app.post('/api/scenes/:avatar', putScene);   // sendBeacon(언로드 직전 저장)은 POST만 가능
+
 // 대상 삭제 (locked 는 삭제 불가)
 app.delete('/api/destinations/:avatar/:idx', (req, res) => {
   const d = load(); const list = d[req.params.avatar] || [];
@@ -165,7 +243,11 @@ app.get('/api/oauth/config', (req, res) => {
   res.json({ provider: p, configured: !!(c && c.client_id), clientId: (c && c.client_id) || '' });
 });
 app.post('/api/oauth/exchange', async (req, res) => {
-  const { code, redirectUri, codeVerifier, provider = 'google', title, description } = req.body || {};
+  let { code, redirectUri, codeVerifier, provider = 'google', title, description } = req.body || {};
+  // google-login: 의무 로그인 게이트용 — 구글 앱은 같은 걸 쓰되 스코프만 openid/email(클라이언트에서
+  // 지정), 유튜브 API 호출은 전부 건너뛰고 세션 토큰만 발급
+  const loginOnly = provider === 'google-login';
+  if (loginOnly) provider = 'google';
   const c = oauthCreds(provider);
   if (!c || !c.client_id || !c.client_secret) return res.status(500).json({ error: 'oauth_not_configured' });
   if (!code || !redirectUri || !TOKEN_URL[provider]) return res.status(400).json({ error: 'missing_code' });
@@ -188,6 +270,11 @@ app.post('/api/oauth/exchange', async (req, res) => {
       const who = await fetch('https://openidconnect.googleapis.com/v1/userinfo',
         { headers: { Authorization: 'Bearer ' + tok.access_token } }).then(r => r.json()).catch(() => ({}));
       email = who.email || null; name = who.name || null; sub = who.sub || 'user';
+      if (loginOnly) {   // 로그인 전용: 유튜브 API 안 건드리고 세션만 발급
+        const session = email ? createSession(email, name) : null;
+        if (!session) return res.status(400).json({ error: 'no_email_in_token' });
+        return res.json({ ok: true, provider: 'google-login', email, name, session });
+      }
       let streamId = null;
       try {
         const ls = await fetch('https://www.googleapis.com/youtube/v3/liveStreams?part=cdn,snippet&mine=true',
@@ -264,7 +351,9 @@ app.post('/api/oauth/exchange', async (req, res) => {
         fs.writeFileSync(path.join(dir, provider + '-token-' + sub + '.json'),
           JSON.stringify({ refresh_token: tok.refresh_token, email }), { mode: 0o600 }); } catch (_) {}
     }
-    res.json({ ok: true, provider, email, name, streamKey, streamTitle, rtmpUrl, broadcastCreated, broadcastError });
+    // 구글 연동(유튜브 연결)도 로그인으로 인정 — 세션 발급(게이트 통과)
+    const session = (provider === 'google' && email) ? createSession(email, name) : undefined;
+    res.json({ ok: true, provider, email, name, streamKey, streamTitle, rtmpUrl, broadcastCreated, broadcastError, session });
   } catch (e) { res.status(500).json({ error: String(e && e.message || e) }); }
 });
 
