@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>가상서버 제어판</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center;
+    justify-content: center; font-family: -apple-system, system-ui, sans-serif;
+    background: #0f172a; color: #e2e8f0;
+  }
+  .card {
+    width: 100%; max-width: 380px; padding: 28px; border-radius: 20px;
+    background: #1e293b; box-shadow: 0 20px 50px rgba(0,0,0,.4);
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; text-align: center; }
+  .sub { text-align: center; color: #94a3b8; font-size: 13px; margin-bottom: 20px; }
+  input {
+    width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid #334155;
+    background: #0f172a; color: #e2e8f0; font-size: 15px; margin-bottom: 14px;
+  }
+  button {
+    width: 100%; padding: 15px; border: 0; border-radius: 14px; font-size: 17px;
+    font-weight: 700; cursor: pointer; margin-bottom: 12px; color: #fff;
+  }
+  .start { background: #16a34a; }
+  .stop  { background: #dc2626; }
+  .status{ background: #334155; font-size: 15px; }
+  button:active { transform: scale(.98); }
+  #out {
+    margin-top: 8px; padding: 12px; border-radius: 12px; background: #0f172a;
+    font-size: 14px; min-height: 20px; white-space: pre-wrap; word-break: break-all;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>🖥️ 가상1번 제어판</h1>
+    <div class="sub">win-vm · 서울 (asia-northeast3)</div>
+    <input id="pw" type="password" placeholder="비밀번호" />
+    <button class="start"  onclick="call('start')">▶ 가상1번 시작</button>
+    <button class="stop"   onclick="call('stop')">■ 가상1번 정지</button>
+    <button class="status" onclick="call('status')">🔄 상태 / 접속 IP 확인</button>
+    <div id="out">준비됨</div>
+  </div>
+<script>
+  const out = document.getElementById('out');
+  async function call(action) {
+    const password = document.getElementById('pw').value;
+    out.textContent = '요청 중...';
+    try {
+      const r = await fetch('/api/' + action, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      const d = await r.json();
+      if (!d.ok) { out.textContent = '❌ ' + d.error; return; }
+      if (action === 'status') {
+        out.textContent = '상태: ' + d.status + '\n접속 IP: ' + d.ip;
+      } else {
+        out.textContent = '✅ ' + d.message;
+      }
+    } catch (e) {
+      out.textContent = '❌ ' + e;
+    }
+  }
+</script>
+</body>
+</html>
