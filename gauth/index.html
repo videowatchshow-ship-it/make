@@ -147,12 +147,17 @@ function accessBadge(a){
       appendLog('  📄 ' + (i+1) + '/' + window._picked.length + ' ' + window._picked[i].name + ' (' + Math.round(window._picked[i].size/1024) + 'KB)');
     }
     appendLog('📦 총 ' + Math.round(totalBytes/1024) + 'KB · FormData 구성 중…');
+    var valid = window._picked.filter(function(f){ return f.size > 0 && f.name.indexOf('~$') !== 0; });
+    if(!valid.length){ appendLog('⚠️ 유효한 파일 없음 (0KB·임시파일 제외됨)'); btn.disabled=false; return; }
+    if(valid.length < window._picked.length) appendLog('⚠️ ' + (window._picked.length - valid.length) + '개 제외 (0KB 또는 ~$ 임시파일)');
     var fd = new FormData();
-    for(var i=0;i<window._picked.length;i++) fd.append('files', window._picked[i]);
+    for(var i=0;i<valid.length;i++) fd.append('files', valid[i]);
     appendLog('🌐 POST /api/upload-excels 전송 시작…');
     /* MDN 표준 XMLHttpRequest + upload progress event (fetch는 upload 진행률 미지원) */
     var xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/upload-excels', true);
+    xhr.timeout = 300000;
+    xhr.ontimeout = function(){ appendLog('❌ 서버 응답 타임아웃 (5분). 서버 로그 확인 필요.'); btn.disabled=false; };
     /* MDN <progress> 그래프 표시 */
     var progWrap = document.getElementById('excelUpProgWrap');
     var progEl = document.getElementById('excelUpProg');
