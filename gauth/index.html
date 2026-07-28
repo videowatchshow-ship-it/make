@@ -1,0 +1,867 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>gauth 대시보드</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:-apple-system,'SF Pro Text',sans-serif;background:#0b0d10;color:#e8ecef;margin:0}
+header{padding:14px 20px;background:#111418;border-bottom:1px solid #22282f;position:sticky;top:0;z-index:5}
+h1{margin:0 0 8px;font-size:18px}
+.stats{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:#9aa5b5}
+.stats b{color:#e8ecef;font-size:15px}
+.stats .ok{color:#3ddc84}
+.controls{padding:12px 20px;background:#0f1216;border-bottom:1px solid #22282f;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+input{background:#161a20;border:1px solid #2a323c;color:#e8ecef;padding:9px 12px;border-radius:6px;font-size:14px;flex:1;min-width:200px}
+input:focus{outline:0;border-color:#2b6cff}
+select{background:#161a20;border:1px solid #2a323c;color:#e8ecef;padding:9px 10px;border-radius:6px;font-size:13px}
+#count{color:#8a95a5;font-size:12px;white-space:nowrap}
+#viewport{position:relative;overflow-y:auto;height:calc(100vh - 220px)}
+#spacer{position:relative}
+.row{position:absolute;left:0;right:0;padding:10px 20px;border-bottom:1px solid #1a1f26;display:grid;grid-template-columns:280px 100px 1fr 1fr 180px 170px;gap:10px;align-items:center;font-size:12.5px}
+.row:hover{background:#141821}
+.email{font-weight:500;word-break:break-all}
+.badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:10.5px;font-weight:600}
+.b-on{background:#0d3222;color:#3ddc84}
+.b-today{background:#0d3222;color:#3ddc84;font-weight:700}
+.b-old{background:#2a2f36;color:#8a95a5}
+.b-never{background:#2a1e1e;color:#f47070}
+.b-off{background:#2a1e1e;color:#f47070}
+.b-2fa{background:#1c2740;color:#7dabff}
+.b-lock{background:#3a1c1c;color:#ff8080}
+.mono{font-family:'SF Mono',Menaco,monospace;color:#c9d2dc;font-size:12px;word-break:break-all}
+.pw{color:#e8ecef}
+button{background:#2b6cff;color:#fff;border:0;padding:7px 12px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600}
+button:hover{background:#1e5ae0}
+button:disabled{background:#333;cursor:not-allowed}
+.no-sess{background:#555}
+.cp{background:#2a323c;padding:3px 8px;font-size:11px;margin-left:6px;color:#c9d2dc}
+.cp:hover{background:#39434f}
+</style></head>
+<body>
+<div id="accStats" style="padding:8px 20px;background:#0d1520;border-bottom:1px solid #22282f;font-size:13px;color:#9aa5b5;text-align:center">📊 로딩 중...</div>
+<div id="monthlyGroups" style="padding:6px 20px;background:#0d1520;border-bottom:1px solid #22282f;font-size:12px;color:#c9d2dc;text-align:center"></div>
+<script>
+async function refreshAccStats(){
+  try {
+    const rp = await fetch('/api/parse-report',{cache:'no-store'}).then(r=>r.json()).catch(()=>({}));
+    const _files = rp && rp.last_run ? (rp.last_run.files || 0) : 0;
+    const r = await fetch('/api/accounts',{cache:'no-store'});
+    const j = await r.json();
+    var el = document.getElementById('accStats');
+    var _2fa = (j.accounts||[]).filter(function(a){return a.has2FA;}).length;
+    if(el) el.innerHTML = '📄 엑셀 파일 <b style="color:#7dabff">'+_files+'</b>장 · 📊 원본 <b style="color:#7dabff">'+(j.file_total||0)+'</b>개 · 로그인 가능 <b style="color:#3ddc84">'+(j.usable||0)+'</b>개 · 제외 <b style="color:#f47070">'+(j.invalid||0)+'</b>개 (이메일/비번 미비) · 2FA <b style="color:#f5c842">'+_2fa+'</b>개';
+    var mg = document.getElementById('monthlyGroups');
+    if(mg && rp && rp.last_run && rp.last_run.by_date){
+      var html = '📅 ';
+      Object.entries(rp.last_run.by_date).sort().reverse().forEach(function(e){
+        html += '<span style="margin:0 6px;padding:3px 8px;background:#161a20;border-radius:6px">'+e[0]+': <b style="color:#3ddc84">'+e[1]+'</b></span>';
+      });
+      mg.innerHTML = html;
+    }
+  } catch(e){}
+}
+refreshAccStats();
+</script>
+
+<style>#excelUpProg::-webkit-progress-bar{background:#1a1f26;border-radius:10px}#excelUpProg::-webkit-progress-value{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px;transition:width .2s}#excelUpProg::-moz-progress-bar{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px}#excelUpProg{-webkit-appearance:none;appearance:none;border:none;border-radius:10px;background:#1a1f26}</style><div id="excelUpBox" style="margin:16px 20px;padding:16px;background:#161a20;border:1px solid #2a323c;border-radius:8px">
+  <h3 style="margin:0 0 10px 0;color:#3ddc84;font-size:14px">📤 엑셀 일괄 업로드 (한번에 여러 파일)</h3>
+  <input type="file" id="excelFiles" multiple accept=".xlsx,.xls,.csv" style="color:#e8ecef;font-size:13px"><div id="excelFileList" style="margin-top:8px;font-size:12px;color:#9fb3e0;font-family:monospace"></div>
+  <button id="excelUpBtn" style="margin-left:10px">▶ 업로드 &amp; 취합</button>
+  <div id="excelUpProgWrap" style="margin-top:10px;display:none"><progress id="excelUpProg" value="0" max="100" style="width:100%;height:20px"></progress><div id="excelUpProgTxt" style="margin-top:4px;font-size:12px;color:#3ddc84;text-align:right;font-family:monospace">0%</div></div><div id="excelUpResult" style="margin-top:12px;font-size:12.5px;color:#c9d2dc;font-family:'SF Mono',monospace;white-space:pre-wrap"></div>
+</div>
+<script>
+/* MDN: KST 자정 = 오늘 00:00 Asia/Seoul → epoch ms
+ * ref: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat */
+function kstTodayMidnightMs(){
+  var now = new Date();
+  var parts = new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Seoul', year:'numeric', month:'2-digit', day:'2-digit'}).formatToParts(now);
+  var y = parts.find(p=>p.type==='year').value;
+  var m = parts.find(p=>p.type==='month').value;
+  var d = parts.find(p=>p.type==='day').value;
+  /* 해당 KST 자정 = UTC 15:00 (전일) */
+  return Date.parse(y+'-'+m+'-'+d+'T00:00:00+09:00');
+}
+function accessBadge(a){
+  var mt = a.session_mtime || 0;
+  if(!mt) return '<span class="badge b-never">미접속</span>';
+  if(mt >= kstTodayMidnightMs()) return '<span class="badge b-today">🟢 오늘</span>';
+  var days = Math.floor((Date.now()-mt)/(24*3600*1000));
+  return '<span class="badge b-old">'+(days<=0?'어제':days+'일 전')+'</span>';
+}
+
+(function(){
+  var btn = document.getElementById('excelUpBtn');
+  var fi = document.getElementById('excelFiles');
+  var out = document.getElementById('excelUpResult');
+  if(!btn||!fi||!out) return;
+  /* ref: MDN HTMLInputElement change event https://developer.mozilla.org/en-US/docs/Web/API/HTMLInputElement/change_event */
+  /* ref: MDN FileList https://developer.mozilla.org/en-US/docs/Web/API/FileList */
+  /* ref: MDN File.name, File.size https://developer.mozilla.org/en-US/docs/Web/API/File */
+  /* MDN: FileList는 change마다 replace. 누적 위해 DataTransfer 사용 https://developer.mozilla.org/en-US/docs/Web/API/DataTransfer */
+  window._picked = window._picked || [];
+  function renderList(){
+    var list = document.getElementById('excelFileList');
+    if(!list) return;
+    if(window._picked.length===0){ list.innerHTML=''; return; }
+    var arr = window._picked.map(function(f,i){ return (i+1)+'. '+f.name+' ('+Math.round(f.size/1024)+'KB)'; });
+    list.innerHTML = '📎 <b>' + window._picked.length + '개 선택됨:</b> <button id="_clearFiles" style="padding:2px 8px;font-size:11px">🗑 초기화</button><br>' + arr.join('<br>');
+    var cb = document.getElementById('_clearFiles');
+    if(cb) cb.onclick = function(){ window._picked=[]; try{fi.value='';}catch(_){} renderList(); };
+  }
+  fi.addEventListener('change', function(){
+    /* 새 선택된 파일을 누적 (같은 이름 중복은 이름+size로 dedup) */
+    for(var i=0;i<fi.files.length;i++){
+      var f = fi.files[i];
+      var dup = window._picked.some(function(x){ return x.name===f.name && x.size===f.size; });
+      if(!dup) window._picked.push(f);
+    }
+    renderList();
+  });
+  btn.addEventListener('click', function(){
+    if(!window._picked.length){ out.textContent = '⚠️ 파일 선택 먼저'; return; }
+    btn.disabled = true;
+    /* 실시간 로그 배열 (MDN XHR progress event로 진행상황 표시) */
+    var log = [];
+    function appendLog(line){ log.push('[' + new Date().toLocaleTimeString() + '] ' + line); out.textContent = log.join(String.fromCharCode(10)); }
+    appendLog('▶ 시작: ' + window._picked.length + '개 파일 준비');
+    var totalBytes = 0;
+    for(var i=0;i<window._picked.length;i++){
+      totalBytes += window._picked[i].size;
+      appendLog('  📄 ' + (i+1) + '/' + window._picked.length + ' ' + window._picked[i].name + ' (' + Math.round(window._picked[i].size/1024) + 'KB)');
+    }
+    appendLog('📦 총 ' + Math.round(totalBytes/1024) + 'KB · FormData 구성 중…');
+    var fd = new FormData();
+    for(var i=0;i<window._picked.length;i++) fd.append('files', window._picked[i]);
+    appendLog('🌐 POST /api/upload-excels 전송 시작…');
+    /* MDN 표준 XMLHttpRequest + upload progress event (fetch는 upload 진행률 미지원) */
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/upload-excels', true);
+    /* MDN <progress> 그래프 표시 */
+    var progWrap = document.getElementById('excelUpProgWrap');
+    var progEl = document.getElementById('excelUpProg');
+    var progTxt = document.getElementById('excelUpProgTxt');
+    if(progWrap){ progWrap.style.display='block'; progEl.value=0; progTxt.textContent='0%'; }
+    xhr.upload.addEventListener('progress', function(ev){
+      if(ev.lengthComputable){
+        var pct = Math.round(100*ev.loaded/ev.total);
+        if(progEl){ progEl.value=pct; }
+        if(progTxt){ progTxt.textContent = pct + '% (' + Math.round(ev.loaded/1024) + '/' + Math.round(ev.total/1024) + 'KB)'; }
+        var last = log[log.length-1]||'';
+        if(last.indexOf('🚀 업로드')===0){ log[log.length-1] = '[' + new Date().toLocaleTimeString() + '] 🚀 업로드 ' + pct + '% (' + Math.round(ev.loaded/1024) + '/' + Math.round(ev.total/1024) + 'KB)'; out.textContent = log.join(String.fromCharCode(10)); }
+        else appendLog('🚀 업로드 ' + pct + '% (' + Math.round(ev.loaded/1024) + '/' + Math.round(ev.total/1024) + 'KB)');
+      }
+    });
+    xhr.upload.addEventListener('load', function(){ if(progEl){progEl.value=100;} if(progTxt){progTxt.textContent='100% · 서버 처리 중…';} appendLog('✅ 업로드 완료 · 서버 파싱 대기…'); });
+    xhr.upload.addEventListener('error', function(){ appendLog('❌ 업로드 실패'); btn.disabled=false; });
+    xhr.upload.addEventListener('abort', function(){ appendLog('⚠️ 업로드 중단'); btn.disabled=false; });
+    xhr.onreadystatechange = function(){
+      if(xhr.readyState===4){
+        appendLog('📡 서버 응답 수신 (HTTP ' + xhr.status + ')');
+        var d = null;
+        try { d = JSON.parse(xhr.responseText); } catch(e){ appendLog('❌ JSON 파싱 실패: '+e.message); btn.disabled=false; return; }
+        if(!d.ok){ appendLog('❌ ' + (d.error||'실패')); btn.disabled=false; return; }
+        appendLog('');
+        appendLog('═══ 파싱 결과 ═══');
+        (d.files||[]).forEach(function(f, idx){
+          appendLog('  [' + (idx+1) + '] ' + f.name + ' → ' + (f.accounts||0) + '개' + (f.error?' ❌'+f.error:'') + (f.sheets?' (시트 '+f.sheets+')':''));
+        });
+        appendLog('');
+        appendLog('═══ 병합 결과 ═══');
+        appendLog('  📊 총 파싱: ' + d.total_parsed);
+        appendLog('  🔄 unique: ' + d.unique);
+        appendLog('  ➕ 신규 추가: ' + d.added);
+        appendLog('  ✏️ 업데이트: ' + d.updated);
+        appendLog('  ⚠️ 충돌: ' + (d.conflicts_count||0));
+        appendLog('  💾 마스터 총: ' + d.total_master);
+        if((d.conflicts||[]).length){
+          appendLog('');
+          appendLog('═══ ⚠️ 충돌 상세 ═══');
+          d.conflicts.slice(0,10).forEach(function(c){
+            appendLog('  ' + c.email + ':');
+            c.fields.forEach(function(f){ appendLog('    ' + f.field + ': "' + f.old + '" → "' + f.new + '" (채택: ' + f.chosen + ')'); });
+          });
+          if(d.conflicts.length>10) appendLog('  … 외 ' + (d.conflicts.length-10) + '개');
+        }
+        appendLog('');
+        appendLog('📅 날짜별 그룹:');
+        Object.keys(d.by_date||{}).forEach(function(k){ appendLog('  ' + k + ': ' + d.by_date[k] + '개'); });
+        appendLog('');
+        appendLog('✅ 완료');
+        if(typeof refreshAccStats==='function') refreshAccStats();
+        btn.disabled = false;
+        window._picked = []; renderList();
+        return;
+      }
+    };
+    xhr.send(fd);
+  });
+})();
+</script>
+
+
+
+<!-- 엑셀 다중 업로드 UI (gauth.cent-solution.online)
+     ref: MDN <input type=file multiple> https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input/file
+     ref: FormData API https://developer.mozilla.org/en-US/docs/Web/API/FormData -->
+
+
+<header>
+  <h1>gauth 대시보드</h1>
+  <div class="stats">
+    <span>엑셀 <b id="s-files">–</b></span>
+    <span>계정 <b id="s-acc">–</b></span>
+    <span>세션 <b class="ok" id="s-sess">–</b></span>
+    <span>2FA <b id="s-2fa">–</b></span>
+    <span>비번만 <b id="s-pw">–</b></span>
+  </div>
+</header>
+
+<!-- 계정 정보 조회 -->
+<div style="padding:14px 20px;background:#0f1620;border-bottom:1px solid #22282f;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+  <span style="font-size:14px;color:#7dabff;font-weight:700">🔎 계정 정보 확인</span>
+  <input id="lookup" placeholder="이메일 입력 후 Enter (예: gtayerai78@gmail.com)" style="flex:1;min-width:300px">
+  <button id="lookup-btn">조회</button>
+  <div id="lookup-result" style="width:100%;display:none;background:#161a20;border:1px solid #2a323c;border-radius:8px;padding:16px;font-size:14px;margin-top:6px"></div>
+</div>
+
+<!-- 시간 순서 계정 정보 확인 -->
+<div style="padding:14px 20px;background:#1a1210;border-bottom:1px solid #22282f;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+  <span style="font-size:14px;color:#ffb469;font-weight:700">⏰ 시간 순서 계정 정보 확인</span>
+  <select id="td-order" style="flex:0 0 auto">
+    <option value="asc">오래된 순 (엑셀 날짜 오래됨 → 최신)</option>
+    <option value="desc">최신 순 (엑셀 날짜 최신 → 오래됨)</option>
+  </select>
+  <button id="td-load" style="background:#ff9040">계정 조회</button>
+  <button id="td-prev" style="background:#555;display:none">◀ 이전</button>
+  <span id="td-pos" style="font-size:13px;color:#9aa5b5;display:none"></span>
+  <button id="td-next" style="background:#555;display:none">다음 ▶</button>
+  <div id="td-result" style="width:100%;display:none;background:#161a20;border:1px solid #2a323c;border-radius:8px;padding:16px;font-size:14px;margin-top:6px"></div>
+</div>
+
+<div class="controls">
+  <input id="q" placeholder="🔍 목록 필터 (부분 일치)…">
+  <select id="filter">
+    <option value="all">전체</option>
+    <option value="today">🟢 오늘 접속만</option>
+    <option value="2fa">2FA 있음</option>
+    <option value="never">미접속만</option>
+    <option value="locked">잠김만 (폰/패스키/기기)</option>
+  </select>
+  <span id="count"></span>
+  <span style="width:1px;height:24px;background:#2a323c"></span>
+  <span style="font-size:12px;color:#9aa5b5">엑셀로</span>
+  <input id="parts" type="number" min="1" max="500" value="5" style="width:70px;flex:0 0 auto">
+  <span style="font-size:12px;color:#9aa5b5">등분</span>
+  <button id="export">📥 다운로드</button>
+  <span style="width:1px;height:24px;background:#2a323c"></span>
+  <button id="batch-run" style="background:#e0503a">▶ 미로그인만 로그인 (순서대로)</button>
+  <button id="batch-stop" style="background:#666">■ 정지</button>
+</div>
+<div id="viewport"><div id="spacer"></div></div>
+<div id="pagination" style="padding:12px 20px;background:#0f1216;border-top:1px solid #22282f;display:flex;gap:6px;flex-wrap:wrap;justify-content:center;align-items:center"></div>
+
+<script>
+const PAGE_SIZE = 20
+let ALL=[], FILTERED=[], PAGE=1
+const vp = document.getElementById('viewport'), sp = document.getElementById('spacer')
+
+let FAILED = {}
+async function load(){
+  const [n, p, f] = await Promise.all([
+    fetch('/api/normalized-accounts').then(r=>r.json()),
+    fetch('/api/profiles').then(r=>r.json()),
+    fetch('/api/failed-accounts').then(r=>r.json()).catch(()=>({}))
+  ])
+  FAILED = f || {}
+  const sess = new Set(p.profiles.map(x => x.folder.replace(/_gmail_com$/,'@gmail.com')))
+  // 최신 순 (엑셀 mtime 내림차순) + 잠금 상태 표시
+  ALL = (n.accounts||[]).map(a => ({
+    ...a,
+    has_session: sess.has(a.email),
+    lock_reason: (FAILED[a.email]||FAILED[a.email+'@gmail.com'])?.reason || null
+  })).sort((x,y) => (y.source_mtime||0) - (x.source_mtime||0))
+  document.getElementById('s-files').textContent = n.summary?.files_scanned ?? '?'
+  document.getElementById('s-acc').textContent = ALL.length.toLocaleString()
+  document.getElementById('s-sess').textContent = ALL.filter(a=>a.has_session).length.toLocaleString()
+  document.getElementById('s-2fa').textContent = (n.summary?.PASSWORD_2FA ?? 0).toLocaleString()
+  document.getElementById('s-pw').textContent = (n.summary?.PASSWORD_ONLY ?? 0).toLocaleString()
+  applyFilter()
+}
+function applyFilter(){
+  const q = document.getElementById('q').value.trim().toLowerCase()
+  const f = document.getElementById('filter').value
+  FILTERED = ALL.filter(a => {
+    if (q && !(a.email||'').toLowerCase().includes(q)) return false
+    if (f==='today' && !(a.session_mtime && a.session_mtime>=kstTodayMidnightMs())) return false
+    if (f==='2fa' && !a.totp_secret) return false
+    if (f==='never' && a.session_mtime) return false
+    const LOCK = ['PHONE_REQUIRED','PASSKEY_REQUIRED','DEVICE_PROMPT','SECURITY_KEY','BACKUP_CODE','REJECTED']
+    if (f==='locked' && !LOCK.includes(a.lock_reason)) return false
+    return true
+  })
+  PAGE = 1
+  const totalPages = Math.max(1, Math.ceil(FILTERED.length / PAGE_SIZE))
+  document.getElementById('count').textContent = `${FILTERED.length.toLocaleString()}개 · ${totalPages}페이지`
+  render()
+}
+function render(){
+  const totalPages = Math.max(1, Math.ceil(FILTERED.length / PAGE_SIZE))
+  if (PAGE > totalPages) PAGE = totalPages
+  const start = (PAGE-1) * PAGE_SIZE
+  const end = Math.min(FILTERED.length, start + PAGE_SIZE)
+  const rows = []
+  for (let i=start;i<end;i++){
+    const a = FILTERED[i]
+    const y = (i-start) * 44
+    const sess = accessBadge(a)
+    const tfa = a.totp_secret ? '<span class="badge b-2fa">2FA</span>' : ''
+    const lock = a.lock_reason ? `<span class="badge b-lock" title="잠김 사유: ${a.lock_reason} (수동 처리 필요)">🔒 ${a.lock_reason}</span>` : ''
+    const rec = a.recovery_email || a.recovery_phone || ''
+    const btnOpen = a.has_session
+      ? `<button onclick="openIt('${a.email}')">🔓 열기</button>`
+      : `<button class="no-sess" onclick="quickLookup('${a.email}')">🔍 정보</button>`
+    const btnLogin = a.lock_reason
+      ? `<button style="background:#555;padding:6px 8px;font-size:11px" onclick="unlockAccount('${a.email}',this)">🔓 잠금해제</button>`
+      : `<button style="background:#7c3aed;padding:6px 8px;font-size:11px" onclick="programLogin('${a.email}',this)">🔑 로그인</button>`
+    rows.push(`<div class="row" style="top:${y}px">
+      <div class="email" style="cursor:pointer;color:#7dabff" onclick="quickLookup('${a.email}')">${a.email}</div>
+      <div>${sess}${tfa}${lock}</div>
+      <div class="mono pw">${a.password||'—'}</div>
+      <div class="mono">${a.totp_secret ? a.totp_secret.slice(0,20)+'…' : '—'}</div>
+      <div class="mono">${rec||'—'}</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap">${btnOpen}${btnLogin}</div>
+    </div>`)
+  }
+  sp.style.height = ((end-start) * 44) + 'px'
+  sp.innerHTML = rows.join('')
+  renderPagination(totalPages)
+}
+function renderPagination(totalPages){
+  const pg = document.getElementById('pagination')
+  if (totalPages <= 1) { pg.innerHTML=''; return }
+  const btn = (label, page, disabled, active) =>
+    `<button ${disabled?'disabled':''} style="min-width:36px;background:${active?'#2b6cff':'#2a323c'}" onclick="gotoPage(${page})">${label}</button>`
+  let html = btn('«', 1, PAGE===1) + btn('‹', PAGE-1, PAGE===1)
+  // 앞뒤 5개 정도만 표시
+  const from = Math.max(1, PAGE-3), to = Math.min(totalPages, PAGE+3)
+  if (from > 1) html += '<span style="color:#8a95a5">…</span>'
+  for (let i=from; i<=to; i++) html += btn(i, i, false, i===PAGE)
+  if (to < totalPages) html += '<span style="color:#8a95a5">…</span>'
+  html += btn('›', PAGE+1, PAGE===totalPages) + btn('»', totalPages, PAGE===totalPages)
+  html += `<span style="color:#8a95a5;font-size:12px;margin-left:10px">${PAGE} / ${totalPages}</span>`
+  pg.innerHTML = html
+}
+function gotoPage(n){
+  const total = Math.max(1, Math.ceil(FILTERED.length / PAGE_SIZE))
+  PAGE = Math.max(1, Math.min(total, n))
+  render()
+  vp.scrollTo({top:0})
+}
+function quickLookup(email){
+  document.getElementById('lookup').value = email
+  lookup()
+  window.scrollTo({top:0,behavior:'smooth'})
+}
+async function openIt(email){
+  const r = await fetch('/api/open-profile',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email})})
+  const j = await r.json()
+  if(j.error) alert('실패: '+j.error)
+}
+async function login(email){
+  if(!confirm(`${email} 지금 로그인 시도?`)) return
+  const r = await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email})})
+  alert('결과: '+JSON.stringify(await r.json()))
+  load()
+}
+// 복사 버튼 — data 속성 사용. targetId가 있으면 그 엘리먼트의 현재 textContent를 복사(항상 최신)
+function cp(v, targetId){
+  if(v===undefined || v===null || v==='—') return ''
+  const esc = String(v).replace(/"/g,'&quot;').replace(/</g,'&lt;')
+  return targetId
+    ? `<button class="cp" data-copy-target="${targetId}">복사</button>`
+    : `<button class="cp" data-copy="${esc}">복사</button>`
+}
+// 공식: navigator.clipboard.writeText (MDN Clipboard API) + secure context (HTTPS/localhost)
+// 실패 시 폴백: document.execCommand('copy') via hidden textarea
+async function doCopy(text){
+  try { await navigator.clipboard.writeText(text); return true }
+  catch {
+    const ta = document.createElement('textarea')
+    ta.value = text; ta.style.position='fixed'; ta.style.opacity='0'
+    document.body.appendChild(ta); ta.select()
+    let ok = false
+    try { ok = document.execCommand('copy') } catch {}
+    ta.remove()
+    return ok
+  }
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('button.cp')
+  if(!b) return
+  let text = b.dataset.copy
+  if(!text && b.dataset.copyTarget){
+    const el = document.getElementById(b.dataset.copyTarget)
+    if(el) text = el.textContent.trim()
+  }
+  if(!text) return
+  const ok = await doCopy(text)
+  const orig = b.textContent
+  b.textContent = ok ? '✓ 복사됨' : '❌ 실패'
+  setTimeout(()=>{b.textContent = orig}, 900)
+})
+// 프로그램 로그인 (로컬 서버 :4000 필요)
+async function unlockAccount(email, btn){
+  if(!confirm(`${email}\n잠금 상태 해제 (다음 배치에서 다시 시도)?`)) return
+  btn.disabled=true
+  const paths = ['/api/failed-accounts/','//api/failed-accounts/']
+  for(const base of paths){
+    try{ const r = await fetch(base+encodeURIComponent(email),{method:'DELETE'}); if(r.ok){ btn.textContent='✓ 해제'; setTimeout(()=>load(), 500); return } }catch{}
+  }
+  alert('해제 실패 — 로컬 서버(:4000) 필요'); btn.disabled=false
+}
+// 잠금 성격 실패 = 사람 개입 필요 (재시도 무의미) → "실패"로만 표시
+const LOCK_REASONS = new Set([
+  'PHONE_REQUIRED','PASSKEY_REQUIRED','DEVICE_PROMPT','SECURITY_KEY','BACKUP_CODE','REJECTED',
+  'AFTER_TOTP_DEVICE_PROMPT','AFTER_TOTP_PHONE_REQUIRED','AFTER_TOTP_PASSKEY_REQUIRED',
+  'WRONG_PASSWORD','UNKNOWN_PASSWORD','2FA_NO_SECRET','TOTP_MAX_ATTEMPTS'
+, 'BROWSER_UNSAFE'])
+async function programLogin(email, btn){
+  const orig = btn.textContent; btn.disabled=true; btn.textContent='⏳ 시도 중…'
+  const endpoints = ['/api/login-one', '//api/login-one']
+  let reason = '', message = '', reachedServer = false
+  for(const url of endpoints){
+    try{
+      const r = await fetch(url, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email})})
+      const j = await r.json().catch(()=>({}))
+      // 서버가 응답한 경우 (도달함)
+      reachedServer = true
+      // 성공 판정: HTTP 2xx AND (success===true OR reason 없음)
+      if(r.ok && j.success !== false && !j.error){
+        btn.textContent = '✅ 로그인 성공'
+        btn.style.background = '#3ddc84'
+        btn.style.color = '#000'
+        // 화면에 즉시 반영: 해당 카드의 미로그인 배지 → 로그인 로 교체
+        // 또는 안전하게 목록 다시 로드
+        try { await load() } catch { location.reload() }
+        setTimeout(()=>{btn.textContent=orig;btn.disabled=false;btn.style.background='';btn.style.color=''}, 3000)
+        return
+      }
+      // 서버가 응답했으나 실패 → 사유 표시
+      reason = j.reason || j.error || `HTTP ${r.status}`
+      break  // 서버 응답 받았으면 fallback 시도 안함
+    }catch(e){
+      reason = e.message
+      // 네트워크 오류면 다음 endpoint 시도
+    }
+  }
+  btn.textContent = '❌ 실패'
+  btn.style.background = '#e0503a'
+  if (reachedServer && LOCK_REASONS.has(reason)) {
+    // 사람 개입 필요한 실패 (폰인증·패스키·기기승인·잘못된비번 등) → 간단히 표시
+    alert(`❌ ${email}\n실패: ${reason}${message?"\n\n"+message:""}\n\n(이 계정은 사람이 직접 로그인해야 합니다.)`)
+  } else if (reachedServer) {
+    alert(`❌ ${email}\n실패: ${reason}`)
+  } else {
+    alert(`❌ 서버 도달 실패: ${reason}`)
+  }
+  setTimeout(()=>{btn.textContent=orig;btn.disabled=false;btn.style.background=''}, 2000)
+}
+async function lookup(){
+  const email = document.getElementById('lookup').value.trim()
+  const box = document.getElementById('lookup-result')
+  if(!email){box.style.display='none';return}
+  box.style.display='block'
+  box.innerHTML = '<span style="color:#8a95a5">조회 중…</span>'
+  const r = await fetch('/api/lookup/'+encodeURIComponent(email))
+  const j = await r.json()
+  if(j.error){box.innerHTML=`<span style="color:#f47070">❌ ${j.error}</span>`;return}
+  let code='—'
+  if(j.totp_secret){try{const c=await(await fetch('/codes/'+j.totp_secret)).json();code=c.code||'—'}catch{}}
+  const yt = j.youtube_url || ''
+  const btn = j.has_session
+    ? `<button onclick="openIt('${j.email}')">🔓 Chrome 열기</button>`
+    : `<button class="no-sess" onclick="login('${j.email}')">🔑 로그인 시도</button>`
+  box.innerHTML = `
+    <div style="display:grid;grid-template-columns:130px 1fr;gap:10px 14px">
+      <div style="color:#8a95a5">이메일</div>
+      <div><b style="font-size:15px">${j.email}</b> ${accessBadge(j)}${cp(j.email)}</div>
+      <div style="color:#8a95a5">비밀번호</div>
+      <div class="mono" style="color:#3ddc84;font-size:15px">${j.password||'—'}${cp(j.password)}</div>
+      <div style="color:#8a95a5">2FA 시크릿</div>
+      <div class="mono">${j.totp_secret||'—'}${cp(j.totp_secret)}</div>
+      <div style="color:#8a95a5">2FA 코드 (지금)</div>
+      <div class="mono" style="color:#7dabff;font-size:22px;font-weight:700;letter-spacing:3px"><span id="lookup-code">${code}</span>${j.totp_secret?cp('_','lookup-code'):cp(code!=='—'?code:'')}${j.totp_secret?`<button style="background:#2a323c;padding:4px 10px;font-size:12px;margin-left:8px;color:#c9d2dc" onclick="lookupRefreshCode('${j.totp_secret}',this)">🔄 새로고침</button>`:''} ${cp('_', null)?'':''}<button style="background:#7c3aed;margin-left:8px" onclick="programLogin('${j.email}',this)">🔑 프로그램 로그인</button></div>
+      <div style="color:#8a95a5">YouTube URL</div>
+      <div class="mono" style="color:#ff8a8a">${yt ? `<a href="${yt}" target="_blank" style="color:#ff8a8a">${yt}</a>${cp(yt)}` : '—'}</div>
+      <div style="color:#8a95a5">복구 이메일</div>
+      <div class="mono">${j.recovery_email||'—'}${cp(j.recovery_email)}</div>
+      <div style="color:#8a95a5">복구 전화</div>
+      <div class="mono">${j.recovery_phone||'—'}${cp(j.recovery_phone)}</div>
+      <div style="color:#8a95a5">방식</div><div>${j.login_method||'—'}</div>
+      <div style="color:#8a95a5">출처</div><div class="mono" style="font-size:11px;color:#8a95a5">${j.source_file||'—'}</div>
+      <div></div><div>${btn}</div>
+    </div>`
+}
+document.getElementById('lookup-btn').addEventListener('click', lookup)
+document.getElementById('lookup').addEventListener('keydown', e=>{if(e.key==='Enter')lookup()})
+
+// --- 시간 순서 계정 정보 확인 (20개씩 페이지) ---
+const TD_PAGE_SIZE = 20
+let TD=[], TDP=1
+async function tdLoad(){
+  // ALL은 이미 로드됨 (accounts_normalized 전체, source_mtime 포함)
+  if(!ALL.length){alert('아직 계정 로드 안됨');return}
+  TD = [...ALL].sort((x,y)=>{
+    const d = (x.source_mtime||0) - (y.source_mtime||0)
+    return document.getElementById('td-order').value==='desc' ? -d : d
+  })
+  TDP = 1
+  document.getElementById('td-result').style.display='block'
+  tdRender()
+}
+async function tdRender(){
+  const total = TD.length, pages = Math.max(1, Math.ceil(total/TD_PAGE_SIZE))
+  if(TDP>pages) TDP=pages
+  const s = (TDP-1)*TD_PAGE_SIZE, e = Math.min(total, s+TD_PAGE_SIZE)
+  const box = document.getElementById('td-result')
+  box.innerHTML = `<div style="color:#8a95a5;margin-bottom:10px">${s+1}~${e} / 총 ${total}개 (${TDP}/${pages}페이지)</div><div id="td-loading">TOTP 코드 계산 중…</div>`
+
+  // 20개 각각의 TOTP 코드 병렬 fetch
+  const slice = TD.slice(s, e)
+  const codes = await Promise.all(slice.map(a =>
+    a.totp_secret ? fetch('/codes/'+a.totp_secret).then(r=>r.json()).then(j=>j.code||'—').catch(()=>'—') : Promise.resolve('—')
+  ))
+
+  const cards = slice.map((a, i) => {
+    const dt = a.source_mtime ? new Date(a.source_mtime).toLocaleString('ko-KR') : '—'
+    const idx = s+i+1
+    const yt = a.youtube_url || ''
+    return `<div style="background:#161a20;border:1px solid #2a323c;border-radius:8px;padding:12px;margin-bottom:8px">
+      <div style="display:grid;grid-template-columns:100px 1fr;gap:6px 12px;font-size:13px">
+        <div style="color:#8a95a5">#${idx}</div><div><b style="color:#ffb469;font-size:14px">${a.email}</b>${cp(a.email)} ${accessBadge(a)}</div>
+        <div style="color:#8a95a5">비밀번호</div><div class="mono" style="color:#3ddc84">${a.password||'—'}${cp(a.password)}</div>
+        <div style="color:#8a95a5">2FA 시크릿</div><div class="mono" style="font-size:11px">${a.totp_secret||'—'}${cp(a.totp_secret)}</div>
+        <div style="color:#8a95a5">2FA 코드</div><div class="mono" style="color:#7dabff;font-size:18px;font-weight:700;letter-spacing:2px"><span id="tdcode-${idx}">${codes[i]}</span>${a.totp_secret?cp('_', 'tdcode-'+idx):cp(codes[i]!=='—'?codes[i]:'')}${a.totp_secret?`<button style="background:#2a323c;padding:3px 8px;font-size:11px;margin-left:6px;color:#c9d2dc" onclick="tdRefreshCode(${idx},'${a.totp_secret}',this)">🔄 새로고침</button>`:''}</div>
+        <div style="color:#8a95a5">동작</div><div><button style="background:#7c3aed" onclick="programLogin('${a.email}',this)">🔑 프로그램 로그인</button></div>
+        <div style="color:#8a95a5">YouTube</div><div class="mono" style="color:#ff8a8a;font-size:11px">${yt?`<a href="${yt}" target="_blank" style="color:#ff8a8a">${yt}</a>${cp(yt)}`:'—'}</div>
+        <div style="color:#8a95a5">복구</div><div class="mono" style="font-size:11px">${a.recovery_email||a.recovery_phone||'—'}</div>
+        <div style="color:#8a95a5">엑셀</div><div class="mono" style="font-size:11px;color:#8a95a5">${a.source_file} (row ${a.source_row}) · ${dt}</div>
+      </div>
+    </div>`
+  }).join('')
+
+  // 페이지네이션
+  const btn = (l, p, disabled, active) => `<button ${disabled?'disabled':''} style="min-width:36px;background:${active?'#ff9040':'#2a323c'}" onclick="tdGoto(${p})">${l}</button>`
+  const from = Math.max(1, TDP-3), to = Math.min(pages, TDP+3)
+  let pgHtml = btn('«',1,TDP===1)+btn('‹',TDP-1,TDP===1)
+  if(from>1) pgHtml += '<span style="color:#8a95a5">…</span>'
+  for(let i=from;i<=to;i++) pgHtml += btn(i,i,false,i===TDP)
+  if(to<pages) pgHtml += '<span style="color:#8a95a5">…</span>'
+  pgHtml += btn('›',TDP+1,TDP===pages)+btn('»',pages,TDP===pages)
+  pgHtml += ` <span style="color:#8a95a5;font-size:12px;margin-left:10px">${TDP} / ${pages}</span>`
+
+  box.innerHTML = `
+    <div style="color:#8a95a5;margin-bottom:10px">${s+1}~${e} / 총 ${total}개 · ${TDP}/${pages}페이지 · 20개씩</div>
+    ${cards}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;padding:10px 0">${pgHtml}</div>`
+}
+async function lookupRefreshCode(secret, btn){
+  const el = document.getElementById('lookup-code')
+  if(!el) return
+  const old = btn.textContent; btn.textContent = '⏳'
+  try{
+    const j = await fetch('/codes/'+secret).then(r=>r.json())
+    el.textContent = j.code || '—'
+    /* 새 코드 시각 강조 (0.6s 골드 반짝) */
+    el.style.transition='background-color .3s'; el.style.backgroundColor='rgba(245,200,66,.35)';
+    setTimeout(()=>el.style.backgroundColor='', 700)
+    /* 인접 복사 버튼 리셋 · 이전 '복사됨' 잔재 제거 */
+    const row = btn.closest('div, td, tr, .row') || btn.parentNode
+    row.querySelectorAll('button.cp').forEach(cb => { cb.textContent = '복사' })
+    btn.textContent = '✓ 새코드'; setTimeout(()=>btn.textContent = old, 900)
+  }catch{btn.textContent='❌';setTimeout(()=>btn.textContent=old, 1200)}
+}
+async function tdRefreshCode(idx, secret, btn){
+  const el = document.getElementById('tdcode-'+idx)
+  if(!el) return
+  const old = btn.textContent
+  btn.textContent = '⏳'
+  try{
+    const j = await fetch('/codes/'+secret).then(r=>r.json())
+    el.textContent = j.code || '—'
+    /* 새 코드 시각 강조 */
+    el.style.transition='background-color .3s'; el.style.backgroundColor='rgba(245,200,66,.35)';
+    setTimeout(()=>el.style.backgroundColor='', 700)
+    /* 인접 복사 버튼 리셋 */
+    const row = btn.closest('div, td, tr') || btn.parentNode
+    row.querySelectorAll('button.cp').forEach(cb => { cb.textContent = '복사' })
+    btn.textContent = '✓ 새코드'
+    setTimeout(()=>btn.textContent = old, 900)
+  }catch{btn.textContent='❌';setTimeout(()=>btn.textContent=old, 1200)}
+}
+function tdGoto(n){
+  const pages = Math.max(1, Math.ceil(TD.length/TD_PAGE_SIZE))
+  TDP = Math.max(1, Math.min(pages, n))
+  tdRender()
+  document.getElementById('td-result').scrollIntoView({behavior:'smooth', block:'start'})
+}
+document.getElementById('td-load').addEventListener('click', tdLoad)
+document.getElementById('td-order').addEventListener('change', ()=>{if(TD.length){tdLoad()}})
+// 이전/다음 버튼은 페이지네이션으로 대체됨 (숨김)
+;['td-prev','td-next','td-pos'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none'})
+// 페이지네이션으로 전환: 스크롤 렌더 제거
+document.getElementById('q').addEventListener('input', applyFilter)
+document.getElementById('filter').addEventListener('change', applyFilter)
+document.getElementById('batch-run').addEventListener('click', async () => {
+  const total = ALL.length
+  if (!confirm(`전체 ${total}개 중 미로그인만 순서대로 로그인 시도. 계속?`)) return
+  const r = await fetch('/api/start',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({start:0,end:total,concurrency:8,skipLoggedIn:true})})
+  alert('배치 시작: '+JSON.stringify(await r.json()))
+})
+document.getElementById('batch-stop').addEventListener('click', async () => {
+  await fetch('/api/stop',{method:'POST'});alert('정지 요청 전송')
+})
+document.getElementById('export').addEventListener('click', async () => {
+  const parts = parseInt(document.getElementById('parts').value,10) || 1
+  const filter = document.getElementById('filter').value
+  const r = await fetch('/api/export-split',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({parts,filter})})
+  if(!r.ok){alert('실패');return}
+  const blob = await r.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href=url; a.download=`gauth-split-${parts}.zip`; a.click()
+  setTimeout(()=>URL.revokeObjectURL(url),1000)
+})
+load()
+</script><!-- GCP VM 제어 패널 (하단, 모바일 반응형)
+     ref: MDN CSS Grid https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout
+     ref: MDN CSS @media https://developer.mozilla.org/en-US/docs/Web/CSS/@media -->
+<style>
+#vmCtrlBox{margin:20px 10px;padding:14px;background:#0f1218;border:2px solid #2a323c;border-radius:10px;font-family:'SF Mono',monospace}
+#vmCtrlBox h3{margin:0 0 12px;color:#3ddc84;font-size:15px}
+#vmCtrlBox .vmPw{display:flex;gap:6px;margin-bottom:10px}
+#vmCtrlBox .vmPw input{flex:1;background:#fff;border:3px solid #ffcc00;color:#000;padding:14px;border-radius:5px;font-size:18px;font-weight:700}
+#vmCtrlBox .vmPw input::placeholder{color:#666;font-weight:600}
+#vmCtrlBox .vmPw button{background:#2b6cff;color:#fff;border:0;padding:8px 14px;border-radius:5px;cursor:pointer;font-size:12px;white-space:nowrap}
+#vmList{display:grid;grid-template-columns:1fr;gap:8px}
+@media (min-width:640px){#vmList{grid-template-columns:1fr 1fr}}
+.vmCard{background:#161a20;border:1px solid #2a323c;border-radius:6px;padding:10px;font-size:12px}
+.vmCard b{color:#e8ecef;font-size:13px}
+.vmSt{display:inline-block;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:600;margin-left:6px}
+.st-RUNNING{background:#0d3222;color:#3ddc84}
+.st-TERMINATED,.st-STOPPED{background:#3a1c1c;color:#f47070}
+.st-STOPPING,.st-STARTING{background:#2a2a1a;color:#ffd400}
+.st-UNKNOWN{background:#252525;color:#888}
+.vmBtns{display:flex;gap:6px;margin-top:8px}
+.vmBtns button{flex:1;padding:8px;border:0;border-radius:5px;cursor:pointer;font-weight:600;font-size:12px}
+.btnStart{background:#0a8f3c;color:#fff}
+.btnStop{background:#e0503a;color:#fff}
+.btnSsh{background:#5b21b6;color:#fff}
+.btnRefresh{background:#2b6cff;color:#fff;padding:8px 12px}
+#vmLog{margin-top:10px;padding:6px 10px;background:#0a0d13;border:1px solid #1a1f26;border-radius:4px;font-size:11px;color:#8a95a5;max-height:80px;overflow-y:auto;white-space:pre-wrap}
+</style>
+<div id="vmCtrlBox">
+  <h3>🖥 GCP 서버 제어 (관리자)</h3>
+  <div class="vmPw">
+    <input type="password" id="vmPw" placeholder="관리자 비밀번호" autocomplete="off">
+    <button id="vmRefresh" class="btnRefresh">🔄 상태 새로고침</button>
+  </div>
+  <div id="vmList">불러오는 중…</div>
+  <div id="vmLog"></div>
+</div>
+<script>
+(function(){
+  var listEl = document.getElementById('vmList');
+  var pwEl = document.getElementById('vmPw');
+  var logEl = document.getElementById('vmLog');
+  var refreshBtn = document.getElementById('vmRefresh');
+  /* 비번은 localStorage에 저장 (편의성; 관리자만 접근) */
+  try { pwEl.value = localStorage.getItem('vm_admin_pw') || ''; } catch(_) {}
+  pwEl.addEventListener('change', function(){ try{ localStorage.setItem('vm_admin_pw', pwEl.value); }catch(_){} });
+
+  function log(msg){
+    var t = new Date().toLocaleTimeString();
+    logEl.textContent = ('[' + t + '] ' + msg + String.fromCharCode(10) + logEl.textContent).slice(0, 2000);
+  }
+
+  function render(vms){
+    if (!vms.length) { listEl.textContent = 'VM 없음'; return; }
+    listEl.innerHTML = vms.map(function(v){
+      var st = v.status || 'UNKNOWN';
+      var canStart = st !== 'RUNNING' && st !== 'STARTING';
+      var canStop = st === 'RUNNING' && v.name !== 'gucci-yanolza';
+      return '<div class="vmCard">'
+        + '<b>' + escapeHtml(v.name) + '</b>'
+        + '<span class="vmSt st-' + escapeHtml(st) + '">' + escapeHtml(st) + '</span>'
+        + '<div style="color:#8a95a5;margin-top:4px">' + escapeHtml(v.label || '') + '</div>'
+        + '<div style="color:#666;font-size:10px;margin-top:2px">' + escapeHtml(v.zone) + '</div>'
+        + '<div class="vmBtns">'
+        + '<button class="btnStart" ' + (canStart?'':'disabled') + ' data-action="start" data-name="' + escapeHtml(v.name) + '" data-project="' + escapeHtml(v.project) + '" data-zone="' + escapeHtml(v.zone) + '">▶ 시작</button>'
+        + '<button class="btnStop"  ' + (canStop?'':'disabled')  + ' data-action="stop"  data-name="' + escapeHtml(v.name) + '" data-project="' + escapeHtml(v.project) + '" data-zone="' + escapeHtml(v.zone) + '">■ 정지</button>'
+        + '<button class="btnSsh" data-action="ssh" data-name="' + escapeHtml(v.name) + '" data-project="' + escapeHtml(v.project) + '" data-zone="' + escapeHtml(v.zone) + '">🖥 SSH</button>'
+        + '</div>'
+        + (v.error ? '<div style="color:#f47070;font-size:10px;margin-top:4px">' + escapeHtml(v.error) + '</div>' : '')
+        + '</div>';
+    }).join('');
+    /* 버튼 이벤트 위임 */
+    [].forEach.call(listEl.querySelectorAll('button[data-action]'), function(btn){
+      btn.addEventListener('click', function(){
+        var action = btn.getAttribute('data-action');
+        if (action === 'ssh') {
+          var url = 'https://ssh.cloud.google.com/v2/ssh/projects/' + btn.getAttribute('data-project') + '/zones/' + btn.getAttribute('data-zone') + '/instances/' + btn.getAttribute('data-name') + '?authuser=0';
+          window.open(url, '_blank');
+          return;
+        }
+        var body = { pw: pwEl.value, name: btn.getAttribute('data-name'), project: btn.getAttribute('data-project'), zone: btn.getAttribute('data-zone') };
+        if (!body.pw) { log('❌ 비번 먼저 입력'); return; }
+        if (action === 'stop' && !confirm(body.name + ' 정지할까요?')) return;
+        btn.disabled = true;
+        log(action + ' → ' + body.name);
+        fetch('/api/vm/' + action, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })
+          .then(function(r){ return r.json().then(function(j){ return {status:r.status, j:j}; }); })
+          .then(function(x){
+            if (x.status === 200 && x.j.ok) log('✅ ' + action + ' 요청 접수: ' + body.name);
+            else log('❌ ' + (x.j.error || 'HTTP ' + x.status));
+            setTimeout(loadList, 3000);
+          })
+          .catch(function(e){ log('❌ ' + e.message); btn.disabled = false; });
+      });
+    });
+  }
+  function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+
+  function loadList(){
+    listEl.textContent = '⏳ 로딩…';
+    fetch('/api/vm/list', {cache:'no-store'})
+      .then(function(r){ return r.json(); })
+      .then(function(d){ if (d.ok) render(d.vms); else { listEl.textContent = '❌ ' + (d.error||'실패'); } })
+      .catch(function(e){ listEl.textContent = '❌ ' + e.message; });
+  }
+  refreshBtn.addEventListener('click', loadList);
+  /* 초기 로드 + 30초마다 자동 새로고침 */
+  loadList();
+  /* auto-refresh disabled */
+})();
+</script>
+
+
+
+<button id="site-map-open" title="활성 사이트" onclick="var f=document.getElementById('site-map-footer'); if(f){f.style.display='block';this.style.display='none';}" style="position:fixed;right:8px;bottom:8px;z-index:9998;width:44px;height:44px;border-radius:50%;background:rgba(15,22,32,.97);border:1.5px solid #22282f;color:#f5c842;font-size:20px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.5);">🌐</button>
+<div id="site-map-footer" style="position:fixed;right:8px;bottom:8px;max-width:380px;max-height:78vh;overflow-y:auto;background:rgba(15,22,32,0.97);border:1.5px solid #22282f;border-radius:8px;padding:10px 12px;z-index:9999;font-size:11px;color:#8a95a5;font-family:-apple-system,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.5);;display:none">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+  <b style="color:#e8ecef">🌐 활성 사이트 (Cloudflare DNS 실측)</b>
+  <span id="site-map-close" style="cursor:pointer;color:#666;font-size:13px" onclick="this.parentNode.parentNode.style.display='none';document.getElementById('site-map-open').style.display='block';">✕</span>
+</div>
+
+<details><summary style="cursor:pointer;color:#7dabff;font-weight:700;margin:4px 0">🇯🇵 my-site-1 (도쿄)</summary>
+<ul style="margin:2px 0 4px 14px;padding:0;list-style:'▸ ';line-height:1.6">
+<li><a href="https://xn--9d0bw2fjtyymch7de9d.info" target="_blank" style="color:#f5c842"><b>참교육카지노.info</b></a></li>
+<li><a href="https://www.xn--9d0bw2fjtyymch7de9d.info" target="_blank" style="color:#f5c842">www.참교육카지노.info</a></li>
+<li><a href="https://invest.xn--9d0bw2fjtyymch7de9d.info" target="_blank" style="color:#f5c842">invest.참교육카지노.info</a></li>
+<li><a href="https://studio.xn--9d0bw2fjtyymch7de9d.info" target="_blank" style="color:#f5c842">studio.참교육카지노.info</a></li>
+<li><a href="https://cent-solutions.info" target="_blank" style="color:#3ddc84"><b>cent-solutions.info</b></a></li>
+<li><a href="https://www.cent-solutions.info" target="_blank" style="color:#3ddc84">www.cent-solutions.info</a></li>
+<li><a href="https://mail.cent-solutions.info" target="_blank" style="color:#3ddc84">mail.cent-solutions.info</a></li>
+<li><a href="https://ns1.cent-solutions.info" target="_blank" style="color:#3ddc84">ns1.cent-solutions.info</a></li>
+<li><a href="https://ns2.cent-solutions.info" target="_blank" style="color:#3ddc84">ns2.cent-solutions.info</a></li>
+<li><a href="https://studio.cent-solutions.info" target="_blank" style="color:#3ddc84">studio.cent-solutions.info</a></li>
+</ul></details>
+
+<details><summary style="cursor:pointer;color:#7dabff;font-weight:700;margin:4px 0">🇸🇬 gucci-yanolza (싱가포르) ← 이 서버</summary>
+<ul style="margin:2px 0 4px 14px;padding:0;list-style:'▸ ';line-height:1.6">
+<li><a href="https://cent-solution.online" target="_blank" style="color:#ffb469"><b>cent-solution.online</b></a></li>
+<li><a href="https://www.cent-solution.online" target="_blank" style="color:#ffb469">www.cent-solution.online</a></li>
+<li><a href="https://admin.cent-solution.online" target="_blank" style="color:#ffb469">admin.cent-solution.online</a></li>
+<li><a href="https://gauth.cent-solution.online" target="_blank" style="color:#ff9040"><b>gauth.cent-solution.online</b> ← 현재</a></li>
+<li><a href="https://gucci-live.cc" target="_blank" style="color:#ff9dff"><b>gucci-live.cc</b></a></li>
+<li><a href="https://www.gucci-live.cc" target="_blank" style="color:#ff9dff">www.gucci-live.cc</a></li>
+<li><a href="https://hoya-avata.cc" target="_blank" style="color:#c88fff"><b>hoya-avata.cc</b></a></li>
+<li><a href="https://www.hoya-avata.cc" target="_blank" style="color:#c88fff">www.hoya-avata.cc</a></li>
+<li><a href="https://api.hoya-avata.cc" target="_blank" style="color:#c88fff">api.hoya-avata.cc</a></li>
+<li><a href="https://auth.hoya-avata.cc" target="_blank" style="color:#c88fff">auth.hoya-avata.cc</a></li>
+<li><a href="https://relay.hoya-avata.cc" target="_blank" style="color:#c88fff">relay.hoya-avata.cc</a></li>
+</ul></details>
+
+<details><summary style="cursor:pointer;color:#7dabff;font-weight:700;margin:4px 0">🇮🇩 my-site-jkt (자카르타)</summary>
+<ul style="margin:2px 0 4px 14px;padding:0;list-style:'▸ ';line-height:1.6">
+<li><a href="https://panda-avata.cc" target="_blank" style="color:#aafa82"><b>panda-avata.cc</b></a></li>
+<li><a href="https://www.panda-avata.cc" target="_blank" style="color:#aafa82">www.panda-avata.cc</a></li>
+</ul></details>
+
+<details><summary style="cursor:pointer;color:#f59090;font-weight:700;margin:4px 0">⏳ 초기화 중</summary>
+<ul style="margin:2px 0 4px 14px;padding:0;list-style:'▸ ';line-height:1.6">
+<li><span style="color:#7a7a7a">로망아바타.info (DNS 프록시 OFF, 네임서버 변경 대기)</span></li>
+</ul></details>
+
+<div style="margin-top:8px;padding-top:6px;border-top:1px solid #22282f;font-size:9.5px;color:#5a6570;line-height:1.5">
+📊 <b>3 서버 · 7 도메인 · 20 서브도메인</b> · 4 브랜드<br>
+🔒 Cloudflare 프록시 100% · SSL Google Trust Services (WE1)<br>
+⚡ Origin IP 은닉 · DDoS/WAF 보호
+</div>
+</div>
+
+
+<script id="position-badge-js">
+/* 정렬 위치 표시 + 인접 리스트
+   ref: https://github.com/TanStack/table (row.index)
+   ref: https://github.com/pacocoursey/cmdk (sibling nav) */
+window._oldestSort = null;
+function _getOldestSort(){
+  if(!window._oldestSort && window.ALL){
+    window._oldestSort = [...window.ALL].sort((x,y) => (x.source_mtime||0) - (y.source_mtime||0));
+  }
+  return window._oldestSort || [];
+}
+window.calcPosition = function(email){
+  const arr = _getOldestSort();
+  const target = String(email||'').toLowerCase();
+  const idx = arr.findIndex(a => String(a.email||'').toLowerCase() === target);
+  if(idx < 0) return null;
+  return { position: idx+1, total: arr.length, siblings: arr.slice(idx+1, idx+6) };
+};
+window.renderPositionBadge = function(email){
+  const info = window.calcPosition(email);
+  if(!info) return '';
+  const siblings = info.siblings.map((a,i) => {
+    const e = a.email.replace(/'/g,'&#39;').replace(/</g,'&lt;');
+    const n = info.position + 1 + i;
+    return '<div style="padding:8px 12px;background:#161a20;border:1px solid #1a1f26;border-radius:4px;margin-bottom:6px;display:grid;grid-template-columns:40px 1fr auto;gap:8px;align-items:center;font-size:12.5px">'
+      + '<span style="color:#8a95a5;font-family:monospace">'+n+'.</span>'
+      + '<span style="color:#7dabff;cursor:pointer" onclick="quickLookup(''+e+'')">'+e+'</span>'
+      + '<div style="display:flex;gap:4px">'
+      + '<button style="padding:4px 8px;font-size:11px" onclick="openIt(''+e+'')">🔓</button>'
+      + '<button style="padding:4px 8px;font-size:11px;background:#7c3aed" onclick="programLogin(''+e+'',this)">🔑</button>'
+      + '<button style="padding:4px 8px;font-size:11px;background:#2a323c" onclick="quickLookup(''+e+'')">📊</button>'
+      + '</div></div>';
+  }).join('');
+  return '<div style="padding:10px 14px;background:#0e1620;border:1px solid #22282f;border-radius:6px;margin-bottom:12px">'
+    + '<div style="color:#f5c842;font-size:14px;font-weight:700">📌 오래된 순번으로 <span style="color:#ffd54f">'+info.position+'</span>번째</div>'
+    + '<div style="color:#8a95a5;font-size:12px;margin-top:2px">전체 '+info.total+'건 중</div></div>'
+    + (siblings ? '<div style="margin-top:16px"><div style="color:#4dd0e1;font-weight:700;font-size:13px;margin-bottom:8px">── 다음 순번 ('+(info.position+1)+'번째 ~) ──</div>'+siblings+'</div>' : '');
+};
+/* 매 lookup() 후 결과 상단에 자동 삽입 */
+(function(){
+  const orig = window.lookup;
+  window.lookup = async function(){
+    const r = orig ? await orig.apply(this, arguments) : null;
+    setTimeout(function(){
+      const inp = document.getElementById('lookup');
+      const res = document.getElementById('lookup-result') || document.querySelector('[class*=lookup-result]');
+      const email = inp ? inp.value.trim() : '';
+      if(email && res && !res.querySelector('.position-badge-injected')){
+        const badge = document.createElement('div');
+        badge.className = 'position-badge-injected';
+        badge.innerHTML = window.renderPositionBadge(email);
+        res.insertBefore(badge, res.firstChild);
+      }
+    }, 150);
+    return r;
+  };
+  /* ALL 로드되면 캐시 무효화 */
+  const origLoad = window.load;
+  if(origLoad){
+    window.load = async function(){
+      window._oldestSort = null;
+      return await origLoad.apply(this, arguments);
+    };
+  }
+})();
+</script>
+</body></html>
