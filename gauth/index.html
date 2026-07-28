@@ -41,10 +41,12 @@ button:disabled{background:#333;cursor:not-allowed}
 <script>
 async function refreshAccStats(){
   try {
-    const rp = await fetch('/api/parse-report',{cache:'no-store'}).then(r=>r.json()).catch(()=>({}));
-    const _files = rp && rp.last_run ? (rp.last_run.files || 0) : 0;
-    const r = await fetch('/api/accounts',{cache:'no-store'});
-    const j = await r.json();
+    const [rp, j, na] = await Promise.all([
+      fetch('/api/parse-report',{cache:'no-store'}).then(r=>r.json()).catch(()=>({})),
+      fetch('/api/accounts',{cache:'no-store'}).then(r=>r.json()).catch(()=>({})),
+      fetch('/api/normalized-accounts',{cache:'no-store'}).then(r=>r.json()).catch(()=>({}))
+    ]);
+    const _files = na.summary?.files_scanned || (rp && rp.last_run ? rp.last_run.files : 0) || 0;
     var el = document.getElementById('accStats');
     var _2fa = (j.accounts||[]).filter(function(a){return a.has2FA;}).length;
     if(el) el.innerHTML = '📄 엑셀 파일 <b style="color:#7dabff">'+_files+'</b>장 · 📊 원본 <b style="color:#7dabff">'+(j.file_total||0)+'</b>개 · 로그인 가능 <b style="color:#3ddc84">'+(j.usable||0)+'</b>개 · 제외 <b style="color:#f47070">'+(j.invalid||0)+'</b>개 (이메일/비번 미비) · 2FA <b style="color:#f5c842">'+_2fa+'</b>개';
