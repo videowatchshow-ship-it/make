@@ -297,7 +297,11 @@ async function load(){
     has_session: sess.has(a.email),
     lock_reason: (FAILED[a.email]||FAILED[a.email+'@gmail.com'])?.reason || null
   })).sort((x,y) => (y.source_mtime||0) - (x.source_mtime||0))
-  document.getElementById('s-files').textContent = n.summary?.files_scanned ?? '?'
+  var _fc = n.summary?.files_scanned;
+  if(_fc == null){
+    try { var _rp = await fetch('/api/parse-report',{cache:'no-store'}).then(r=>r.json()); _fc = _rp?.last_run?.files; } catch(_){}
+  }
+  document.getElementById('s-files').textContent = (_fc ?? 0).toLocaleString()
   document.getElementById('s-acc').textContent = ALL.length.toLocaleString()
   document.getElementById('s-sess').textContent = ALL.filter(a=>a.has_session).length.toLocaleString()
   document.getElementById('s-2fa').textContent = (n.summary?.PASSWORD_2FA ?? 0).toLocaleString()
