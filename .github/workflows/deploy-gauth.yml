@@ -1,0 +1,47 @@
+name: Deploy gauth to server
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/auto-test-debugging-local-n0xjkg, claude/gauth-frontend-backend-fixes-cg2icv]
+    paths:
+      - 'gauth/index.html'
+      - 'gauth/upload_excels.js'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy frontend
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: "gauth/index.html"
+          target: "/var/www/sites/gauth/public/"
+          strip_components: 1
+
+      - name: Deploy parser
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: "gauth/upload_excels.js"
+          target: "/opt/gauth-full/"
+          strip_components: 1
+
+      - name: Restart gauth service
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          script: |
+            sudo systemctl restart gauth
+            sleep 2
+            sudo systemctl status gauth --no-pager | head -5
+            echo "=== Deploy complete ==="
+            curl -s http://localhost:4000/api/parse-report | python3 -c "import json,sys; d=json.load(sys.stdin); print('Accounts:', d.get('total_accounts',0))" 2>/dev/null || true
