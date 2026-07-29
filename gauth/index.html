@@ -433,9 +433,9 @@ function gotoPage(n){
   render()
   vp.scrollTo({top:0})
 }
-function quickLookup(email){
+async function quickLookup(email){
   document.getElementById('lookup').value = email
-  lookup()
+  await lookup()
   window.scrollTo({top:0,behavior:'smooth'})
 }
 async function openIt(email){
