@@ -51,13 +51,33 @@ async function refreshAccStats(){
     var _2fa = (j.accounts||[]).filter(function(a){return a.has2FA;}).length;
     if(el) el.innerHTML = '📄 엑셀 파일 <b style="color:#7dabff">'+_files+'</b>장 · 📊 원본 <b style="color:#7dabff">'+(j.file_total||0)+'</b>개 · 로그인 가능 <b style="color:#3ddc84">'+(j.usable||0)+'</b>개 · 제외 <b style="color:#f47070">'+(j.invalid||0)+'</b>개 (이메일/비번 미비) · 2FA <b style="color:#f5c842">'+_2fa+'</b>개';
     var mg = document.getElementById('monthlyGroups');
-    if(mg && rp && rp.last_run && rp.last_run.by_date){
-      var html = '📅 ';
+    var fileBreakdown = (rp && rp.last_run && rp.last_run.file_details) || (na.summary?.file_details) || null;
+    var mgHtml = '';
+    if(rp && rp.last_run && rp.last_run.by_date){
+      mgHtml += '📅 ';
       Object.entries(rp.last_run.by_date).sort().reverse().forEach(function(e){
-        html += '<span style="margin:0 6px;padding:3px 8px;background:#161a20;border-radius:6px">'+e[0]+': <b style="color:#3ddc84">'+e[1]+'</b></span>';
+        mgHtml += '<span style="margin:0 6px;padding:3px 8px;background:#161a20;border-radius:6px">'+e[0]+': <b style="color:#3ddc84">'+e[1]+'</b></span>';
       });
-      mg.innerHTML = html;
     }
+    if(fileBreakdown && fileBreakdown.length){
+      mgHtml += '<details style="margin-top:6px;display:inline-block;text-align:left"><summary style="cursor:pointer;color:#7dabff;font-weight:700;font-size:12px">📁 파일별 계정 수 ('+fileBreakdown.length+'개)</summary><div style="margin-top:4px;max-height:200px;overflow-y:auto">';
+      fileBreakdown.forEach(function(f,i){
+        mgHtml += '<div style="padding:2px 8px;font-size:11px;border-bottom:1px solid #1a1f26;display:flex;justify-content:space-between"><span style="color:#8a95a5;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(i+1)+'. '+f.name+'</span><span style="color:'+(f.count>0?'#3ddc84':'#f47070')+';font-weight:700">'+f.count+'개</span></div>';
+      });
+      mgHtml += '</div></details>';
+    } else {
+      var fileCounts = {};
+      (j.accounts||[]).forEach(function(a){ var src = a.source_file||'unknown'; fileCounts[src] = (fileCounts[src]||0)+1; });
+      var fileEntries = Object.entries(fileCounts).sort(function(a,b){return b[1]-a[1]});
+      if(fileEntries.length){
+        mgHtml += '<details style="margin-top:6px;display:inline-block;text-align:left"><summary style="cursor:pointer;color:#7dabff;font-weight:700;font-size:12px">📁 파일별 계정 수 ('+fileEntries.length+'개)</summary><div style="margin-top:4px;max-height:200px;overflow-y:auto">';
+        fileEntries.forEach(function(e,i){
+          mgHtml += '<div style="padding:2px 8px;font-size:11px;border-bottom:1px solid #1a1f26;display:flex;justify-content:space-between"><span style="color:#8a95a5;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(i+1)+'. '+e[0]+'</span><span style="color:#3ddc84;font-weight:700">'+e[1]+'개</span></div>';
+        });
+        mgHtml += '</div></details>';
+      }
+    }
+    if(mg) mg.innerHTML = mgHtml;
   } catch(e){}
 }
 refreshAccStats();
