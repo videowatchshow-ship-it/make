@@ -228,6 +228,10 @@ function accessBadge(a){
       out.innerHTML = statusHTML('upload', 100, '<span style="color:#f47070;font-size:15px;font-weight:700">❌ 서버 응답 타임아웃 (5분)</span>');
       btn.disabled=false; localStorage.removeItem('gauth_uploading'); updateUploadStatus();
     };
+    xhr.onerror = function(){
+      out.innerHTML = statusHTML('upload', 0, '<span style="color:#f47070;font-size:15px;font-weight:700">❌ 서버 연결 실패 — 네트워크 오류 또는 서버 다운</span>');
+      btn.disabled=false; localStorage.removeItem('gauth_uploading'); updateUploadStatus();
+    };
     var progWrap = document.getElementById('excelUpProgWrap');
     var progEl = document.getElementById('excelUpProg');
     var progTxt = document.getElementById('excelUpProgTxt');
