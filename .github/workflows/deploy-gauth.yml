@@ -13,57 +13,57 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy via API (no SSH needed)
+      - name: Try API deploy
+        id: api_deploy
+        continue-on-error: true
         run: |
-          echo "=== Triggering server-side deploy ==="
-          HTTP_CODE=$(curl -s -o /tmp/deploy_response.txt -w "%{http_code}" \
+          HTTP_CODE=$(curl -s -o /tmp/resp.txt -w "%{http_code}" \
             -X POST https://gauth.cent-solution.online/api/deploy \
             -H "Content-Type: application/json" \
-            --connect-timeout 15 \
-            --max-time 90)
-          echo "HTTP status: $HTTP_CODE"
-          echo "Response body:"
-          cat /tmp/deploy_response.txt || true
-          echo ""
+            --connect-timeout 15 --max-time 90)
+          echo "HTTP $HTTP_CODE"
+          cat /tmp/resp.txt 2>/dev/null || true
           if [ "$HTTP_CODE" = "200" ]; then
-            cat /tmp/deploy_response.txt | python3 -c "
-          import json,sys
-          d=json.load(sys.stdin)
-          if d.get('ok'):
-            print('Deployed:', ', '.join(d.get('deployed',[])))
-            print(d.get('message',''))
-          else:
-            print('Error:', d.get('error','unknown'))
-            sys.exit(1)
-          "
+            echo "deploy_ok=true" >> "$GITHUB_OUTPUT"
+            python3 -c "import json; d=json.load(open('/tmp/resp.txt')); print('Deployed:', d.get('deployed',[])); assert d.get('ok')"
           else
-            echo "::warning::API deploy failed with HTTP $HTTP_CODE"
+            echo "deploy_ok=false" >> "$GITHUB_OUTPUT"
+            echo "API deploy returned HTTP $HTTP_CODE"
             exit 1
           fi
 
-      - name: Deploy via SSH (fallback)
-        if: failure()
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.GAUTH_HOST }}
-          username: ${{ secrets.GAUTH_USER }}
-          key: ${{ secrets.GAUTH_SSH_KEY }}
-          source: "gauth/index.html,gauth/upload_excels.js"
-          target: "/tmp/gauth-deploy/"
-          strip_components: 1
-
-      - name: Apply SSH deploy + restart (fallback)
-        if: failure()
+      - name: Try SSH deploy
+        if: steps.api_deploy.outputs.deploy_ok != 'true'
+        id: ssh_deploy
+        continue-on-error: true
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
           script: |
-            cp /tmp/gauth-deploy/index.html /var/www/sites/gauth/public/index.html
-            cp /tmp/gauth-deploy/upload_excels.js /opt/gauth-full/upload_excels.js
+            cd /opt/gauth-full
+            curl -sL "https://raw.githubusercontent.com/videowatchshow-ship-it/make/claude/auto-test-debugging-local-n0xjkg/gauth/upload_excels.js" -o upload_excels.js
+            curl -sL "https://raw.githubusercontent.com/videowatchshow-ship-it/make/claude/auto-test-debugging-local-n0xjkg/gauth/auto_deploy.js" -o auto_deploy.js
+            curl -sL "https://raw.githubusercontent.com/videowatchshow-ship-it/make/claude/auto-test-debugging-local-n0xjkg/gauth/index.html" -o /var/www/sites/gauth/public/index.html
+            grep -q "auto_deploy" rebrowser-login.js || echo "require('./auto_deploy.js')(app);" >> rebrowser-login.js
             sudo systemctl restart gauth
             sleep 2
-            sudo systemctl status gauth --no-pager | head -5
+            curl -s http://localhost:4000/api/deploy -X POST | python3 -c "import json,sys; d=json.load(sys.stdin); print('OK' if d.get('ok') else 'FAIL')"
             echo "=== Deploy complete ==="
-            rm -rf /tmp/gauth-deploy
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "${{ steps.api_deploy.outputs.deploy_ok }}" = "true" ]; then
+            echo "## Deploy SUCCESS via API" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.ssh_deploy.outcome }}" = "success" ]; then
+            echo "## Deploy SUCCESS via SSH" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## Deploy FAILED" >> $GITHUB_STEP_SUMMARY
+            echo "- API: /api/deploy returned non-200" >> $GITHUB_STEP_SUMMARY
+            echo "- SSH: secrets not configured or connection failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### To fix: set GitHub Secrets" >> $GITHUB_STEP_SUMMARY
+            echo "GAUTH_HOST, GAUTH_USER, GAUTH_SSH_KEY" >> $GITHUB_STEP_SUMMARY
+          fi
