@@ -184,11 +184,12 @@ function accessBadge(a){
     for(var i=0;i<valid.length;i++) fd.append('files', valid[i]);
     appendLog('🌐 POST /api/upload-excels 전송 시작…');
     localStorage.setItem('gauth_uploading', Date.now());
+    updateUploadStatus();
     /* MDN 표준 XMLHttpRequest + upload progress event (fetch는 upload 진행률 미지원) */
     var xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/upload-excels', true);
     xhr.timeout = 300000;
-    xhr.ontimeout = function(){ appendLog('❌ 서버 응답 타임아웃 (5분). 서버 로그 확인 필요.'); btn.disabled=false; localStorage.removeItem('gauth_uploading'); };
+    xhr.ontimeout = function(){ appendLog('❌ 서버 응답 타임아웃 (5분).'); btn.disabled=false; localStorage.removeItem('gauth_uploading'); updateUploadStatus(); };
     /* MDN <progress> 그래프 표시 */
     var progWrap = document.getElementById('excelUpProgWrap');
     var progEl = document.getElementById('excelUpProg');
@@ -247,10 +248,20 @@ function accessBadge(a){
         var banner = document.createElement('div');
         banner.id = 'uploadDoneBanner';
         banner.style.cssText = 'position:fixed;top:0;left:0;right:0;padding:14px 20px;background:linear-gradient(135deg,#0d3222,#1c4a35);color:#3ddc84;font-size:15px;font-weight:700;text-align:center;z-index:9999;border-bottom:2px solid #3ddc84;animation:bannerIn .3s ease';
-        banner.textContent = '✅ 엑셀 업로드 완료 — ' + (d.total_parsed||0) + '건 파싱, ' + (d.added||0) + '건 추가, ' + (d.updated||0) + '건 업데이트';
+        banner.textContent = '✅ 엑셀 업로드 완료 — ' + (d.total_parsed||0) + '건 파싱, ' + (d.added||0) + '건 추가, ' + (d.updated||0) + '건 업데이트, 마스터 총 ' + (d.total_master||0) + '건';
         document.body.prepend(banner);
-        setTimeout(function(){ var b=document.getElementById('uploadDoneBanner'); if(b) b.remove(); }, 8000);
+        setTimeout(function(){ var b=document.getElementById('uploadDoneBanner'); if(b) b.remove(); }, 15000);
         localStorage.removeItem('gauth_uploading');
+        localStorage.setItem('gauth_last_upload', JSON.stringify({
+          time: new Date().toLocaleString('ko-KR',{timeZone:'Asia/Seoul'}),
+          total_parsed: d.total_parsed||0,
+          added: d.added||0,
+          updated: d.updated||0,
+          total_master: d.total_master||0,
+          files_count: (d.files||[]).length
+        }));
+        updateUploadStatus();
+        load();
         return;
       }
     };
@@ -275,7 +286,35 @@ function accessBadge(a){
     <span>2FA <b id="s-2fa">–</b></span>
     <span>비번만 <b id="s-pw">–</b></span>
   </div>
+  <div id="upload-status" style="margin-top:6px;padding:6px 12px;border-radius:6px;font-size:12px;font-family:monospace;display:none"></div>
 </header>
+<script>
+function updateUploadStatus(){
+  var el = document.getElementById('upload-status');
+  if(!el) return;
+  var uploading = localStorage.getItem('gauth_uploading');
+  var lastUp = localStorage.getItem('gauth_last_upload');
+  if(uploading){
+    el.style.display='block';
+    el.style.background='#2a1a00';
+    el.style.border='1px solid #d29922';
+    el.style.color='#d29922';
+    el.textContent='⏳ 업로드 진행 중… (시작: '+new Date(parseInt(uploading)).toLocaleTimeString('ko-KR')+')';
+  } else if(lastUp){
+    try{
+      var d=JSON.parse(lastUp);
+      el.style.display='block';
+      el.style.background='#0d2818';
+      el.style.border='1px solid #3ddc84';
+      el.style.color='#3ddc84';
+      el.textContent='✅ 마지막 업로드: '+d.time+' | 파일 '+d.files_count+'개 → '+d.total_parsed+'건 파싱, '+d.added+'건 추가, '+d.updated+'건 업데이트 | 마스터 총 '+d.total_master+'건';
+    }catch(e){ el.style.display='none'; }
+  } else {
+    el.style.display='none';
+  }
+}
+updateUploadStatus();
+</script>
 
 <!-- 계정 정보 조회 -->
 <div style="padding:14px 20px;background:#0f1620;border-bottom:1px solid #22282f;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
