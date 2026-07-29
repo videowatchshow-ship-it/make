@@ -1,4 +1,5 @@
-name: Diagnose and bootstrap gauth server
+name: Diagnose gauth server
+
 on:
   workflow_dispatch:
 
@@ -8,51 +9,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Full server diagnostics
-        run: |
-          echo "=== 1. Express route map ==="
-          for ep in "/" "/api/accounts" "/api/accounts?q=test" "/api/stats" "/api/conflicts" "/api/parse-report" "/api/upload-excels" "/api/deploy" "/api/health" "/api/search" "/api/search?q=test" "/api/fail-queue" "/api/reparse" "/api/git-pull" "/api/update" "/api/restart" "/api/self-update" "/webhook" "/deploy" "/pull"; do
-            CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://gauth.cent-solution.online${ep}" --max-time 5)
-            echo "  GET  ${ep} => HTTP ${CODE}"
-          done
-          echo ""
-          echo "=== POST endpoints ==="
-          for ep in "/api/upload-excels" "/api/deploy" "/api/git-pull" "/api/update" "/api/self-update" "/api/restart" "/webhook" "/deploy" "/pull" "/api/webhook"; do
-            CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "https://gauth.cent-solution.online${ep}" -H "Content-Type: application/json" -d '{}' --max-time 5)
-            echo "  POST ${ep} => HTTP ${CODE}"
-          done
-
-          echo ""
-          echo "=== 2. /api/parse-report full response ==="
-          curl -s https://gauth.cent-solution.online/api/parse-report | python3 -m json.tool 2>/dev/null || curl -s https://gauth.cent-solution.online/api/parse-report
-
-          echo ""
-          echo "=== 3. /api/accounts sample (first 3) ==="
-          curl -s "https://gauth.cent-solution.online/api/accounts" | python3 -c "
-import json,sys
-d=json.load(sys.stdin)
-if isinstance(d, list):
-  print(f'Total accounts: {len(d)}')
-  for a in d[:3]: print(json.dumps(a, indent=2, ensure_ascii=False))
-elif isinstance(d, dict):
-  accs = d.get('accounts', d.get('data', []))
-  print(f'Total: {len(accs) if isinstance(accs,list) else "unknown"}')
-  print(json.dumps(d, indent=2, ensure_ascii=False)[:2000])
-" 2>/dev/null || echo 'parse error'
-
-          echo ""
-          echo "=== 4. Server response headers for various paths ==="
-          curl -sI https://gauth.cent-solution.online/ | grep -i 'server\|x-powered\|express\|via'
-          curl -sI https://gauth.cent-solution.online/api/accounts | grep -i 'server\|x-powered\|express\|content-type'
-
-          echo ""
-          echo "=== 5. Check if server pulls from git ==="
-          curl -s -o /dev/null -w "POST /api/git-pull => HTTP %{http_code}" -X POST "https://gauth.cent-solution.online/api/git-pull" -H "Content-Type: application/json" --max-time 10
-          echo ""
-          curl -s -o /tmp/gitpull.txt -w "POST /pull => HTTP %{http_code}" -X POST "https://gauth.cent-solution.online/pull" -H "Content-Type: application/json" --max-time 10
-          echo ""
-          cat /tmp/gitpull.txt 2>/dev/null
-          echo ""
-          curl -s -o /tmp/webhook.txt -w "POST /webhook => HTTP %{http_code}" -X POST "https://gauth.cent-solution.online/webhook" -H "Content-Type: application/json" -d '{"ref":"refs/heads/claude/auto-test-debugging-local-n0xjkg"}' --max-time 10
-          echo ""
-          cat /tmp/webhook.txt 2>/dev/null
+      - name: Check all endpoints
+        run: bash gauth/diagnose.sh
