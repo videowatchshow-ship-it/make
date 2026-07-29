@@ -36,6 +36,8 @@ function isTotpLike(s) {
   s = String(s).trim();
   if (s.includes('@')) return false;
   if (/^[0-9]+$/.test(s)) return false;
+  if (/^https?:\/\//i.test(s)) return false;
+  if (/[\/\\:;!#$%^&*()=+\[\]{}|<>?]/.test(s)) return false;
   const n = normalizeTotp(s);
   return n.length >= 16 && n.length <= 128;
 }
@@ -101,36 +103,24 @@ function analyzeColumns(rows) {
   const mapping = {};
   const used = new Set();
 
-  // 1. email column: highest email ratio, must be >50%
-  let bestEmail = null, bestEmailRatio = 0;
-  for (const s of stats) {
-    if (s.nonEmpty === 0) continue;
-    const ratio = s.emails / s.nonEmpty;
-    if (ratio > bestEmailRatio && ratio > 0.5) {
-      bestEmailRatio = ratio;
-      bestEmail = s.col;
-    }
-  }
-  if (bestEmail !== null) {
-    mapping.email = bestEmail;
-    used.add(bestEmail);
-  } else {
-    return {};
-  }
+  // 1. find ALL email-like columns (>50% email pattern)
+  const emailCols = stats
+    .filter(s => s.nonEmpty > 0 && s.emails / s.nonEmpty > 0.5)
+    .sort((a, b) => {
+      const rd = (b.emails / b.nonEmpty) - (a.emails / a.nonEmpty);
+      return rd !== 0 ? rd : a.col - b.col;
+    });
 
-  // 2. recovery email: second email-heavy column (>40%)
-  let bestRecov = null, bestRecovRatio = 0;
-  for (const s of stats) {
-    if (used.has(s.col) || s.nonEmpty === 0) continue;
-    const ratio = s.emails / s.nonEmpty;
-    if (ratio > bestRecovRatio && ratio > 0.4) {
-      bestRecovRatio = ratio;
-      bestRecov = s.col;
-    }
-  }
-  if (bestRecov !== null) {
-    mapping.recovery = bestRecov;
-    used.add(bestRecov);
+  if (!emailCols.length) return {};
+
+  // first email column = main email (by ratio, then by position)
+  mapping.email = emailCols[0].col;
+  used.add(emailCols[0].col);
+
+  // second email column = recovery
+  if (emailCols.length > 1) {
+    mapping.recovery = emailCols[1].col;
+    used.add(emailCols[1].col);
   }
 
   // 3. totp column: highest totp ratio, >40%
