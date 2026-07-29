@@ -166,6 +166,203 @@ function analyzeColumns(rows) {
   return mapping;
 }
 
+// ── label-value pair detection ──
+
+const LABEL_PATTERNS = {
+  email:    /^(e[-_]?mail|login|account|user|gmail|id|아이디|계정|메일)\s*[:：]/i,
+  password: /^(pass(word)?|pw|pwd|비밀번호|비번|암호)\s*[:：]/i,
+  totp:     /^(totp|2fa|secret|otp|mfa|인증|코드|시크릿)\s*[:：]/i,
+  recovery: /^(recover|backup|alt.*mail|second.*mail|복구|보조)\s*[:：]/i,
+  youtube:  /^(youtube|yt|url|link|channel|채널|주소)\s*[:：]/i,
+};
+
+function extractLabelValue(cell) {
+  const s = String(cell || '').trim();
+  for (const [field, pattern] of Object.entries(LABEL_PATTERNS)) {
+    const m = s.match(pattern);
+    if (m) return { field, value: s.slice(m[0].length).trim() };
+  }
+  return null;
+}
+
+function classifyValue(s) {
+  s = String(s || '').trim();
+  if (!s) return null;
+  if (isEmail(s)) return 'email';
+  if (isTotpLike(s)) return 'totp';
+  if (isUrlLike(s)) return 'url';
+  return 'unknown';
+}
+
+// ── vertical/stacked layout detection ──
+
+function tryVerticalExtract(rows, sourceFile) {
+  const maxCols = Math.max(...rows.map(r => (r && r.length) || 0));
+  if (maxCols > 3) return null;
+
+  // Case 1: label-value pairs in 2 columns (label in col 0, value in col 1)
+  // Case 2: label:value in single column
+  // Case 3: stacked single column (email, password, totp in consecutive rows)
+
+  const accounts = [];
+
+  // try label-value pair extraction first
+  const lvAccounts = tryLabelValueExtract(rows, maxCols, sourceFile);
+  if (lvAccounts && lvAccounts.length) return lvAccounts;
+
+  // try stacked single/dual column (consecutive rows grouped by blank-line or by email detection)
+  const stackedAccounts = tryStackedExtract(rows, maxCols, sourceFile);
+  if (stackedAccounts && stackedAccounts.length) return stackedAccounts;
+
+  return null;
+}
+
+function tryLabelValueExtract(rows, maxCols, sourceFile) {
+  let labelCount = 0;
+  for (let i = 0; i < Math.min(20, rows.length); i++) {
+    const row = rows[i];
+    if (!row) continue;
+    // check col 0 for "label: value" pattern
+    const c0 = String((row[0]) || '').trim();
+    if (extractLabelValue(c0)) { labelCount++; continue; }
+    // check if single-cell has "label: value"
+    if (maxCols <= 2) {
+      let found = false;
+      for (let c = 0; c < (row.length || 0); c++) {
+        if (extractLabelValue(String(row[c] || '').trim())) { labelCount++; found = true; break; }
+      }
+      if (found) continue;
+    }
+    // 2-col: col0 matches HEADER_PATTERNS (no colon), col1 = value
+    if (maxCols === 2 && row.length >= 2) {
+      const label = String((row[0]) || '').trim();
+      for (const [, pattern] of Object.entries(HEADER_PATTERNS)) {
+        if (pattern.test(label)) { labelCount++; break; }
+      }
+    }
+  }
+  if (labelCount < 2) return null;
+
+  const accounts = [];
+  let cur = {};
+
+  function flushCur() {
+    if (cur.email && isEmail(cur.email)) {
+      accounts.push({
+        email: cur.email,
+        password: cur.password || '',
+        totp_secret: cur.totp && isTotpLike(cur.totp) ? normalizeTotp(cur.totp) : (cur.totp || ''),
+        recovery_email: cur.recovery || '',
+        youtube_url: cur.youtube || '',
+        extra: [],
+        source_file: sourceFile || 'unknown',
+      });
+    }
+    cur = {};
+  }
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row) { flushCur(); continue; }
+
+    const allEmpty = row.every(c => !String(c || '').trim());
+    if (allEmpty) { flushCur(); continue; }
+
+    let found = false;
+    for (let c = 0; c < (row.length || 0); c++) {
+      const cell = String(row[c] || '').trim();
+      const lv = extractLabelValue(cell);
+      if (lv) {
+        // value might be in next column
+        let val = lv.value;
+        if (!val && c + 1 < row.length) val = String(row[c + 1] || '').trim();
+        if (lv.field === 'email' && cur.email && isEmail(cur.email)) flushCur();
+        cur[lv.field] = val;
+        found = true;
+        break;
+      }
+    }
+
+    // 2-col label-value: col0=label text (no colon), col1=value — matched by HEADER_PATTERNS
+    if (!found && maxCols === 2) {
+      const label = String((row[0]) || '').trim();
+      const value = String((row[1]) || '').trim();
+      for (const [field, pattern] of Object.entries(HEADER_PATTERNS)) {
+        if (pattern.test(label)) {
+          if (field === 'email' && cur.email && isEmail(cur.email)) flushCur();
+          cur[field] = value;
+          found = true;
+          break;
+        }
+      }
+    }
+  }
+  flushCur();
+  return accounts.length ? accounts : null;
+}
+
+function tryStackedExtract(rows, maxCols, sourceFile) {
+  if (maxCols > 3) return null;
+
+  // collect all non-empty values in reading order
+  const values = [];
+  for (const row of rows) {
+    if (!row) { values.push(null); continue; } // blank row = separator
+    const allEmpty = row.every(c => !String(c || '').trim());
+    if (allEmpty) { values.push(null); continue; }
+    for (let c = 0; c < row.length; c++) {
+      const v = String(row[c] || '').trim();
+      if (v) values.push(v);
+    }
+  }
+
+  // group by: start new account on each email found
+  const accounts = [];
+  let cur = null;
+  let afterBlank = false;
+
+  for (const v of values) {
+    if (v === null) {
+      if (cur && cur.email) accounts.push(cur);
+      cur = null;
+      afterBlank = true;
+      continue;
+    }
+    if (isEmail(v)) {
+      if (cur && cur.email && !cur.recovery && (cur.password || cur.totp) && cur._hasBlankBefore) {
+        cur.recovery = v;
+        continue;
+      }
+      if (cur && cur.email) accounts.push(cur);
+      cur = { email: v, password: '', totp: '', recovery: '', youtube: '', extra: [], _hasBlankBefore: afterBlank, source_file: sourceFile || 'unknown' };
+      afterBlank = false;
+      continue;
+    }
+
+    if (!cur) continue;
+
+    // classify and assign to first empty matching slot
+    if (isTotpLike(v) && !cur.totp) { cur.totp = v; }
+    else if (isUrlLike(v) && !cur.youtube) { cur.youtube = v; }
+    else if (isEmail(v) && !cur.recovery) { cur.recovery = v; }
+    else if (!cur.password) { cur.password = v; }
+    else { cur.extra.push(v); }
+  }
+  if (cur && cur.email) accounts.push(cur);
+
+  if (accounts.length < 1) return null;
+
+  return accounts.map(a => ({
+    email: a.email,
+    password: a.password || '',
+    totp_secret: a.totp && isTotpLike(a.totp) ? normalizeTotp(a.totp) : (a.totp || ''),
+    recovery_email: a.recovery || '',
+    youtube_url: a.youtube || '',
+    extra: a.extra || [],
+    source_file: a.source_file,
+  }));
+}
+
 // ── main extraction ──
 
 function extractAccountsFromSheet(sheet, sourceFile) {
@@ -185,9 +382,17 @@ function extractAccountsFromSheet(sheet, sourceFile) {
     }
   }
 
-  // no header → analyze column data
+  // no header → try vertical/stacked layout (1~2 columns, label-value pairs, etc.)
   if (!mapping) {
-    // skip non-data first row if present
+    const maxCols = Math.max(...rows.map(r => (r && r.length) || 0));
+    if (maxCols <= 3) {
+      const vertAccounts = tryVerticalExtract(rows, sourceFile);
+      if (vertAccounts && vertAccounts.length) return vertAccounts;
+    }
+  }
+
+  // no header → analyze column data (standard horizontal layout)
+  if (!mapping) {
     let sampleStart = 0;
     if (rows.length > 1) {
       const firstCell = String((rows[0] && rows[0][0]) || '').trim();
@@ -272,4 +477,4 @@ function parseMultipleFiles(filePaths) {
   return { accounts: allAccounts, report };
 }
 
-module.exports = { parseExcelFile, parseMultipleFiles, extractAccountsFromSheet, normalizeTotp, isTotpLike, isEmail, analyzeColumns };
+module.exports = { parseExcelFile, parseMultipleFiles, extractAccountsFromSheet, normalizeTotp, isTotpLike, isEmail, analyzeColumns, classifyValue, extractLabelValue, tryVerticalExtract, tryStackedExtract, tryLabelValueExtract };
