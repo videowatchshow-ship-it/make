@@ -592,7 +592,9 @@ async function lookup(){
   if(window.FILTERED && FILTERED.length){
     const fi = FILTERED.findIndex(a=>a.email===j.email)
     if(fi>=0){
-      PAGE = Math.floor(fi/PAGE_SIZE)+1
+      const cur = FILTERED.splice(fi, 1)[0]
+      FILTERED.unshift(cur)
+      PAGE = 1
       render()
     }
   }
