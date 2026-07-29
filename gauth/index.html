@@ -551,7 +551,40 @@ async function lookup(){
   box.innerHTML = '<span style="color:#8a95a5">조회 중…</span>'
   const r = await fetch('/api/lookup/'+encodeURIComponent(email))
   const j = await r.json()
-  if(j.error){box.innerHTML=`<span style="color:#f47070">❌ ${j.error}</span>`;return}
+  if(j.error){
+    // API 실패 시 로컬 ALL에서 부분 검색 시도
+    const local = (window.ALL||[]).find(a=>a.email.toLowerCase()===email.toLowerCase()
+      || a.email.toLowerCase().includes(email.toLowerCase()))
+    if(local){
+      // 로컬 데이터로 표시
+      document.getElementById('lookup').value = local.email
+      localStorage.setItem('gauth_last_lookup', local.email)
+      let code2='—'
+      if(local.totp_secret){try{const c=await(await fetch('/codes/'+local.totp_secret)).json();code2=c.code||'—'}catch{}}
+      box.innerHTML = `
+        <div style="background:#2a1a00;border:1px solid #d29922;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#d29922">⚠ 서버 조회 실패 — 로컬 캐시 데이터로 표시 중</div>
+        <div style="display:grid;grid-template-columns:130px 1fr;gap:10px 14px">
+          <div style="color:#8a95a5">이메일</div>
+          <div><b style="font-size:15px">${local.email}</b>${cp(local.email)}</div>
+          <div style="color:#8a95a5">비밀번호</div>
+          <div class="mono" style="color:#3ddc84;font-size:15px">${local.password||'—'}${cp(local.password)}</div>
+          <div style="color:#8a95a5">2FA 시크릿</div>
+          <div class="mono">${local.totp_secret||'—'}${cp(local.totp_secret)}</div>
+          <div style="color:#8a95a5">2FA 코드 (지금)</div>
+          <div class="mono" style="color:#7dabff;font-size:22px;font-weight:700;letter-spacing:3px"><span id="lookup-code">${code2}</span>${local.totp_secret?cp('_','lookup-code'):''} ${local.totp_secret?`<button style="background:#2a323c;padding:4px 10px;font-size:12px;margin-left:8px;color:#c9d2dc" onclick="lookupRefreshCode('${local.totp_secret}',this)">🔄 새로고침</button>`:''}</div>
+          <div style="color:#8a95a5">출처</div><div class="mono" style="font-size:11px;color:#8a95a5">${local.source_file||'—'}</div>
+        </div>`
+      if(window.FILTERED && FILTERED.length){
+        const fi2 = FILTERED.findIndex(a=>a.email===local.email)
+        if(fi2>=0){ FILTERED.unshift(FILTERED.splice(fi2,1)[0]) }
+        else { FILTERED.unshift(local) }
+        PAGE=1; render()
+      }
+      return
+    }
+    box.innerHTML=`<span style="color:#f47070">❌ ${j.error}</span><div style="color:#8a95a5;font-size:12px;margin-top:6px">이 이메일이 업로드된 엑셀에 없거나, 파서가 인식 못했을 수 있습니다.<br>엑셀 파일에 이 이메일이 있는지 확인해주세요.</div>`
+    return
+  }
   let code='—'
   if(j.totp_secret){try{const c=await(await fetch('/codes/'+j.totp_secret)).json();code=c.code||'—'}catch{}}
   const yt = j.youtube_url || ''
