@@ -13,35 +13,51 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy frontend
+      - name: Deploy via API (no SSH needed)
+        run: |
+          echo "=== Triggering server-side deploy ==="
+          RESPONSE=$(curl -sf -X POST https://gauth.cent-solution.online/api/deploy \
+            -H "Content-Type: application/json" \
+            --connect-timeout 15 \
+            --max-time 60 \
+            2>&1) || {
+            echo "::warning::API deploy failed, falling back to SSH deploy"
+            exit 1
+          }
+          echo "$RESPONSE" | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)
+          if d.get('ok'):
+            print('✅ Deployed:', ', '.join(d.get('deployed',[])))
+            print(d.get('message',''))
+          else:
+            print('❌ Error:', d.get('error','unknown'))
+            sys.exit(1)
+          "
+
+      - name: Deploy via SSH (fallback)
+        if: failure()
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          source: "gauth/index.html"
-          target: "/var/www/sites/gauth/public/"
+          source: "gauth/index.html,gauth/upload_excels.js"
+          target: "/tmp/gauth-deploy/"
           strip_components: 1
 
-      - name: Deploy parser
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.GAUTH_HOST }}
-          username: ${{ secrets.GAUTH_USER }}
-          key: ${{ secrets.GAUTH_SSH_KEY }}
-          source: "gauth/upload_excels.js"
-          target: "/opt/gauth-full/"
-          strip_components: 1
-
-      - name: Restart gauth service
+      - name: Apply SSH deploy + restart (fallback)
+        if: failure()
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
           script: |
+            cp /tmp/gauth-deploy/index.html /var/www/sites/gauth/public/index.html
+            cp /tmp/gauth-deploy/upload_excels.js /opt/gauth-full/upload_excels.js
             sudo systemctl restart gauth
             sleep 2
             sudo systemctl status gauth --no-pager | head -5
             echo "=== Deploy complete ==="
-            curl -s http://localhost:4000/api/parse-report | python3 -c "import json,sys; d=json.load(sys.stdin); print('Accounts:', d.get('total_accounts',0))" 2>/dev/null || true
+            rm -rf /tmp/gauth-deploy

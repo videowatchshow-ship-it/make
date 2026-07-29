@@ -51,13 +51,33 @@ async function refreshAccStats(){
     var _2fa = (j.accounts||[]).filter(function(a){return a.has2FA;}).length;
     if(el) el.innerHTML = '📄 엑셀 파일 <b style="color:#7dabff">'+_files+'</b>장 · 📊 원본 <b style="color:#7dabff">'+(j.file_total||0)+'</b>개 · 로그인 가능 <b style="color:#3ddc84">'+(j.usable||0)+'</b>개 · 제외 <b style="color:#f47070">'+(j.invalid||0)+'</b>개 (이메일/비번 미비) · 2FA <b style="color:#f5c842">'+_2fa+'</b>개';
     var mg = document.getElementById('monthlyGroups');
-    if(mg && rp && rp.last_run && rp.last_run.by_date){
-      var html = '📅 ';
+    var fileBreakdown = (rp && rp.last_run && rp.last_run.file_details) || (na.summary?.file_details) || null;
+    var mgHtml = '';
+    if(rp && rp.last_run && rp.last_run.by_date){
+      mgHtml += '📅 ';
       Object.entries(rp.last_run.by_date).sort().reverse().forEach(function(e){
-        html += '<span style="margin:0 6px;padding:3px 8px;background:#161a20;border-radius:6px">'+e[0]+': <b style="color:#3ddc84">'+e[1]+'</b></span>';
+        mgHtml += '<span style="margin:0 6px;padding:3px 8px;background:#161a20;border-radius:6px">'+e[0]+': <b style="color:#3ddc84">'+e[1]+'</b></span>';
       });
-      mg.innerHTML = html;
     }
+    if(fileBreakdown && fileBreakdown.length){
+      mgHtml += '<details style="margin-top:6px;display:inline-block;text-align:left"><summary style="cursor:pointer;color:#7dabff;font-weight:700;font-size:12px">📁 파일별 계정 수 ('+fileBreakdown.length+'개)</summary><div style="margin-top:4px;max-height:200px;overflow-y:auto">';
+      fileBreakdown.forEach(function(f,i){
+        mgHtml += '<div style="padding:2px 8px;font-size:11px;border-bottom:1px solid #1a1f26;display:flex;justify-content:space-between"><span style="color:#8a95a5;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(i+1)+'. '+f.name+'</span><span style="color:'+(f.count>0?'#3ddc84':'#f47070')+';font-weight:700">'+f.count+'개</span></div>';
+      });
+      mgHtml += '</div></details>';
+    } else {
+      var fileCounts = {};
+      (j.accounts||[]).forEach(function(a){ var src = a.source_file||'unknown'; fileCounts[src] = (fileCounts[src]||0)+1; });
+      var fileEntries = Object.entries(fileCounts).sort(function(a,b){return b[1]-a[1]});
+      if(fileEntries.length){
+        mgHtml += '<details style="margin-top:6px;display:inline-block;text-align:left"><summary style="cursor:pointer;color:#7dabff;font-weight:700;font-size:12px">📁 파일별 계정 수 ('+fileEntries.length+'개)</summary><div style="margin-top:4px;max-height:200px;overflow-y:auto">';
+        fileEntries.forEach(function(e,i){
+          mgHtml += '<div style="padding:2px 8px;font-size:11px;border-bottom:1px solid #1a1f26;display:flex;justify-content:space-between"><span style="color:#8a95a5;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(i+1)+'. '+e[0]+'</span><span style="color:#3ddc84;font-weight:700">'+e[1]+'개</span></div>';
+        });
+        mgHtml += '</div></details>';
+      }
+    }
+    if(mg) mg.innerHTML = mgHtml;
   } catch(e){}
 }
 refreshAccStats();
@@ -167,30 +187,47 @@ function accessBadge(a){
   btn.addEventListener('click', function(){
     if(!window._picked.length){ out.textContent = '⚠️ 파일 선택 먼저'; return; }
     btn.disabled = true;
-    /* 실시간 로그 배열 (MDN XHR progress event로 진행상황 표시) */
-    var log = [];
-    function appendLog(line){ log.push('[' + new Date().toLocaleTimeString() + '] ' + line); out.textContent = log.join(String.fromCharCode(10)); }
-    appendLog('▶ 시작: ' + window._picked.length + '개 파일 준비');
-    var totalBytes = 0;
-    for(var i=0;i<window._picked.length;i++){
-      totalBytes += window._picked[i].size;
-      appendLog('  📄 ' + (i+1) + '/' + window._picked.length + ' ' + window._picked[i].name + ' (' + Math.round(window._picked[i].size/1024) + 'KB)');
-    }
-    appendLog('📦 총 ' + Math.round(totalBytes/1024) + 'KB · FormData 구성 중…');
+    var startTime = Date.now();
     var valid = window._picked.filter(function(f){ return f.size > 0 && f.name.indexOf('~$') !== 0; });
-    if(!valid.length){ appendLog('⚠️ 유효한 파일 없음 (0KB·임시파일 제외됨)'); btn.disabled=false; return; }
-    if(valid.length < window._picked.length) appendLog('⚠️ ' + (window._picked.length - valid.length) + '개 제외 (0KB 또는 ~$ 임시파일)');
+    var skipped = window._picked.length - valid.length;
+    var totalKB = Math.round(valid.reduce(function(s,f){return s+f.size},0)/1024);
+    if(!valid.length){ out.innerHTML='<div style="color:#f47070;font-size:14px;padding:12px">❌ 유효한 파일 없음 (0KB·임시파일만 있음)</div>'; btn.disabled=false; return; }
+    function statusHTML(phase, pct, detail, result){
+      var phases = [
+        {id:'prep',label:'준비'},
+        {id:'upload',label:'업로드'},
+        {id:'parse',label:'서버 파싱'},
+        {id:'done',label:'완료'}
+      ];
+      var h = '<div style="display:flex;gap:6px;margin-bottom:12px">';
+      var pi = phases.findIndex(function(p){return p.id===phase});
+      phases.forEach(function(p,i){
+        var active = i===pi;
+        var done = i<pi || phase==='done';
+        var bg = done?'#3ddc84':active?'#2b6cff':'#2a323c';
+        var fg = done?'#000':active?'#fff':'#8a95a5';
+        h+='<div style="flex:1;text-align:center;padding:6px 0;border-radius:4px;font-size:11px;font-weight:700;background:'+bg+';color:'+fg+'">'+(done?'✓ ':active?'● ':'')+p.label+'</div>';
+      });
+      h+='</div>';
+      if(pct>=0 && phase==='upload'){
+        h+='<div style="background:#1a1f26;border-radius:6px;overflow:hidden;height:8px;margin-bottom:8px"><div style="height:100%;background:linear-gradient(90deg,#2b6cff,#3ddc84);width:'+pct+'%;transition:width .2s"></div></div>';
+      }
+      h+='<div style="font-size:13px;color:#c9d2dc;font-family:monospace">'+detail+'</div>';
+      if(result) h+=result;
+      return h;
+    }
+    out.innerHTML = statusHTML('prep', -1, valid.length+'개 파일 · '+totalKB+'KB'+(skipped?' ('+skipped+'개 임시파일 제외)':''));
     var fd = new FormData();
     for(var i=0;i<valid.length;i++) fd.append('files', valid[i]);
-    appendLog('🌐 POST /api/upload-excels 전송 시작…');
     localStorage.setItem('gauth_uploading', Date.now());
     updateUploadStatus();
-    /* MDN 표준 XMLHttpRequest + upload progress event (fetch는 upload 진행률 미지원) */
     var xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/upload-excels', true);
     xhr.timeout = 300000;
-    xhr.ontimeout = function(){ appendLog('❌ 서버 응답 타임아웃 (5분).'); btn.disabled=false; localStorage.removeItem('gauth_uploading'); updateUploadStatus(); };
-    /* MDN <progress> 그래프 표시 */
+    xhr.ontimeout = function(){
+      out.innerHTML = statusHTML('upload', 100, '<span style="color:#f47070;font-size:15px;font-weight:700">❌ 서버 응답 타임아웃 (5분)</span>');
+      btn.disabled=false; localStorage.removeItem('gauth_uploading'); updateUploadStatus();
+    };
     var progWrap = document.getElementById('excelUpProgWrap');
     var progEl = document.getElementById('excelUpProg');
     var progTxt = document.getElementById('excelUpProgTxt');
@@ -198,57 +235,66 @@ function accessBadge(a){
     xhr.upload.addEventListener('progress', function(ev){
       if(ev.lengthComputable){
         var pct = Math.round(100*ev.loaded/ev.total);
-        if(progEl){ progEl.value=pct; }
-        if(progTxt){ progTxt.textContent = pct + '% (' + Math.round(ev.loaded/1024) + '/' + Math.round(ev.total/1024) + 'KB)'; }
-        var last = log[log.length-1]||'';
-        if(last.indexOf('🚀 업로드')===0){ log[log.length-1] = '[' + new Date().toLocaleTimeString() + '] 🚀 업로드 ' + pct + '% (' + Math.round(ev.loaded/1024) + '/' + Math.round(ev.total/1024) + 'KB)'; out.textContent = log.join(String.fromCharCode(10)); }
-        else appendLog('🚀 업로드 ' + pct + '% (' + Math.round(ev.loaded/1024) + '/' + Math.round(ev.total/1024) + 'KB)');
+        if(progEl) progEl.value=pct;
+        if(progTxt) progTxt.textContent=pct+'%';
+        out.innerHTML = statusHTML('upload', pct, '전송 중 '+Math.round(ev.loaded/1024)+'/'+Math.round(ev.total/1024)+'KB');
       }
     });
-    xhr.upload.addEventListener('load', function(){ if(progEl){progEl.value=100;} if(progTxt){progTxt.textContent='100% · 서버 처리 중…';} appendLog('✅ 업로드 완료 · 서버 파싱 대기…'); });
-    xhr.upload.addEventListener('error', function(){ appendLog('❌ 업로드 실패'); btn.disabled=false; localStorage.removeItem('gauth_uploading'); });
-    xhr.upload.addEventListener('abort', function(){ appendLog('⚠️ 업로드 중단'); btn.disabled=false; localStorage.removeItem('gauth_uploading'); });
+    xhr.upload.addEventListener('load', function(){
+      if(progEl) progEl.value=100;
+      if(progTxt) progTxt.textContent='100%';
+      out.innerHTML = statusHTML('parse', -1, '서버에서 '+valid.length+'개 파일 파싱 중…');
+    });
+    xhr.upload.addEventListener('error', function(){
+      out.innerHTML = statusHTML('upload', 0, '<span style="color:#f47070;font-size:15px;font-weight:700">❌ 업로드 실패 — 네트워크 오류</span>');
+      btn.disabled=false; localStorage.removeItem('gauth_uploading'); updateUploadStatus();
+    });
     xhr.onreadystatechange = function(){
       if(xhr.readyState===4){
-        appendLog('📡 서버 응답 수신 (HTTP ' + xhr.status + ')');
+        var elapsed = ((Date.now()-startTime)/1000).toFixed(1);
         var d = null;
-        try { d = JSON.parse(xhr.responseText); } catch(e){ appendLog('❌ JSON 파싱 실패: '+e.message); btn.disabled=false; localStorage.removeItem('gauth_uploading'); return; }
-        if(!d.ok){ appendLog('❌ ' + (d.error||'실패')); btn.disabled=false; localStorage.removeItem('gauth_uploading'); return; }
-        appendLog('');
-        appendLog('═══ 파싱 결과 ═══');
-        (d.files||[]).forEach(function(f, idx){
-          appendLog('  [' + (idx+1) + '] ' + f.name + ' → ' + (f.accounts||0) + '개' + (f.error?' ❌'+f.error:'') + (f.sheets?' (시트 '+f.sheets+')':''));
-        });
-        appendLog('');
-        appendLog('═══ 병합 결과 ═══');
-        appendLog('  📊 총 파싱: ' + d.total_parsed);
-        appendLog('  🔄 unique: ' + d.unique);
-        appendLog('  ➕ 신규 추가: ' + d.added);
-        appendLog('  ✏️ 업데이트: ' + d.updated);
-        appendLog('  ⚠️ 충돌: ' + (d.conflicts_count||0));
-        appendLog('  💾 마스터 총: ' + d.total_master);
-        if((d.conflicts||[]).length){
-          appendLog('');
-          appendLog('═══ ⚠️ 충돌 상세 ═══');
-          d.conflicts.slice(0,10).forEach(function(c){
-            appendLog('  ' + c.email + ':');
-            c.fields.forEach(function(f){ appendLog('    ' + f.field + ': "' + f.old + '" → "' + f.new + '" (채택: ' + f.chosen + ')'); });
-          });
-          if(d.conflicts.length>10) appendLog('  … 외 ' + (d.conflicts.length-10) + '개');
+        try { d = JSON.parse(xhr.responseText); } catch(e){
+          out.innerHTML = statusHTML('parse', -1, '<span style="color:#f47070;font-size:15px;font-weight:700">❌ 서버 응답 오류 (HTTP '+xhr.status+')</span><br><span style="font-size:11px;color:#8a95a5">'+elapsed+'초 소요</span>');
+          btn.disabled=false; localStorage.removeItem('gauth_uploading'); updateUploadStatus(); return;
         }
-        appendLog('');
-        appendLog('📅 날짜별 그룹:');
-        Object.keys(d.by_date||{}).forEach(function(k){ appendLog('  ' + k + ': ' + d.by_date[k] + '개'); });
-        appendLog('');
-        appendLog('✅ 완료');
+        if(!d.ok){
+          out.innerHTML = statusHTML('parse', -1, '<span style="color:#f47070;font-size:15px;font-weight:700">❌ '+(d.error||'서버 처리 실패')+'</span><br><span style="font-size:11px;color:#8a95a5">HTTP '+xhr.status+' · '+elapsed+'초</span>');
+          btn.disabled=false; localStorage.removeItem('gauth_uploading'); updateUploadStatus(); return;
+        }
+        var fileRows = (d.files||[]).map(function(f,i){
+          var ok = !f.error && (f.accounts||0)>0;
+          return '<tr style="border-bottom:1px solid #22282f"><td style="padding:4px 8px;color:#8a95a5;font-size:11px">'+(i+1)+'</td><td style="padding:4px 8px;font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+f.name+'</td><td style="padding:4px 8px;text-align:right;font-weight:700;color:'+(ok?'#3ddc84':'#f47070')+'">'+(f.accounts||0)+'개'+(f.error?' ❌':'')+'</td></tr>';
+        }).join('');
+        var resultHTML = '<div style="margin-top:14px;padding:16px;background:#0d2818;border:2px solid #3ddc84;border-radius:8px">'
+          +'<div style="font-size:18px;font-weight:800;color:#3ddc84;margin-bottom:10px">✅ 업로드 완료</div>'
+          +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">'
+          +'<div style="background:#1a2a1a;padding:10px;border-radius:6px;text-align:center"><div style="font-size:22px;font-weight:800;color:#3ddc84">'+(d.total_parsed||0)+'</div><div style="font-size:10px;color:#8a95a5">파싱</div></div>'
+          +'<div style="background:#1a1a2a;padding:10px;border-radius:6px;text-align:center"><div style="font-size:22px;font-weight:800;color:#7dabff">'+(d.added||0)+'</div><div style="font-size:10px;color:#8a95a5">신규</div></div>'
+          +'<div style="background:#2a1a1a;padding:10px;border-radius:6px;text-align:center"><div style="font-size:22px;font-weight:800;color:#ffaa55">'+(d.updated||0)+'</div><div style="font-size:10px;color:#8a95a5">업데이트</div></div>'
+          +'</div>'
+          +'<div style="display:flex;justify-content:space-between;font-size:12px;color:#8a95a5;margin-bottom:8px"><span>마스터 총 <b style="color:#e8ecef">'+(d.total_master||0)+'</b>건</span><span>충돌 <b style="color:'+(d.conflicts_count?'#ffaa55':'#8a95a5')+'">'+(d.conflicts_count||0)+'</b>건</span><span>'+elapsed+'초 소요</span></div>';
+        if(fileRows){
+          resultHTML+='<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12px;color:#7dabff;font-weight:700">파일별 상세 ('+((d.files||[]).length)+'개)</summary>'
+            +'<table style="width:100%;margin-top:6px;font-family:monospace;border-collapse:collapse">'+fileRows+'</table></details>';
+        }
+        if((d.conflicts||[]).length){
+          var confRows = d.conflicts.slice(0,5).map(function(c){
+            return '<div style="padding:4px 0;font-size:11px;border-bottom:1px solid #22282f"><b>'+c.email+'</b>: '+c.fields.map(function(f){return f.field}).join(', ')+'</div>';
+          }).join('');
+          resultHTML+='<details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px;color:#ffaa55;font-weight:700">충돌 상세 ('+(d.conflicts||[]).length+'건)</summary><div style="margin-top:4px">'+confRows;
+          if(d.conflicts.length>5) resultHTML+='<div style="font-size:11px;color:#8a95a5">… 외 '+(d.conflicts.length-5)+'건</div>';
+          resultHTML+='</div></details>';
+        }
+        resultHTML+='</div>';
+        out.innerHTML = statusHTML('done', -1, '', resultHTML);
+        if(progWrap) progWrap.style.display='none';
         if(typeof refreshAccStats==='function') refreshAccStats();
         btn.disabled = false;
         window._picked = []; renderList();
-        /* 완료 배너 */
         var banner = document.createElement('div');
         banner.id = 'uploadDoneBanner';
-        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;padding:14px 20px;background:linear-gradient(135deg,#0d3222,#1c4a35);color:#3ddc84;font-size:15px;font-weight:700;text-align:center;z-index:9999;border-bottom:2px solid #3ddc84;animation:bannerIn .3s ease';
-        banner.textContent = '✅ 엑셀 업로드 완료 — ' + (d.total_parsed||0) + '건 파싱, ' + (d.added||0) + '건 추가, ' + (d.updated||0) + '건 업데이트, 마스터 총 ' + (d.total_master||0) + '건';
+        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;padding:14px 20px;background:linear-gradient(135deg,#0d3222,#1c4a35);color:#3ddc84;font-size:15px;font-weight:700;text-align:center;z-index:9999;border-bottom:2px solid #3ddc84';
+        banner.textContent = '✅ 완료 — '+(d.total_parsed||0)+'건 파싱 · '+(d.added||0)+'건 추가 · '+(d.updated||0)+'건 업데이트 · 마스터 '+(d.total_master||0)+'건 · '+elapsed+'초';
         document.body.prepend(banner);
         setTimeout(function(){ var b=document.getElementById('uploadDoneBanner'); if(b) b.remove(); }, 15000);
         localStorage.removeItem('gauth_uploading');
