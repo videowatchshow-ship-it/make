@@ -388,8 +388,14 @@ function render(){
     const btnLogin = a.lock_reason
       ? `<button style="background:#555;padding:6px 8px;font-size:11px" onclick="unlockAccount('${a.email}',this)">🔓 잠금해제</button>`
       : `<button style="background:#7c3aed;padding:6px 8px;font-size:11px" onclick="programLogin('${a.email}',this)">🔑 로그인</button>`
-    rows.push(`<div class="row" style="top:${y}px">
-      <div class="email" style="cursor:pointer;color:#7dabff" onclick="quickLookup('${a.email}')">${a.email}</div>
+    const _cur = localStorage.getItem('gauth_last_lookup')||''
+    const _curIdx = _cur ? FILTERED.findIndex(x=>x.email===_cur) : -1
+    const _isCur = a.email===_cur
+    const _isNext = _curIdx>=0 && i===_curIdx+1
+    const _hl = _isCur ? 'background:#1a2a1a;border-left:3px solid #3ddc84;' : _isNext ? 'background:#1a1a2a;border-left:3px solid #7dabff;' : ''
+    const _label = _isCur ? '<span style="color:#3ddc84;font-size:10px;font-weight:700;margin-left:6px">◀ 현재 조회</span>' : _isNext ? '<span style="color:#7dabff;font-size:10px;font-weight:700;margin-left:6px">▶ 다음</span>' : ''
+    rows.push(`<div class="row" style="top:${y}px;${_hl}">
+      <div class="email" style="cursor:pointer;color:${_isCur?'#3ddc84':_isNext?'#7dabff':'#7dabff'}" onclick="quickLookup('${a.email}')">${a.email}${_label}</div>
       <div>${sess}${tfa}${lock}</div>
       <div class="mono pw">${a.password||'—'}</div>
       <div class="mono">${a.totp_secret ? a.totp_secret.slice(0,20)+'…' : '—'}</div>
