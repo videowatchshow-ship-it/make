@@ -16,24 +16,30 @@ jobs:
       - name: Deploy via API (no SSH needed)
         run: |
           echo "=== Triggering server-side deploy ==="
-          RESPONSE=$(curl -sf -X POST https://gauth.cent-solution.online/api/deploy \
+          HTTP_CODE=$(curl -s -o /tmp/deploy_response.txt -w "%{http_code}" \
+            -X POST https://gauth.cent-solution.online/api/deploy \
             -H "Content-Type: application/json" \
             --connect-timeout 15 \
-            --max-time 60 \
-            2>&1) || {
-            echo "::warning::API deploy failed, falling back to SSH deploy"
-            exit 1
-          }
-          echo "$RESPONSE" | python3 -c "
+            --max-time 90)
+          echo "HTTP status: $HTTP_CODE"
+          echo "Response body:"
+          cat /tmp/deploy_response.txt || true
+          echo ""
+          if [ "$HTTP_CODE" = "200" ]; then
+            cat /tmp/deploy_response.txt | python3 -c "
           import json,sys
           d=json.load(sys.stdin)
           if d.get('ok'):
-            print('✅ Deployed:', ', '.join(d.get('deployed',[])))
+            print('Deployed:', ', '.join(d.get('deployed',[])))
             print(d.get('message',''))
           else:
-            print('❌ Error:', d.get('error','unknown'))
+            print('Error:', d.get('error','unknown'))
             sys.exit(1)
           "
+          else
+            echo "::warning::API deploy failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
 
       - name: Deploy via SSH (fallback)
         if: failure()
