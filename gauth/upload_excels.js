@@ -452,6 +452,17 @@ function parseExcelFile(filePath) {
 
   for (const sheetName of wb.SheetNames) {
     const sheet = wb.Sheets[sheetName];
+    // Restore hyperlink emails (mailto:xxx@gmail.com) that SheetJS strips to display text only
+    for (const k of Object.keys(sheet)) {
+      if (k[0] === '!') continue;
+      const c = sheet[k];
+      if (c && c.l && c.l.Target) {
+        const t = String(c.l.Target).replace(/^mailto:/i, '');
+        if (t.includes('@') && !String(c.v || '').includes('@')) {
+          c.v = t; c.w = t;
+        }
+      }
+    }
     const accounts = extractAccountsFromSheet(sheet, baseName);
     allAccounts.push(...accounts);
   }
