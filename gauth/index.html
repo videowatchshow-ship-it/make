@@ -364,6 +364,11 @@ function applyFilter(){
     if (f==='locked' && !LOCK.includes(a.lock_reason)) return false
     return true
   })
+  const _ll = localStorage.getItem('gauth_last_lookup')
+  if(_ll){
+    const _li = FILTERED.findIndex(a=>a.email===_ll)
+    if(_li>0){ FILTERED.unshift(FILTERED.splice(_li,1)[0]) }
+  }
   PAGE = 1
   const totalPages = Math.max(1, Math.ceil(FILTERED.length / PAGE_SIZE))
   document.getElementById('count').textContent = `${FILTERED.length.toLocaleString()}개 · ${totalPages}페이지`
