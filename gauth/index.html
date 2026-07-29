@@ -534,7 +534,8 @@ async function programLogin(email, btn){
 async function lookup(){
   const email = document.getElementById('lookup').value.trim()
   const box = document.getElementById('lookup-result')
-  if(!email){box.style.display='none';return}
+  if(!email){box.style.display='none';localStorage.removeItem('gauth_last_lookup');return}
+  localStorage.setItem('gauth_last_lookup', email)
   box.style.display='block'
   box.innerHTML = '<span style="color:#8a95a5">조회 중…</span>'
   const r = await fetch('/api/lookup/'+encodeURIComponent(email))
@@ -585,6 +586,7 @@ async function lookup(){
 }
 document.getElementById('lookup-btn').addEventListener('click', lookup)
 document.getElementById('lookup').addEventListener('keydown', e=>{if(e.key==='Enter')lookup()})
+;(function(){var ll=localStorage.getItem('gauth_last_lookup');if(ll){document.getElementById('lookup').value=ll;lookup()}})()
 
 // --- 시간 순서 계정 정보 확인 (20개씩 페이지) ---
 const TD_PAGE_SIZE = 20
