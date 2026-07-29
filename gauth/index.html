@@ -565,7 +565,23 @@ async function lookup(){
       <div style="color:#8a95a5">방식</div><div>${j.login_method||'—'}</div>
       <div style="color:#8a95a5">출처</div><div class="mono" style="font-size:11px;color:#8a95a5">${j.source_file||'—'}</div>
       <div></div><div>${btn}</div>
-    </div>`
+    </div>
+    <div id="lookup-next" style="margin-top:14px;border-top:1px solid #22282f;padding-top:10px"></div>`
+  if(window.ALL && window.ALL.length){
+    const idx = ALL.findIndex(a=>a.email===j.email)
+    if(idx>=0){
+      const next = ALL.slice(idx+1, idx+6)
+      const nbox = document.getElementById('lookup-next')
+      if(nbox && next.length){
+        nbox.innerHTML = '<div style="color:#8a95a5;font-size:12px;margin-bottom:6px">▼ 다음 순번 ('+(idx+2)+'~'+(idx+1+next.length)+' / '+ALL.length+')</div>'
+          + next.map((a,i)=>'<div style="padding:5px 0;border-bottom:1px solid #1a1f26;font-size:12.5px;display:flex;align-items:center;gap:8px">'
+            +'<span style="color:#8a95a5;font-family:monospace;min-width:35px">'+(idx+2+i)+'.</span>'
+            +'<span style="color:#7dabff;cursor:pointer;flex:1" onclick="quickLookup(\''+a.email.replace(/'/g,"\\'")+'\')">'+a.email+'</span>'
+            +'<button style="padding:3px 8px;font-size:11px;background:#7c3aed" onclick="programLogin(\''+a.email.replace(/'/g,"\\'")+'\',this)">🔑</button>'
+            +'</div>').join('')
+      }
+    }
+  }
 }
 document.getElementById('lookup-btn').addEventListener('click', lookup)
 document.getElementById('lookup').addEventListener('keydown', e=>{if(e.key==='Enter')lookup()})
