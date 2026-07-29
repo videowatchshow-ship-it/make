@@ -375,6 +375,8 @@ function render(){
   const start = (PAGE-1) * PAGE_SIZE
   const end = Math.min(FILTERED.length, start + PAGE_SIZE)
   const rows = []
+  const _cur = localStorage.getItem('gauth_last_lookup')||''
+  const _curIdx = _cur ? FILTERED.findIndex(x=>x.email===_cur) : -1
   for (let i=start;i<end;i++){
     const a = FILTERED[i]
     const y = (i-start) * 44
@@ -388,8 +390,6 @@ function render(){
     const btnLogin = a.lock_reason
       ? `<button style="background:#555;padding:6px 8px;font-size:11px" onclick="unlockAccount('${a.email}',this)">🔓 잠금해제</button>`
       : `<button style="background:#7c3aed;padding:6px 8px;font-size:11px" onclick="programLogin('${a.email}',this)">🔑 로그인</button>`
-    const _cur = localStorage.getItem('gauth_last_lookup')||''
-    const _curIdx = _cur ? FILTERED.findIndex(x=>x.email===_cur) : -1
     const _isCur = a.email===_cur
     const _isNext = _curIdx>=0 && i===_curIdx+1
     const _hl = _isCur ? 'background:#1a2a1a;border-left:3px solid #3ddc84;' : _isNext ? 'background:#1a1a2a;border-left:3px solid #7dabff;' : ''
@@ -587,6 +587,13 @@ async function lookup(){
             +'<button style="padding:3px 8px;font-size:11px;background:#7c3aed" onclick="programLogin(\''+a.email.replace(/'/g,"\\'")+'\',this)">🔑</button>'
             +'</div>').join('')
       }
+    }
+  }
+  if(window.FILTERED && FILTERED.length){
+    const fi = FILTERED.findIndex(a=>a.email===j.email)
+    if(fi>=0){
+      PAGE = Math.floor(fi/PAGE_SIZE)+1
+      render()
     }
   }
 }
