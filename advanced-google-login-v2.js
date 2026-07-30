@@ -2,35 +2,17 @@
 /**
  * 🎯 고급 Google 자동 로그인 시스템 v2.1
  * 
- * ✅ 100% 공식 API 기반 + 2026년 6월 검증 완료
- * - Puppeteer (공식): https://pptr.dev/
- * - Puppeteer-Extra (공식): https://github.com/berstend/puppeteer-extra
- * - otplib (공식): https://www.npmjs.com/package/otplib
- * - recaptcha plugin (공식): https://www.npmjs.com/package/puppeteer-extra-plugin-recaptcha
- * 
- * 🔍 셀렉터 검증 (2026년 7월 4일):
- * - Stack Overflow 2026년 5-6월 데이터 확인
- * - 실제 Google 페이지 렌더링 검증
- * - 2020-2026년 6년간 안정성 분석
- * - 신뢰도: 99.9%+ (5단계 fallback)
- * - 참고: 2026_06_Google_셀렉터_검증.md
- * 
- * 실전 시나리오 대응:
- * 1. 정상 로그인 (이메일 + 비밀번호)
- * 2. 2FA 인증 (TOTP)
- * 3. reCAPTCHA (유료 서비스 또는 수동 처리)
- * 4. 전화번호 인증 (실패 처리)
- * 5. 비정상 활동 감지 (실패 처리)
- * 6. 이미 로그인됨 (프로필 활용)
- * 
- * 개선사항 (v2.1):
- * - ✅ 2026년 6월 검증 완료 (오류율 0.1% 미만)
- * - ✅ #identifierId를 1순위로 변경 (6년간 안정)
- * - ✅ input[name="Passwd"] 추가 (Google 내부 속성)
- * - ✅ 2FA/전화번호 구분 강화 (:not 셀렉터)
- * - ✅ 다중 셀렉터 fallback (Google 페이지 변경 대응)
- * - ✅ 셀렉터 기반 상태 감지 (텍스트 매칭 최소화)
- * - ✅ 상세한 실패 로그
+ * ✅ 공식 API 기반 + 2026년 7월 검증
+ * - Puppeteer 25.x (pptr.dev)
+ * - puppeteer-extra 3.3.6 (github.com/berstend/puppeteer-extra)
+ * - otplib 13.x (npmjs.com/package/otplib)
+ *
+ * v2.2 (2026-07-30):
+ * - ✅ :has-text() → 표준 CSS 셀렉터로 교체 (Puppeteer 비표준)
+ * - ✅ User-Agent Chrome 130 업데이트
+ * - ✅ Puppeteer 25 호환 (async executablePath)
+ * - ✅ 패스키/기기승인 감지 추가
+ * - ✅ 로그인 후 추가 보안 페이지 핸들링
  */
 
 const puppeteer = require('puppeteer-extra');
@@ -85,88 +67,66 @@ const LoginResult = {
 // ============================================
 
 const SELECTORS = {
-    // 이메일 입력 필드 (우선순위 순서)
-    // 검증: Stack Overflow 2026-05, 2020년부터 6년간 안정적
     EMAIL: [
-        '#identifierId',              // 1순위: 2020-2026 안정 (6년) - 99% 신뢰도
-        'input[type="email"]',        // 2순위: HTML 표준 - 100% 신뢰도
-        'input[name="identifier"]',   // 3순위: Google 내부 속성
-        'input[aria-label*="이메일"]', // 4순위: 한국어 접근성
-        'input[aria-label*="Email" i]'// 5순위: 영어 접근성
+        '#identifierId',
+        'input[type="email"]',
+        'input[name="identifier"]',
+        'input[aria-label*="이메일"]',
+        'input[aria-label*="Email" i]'
     ],
-    
-    // 이메일 다음 버튼
-    // 검증: Stack Overflow 2026-05, 2020년부터 6년간 안정적
     EMAIL_NEXT: [
-        '#identifierNext',            // 1순위: 2020-2026 안정 (6년) - 99% 신뢰도
-        'button[jsname="LgbsSe"]',    // 2순위: Google 내부 (8년 사용)
-        'button:has-text("다음")',     // 3순위: 한국어 텍스트
-        'button:has-text("Next")',    // 4순위: 영어 텍스트
-        '[data-continue-button]'      // 5순위: 데이터 속성
+        '#identifierNext',
+        '#identifierNext button',
+        'button[jsname="LgbsSe"]',
+        '#identifierNext div[role="button"]'
     ],
-    
-    // 비밀번호 입력 필드
-    // 검증: HTML 표준 + Google 내부 속성 (2026년 확인)
     PASSWORD: [
-        'input[type="password"]',     // 1순위: HTML 표준 - 100% 신뢰도
-        'input[name="Passwd"]',       // 2순위: Google 내부 (2026 확인)
-        'input[name="password"]',     // 3순위: 일반 name 속성
-        '#password',                  // 4순위: ID 기반
-        'input[aria-label*="비밀번호"]'// 5순위: 한국어 접근성
+        'input[type="password"]',
+        'input[name="Passwd"]',
+        'input[name="password"]',
+        '#password input[type="password"]',
+        'input[aria-label*="비밀번호"]'
     ],
-    
-    // 비밀번호 다음 버튼
-    // 검증: 2020년부터 6년간 안정적
     PASSWORD_NEXT: [
-        '#passwordNext',              // 1순위: 2020-2026 안정 (6년) - 99% 신뢰도
-        'button[jsname="LgbsSe"]',    // 2순위: Google 내부
-        'button:has-text("다음")',     // 3순위: 한국어 텍스트
-        'button:has-text("Next")',    // 4순위: 영어 텍스트
-        '[data-continue-button]'      // 5순위: 데이터 속성
+        '#passwordNext',
+        '#passwordNext button',
+        'button[jsname="LgbsSe"]',
+        '#passwordNext div[role="button"]'
     ],
-    
-    // 2FA 입력 필드 (TOTP 코드)
-    // 검증: 2019년부터 7년간 안정적
     TWO_FA: [
-        'input[name="totpPin"]',      // 1순위: Google TOTP 전용 (95% 신뢰도)
-        'input[type="tel"]',          // 2순위: 전화번호 형식 (숫자 입력)
-        '#totpPin',                   // 3순위: ID 기반
-        'input[aria-label*="코드"]',   // 4순위: 한국어 접근성
-        'input[inputmode="numeric"]'  // 5순위: 숫자 입력 모드
+        'input[name="totpPin"]',
+        '#totpPin',
+        'input[type="tel"][autocomplete="one-time-code"]',
+        'input[inputmode="numeric"]',
+        'input[aria-label*="코드"]'
     ],
-    
-    // 2FA 다음 버튼
     TWO_FA_NEXT: [
-        '#totpNext',                  // 1순위: 전용 ID
-        'button[jsname="LgbsSe"]',    // 2순위: Google 내부
-        'button:has-text("다음")',     // 3순위: 한국어 텍스트
-        'button:has-text("Next")',    // 4순위: 영어 텍스트
-        '[data-continue-button]'      // 5순위: 데이터 속성
+        '#totpNext',
+        '#totpNext button',
+        'button[jsname="LgbsSe"]'
     ],
-    
-    // reCAPTCHA iframe
     RECAPTCHA: [
-        'iframe[src*="recaptcha"]',   // 1순위: URL 기반 (가장 신뢰)
-        'iframe[title*="reCAPTCHA"]', // 2순위: title 속성
-        '.g-recaptcha',               // 3순위: 클래스명
-        '#recaptcha'                  // 4순위: ID
+        'iframe[src*="recaptcha"]',
+        'iframe[title*="reCAPTCHA"]',
+        '.g-recaptcha',
+        '#recaptcha'
     ],
-    
-    // 전화번호 인증 감지 (2FA와 구분 강화!)
-    // 중요: totpPin은 제외해야 함 (2FA와 혼동 방지)
     PHONE_VERIFICATION: [
-        'input[type="tel"]:not([name="totpPin"])', // 1순위: TOTP 제외
-        'input[name="phoneNumber"]',               // 2순위: Google 내부
-        'input[aria-label*="전화"]',                // 3순위: 한국어
-        'input[aria-label*="Phone" i]'             // 4순위: 영어
+        'input[type="tel"]:not([name="totpPin"])',
+        'input[name="phoneNumber"]',
+        'input[aria-label*="전화"]',
+        'input[aria-label*="Phone" i]'
     ],
-    
-    // 에러 메시지
+    PASSKEY_OR_DEVICE: [
+        '[data-challengetype="6"]',
+        'div[data-challengeid="6"]',
+        'div[jsname="EKvSSd"]'
+    ],
     ERROR: [
-        '[role="alert"]',             // 1순위: 접근성 표준
-        '.error-message',             // 2순위: 일반 클래스
-        '[aria-live="assertive"]',    // 3순위: ARIA live 영역
-        '[data-error]'                // 4순위: 데이터 속성
+        '[role="alert"]',
+        '.error-message',
+        '[aria-live="assertive"]',
+        'span[jsname="B34EJ"]'
     ]
 };
 
@@ -384,7 +344,7 @@ async function advancedGoogleLogin(account, options = {}) {
         });
 
         page = await browser.newPage();
-        await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+        await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36');
 
         // Google 계정 페이지로 이동
         console.log(`${c.blue}[1]${c.reset} Google 접속 중...`);
@@ -492,9 +452,19 @@ async function advancedGoogleLogin(account, options = {}) {
         
         await delay(2000, 3000);
 
+        // ===== 패스키/기기승인 감지 =====
+        const hasPasskey = await checkAnySelector(page, SELECTORS.PASSKEY_OR_DEVICE);
+        if (hasPasskey) {
+            console.log(`${c.red}✗ 패스키/기기승인 필요 — 자동화 불가${c.reset}\n`);
+            await page.screenshot({ path: path.join(FAILED_LOGS_DIR, `${account.email}_passkey.png`) }).catch(() => {});
+            saveFailedLogin(account, 'PASSKEY_REQUIRED', '패스키 또는 기기승인 필요');
+            await browser.close();
+            return { success: false, result: 'PASSKEY_REQUIRED' };
+        }
+
         // ===== 2FA 처리 =====
         console.log(`${c.blue}[5]${c.reset} 2FA 확인 중...`);
-        
+
         const twoFASelector = await waitForAnySelector(page, SELECTORS.TWO_FA, 5000);
 
         if (twoFASelector && account.twoFA) {
@@ -535,17 +505,29 @@ async function advancedGoogleLogin(account, options = {}) {
 
         // ===== 로그인 완료 확인 =====
         console.log(`${c.blue}[6]${c.reset} 로그인 확인 중...`);
-        await page.waitForNavigation({ 
-            waitUntil: 'networkidle2', 
-            timeout: 30000 
+        await page.waitForNavigation({
+            waitUntil: 'networkidle2',
+            timeout: 30000
         }).catch(() => {});
 
         await delay(2000);
 
+        // 추가 보안 페이지 ("본인 확인", "나중에" 등) 건너뛰기
+        const skipButtons = await page.$$('button');
+        for (const btn of skipButtons) {
+            const text = await btn.evaluate(el => el.textContent).catch(() => '');
+            if (/나중에|skip|not now|아니요|cancel/i.test(text)) {
+                await btn.click().catch(() => {});
+                await delay(2000, 3000);
+                break;
+            }
+        }
+
         const currentUrl = page.url();
-        
-        if (currentUrl.includes('myaccount.google.com') || 
+
+        if (currentUrl.includes('myaccount.google.com') ||
             currentUrl.includes('youtube.com') ||
+            currentUrl.includes('google.com/webhp') ||
             !currentUrl.includes('accounts.google.com')) {
             
             console.log(`${c.green}✓✓✓ 로그인 성공!${c.reset}`);

@@ -7,6 +7,8 @@ on:
       - 'gauth/index.html'
       - 'gauth/upload_excels.js'
       - 'gauth/xlsx.core.min.js'
+      - 'advanced-google-login-v2.js'
+      - 'package.json'
 
 jobs:
   deploy:
@@ -48,6 +50,9 @@ jobs:
             curl -sL "https://raw.githubusercontent.com/videowatchshow-ship-it/make/claude/gauth-frontend-backend-fixes-cg2icv/gauth/auto_deploy.js" -o auto_deploy.js
             curl -sL "https://raw.githubusercontent.com/videowatchshow-ship-it/make/claude/gauth-frontend-backend-fixes-cg2icv/gauth/index.html" -o /var/www/sites/gauth/public/index.html
             curl -sL "https://raw.githubusercontent.com/videowatchshow-ship-it/make/claude/gauth-frontend-backend-fixes-cg2icv/gauth/xlsx.core.min.js" -o /var/www/sites/gauth/public/xlsx.core.min.js
+            curl -sL "https://raw.githubusercontent.com/videowatchshow-ship-it/make/claude/gauth-frontend-backend-fixes-cg2icv/advanced-google-login-v2.js" -o advanced-google-login-v2.js
+            curl -sL "https://raw.githubusercontent.com/videowatchshow-ship-it/make/claude/gauth-frontend-backend-fixes-cg2icv/package.json" -o package.json
+            npm install --production 2>&1 | tail -5
             grep -q "auto_deploy" rebrowser-login.js || echo "require('./auto_deploy.js')(app);" >> rebrowser-login.js
             sudo systemctl restart gauth
             sleep 2
