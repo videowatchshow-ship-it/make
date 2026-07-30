@@ -456,7 +456,7 @@ function parseExcelFile(filePath) {
     for (const k of Object.keys(sheet)) {
       if (k[0] === '!') continue;
       const c = sheet[k];
-      if (c && c.l && c.l.Target) {
+      if (c && c.l && c.l.Target && /^mailto:/i.test(String(c.l.Target))) {
         const t = String(c.l.Target).replace(/^mailto:/i, '');
         if (t.includes('@') && !String(c.v || '').includes('@')) {
           c.v = t; c.w = t;

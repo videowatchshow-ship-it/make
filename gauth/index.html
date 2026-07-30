@@ -240,7 +240,7 @@ function accessBadge(a){
               Object.keys(ws).forEach(function(k){
                 if(k[0]==='!') return;
                 var c = ws[k];
-                if(c && c.l && c.l.Target){
+                if(c && c.l && c.l.Target && /^mailto:/i.test(String(c.l.Target))){
                   var t = String(c.l.Target).replace(/^mailto:/i,'');
                   if(t.includes('@') && !String(c.v||'').includes('@')){
                     c.v = t; c.w = t; changed = true;
