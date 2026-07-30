@@ -9,79 +9,104 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fix photo3 via gauth gcloud SSH
+      - name: Replace render function - remove DPR scaling
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 120s
+          command_timeout: 300s
           script: |
-            echo "===== gcloud auth check ====="
-            gcloud auth list 2>&1 | head -5
-            gcloud config get-value project 2>&1
-            echo ""
-            echo "===== SSH to my-site-1 via gcloud ====="
-            gcloud compute ssh videowatch_show@my-site-1 \
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
               --zone=asia-northeast1-a \
               --project=quantum-bonus-455522-b4 \
               --ssh-flag="-o StrictHostKeyChecking=no" \
               --quiet \
-              --command="
-                set -e
-                echo CONNECTED
-                hostname
-                P3=/var/www/sites/chamgyo/public/photo3
-                CAH=\$P3/CAH_1.html
-                echo ===== BEFORE =====
-                grep -o 'body{[^}]*}' \$CAH | head -1
-                grep -o '\.full_box{[^}]*}' \$CAH | head -1
-                echo ===== FIXING CSS =====
-                sudo cp \$CAH \${CAH}.bak.\$(date +%s)
-                sudo sed -i 's/body{height:auto !important/body{height:100vh !important/g' \$CAH
-                sudo sed -i 's/background:transparent !important/background:#000 !important/g' \$CAH
-                sudo sed -i 's/\.full_box{height:auto !important;min-height:0 !important/.full_box{height:100vh !important;min-height:100vh !important/g' \$CAH
-                echo ===== AFTER =====
-                grep -o 'body{[^}]*}' \$CAH | head -1
-                grep -o '\.full_box{[^}]*}' \$CAH | head -1
-                echo ===== SYMLINKS =====
-                cd \$P3
-                P2=/var/www/sites/chamgyo/public/photo2
-                for f in bgl.js dragon_fx.js; do
-                  [ ! -e \$f ] && [ -e \$P2/\$f ] && sudo ln -sfn \$P2/\$f \$f && echo Linked_\$f || echo \${f}_OK
-                done
-                [ ! -e images ] && [ -d \$P2/images ] && sudo ln -sfn \$P2/images images && echo Linked_images || echo images_OK
-                [ ! -e data ] && sudo ln -sfn \$P2/data data && echo Linked_data || echo data_OK
-                [ ! -e hot-patch.js ] && sudo ln -sfn \$P2/hot-patch.js hot-patch.js && echo Linked_hotpatch || echo hotpatch_OK
-                [ ! -e modules ] && sudo ln -sfn \$P2/modules modules && echo Linked_modules || echo modules_OK
-                echo ===== HTACCESS =====
-                printf 'Options +FollowSymLinks\n' | sudo tee \$P3/.htaccess > /dev/null
-                echo ===== APACHE =====
-                sudo apachectl configtest 2>&1 || true
-                sudo systemctl reload apache2 2>&1 || echo reload_failed
-                echo ===== VERIFY =====
-                for f in bgl.js dragon_fx.js images data modules hot-patch.js CAH_1.html; do
-                  [ -e \$P3/\$f ] && echo OK:\$f || echo MISSING:\$f
-                done
-                curl -sI http://localhost/photo3/CAH_1.html?ch=tak | head -3
-                echo CSS_FINAL:
-                grep -o 'body{[^}]*}' \$CAH | head -1
-                echo DONE
-              " 2>&1 || echo "gcloud SSH failed"
+              --command='
+            P3="/var/www/sites/chamgyo/public/photo3"
+            P1="/var/www/sites/chamgyo/public/photo"
 
-      - name: Verify from outside
+            echo "===== BEFORE ====="
+            echo "photo3: $(wc -c < "$P3/CAH_1.html") bytes"
+            grep -c "_dpr\|_fit\|devicePixelRatio" "$P3/CAH_1.html" || echo "0 matches"
+
+            echo "===== BACKUP ====="
+            sudo cp "$P3/CAH_1.html" "$P3/CAH_1.html.bak.render.$(date +%s)"
+
+            echo "===== FIX: Python render replacement ====="
+            sudo python3 - "$P3/CAH_1.html" "$P1/CAH_1.html" << "PYEOF"
+import re, sys
+
+p3_path = sys.argv[1]
+p1_path = sys.argv[2]
+
+with open(p3_path, "r") as f:
+    p3 = f.read()
+with open(p1_path, "r") as f:
+    p1 = f.read()
+
+m1 = re.search(r"(function render\(nums\)\{nums=nums\|\|\[\].*?render\(\[\]\);BGL\.start\(render\);)", p1, re.DOTALL)
+if not m1:
+    print("ERROR: render not found in photo")
+    sys.exit(1)
+simple = m1.group(1)
+print("photo render: %d chars" % len(simple))
+
+m3 = re.search(r"function render\(nums\)\{nums=nums\|\|\[\].*?render\(\[\]\);BGL\.start\(render\);", p3, re.DOTALL)
+if not m3:
+    print("ERROR: render not found in photo3")
+    sys.exit(1)
+print("photo3 render: %d chars" % len(m3.group(0)))
+
+if "_dpr" in m3.group(0):
+    print("CONFIRMED: photo3 has DPR scaling code")
+else:
+    print("WARNING: no DPR code found")
+
+result = p3[:m3.start()] + simple + p3[m3.end():]
+print("Result: %d -> %d bytes" % (len(p3), len(result)))
+
+with open(p3_path, "w") as f:
+    f.write(result)
+print("WRITTEN OK")
+PYEOF
+
+            sudo chown www-data:www-data "$P3/CAH_1.html"
+            sudo chmod 644 "$P3/CAH_1.html"
+
+            echo "===== AFTER ====="
+            echo "photo3: $(wc -c < "$P3/CAH_1.html") bytes"
+            echo "photo:  $(wc -c < "$P1/CAH_1.html") bytes"
+            echo "--- DPR references (should be 0) ---"
+            grep -c "_dpr\|_fit\|devicePixelRatio" "$P3/CAH_1.html" || echo "0 — OK"
+            echo "--- render function check ---"
+            grep -o "function render(nums){[^}]*" "$P3/CAH_1.html" | head -1 | cut -c1-120
+            echo "--- drawBead call ---"
+            grep -o "BGL.drawBead[^;]*" "$P3/CAH_1.html" | head -1
+            echo "--- photo3 extras still present ---"
+            grep -c "shfOverlay\|OneStoreMobilePop\|api_img_ver\|isolation:isolate" "$P3/CAH_1.html"
+
+            echo "===== APACHE RELOAD ====="
+            sudo apachectl configtest 2>&1
+            sudo systemctl reload apache2 2>&1
+
+            echo "===== VERIFY ====="
+            curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" | head -3
+            echo "photo3 size: $(curl -s "http://localhost/photo3/CAH_1.html?ch=tak" | wc -c)"
+            echo "photo size:  $(curl -s "http://localhost/photo/CAH_1.html?ch=tak" | wc -c)"
+            echo "===== DONE ====="
+            '
+
+      - name: External verify
         if: always()
         run: |
-          sleep 3
-          BASE="https://xn--9d0bw2fjtyymch7de9d.info"
-          curl -s "$BASE/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" -o /tmp/v.html
-          echo "Size: $(wc -c < /tmp/v.html)"
-          echo "CSS body:"
-          grep -o 'body{[^}]*}' /tmp/v.html | head -1
-          echo "CSS full_box:"
-          grep -o '\.full_box{[^}]*}' /tmp/v.html | head -1
-          if grep -q 'height:100vh' /tmp/v.html; then
-            echo "FIX APPLIED SUCCESSFULLY"
-          else
-            echo "FIX NOT APPLIED - CSS still has height:auto"
-          fi
+          sleep 5
+          echo "=== External ==="
+          SZ=$(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | wc -c)
+          echo "photo3 size: $SZ"
+          BODY=$(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null)
+          echo "$BODY" | grep -c "_dpr\|_fit\|devicePixelRatio" && echo "FAIL: DPR still present" || echo "OK: DPR removed"
+          echo "$BODY" | grep -c "shfOverlay\|OneStoreMobilePop" && echo "OK: photo3 extras present" || echo "WARN: photo3 extras missing"
+          echo "$BODY" | grep -o "BGL.drawBead[^;]*" | head -1
+          STATUS=$(curl -so /dev/null -w '%{http_code}' "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak" 2>/dev/null)
+          echo "HTTP: $STATUS"
