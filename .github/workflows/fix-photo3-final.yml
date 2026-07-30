@@ -26,35 +26,22 @@ jobs:
             P3="/var/www/sites/chamgyo/public/photo3"
             P1="/var/www/sites/chamgyo/public/photo"
 
-            echo "===== BACKUP ====="
-            sudo cp "$P3/CAH_1.html" "$P3/CAH_1.html.bak.copy.$(date +%s)"
-
             echo "===== COPY photo/CAH_1.html to photo3 ====="
             sudo cp "$P1/CAH_1.html" "$P3/CAH_1.html"
             sudo chown www-data:www-data "$P3/CAH_1.html"
 
-            echo "===== ADD tak guard ====="
-            sudo sed -i "s|<body>|<script id=\"photo3-tak-only\">(function(){var p=new URLSearchParams(window.location.search);if(p.get(\"ch\")!==\"tak\"){document.documentElement.innerHTML=\"<body style=background:#000></body>\";return;}})()</script>\n<body>|" "$P3/CAH_1.html"
+            echo "===== ADD tak guard (first body only) ====="
+            sudo sed -i "0,/<body>/s|<body>|<body><script id=\"photo3-tak-only\">(function(){var p=new URLSearchParams(window.location.search);if(p.get(\"ch\")!==\"tak\"){document.documentElement.innerHTML=\"\";document.body.style.background=\"#000\";return;}})()</script>|" "$P3/CAH_1.html"
+
+            echo "===== ALSO COPY bgl.js and dragon_fx.js from photo ====="
+            sudo cp "$P1/bgl.js" "$P3/bgl.js"
+            sudo cp "$P1/dragon_fx.js" "$P3/dragon_fx.js"
+            sudo chown www-data:www-data "$P3/bgl.js" "$P3/dragon_fx.js"
 
             echo "===== VERIFY ====="
-            echo "--- photo3 size ---"
-            wc -c "$P3/CAH_1.html"
-            echo "--- photo size ---"
-            wc -c "$P1/CAH_1.html"
-            echo "--- tak guard ---"
+            wc -c "$P3/CAH_1.html" "$P1/CAH_1.html"
             grep -c "photo3-tak-only" "$P3/CAH_1.html"
-            echo "--- scripts ---"
-            grep -n "<script" "$P3/CAH_1.html"
-            echo "--- body ---"
-            grep -n "body{" "$P3/CAH_1.html" | head -3
-            echo "--- diff (should only be tak guard) ---"
             diff "$P1/CAH_1.html" "$P3/CAH_1.html" || true
-
-            echo "===== SYMLINKS ====="
-            ls -la "$P3/data" 2>/dev/null || echo "data MISSING"
-            ls -la "$P3/bgl.js" 2>/dev/null || echo "bgl.js check"
-            ls -la "$P1/bgl.js" 2>/dev/null || echo "photo bgl.js check"
-            ls -la "$P3/dragon_fx.js" 2>/dev/null || echo "dragon_fx.js check"
 
             echo "===== APACHE ====="
             sudo apachectl configtest 2>&1
@@ -62,9 +49,7 @@ jobs:
 
             echo "===== CURL ====="
             curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" | head -5
-            echo "---"
             curl -s "http://localhost/photo3/CAH_1.html?ch=tak" | wc -c
-            echo "---"
             curl -s "http://localhost/photo/CAH_1.html?ch=tak" | wc -c
             echo "===== DONE ====="
             '
