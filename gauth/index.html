@@ -460,8 +460,9 @@ updateUploadStatus();
 <div id="pagination" style="padding:12px 20px;background:#0f1216;border-top:1px solid #22282f;display:flex;gap:6px;flex-wrap:wrap;justify-content:center;align-items:center"></div>
 
 <script>
-const PAGE_SIZE = 20
+const PAGE_SIZE = 50
 let ALL=[], FILTERED=[], PAGE=1
+let _lookupEmail = null, _loginEmail = null
 const vp = document.getElementById('viewport'), sp = document.getElementById('spacer')
 
 let FAILED = {}
@@ -527,15 +528,21 @@ function render(){
     const tfa = a.totp_secret ? '<span class="badge b-2fa">2FA</span>' : ''
     const lock = a.lock_reason ? `<span class="badge b-lock" title="잠김 사유: ${a.lock_reason} (수동 처리 필요)">🔒 ${a.lock_reason}</span>` : ''
     const rec = a.recovery_email || a.recovery_phone || ''
-    const btnOpen = a.has_session
+    const _isLookup = _lookupEmail === a.email
+    const _isLogin = _loginEmail === a.email
+    const btnOpen = _isLookup
+      ? `<button style="background:#ff9040;padding:6px 8px;font-size:11px" disabled>⏳ 조회 중</button>`
+      : a.has_session
       ? `<button onclick="openIt('${a.email}')">🔓 열기</button>`
       : `<button class="no-sess" onclick="quickLookup('${a.email}')">🔍 정보</button>`
-    const btnLogin = a.lock_reason
+    const btnLogin = _isLogin
+      ? `<button style="background:#f5c842;color:#000;padding:6px 8px;font-size:11px" disabled>⏳ 로그인 중…</button>`
+      : a.lock_reason
       ? `<button style="background:#555;padding:6px 8px;font-size:11px" onclick="unlockAccount('${a.email}',this)">🔓 잠금해제</button>`
       : `<button style="background:#7c3aed;padding:6px 8px;font-size:11px" onclick="programLogin('${a.email}',this)">🔑 로그인</button>`
     const _isCur = a.email===_cur
     const _isNext = _curIdx>=0 && i===_curIdx+1
-    const _hl = _isCur ? 'background:#0d2818;border-left:4px solid #3ddc84;box-shadow:inset 0 0 20px rgba(61,220,132,0.08);' : _isNext ? 'background:#0d1528;border-left:4px solid #7dabff;box-shadow:inset 0 0 20px rgba(125,171,255,0.08);' : ''
+    const _hl = _isLookup ? 'background:#2a1a00;border-left:4px solid #ff9040;box-shadow:inset 0 0 20px rgba(255,144,64,0.1);' : _isLogin ? 'background:#2a2a00;border-left:4px solid #f5c842;box-shadow:inset 0 0 20px rgba(245,200,66,0.1);' : _isCur ? 'background:#0d2818;border-left:4px solid #3ddc84;box-shadow:inset 0 0 20px rgba(61,220,132,0.08);' : _isNext ? 'background:#0d1528;border-left:4px solid #7dabff;box-shadow:inset 0 0 20px rgba(125,171,255,0.08);' : ''
     const _label = _isCur ? '<span style="background:#3ddc84;color:#000;font-size:10px;font-weight:800;margin-left:8px;padding:1px 6px;border-radius:3px">★ 현재 조회</span>' : _isNext ? '<span style="background:#7dabff;color:#000;font-size:10px;font-weight:800;margin-left:8px;padding:1px 6px;border-radius:3px">▶ 다음</span>' : ''
     rows.push(`<div class="row" style="top:${y}px;${_hl}">
       <div class="email" style="cursor:pointer;color:${_isCur?'#3ddc84':_isNext?'#7dabff':'#7dabff'}" onclick="quickLookup('${a.email}')">${a.email}${_label}</div>
@@ -573,7 +580,9 @@ function gotoPage(n){
 }
 async function quickLookup(email){
   document.getElementById('lookup').value = email
+  _lookupEmail = email; render()
   await lookup()
+  _lookupEmail = null; render()
   window.scrollTo({top:0,behavior:'smooth'})
 }
 async function openIt(email){
@@ -641,6 +650,7 @@ const LOCK_REASONS = new Set([
 , 'BROWSER_UNSAFE'])
 async function programLogin(email, btn){
   const orig = btn.textContent; btn.disabled=true; btn.textContent='⏳ 시도 중…'
+  _loginEmail = email; render()
   const endpoints = ['/api/login-one', '//api/login-one']
   let reason = '', message = '', reachedServer = false
   for(const url of endpoints){
@@ -651,6 +661,7 @@ async function programLogin(email, btn){
       reachedServer = true
       // 성공 판정: HTTP 2xx AND (success===true OR reason 없음)
       if(r.ok && j.success !== false && !j.error){
+        _loginEmail = null
         btn.textContent = '✅ 로그인 성공'
         btn.style.background = '#3ddc84'
         btn.style.color = '#000'
@@ -678,6 +689,7 @@ async function programLogin(email, btn){
   } else {
     alert(`❌ 서버 도달 실패: ${reason}`)
   }
+  _loginEmail = null; render()
   setTimeout(()=>{btn.textContent=orig;btn.disabled=false;btn.style.background=''}, 2000)
 }
 async function lookup(){
