@@ -133,7 +133,7 @@ jobs:
 
             # ===== 5. npm install =====
             echo "=== [5/6] npm install ==="
-            npm install --production 2>&1 | tail -10
+            PUPPETEER_SKIP_BROWSER_DOWNLOAD=1 PUPPETEER_SKIP_DOWNLOAD=1 npm install --production 2>&1 | tail -10
             # Force install rebrowser-puppeteer + archiver if missing
             node -e "require('rebrowser-puppeteer')" 2>/dev/null || npm install rebrowser-puppeteer 2>&1 | tail -5
             node -e "require('archiver')" 2>/dev/null || npm install archiver 2>&1 | tail -5
