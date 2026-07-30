@@ -182,19 +182,38 @@ jobs:
         if: always()
         continue-on-error: true
         run: |
-          # Set security level to essentially_off so the site is accessible
-          curl -s -X PATCH "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/settings/security_level" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            --data '{"value":"essentially_off"}' | python3 -c "import json,sys; d=json.load(sys.stdin); print('Security level:', d.get('result',{}).get('value','?'), '— success' if d.get('success') else '— FAILED:', d.get('errors'))"
-          # Disable Bot Fight Mode
-          curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/bot_management" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            --data '{"fight_mode":false}' | python3 -c "import json,sys; d=json.load(sys.stdin); print('Bot fight mode:', 'disabled' if d.get('success') else 'FAILED:', d.get('errors'))" 2>/dev/null || echo "Bot management API not available (free plan)"
-          # Verify site is accessible
+          if [ -z "${{ secrets.CLOUDFLARE_TOKEN }}" ] || [ -z "${{ secrets.CLOUDFLARE_ZONE_ID }}" ]; then
+            echo "CLOUDFLARE_TOKEN or CLOUDFLARE_ZONE_ID not set — skipping"
+          else
+            curl -s -X PATCH "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/settings/security_level" \
+              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              --data '{"value":"essentially_off"}' | python3 -c "import json,sys; d=json.load(sys.stdin); print('Security level:', d.get('result',{}).get('value','?'), '— success' if d.get('success') else '— FAILED:', d.get('errors'))" || true
+          fi
           HTTP=$(curl -s -o /dev/null -w "%{http_code}" https://gauth.cent-solution.online/ --max-time 10)
           echo "Site HTTP: $HTTP"
+
+      - name: SSH Cloudflare check
+        if: always()
+        continue-on-error: true
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          script: |
+            # Check if Apache/Nginx is proxying correctly to port 4000
+            echo "=== Port 4000 check ==="
+            curl -s -o /dev/null -w "localhost:4000 HTTP %{http_code}\n" http://localhost:4000/ || echo "localhost:4000 unreachable"
+            curl -s -o /dev/null -w "localhost:4000/api/accounts HTTP %{http_code}\n" http://localhost:4000/api/accounts || echo "API unreachable"
+            echo "=== Apache/Nginx config ==="
+            sudo apache2ctl -S 2>/dev/null | grep -i gauth || true
+            sudo nginx -T 2>/dev/null | grep -A5 gauth || true
+            cat /etc/apache2/sites-enabled/*gauth* 2>/dev/null || true
+            cat /etc/nginx/sites-enabled/*gauth* 2>/dev/null || true
+            echo "=== DNS check ==="
+            host gauth.cent-solution.online 2>/dev/null || dig gauth.cent-solution.online +short 2>/dev/null || echo "DNS tools not available"
+            echo "=== Done ==="
 
       - name: Summary
         if: always()
