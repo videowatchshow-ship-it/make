@@ -1,0 +1,124 @@
+name: Fix photo3 PRISM full
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fix photo3 via gauth gcloud SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='
+            set -x
+            P3="/var/www/sites/chamgyo/public/photo3"
+            P2="/var/www/sites/chamgyo/public/photo2"
+            P1="/var/www/sites/chamgyo/public/photo"
+
+            echo "===== CURRENT CSS STATE ====="
+            grep -n "body{" "$P3/CAH_1.html" | head -5
+            grep -n "full_box" "$P3/CAH_1.html" | head -5
+            grep -n "height" "$P3/CAH_1.html" | grep -i "auto\|100vh\|transparent\|#000" | head -10
+
+            echo "===== FILE INFO ====="
+            ls -la "$P3/CAH_1.html"
+            stat -c "%s %Y" "$P3/CAH_1.html"
+
+            echo "===== WRITE.PHP ====="
+            ls -la "$P3/write.php" 2>/dev/null || echo "write.php NOT in photo3"
+            ls -la "$P2/write.php" 2>/dev/null || echo "write.php NOT in photo2"
+            ls -la "$P1/write.php" 2>/dev/null || echo "write.php NOT in photo1"
+            cat "$P3/write.php" 2>/dev/null || cat "$P2/write.php" 2>/dev/null || cat "$P1/write.php" 2>/dev/null || echo "write.php not found anywhere"
+
+            echo "===== APPLYING CSS FIX ====="
+            sudo cp "$P3/CAH_1.html" "$P3/CAH_1.html.bak.$(date +%s)"
+
+            sudo sed -i "s|body{height:auto !important|body{height:100vh !important|g" "$P3/CAH_1.html"
+            sudo sed -i "s|background:transparent !important|background:#000 !important|g" "$P3/CAH_1.html"
+            sudo sed -i "s|\.full_box{height:auto !important;min-height:0 !important|.full_box{height:100vh !important;min-height:100vh !important|g" "$P3/CAH_1.html"
+
+            echo "===== VERIFY CSS AFTER FIX ====="
+            grep -n "body{" "$P3/CAH_1.html" | head -5
+            grep -n "full_box" "$P3/CAH_1.html" | head -5
+
+            echo "===== ADD META NO-CACHE ====="
+            if ! grep -q "http-equiv=\"Cache-Control\"" "$P3/CAH_1.html"; then
+              sudo sed -i "s|<head>|<head>\n<meta http-equiv=\"Cache-Control\" content=\"no-cache, no-store, must-revalidate\">\n<meta http-equiv=\"Pragma\" content=\"no-cache\">\n<meta http-equiv=\"Expires\" content=\"0\">|" "$P3/CAH_1.html"
+              echo "Added no-cache meta tags"
+            else
+              echo "No-cache meta tags already present"
+            fi
+
+            echo "===== HTACCESS ====="
+            cat "$P3/.htaccess" 2>/dev/null || echo "no .htaccess"
+
+            echo "===== UPDATE HTACCESS FOR AGGRESSIVE NO-CACHE ====="
+            sudo tee "$P3/.htaccess" > /dev/null << HTEOF
+            Options +FollowSymLinks
+
+            <IfModule mod_headers.c>
+              Header set Access-Control-Allow-Origin "*"
+              Header set Access-Control-Allow-Methods "GET, OPTIONS"
+              Header set X-Photo3-Fix "prism-ios-v2"
+              Header set Cache-Control "no-cache, no-store, must-revalidate"
+              Header set Pragma "no-cache"
+              Header set Expires "0"
+            </IfModule>
+
+            <IfModule mod_expires.c>
+              ExpiresActive On
+              ExpiresDefault "access plus 0 seconds"
+            </IfModule>
+            HTEOF
+            echo ".htaccess updated"
+
+            echo "===== SYMLINKS ====="
+            ls -la "$P3/data" 2>/dev/null || echo "data MISSING"
+            ls -la "$P3/hot-patch.js" 2>/dev/null || echo "hot-patch.js MISSING"
+            ls -la "$P3/modules" 2>/dev/null || echo "modules MISSING"
+            ls -la "$P3/bgl.js" 2>/dev/null || echo "bgl.js MISSING"
+            ls -la "$P3/dragon_fx.js" 2>/dev/null || echo "dragon_fx.js MISSING"
+
+            echo "===== APACHE RELOAD ====="
+            sudo apachectl configtest 2>&1
+            sudo systemctl reload apache2 2>&1 || echo "reload failed"
+
+            echo "===== VERIFY VIA CURL ====="
+            curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" | head -10
+            echo "---"
+            curl -s "http://localhost/photo3/CAH_1.html?ch=tak" | grep -o "body{[^}]*}" | head -3
+            echo "---"
+            curl -s "http://localhost/photo3/CAH_1.html?ch=tak" | grep -o "full_box{[^}]*}" | head -3
+            echo "---"
+            curl -sI "http://localhost/photo/CAH_1.html?ch=tak" | head -5
+            echo "===== DONE ====="
+            '
+
+      - name: Verify external
+        run: |
+          sleep 5
+          echo "=== External verification ==="
+          for path in "photo3/CAH_1.html?ch=tak" "photo/CAH_1.html?ch=tak" "photo3/data/sel_tak.json"; do
+            echo "--- $path ---"
+            STATUS=$(curl -so /dev/null -w '%{http_code}' "https://xn--9d0bw2fjtyymch7de9d.info/$path" 2>/dev/null || echo "FAIL")
+            echo "HTTP $STATUS"
+          done
+          echo ""
+          echo "=== Check CSS in response ==="
+          BODY=$(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak" 2>/dev/null)
+          echo "$BODY" | grep -o "body{[^}]*}" | head -3 || echo "Could not extract body CSS"
+          echo "$BODY" | grep -o "full_box{[^}]*}" | head -3 || echo "Could not extract full_box CSS"
+          echo "$BODY" | grep -o 'http-equiv="Cache-Control"' | head -1 || echo "No cache meta"
