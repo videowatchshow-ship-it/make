@@ -1,4 +1,4 @@
-name: Fix photo3 htaccess independent
+name: Fix photo3 column gap
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Restore photo3 original and fix
+      - name: Diagnose and fix column gap
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -24,83 +24,80 @@ jobs:
               --quiet \
               --command='
             P3="/var/www/sites/chamgyo/public/photo3"
+            P2="/var/www/sites/chamgyo/public/photo2"
             P1="/var/www/sites/chamgyo/public/photo"
 
-            echo "===== [1] 현재 상태 ====="
-            echo "photo3/CAH_1.html: $(wc -c < "$P3/CAH_1.html") bytes, md5: $(md5sum "$P3/CAH_1.html" | cut -d" " -f1)"
-            echo "photo/CAH_1.html:  $(wc -c < "$P1/CAH_1.html") bytes, md5: $(md5sum "$P1/CAH_1.html" | cut -d" " -f1)"
+            echo "===== [1] bgl.js 버전 비교 ====="
+            echo "photo3/bgl.js: $(wc -c < "$P3/bgl.js") bytes, md5: $(md5sum "$P3/bgl.js" | cut -d" " -f1)"
+            echo "photo2/bgl.js: $(wc -c < "$P2/bgl.js") bytes, md5: $(md5sum "$P2/bgl.js" | cut -d" " -f1)"
+            echo "photo/bgl.js:  $(wc -c < "$P1/bgl.js") bytes, md5: $(md5sum "$P1/bgl.js" | cut -d" " -f1)"
 
-            echo "===== [2] 백업 파일 목록 ====="
-            ls -la "$P3/CAH_1.html"*
+            echo "===== [2] dragon_fx.js 버전 비교 ====="
+            echo "photo3/dragon_fx.js: $(wc -c < "$P3/dragon_fx.js") bytes, md5: $(md5sum "$P3/dragon_fx.js" | cut -d" " -f1)"
+            echo "photo2/dragon_fx.js: $(wc -c < "$P2/dragon_fx.js") bytes, md5: $(md5sum "$P2/dragon_fx.js" | cut -d" " -f1)"
+            echo "photo/dragon_fx.js:  $(wc -c < "$P1/dragon_fx.js") bytes, md5: $(md5sum "$P1/dragon_fx.js" | cut -d" " -f1)"
 
-            echo "===== [3] backup-good 내용 확인 ====="
-            echo "크기: $(wc -c < "$P3/CAH_1.html.backup-good") bytes"
-            echo "md5: $(md5sum "$P3/CAH_1.html.backup-good" | cut -d" " -f1)"
-            echo "--- 첫 10줄 ---"
-            head -10 "$P3/CAH_1.html.backup-good"
-            echo "--- script src ---"
-            grep -oi "src=[\"'"'"'][^\"'"'"']*[\"'"'"']" "$P3/CAH_1.html.backup-good" | head -20
-            echo "--- 경로 참조 ---"
-            grep -n "photo3\|photo2\|/photo/" "$P3/CAH_1.html.backup-good" || echo "경로 참조 없음"
-            echo "--- body CSS ---"
-            grep -o "body{[^}]*}" "$P3/CAH_1.html.backup-good" | head -5
-            echo "--- 마지막 10줄 ---"
-            tail -10 "$P3/CAH_1.html.backup-good"
+            echo "===== [3] bgl.js 심볼릭 상태 ====="
+            ls -la "$P3/bgl.js"
+            ls -la "$P2/bgl.js"
+            ls -la "$P1/bgl.js"
 
-            echo "===== [4] bak-1785203263 확인 (Jul 28 원본) ====="
-            echo "크기: $(wc -c < "$P3/CAH_1.html.bak-1785203263") bytes"
-            echo "md5: $(md5sum "$P3/CAH_1.html.bak-1785203263" | cut -d" " -f1)"
-            echo "--- 첫 5줄 ---"
-            head -5 "$P3/CAH_1.html.bak-1785203263"
-            echo "--- script src ---"
-            grep -oi "src=[\"'"'"'][^\"'"'"']*[\"'"'"']" "$P3/CAH_1.html.bak-1785203263" | head -20
+            echo "===== [4] CAH_1.html bgl.js 참조 버전 ====="
+            echo "photo3:" && grep -o "bgl\.js[^\"]*" "$P3/CAH_1.html" | head -3
+            echo "photo:" && grep -o "bgl\.js[^\"]*" "$P1/CAH_1.html" | head -3
 
-            echo "===== [5] photo3 .user.ini 내용 ====="
-            cat "$P3/.user.ini" 2>/dev/null || echo "(없음)"
-            echo "===== [5b] photo .user.ini 내용 ====="
-            cat "$P1/.user.ini" 2>/dev/null || echo "(없음)"
+            echo "===== [5] CAH_1.html canvas/칸/column 관련 코드 비교 ====="
+            echo "--- photo3 canvas config ---"
+            grep -n "col\|column\|gap\|spacing\|beadW\|beadH\|cellW\|cellH\|gridW\|gridH\|cntX\|cntY\|ballR\|rad\|diam" "$P3/CAH_1.html" | grep -iv "color\|background" | head -30
+            echo "--- photo canvas config ---"
+            grep -n "col\|column\|gap\|spacing\|beadW\|beadH\|cellW\|cellH\|gridW\|gridH\|cntX\|cntY\|ballR\|rad\|diam" "$P1/CAH_1.html" | grep -iv "color\|background" | head -30
 
-            echo "===== [6] RESTORE: backup-good → CAH_1.html ====="
-            sudo cp "$P3/CAH_1.html" "$P3/CAH_1.html.bak.before-restore.$(date +%s)"
-            sudo cp "$P3/CAH_1.html.backup-good" "$P3/CAH_1.html"
-            sudo chown www-data:www-data "$P3/CAH_1.html"
-            sudo chmod 644 "$P3/CAH_1.html"
-            echo "복원 완료"
-            echo "photo3/CAH_1.html: $(wc -c < "$P3/CAH_1.html") bytes, md5: $(md5sum "$P3/CAH_1.html" | cut -d" " -f1)"
+            echo "===== [6] CAH_1.html 크기 비교 ====="
+            echo "photo3: $(wc -c < "$P3/CAH_1.html") bytes"
+            echo "photo: $(wc -c < "$P1/CAH_1.html") bytes"
 
-            echo "===== [7] Apache reload ====="
+            echo "===== [7] SYNC bgl.js: photo → photo3 ====="
+            if ! diff -q "$P1/bgl.js" "$P3/bgl.js" > /dev/null 2>&1; then
+              echo "bgl.js 다름 — photo 버전으로 동기화"
+              sudo cp "$P3/bgl.js" "$P3/bgl.js.bak.$(date +%s)"
+              sudo cp "$P1/bgl.js" "$P3/bgl.js"
+              sudo chown www-data:www-data "$P3/bgl.js"
+              echo "bgl.js 동기화 완료: $(wc -c < "$P3/bgl.js") bytes"
+            else
+              echo "bgl.js 동일 — 동기화 불필요"
+            fi
+
+            echo "===== [8] SYNC dragon_fx.js: photo → photo3 ====="
+            if ! diff -q "$P1/dragon_fx.js" "$P3/dragon_fx.js" > /dev/null 2>&1; then
+              echo "dragon_fx.js 다름 — photo 버전으로 동기화"
+              sudo cp "$P3/dragon_fx.js" "$P3/dragon_fx.js.bak.$(date +%s)"
+              sudo cp "$P1/dragon_fx.js" "$P3/dragon_fx.js"
+              sudo chown www-data:www-data "$P3/dragon_fx.js"
+              echo "dragon_fx.js 동기화 완료: $(wc -c < "$P3/dragon_fx.js") bytes"
+            else
+              echo "dragon_fx.js 동일 — 동기화 불필요"
+            fi
+
+            echo "===== [9] CAH_1.html diff (photo vs photo3) — 주요 차이 ====="
+            diff "$P1/CAH_1.html" "$P3/CAH_1.html" | head -80 || echo "diff 없음"
+
+            echo "===== [10] photo CAH_1.html 에만 있는 코드 (gap fix 후보) ====="
+            diff "$P3/CAH_1.html" "$P1/CAH_1.html" | grep "^>" | head -40
+
+            echo "===== [11] photo3 CAH_1.html 에만 있는 코드 ====="
+            diff "$P3/CAH_1.html" "$P1/CAH_1.html" | grep "^<" | head -40
+
+            echo "===== [12] Apache reload ====="
             sudo apachectl configtest 2>&1
             sudo systemctl reload apache2 2>&1
 
-            echo "===== [8] 검증 ====="
-            echo "--- photo3 localhost ---"
-            curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" | head -5
-            echo "--- photo3 응답 크기 ---"
-            curl -s "http://localhost/photo3/CAH_1.html?ch=tak" | wc -c
-            echo "--- photo localhost ---"
-            curl -sI "http://localhost/photo/CAH_1.html?ch=tak" | head -5
-            echo "--- photo 응답 크기 ---"
-            curl -s "http://localhost/photo/CAH_1.html?ch=tak" | wc -c
-            echo "--- photo3 리소스 접근 ---"
+            echo "===== [13] 검증 ====="
+            echo "photo3/bgl.js: $(md5sum "$P3/bgl.js" | cut -d" " -f1)"
+            echo "photo/bgl.js:  $(md5sum "$P1/bgl.js" | cut -d" " -f1)"
+            echo "photo3/dragon_fx.js: $(md5sum "$P3/dragon_fx.js" | cut -d" " -f1)"
+            echo "photo/dragon_fx.js:  $(md5sum "$P1/dragon_fx.js" | cut -d" " -f1)"
             curl -sI "http://localhost/photo3/bgl.js" | head -3
             curl -sI "http://localhost/photo3/dragon_fx.js" | head -3
-            curl -sI "http://localhost/photo3/data/sel_tak.json" | head -3
+            curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" | head -3
             echo "===== DONE ====="
             '
-
-      - name: External verify
-        if: always()
-        run: |
-          sleep 5
-          echo "=== photo3 외부 ==="
-          curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | head -10
-          echo ""
-          echo "=== photo3 외부 크기 ==="
-          curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | wc -c
-          echo "=== photo 외부 크기 ==="
-          curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | wc -c
-          echo ""
-          echo "=== CORS 확인 ==="
-          H=$(curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null)
-          echo "$H" | grep -i "access-control" && echo "FAIL" || echo "OK"
-          echo "$H" | grep -i "x-photo3" && echo "FAIL" || echo "OK"
