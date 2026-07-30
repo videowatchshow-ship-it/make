@@ -1,0 +1,58 @@
+name: Fetch CAH_1.html source
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch CAH_1.html via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 34.104.233.35
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            echo "===== PHOTO3 CAH_1.html FULL SOURCE ====="
+            FILE="/var/www/sites/chamgyo/public/photo3/CAH_1.html"
+            if [ -f "$FILE" ]; then
+              echo "FILE_EXISTS=true"
+              echo "FILE_SIZE=$(stat -c%s "$FILE")"
+              echo "===== BEGIN_HTML ====="
+              cat "$FILE"
+              echo ""
+              echo "===== END_HTML ====="
+            else
+              echo "FILE_EXISTS=false at photo3"
+              echo "Checking photo2..."
+              FILE2="/var/www/sites/chamgyo/public/photo2/CAH_1.html"
+              if [ -f "$FILE2" ]; then
+                echo "Found at photo2"
+                echo "===== BEGIN_HTML ====="
+                cat "$FILE2"
+                echo ""
+                echo "===== END_HTML ====="
+              else
+                echo "Checking photo..."
+                FILE3="/var/www/sites/chamgyo/public/photo/CAH_1.html"
+                if [ -f "$FILE3" ]; then
+                  echo "Found at photo"
+                  echo "===== BEGIN_HTML ====="
+                  cat "$FILE3"
+                  echo ""
+                  echo "===== END_HTML ====="
+                else
+                  echo "NOT FOUND in any photo dir"
+                  echo "Listing photo3 dir:"
+                  ls -la /var/www/sites/chamgyo/public/photo3/ 2>/dev/null | head -30 || echo "photo3 dir not found"
+                  echo "Listing photo2 dir:"
+                  ls -la /var/www/sites/chamgyo/public/photo2/ 2>/dev/null | head -30 || echo "photo2 dir not found"
+                  echo "Listing photo dir:"
+                  ls -la /var/www/sites/chamgyo/public/photo/ 2>/dev/null | head -30 || echo "photo dir not found"
+                fi
+              fi
+            fi
