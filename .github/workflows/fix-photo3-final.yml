@@ -26,62 +26,27 @@ jobs:
             CAH="/var/www/sites/chamgyo/public/photo3/CAH_1.html"
 
             echo "===== BEFORE ====="
-            echo "--- photo-center-align block ---"
-            sed -n "/<style id=\"photo-center-align\">/,/<\/style>/p" "$CAH"
-            echo "--- line 791 area (full_box height auto) ---"
-            grep -n "full_box.*height.*auto\|height.*auto.*full_box" "$CAH" | head -5
-            echo "--- mobile-fit zoom ---"
+            grep -n "photo-center-align" "$CAH" | head -5
+            grep -n "height: auto" "$CAH" | head -5
             grep -n "style.zoom" "$CAH" | head -5
-            echo "--- all body display:flex ---"
-            grep -n "display.*flex" "$CAH" | grep -i "body\|photo-center" | head -10
 
-            echo "===== BACKUP ====="
             sudo cp "$CAH" "${CAH}.bak.final.$(date +%s)"
 
-            echo "===== FIX 1: Replace entire photo-center-align style block ====="
-            sudo python3 -c "
-import re
-with open(\"$CAH\", \"r\") as f:
-    content = f.read()
+            echo "===== FIX 1: Remove photo-center-align style block ====="
+            sudo sed -i "/<style id=.photo-center-align.>/,/<\/style>/d" "$CAH"
 
-# Remove the photo-center-align style block entirely
-content = re.sub(
-    r'<style id=\"photo-center-align\">.*?</style>',
-    '<!-- photo-center-align removed for WKWebView -->',
-    content,
-    flags=re.DOTALL
-)
+            echo "===== FIX 2: Fix full_box height auto to 100vh ====="
+            sudo sed -i "s/height: auto !important/height: 100vh !important/g" "$CAH"
 
-# Fix full_box height:auto to height:100vh (line 791 area)
-content = re.sub(
-    r'\.full_box\s*\{\s*transform:\s*none\s*!important;\s*min-height:\s*100vh;\s*height:\s*auto\s*!important;\s*\}',
-    '.full_box { transform: none !important; min-height: 100vh; height: 100vh !important; }',
-    content
-)
-
-# Replace mobile-fit zoom with transform scale (WKWebView compatible)
-content = re.sub(
-    r'document\.body\.style\.zoom\s*=\s*ratio',
-    'document.body.style.transform=\"scale(\"+ratio+\")\";document.body.style.transformOrigin=\"0 0\";document.body.style.width=(100/ratio)+\"%\"',
-    content
-)
-
-with open(\"$CAH\", \"w\") as f:
-    f.write(content)
-print(\"Python fixes applied\")
-"
+            echo "===== FIX 3: Replace zoom with transform scale ====="
+            sudo sed -i "s|document\.body\.style\.zoom = ratio|document.body.style.transform=\"scale(\"+ratio+\")\";document.body.style.transformOrigin=\"0 0\";document.body.style.width=(100/ratio)+\"%\"|g" "$CAH"
 
             echo "===== AFTER ====="
-            echo "--- photo-center-align (should be gone) ---"
-            grep -n "photo-center-align" "$CAH" | head -5
-            echo "--- body display flex (should be gone from center-align) ---"
-            grep -n "display.*flex" "$CAH" | grep -i "body" | head -5
-            echo "--- full_box height (should be 100vh) ---"
-            grep -n "full_box.*height\|height.*full_box" "$CAH" | head -10
-            echo "--- zoom (should be transform now) ---"
+            grep -n "photo-center-align" "$CAH" | head -3 || echo "center-align REMOVED"
+            grep -n "height: auto" "$CAH" | head -3 || echo "height-auto FIXED"
             grep -n "style.zoom\|style.transform" "$CAH" | head -5
-            echo "--- body override at bottom ---"
             grep -n "body{" "$CAH" | head -5
+            grep -n "full_box" "$CAH" | grep "height" | head -5
 
             echo "===== APACHE RELOAD ====="
             sudo apachectl configtest 2>&1
@@ -89,18 +54,10 @@ print(\"Python fixes applied\")
 
             echo "===== VERIFY ====="
             curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" | head -5
-            echo "---"
-            BODY=$(curl -s "http://localhost/photo3/CAH_1.html?ch=tak")
-            echo "body CSS:"
-            echo "$BODY" | grep -o "body{[^}]*}" | head -3
-            echo "full_box CSS:"
-            echo "$BODY" | grep -oP "\.full_box\s*\{[^}]*\}" | head -5
-            echo "display:flex check:"
-            echo "$BODY" | grep -c "display.*flex.*align-items.*center" || echo "0 matches (good)"
-            echo "zoom check:"
-            echo "$BODY" | grep -c "style.zoom" || echo "0 zoom refs (good)"
-            echo "transform check:"
-            echo "$BODY" | grep -c "style.transform" || echo "0 transform refs"
+            echo "---body---"
+            curl -s "http://localhost/photo3/CAH_1.html?ch=tak" | grep -o "body{[^}]*}" | head -3
+            echo "---flex-check---"
+            curl -s "http://localhost/photo3/CAH_1.html?ch=tak" | grep -c "display: flex" || echo "0"
             echo "===== DONE ====="
             '
 
@@ -108,27 +65,9 @@ print(\"Python fixes applied\")
         if: always()
         run: |
           sleep 5
-          echo "=== External check ==="
           BODY=$(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null)
           echo "Size: $(echo "$BODY" | wc -c)"
-          echo "body CSS:"
           echo "$BODY" | grep -o "body{[^}]*}" | head -3
-          echo "full_box CSS:"
-          echo "$BODY" | grep -oP "\.full_box\s*\{[^}]*\}" | head -5 || echo "n/a"
-          if echo "$BODY" | grep -q "display: flex.*align-items: center"; then
-            echo "FAIL: center-align block still present"
-          else
-            echo "OK: center-align removed"
-          fi
-          if echo "$BODY" | grep -q "height: auto !important"; then
-            echo "FAIL: height:auto still present"
-          else
-            echo "OK: height:auto removed"
-          fi
-          if echo "$BODY" | grep -q "style.zoom"; then
-            echo "WARN: zoom still present"
-          else
-            echo "OK: zoom replaced with transform"
-          fi
-          STATUS=$(curl -so /dev/null -w '%{http_code}' "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak" 2>/dev/null)
-          echo "HTTP: $STATUS"
+          echo "$BODY" | grep -q "display: flex.*align-items: center" && echo "FAIL: flex" || echo "OK: flex removed"
+          echo "$BODY" | grep -q "height: auto !important" && echo "FAIL: height auto" || echo "OK: height fixed"
+          curl -so /dev/null -w "HTTP: %{http_code}\n" "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak" 2>/dev/null
