@@ -9,7 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fix remaining CSS issues for WKWebView
+      - name: Aggressive fix for PRISM WKWebView
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -24,40 +24,57 @@ jobs:
               --quiet \
               --command='
             CAH="/var/www/sites/chamgyo/public/photo3/CAH_1.html"
+            REF="/var/www/sites/chamgyo/public/photo/CAH_1.html"
 
-            echo "===== BEFORE ====="
-            grep -n "photo-center-align" "$CAH" | head -5
-            grep -n "height: auto" "$CAH" | head -5
-            grep -n "style.zoom" "$CAH" | head -5
+            echo "===== BACKUP ====="
+            sudo cp "$CAH" "${CAH}.bak.aggressive.$(date +%s)"
 
-            sudo cp "$CAH" "${CAH}.bak.final.$(date +%s)"
+            echo "===== REMOVE mobile-fit-js entirely ====="
+            sudo sed -i "/<script id=.chamgyo-mobile-fit-js.>/,/<\/script>/d" "$CAH"
 
-            echo "===== FIX 1: Remove photo-center-align style block ====="
+            echo "===== REMOVE photo-center-align if still exists ====="
             sudo sed -i "/<style id=.photo-center-align.>/,/<\/style>/d" "$CAH"
 
-            echo "===== FIX 2: Fix full_box height auto to 100vh ====="
+            echo "===== REMOVE photo-no-miniview style ====="
+            sudo sed -i "/<style id=.photo-no-miniview.>/,/<\/style>/d" "$CAH"
+
+            echo "===== FIX all height:auto to 100vh ====="
             sudo sed -i "s/height: auto !important/height: 100vh !important/g" "$CAH"
 
-            echo "===== FIX 3: Replace zoom with transform scale ====="
-            sudo sed -i "s|document\.body\.style\.zoom = ratio|document.body.style.transform=\"scale(\"+ratio+\")\";document.body.style.transformOrigin=\"0 0\";document.body.style.width=(100/ratio)+\"%\"|g" "$CAH"
+            echo "===== REMOVE any remaining zoom refs ====="
+            sudo sed -i "/style\.zoom/d" "$CAH"
 
-            echo "===== AFTER ====="
-            grep -n "photo-center-align" "$CAH" | head -3 || echo "center-align REMOVED"
-            grep -n "height: auto" "$CAH" | head -3 || echo "height-auto FIXED"
-            grep -n "style.zoom\|style.transform" "$CAH" | head -5
+            echo "===== REMOVE all added style blocks after body tag ====="
+            sudo sed -i "/photo-center-align removed/d" "$CAH"
+
+            echo "===== VERIFY REMAINING STRUCTURE ====="
+            echo "--- zoom refs ---"
+            grep -cn "zoom" "$CAH"
+            echo "--- display flex refs ---"
+            grep -n "display.*flex" "$CAH" | head -10
+            echo "--- body overrides ---"
             grep -n "body{" "$CAH" | head -5
+            echo "--- full_box ---"
             grep -n "full_box" "$CAH" | grep "height" | head -5
+            echo "--- scripts ---"
+            grep -n "<script" "$CAH" | head -20
+            echo "--- styles ---"
+            grep -n "<style" "$CAH" | head -10
+            echo "--- photo reference body ---"
+            grep -n "body{" "$REF" | head -3
+            echo "--- photo reference scripts ---"
+            grep -n "<script" "$REF" | head -10
 
             echo "===== APACHE RELOAD ====="
             sudo apachectl configtest 2>&1
             sudo systemctl reload apache2 2>&1 || echo "reload failed"
 
-            echo "===== VERIFY ====="
+            echo "===== CURL TEST ====="
             curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" | head -5
-            echo "---body---"
+            echo "---"
             curl -s "http://localhost/photo3/CAH_1.html?ch=tak" | grep -o "body{[^}]*}" | head -3
-            echo "---flex-check---"
-            curl -s "http://localhost/photo3/CAH_1.html?ch=tak" | grep -c "display: flex" || echo "0"
+            echo "---"
+            curl -s "http://localhost/photo3/CAH_1.html?ch=tak" | grep -c "zoom" || echo "0 zoom"
             echo "===== DONE ====="
             '
 
@@ -68,6 +85,7 @@ jobs:
           BODY=$(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null)
           echo "Size: $(echo "$BODY" | wc -c)"
           echo "$BODY" | grep -o "body{[^}]*}" | head -3
-          echo "$BODY" | grep -q "display: flex.*align-items: center" && echo "FAIL: flex" || echo "OK: flex removed"
-          echo "$BODY" | grep -q "height: auto !important" && echo "FAIL: height auto" || echo "OK: height fixed"
+          echo "$BODY" | grep -q "display: flex.*align-items: center" && echo "FAIL: flex" || echo "OK: no body flex"
+          echo "$BODY" | grep -q "style\.zoom" && echo "FAIL: zoom" || echo "OK: no zoom"
+          echo "$BODY" | grep -q "chamgyo-mobile-fit" && echo "FAIL: mobile-fit" || echo "OK: no mobile-fit"
           curl -so /dev/null -w "HTTP: %{http_code}\n" "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak" 2>/dev/null
