@@ -20,125 +20,67 @@ jobs:
             set -euo pipefail
             PHOTO="/var/www/sites/chamgyo/public/photo"
             DATA="$PHOTO/data"
-
-            echo "===== [1/6] 현재 파일 구조 ====="
+            echo "===== [1/7] 파일 구조 ====="
             ls -la "$PHOTO/" 2>/dev/null || echo "photo dir not found"
             ls -la "$DATA/" 2>/dev/null | head -20 || echo "data dir not found"
-
             echo ""
-            echo "===== [2/6] sel_cent.json 확인 ====="
-            cat "$DATA/sel_cent.json" 2>/dev/null || echo "sel_cent.json not found"
-
+            echo "===== [2/7] sel_cent.json ====="
+            cat "$DATA/sel_cent.json" 2>/dev/null || echo "not found"
             echo ""
-            echo "===== [3/6] api_selected_room.php 원본 ====="
-            cat "$PHOTO/api_selected_room.php" 2>/dev/null || echo "FILE NOT FOUND"
-
+            echo "===== [3/7] api_selected_room.php 원본 ====="
+            cat "$PHOTO/api_selected_room.php" 2>/dev/null || echo "NOT FOUND"
             echo ""
-            echo "===== [4/6] CAH_1.html 폴링 로직 추출 ====="
-            grep -n -i 'sel\|selected\|room_id\|polling\|setInterval\|fetch.*api_selected\|loadRoom\|renderRoom\|\.json' "$PHOTO/CAH_1.html" 2>/dev/null | head -60 || echo "CAH_1.html not found or no matches"
-
+            echo "===== [4/7] CAH_1.html 폴링 관련 줄 ====="
+            grep -n -i 'selected\|room_id\|setInterval\|fetch.*api_selected\|loadRoom\|\.json' "$PHOTO/CAH_1.html" 2>/dev/null | head -60 || echo "not found"
             echo ""
-            echo "===== [5/6] api_selected_room.php 캐시 헤더 패치 ====="
+            echo "===== [5/7] api_selected_room.php 캐시 헤더 패치 ====="
             API="$PHOTO/api_selected_room.php"
             if [ -f "$API" ]; then
-              # 백업
-              cp "$API" "$API.bak.$(date +%Y%m%d%H%M%S)"
-
+              cp "$API" "${API}.bak"
               if grep -q 'Cache-Control' "$API"; then
-                echo "Cache-Control 헤더 이미 존재 — 스킵"
+                echo "Cache-Control already present"
               else
-                # <?php 다음 줄에 no-cache 헤더 삽입
-                sudo sed -i '/<?php/a\header("Cache-Control: no-cache, no-store, must-revalidate");\nheader("Pragma: no-cache");\nheader("Expires: 0");' "$API"
-                echo "✅ no-cache 헤더 추가 완료"
+                sudo sed -i '/<\?php/a header("Cache-Control: no-cache, no-store, must-revalidate"); header("Pragma: no-cache"); header("Expires: 0");' "$API"
+                echo "added no-cache headers"
               fi
-
-              # clearstatcache + file_get_contents에 realpath 확인
-              if grep -q 'clearstatcache' "$API"; then
-                echo "clearstatcache 이미 존재"
-              else
-                # file_get_contents 앞에 clearstatcache 삽입 (PHP 파일 캐시 방지)
-                sudo sed -i '/file_get_contents/i\clearstatcache(true);' "$API" 2>/dev/null || true
-                echo "✅ clearstatcache 추가"
+              if ! grep -q 'clearstatcache' "$API"; then
+                sudo sed -i '/file_get_contents/i clearstatcache(true);' "$API" 2>/dev/null || true
+                echo "added clearstatcache"
               fi
-
-              echo "--- 패치 후 api_selected_room.php ---"
+              echo "--- patched file ---"
               cat "$API"
-            else
-              echo "⚠️ api_selected_room.php 없음"
             fi
-
             echo ""
-            echo "===== [6/6] CAH_1.html fetch 캐시버스팅 패치 ====="
+            echo "===== [6/7] CAH_1.html fetch cache-busting ====="
             CAH="$PHOTO/CAH_1.html"
             if [ -f "$CAH" ]; then
-              cp "$CAH" "$CAH.bak.$(date +%Y%m%d%H%M%S)"
-
-              # 패턴 1: fetch('api_selected_room.php?ch=' + ...) → 캐시버스팅 추가
-              # api_selected_room 을 fetch 하는 모든 줄에 &_t=Date.now() 추가
+              cp "$CAH" "${CAH}.bak"
               if grep -q '_t=.*Date.now' "$CAH"; then
-                echo "캐시버스팅 이미 존재 — 스킵"
+                echo "cache-busting already exists"
               else
-                # 다양한 fetch 패턴 처리
-                # 패턴: fetch(url) 에서 url에 api_selected_room 포함시 cache:'no-store' 추가
-                # 방법: fetch 옵션에 cache:'no-store' 추가하는 것이 가장 안전
-                # sed로 fetch('...api_selected_room...')를 fetch('...api_selected_room...', {cache:'no-store'})로
                 sudo sed -i "s|fetch(\(['\"].*api_selected_room[^)]*\))|fetch(\1, {cache:'no-store'})|g" "$CAH" 2>/dev/null || true
-
-                # 또한 URL에 cache-busting 파라미터 추가
-                # api_selected_room.php?ch= 뒤에 &_t='+Date.now()+'  추가
-                sudo sed -i "s|api_selected_room\.php?ch=\([^'\"&]*\)|api_selected_room.php?ch=\1\&_t='+Date.now()+'|g" "$CAH" 2>/dev/null || true
-
-                # 백틱 템플릿 리터럴 패턴도 처리
-                sudo sed -i 's|api_selected_room\.php?ch=\${|api_selected_room.php?ch=${|g' "$CAH" 2>/dev/null || true
-                sudo sed -i 's|api_selected_room\.php?ch=\${\([^}]*\)}|api_selected_room.php?ch=${\1}\&_t=${Date.now()}|g' "$CAH" 2>/dev/null || true
-
-                echo "✅ fetch 캐시버스팅 추가"
+                sudo sed -i "s|api_selected_room\.php?ch=|api_selected_room.php?ch='+ch+'\&_t='+Date.now()+'|g" "$CAH" 2>/dev/null || true
+                echo "added cache-busting to fetch"
               fi
-
-              # room_N.json fetch에도 캐시버스팅 적용
               if grep -q 'room_.*\.json' "$CAH"; then
                 sudo sed -i "s|fetch(\(['\"].*room_[^)]*\.json[^)]*\))|fetch(\1, {cache:'no-store'})|g" "$CAH" 2>/dev/null || true
-                echo "✅ room_N.json fetch에도 no-store 적용"
+                echo "added no-store to room_N.json fetch"
               fi
-
-              echo "--- 패치 후 fetch 관련 줄 ---"
+              echo "--- patched fetch lines ---"
               grep -n 'fetch\|api_selected_room\|room_.*json' "$CAH" | head -30
-            else
-              echo "⚠️ CAH_1.html 없음"
             fi
-
             echo ""
-            echo "===== Apache .htaccess 캐시 방지 ====="
-            HTACCESS="$PHOTO/.htaccess"
-            if [ -f "$HTACCESS" ] && grep -q 'api_selected_room' "$HTACCESS"; then
-              echo ".htaccess에 api_selected_room 캐시 규칙 이미 존재"
+            echo "===== [7/7] .htaccess cache rules ====="
+            HT="$PHOTO/.htaccess"
+            if [ -f "$HT" ] && grep -q 'api_selected_room' "$HT"; then
+              echo "htaccess rules already exist"
             else
-              cat >> "$HTACCESS" <<'HTEOF'
-
-# CAH_1 room selection - no cache for API and sel JSON
-<FilesMatch "api_selected_room\.php$">
-  Header set Cache-Control "no-cache, no-store, must-revalidate"
-  Header set Pragma "no-cache"
-  Header set Expires "0"
-</FilesMatch>
-<FilesMatch "sel_.*\.json$">
-  Header set Cache-Control "no-cache, no-store, must-revalidate"
-  Header set Pragma "no-cache"
-  Header set Expires "0"
-</FilesMatch>
-<FilesMatch "room_.*\.json$">
-  Header set Cache-Control "no-cache, no-store, must-revalidate"
-  Header set Pragma "no-cache"
-  Header set Expires "0"
-</FilesMatch>
-HTEOF
-              echo "✅ .htaccess 캐시 방지 규칙 추가"
+              printf '\n<FilesMatch "api_selected_room\\.php$">\n  Header set Cache-Control "no-cache, no-store, must-revalidate"\n  Header set Pragma "no-cache"\n  Header set Expires "0"\n</FilesMatch>\n<FilesMatch "sel_.*\\.json$">\n  Header set Cache-Control "no-cache, no-store, must-revalidate"\n  Header set Pragma "no-cache"\n  Header set Expires "0"\n</FilesMatch>\n<FilesMatch "room_.*\\.json$">\n  Header set Cache-Control "no-cache, no-store, must-revalidate"\n  Header set Pragma "no-cache"\n  Header set Expires "0"\n</FilesMatch>\n' | sudo tee -a "$HT"
+              echo "added htaccess cache rules"
             fi
-
-            echo ""
-            echo "===== Apache reload ====="
             sudo apachectl configtest 2>&1 || true
-            sudo systemctl reload apache2 2>&1 || echo "apache reload 실패"
+            sudo systemctl reload apache2 2>&1 || echo "apache reload failed"
+            echo "DONE"
 
       - name: Purge Cloudflare cache
         env:
@@ -148,47 +90,13 @@ HTEOF
         run: |
           TOKEN="${CF_TOKEN:-$CF_TOKEN2}"
           ZONE="${CF_ZONE:-7e5faed2d3d4d6da7aceb4ddde81a62b}"
-
           if [ -z "$TOKEN" ]; then
-            echo "⚠️ Cloudflare token not found in secrets"
+            echo "No Cloudflare token found"
             exit 0
           fi
-
-          echo "=== Purging Cloudflare cache ==="
-          # Purge specific URLs
-          curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE/purge_cache" \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "Content-Type: application/json" \
-            --data '{
-              "files": [
-                "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html",
-                "https://xn--9d0bw2fjtyymch7de9d.info/photo/api_selected_room.php",
-                "https://xn--9d0bw2fjtyymch7de9d.info/photo/data/sel_cent.json",
-                "https://xn--9d0bw2fjtyymch7de9d.info/photo/data/sel_otuki.json",
-                "https://xn--9d0bw2fjtyymch7de9d.info/photo/data/sel_jay.json",
-                "https://xn--9d0bw2fjtyymch7de9d.info/photo/data/sel_tak.json"
-              ]
-            }' | jq .
-
-          echo ""
-          echo "=== Purging all photo cache ==="
+          echo "Purging cache..."
           curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE/purge_cache" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             --data '{"purge_everything":true}' | jq .
-
-      - name: Verify fix
-        run: |
-          echo "=== Verifying API response headers ==="
-          curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo/api_selected_room.php?ch=cent" 2>/dev/null | head -15 || echo "Direct verify failed (expected in CI)"
-          echo ""
-          echo "=== Verifying sel_cent.json ==="
-          curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo/api_selected_room.php?ch=cent" 2>/dev/null || echo "API check failed (expected if domain not reachable from CI)"
-          echo ""
-          echo "✅ 패치 완료. 다음 변경사항 적용됨:"
-          echo "  1. api_selected_room.php: Cache-Control no-cache 헤더 추가"
-          echo "  2. api_selected_room.php: clearstatcache() 추가"
-          echo "  3. CAH_1.html: fetch에 cache:'no-store' 옵션 추가"
-          echo "  4. CAH_1.html: URL에 _t=Date.now() 캐시버스팅 추가"
-          echo "  5. .htaccess: sel_*.json, room_*.json, api_selected_room.php 캐시 방지"
-          echo "  6. Cloudflare 캐시 전체 퍼지"
+          echo "Cache purged"
