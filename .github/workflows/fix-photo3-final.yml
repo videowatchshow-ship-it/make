@@ -1,4 +1,4 @@
-name: Fix photo3 htaccess to match photo
+name: Fix photo3 htaccess independent
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Replace photo3 htaccess with photo htaccess
+      - name: Write photo3-specific htaccess
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -24,55 +24,63 @@ jobs:
               --quiet \
               --command='
             P3="/var/www/sites/chamgyo/public/photo3"
-            P1="/var/www/sites/chamgyo/public/photo"
 
-            echo "===== BEFORE ====="
-            echo "--- photo3/.htaccess ---"
+            echo "===== CURRENT photo3/.htaccess ====="
             cat "$P3/.htaccess"
-            echo "--- photo/.htaccess ---"
-            cat "$P1/.htaccess"
 
-            echo "===== BACKUP photo3/.htaccess ====="
+            echo "===== BACKUP ====="
             sudo cp "$P3/.htaccess" "$P3/.htaccess.bak.$(date +%s)"
 
-            echo "===== REPLACE photo3/.htaccess with photo/.htaccess ====="
-            sudo cp "$P1/.htaccess" "$P3/.htaccess"
+            echo "===== WRITE photo3-specific .htaccess ====="
+            sudo tee "$P3/.htaccess" > /dev/null << '"'"'HTEOF'"'"'
+            Options +FollowSymLinks
+
+            <FilesMatch "^(CAW_[0-9]+|CAH_[0-9]+)\.html$">
+              Header set Cache-Control "no-cache, no-store, must-revalidate"
+              Header set Pragma "no-cache"
+              Header set Expires "0"
+            </FilesMatch>
+
+            <FilesMatch "^bgl\.js$">
+              Header set Cache-Control "no-cache, no-store, must-revalidate"
+            </FilesMatch>
+
+            <FilesMatch "^(api_selected_room|write_select_room|write)\.php$">
+              Header set Cache-Control "no-cache, no-store, must-revalidate"
+              Header set Pragma "no-cache"
+              Header set Expires "0"
+            </FilesMatch>
+            HTEOF
             sudo chown www-data:www-data "$P3/.htaccess"
             sudo chmod 644 "$P3/.htaccess"
 
-            echo "===== AFTER ====="
-            echo "--- photo3/.htaccess (now) ---"
+            echo "===== NEW photo3/.htaccess ====="
             cat "$P3/.htaccess"
-            echo "--- diff ---"
-            diff "$P3/.htaccess" "$P1/.htaccess" && echo "IDENTICAL" || echo "DIFFER"
 
             echo "===== APACHE RELOAD ====="
             sudo apachectl configtest 2>&1
             sudo systemctl reload apache2 2>&1
 
-            echo "===== VERIFY HEADERS ====="
-            echo "--- photo3 ---"
+            echo "===== VERIFY ====="
+            echo "--- photo3 headers ---"
             curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" | head -20
-            echo "--- photo ---"
+            echo "--- photo headers ---"
             curl -sI "http://localhost/photo/CAH_1.html?ch=tak" | head -20
-
+            echo "--- CORS check ---"
+            curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" | grep -i "access-control\|x-photo3" && echo "FAIL" || echo "OK: no extra headers"
+            echo "--- symlink check ---"
+            curl -sI "http://localhost/photo3/data/sel_tak.json" | head -3
             echo "===== DONE ====="
             '
 
-      - name: Verify external headers match
+      - name: Verify external
         if: always()
         run: |
           sleep 5
-          echo "=== photo3 external headers ==="
+          echo "=== photo3 ==="
           curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null
           echo ""
-          echo "=== photo external headers ==="
-          curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null
-          echo ""
-          echo "=== HEADER DIFF ==="
-          diff <(curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | grep -iv "cf-ray\|report-to\|nel:\|date:\|last-modified\|alt-svc" | sort) <(curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | grep -iv "cf-ray\|report-to\|nel:\|date:\|last-modified\|alt-svc" | sort) && echo "HEADERS NOW IDENTICAL" || echo "HEADERS STILL DIFFER"
-          echo ""
-          echo "=== CORS CHECK (should be gone from photo3) ==="
+          echo "=== CORS gone? ==="
           H=$(curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null)
-          echo "$H" | grep -i "access-control" && echo "FAIL: CORS still present" || echo "OK: No CORS headers"
-          echo "$H" | grep -i "x-photo3-fix" && echo "FAIL: custom header still present" || echo "OK: No custom header"
+          echo "$H" | grep -i "access-control" && echo "FAIL" || echo "OK"
+          echo "$H" | grep -i "x-photo3" && echo "FAIL" || echo "OK"
