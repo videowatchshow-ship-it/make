@@ -9,7 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deep photo3 path check
+      - name: Restore photo3 original and fix
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -26,80 +26,81 @@ jobs:
             P3="/var/www/sites/chamgyo/public/photo3"
             P1="/var/www/sites/chamgyo/public/photo"
 
-            echo "===== [1] photo3/.user.ini ====="
-            cat "$P3/.user.ini" 2>/dev/null || echo "(없음)"
+            echo "===== [1] 현재 상태 ====="
+            echo "photo3/CAH_1.html: $(wc -c < "$P3/CAH_1.html") bytes, md5: $(md5sum "$P3/CAH_1.html" | cut -d" " -f1)"
+            echo "photo/CAH_1.html:  $(wc -c < "$P1/CAH_1.html") bytes, md5: $(md5sum "$P1/CAH_1.html" | cut -d" " -f1)"
 
-            echo "===== [2] photo/.user.ini ====="
+            echo "===== [2] 백업 파일 목록 ====="
+            ls -la "$P3/CAH_1.html"*
+
+            echo "===== [3] backup-good 내용 확인 ====="
+            echo "크기: $(wc -c < "$P3/CAH_1.html.backup-good") bytes"
+            echo "md5: $(md5sum "$P3/CAH_1.html.backup-good" | cut -d" " -f1)"
+            echo "--- 첫 10줄 ---"
+            head -10 "$P3/CAH_1.html.backup-good"
+            echo "--- script src ---"
+            grep -oi "src=[\"'"'"'][^\"'"'"']*[\"'"'"']" "$P3/CAH_1.html.backup-good" | head -20
+            echo "--- 경로 참조 ---"
+            grep -n "photo3\|photo2\|/photo/" "$P3/CAH_1.html.backup-good" || echo "경로 참조 없음"
+            echo "--- body CSS ---"
+            grep -o "body{[^}]*}" "$P3/CAH_1.html.backup-good" | head -5
+            echo "--- 마지막 10줄 ---"
+            tail -10 "$P3/CAH_1.html.backup-good"
+
+            echo "===== [4] bak-1785203263 확인 (Jul 28 원본) ====="
+            echo "크기: $(wc -c < "$P3/CAH_1.html.bak-1785203263") bytes"
+            echo "md5: $(md5sum "$P3/CAH_1.html.bak-1785203263" | cut -d" " -f1)"
+            echo "--- 첫 5줄 ---"
+            head -5 "$P3/CAH_1.html.bak-1785203263"
+            echo "--- script src ---"
+            grep -oi "src=[\"'"'"'][^\"'"'"']*[\"'"'"']" "$P3/CAH_1.html.bak-1785203263" | head -20
+
+            echo "===== [5] photo3 .user.ini 내용 ====="
+            cat "$P3/.user.ini" 2>/dev/null || echo "(없음)"
+            echo "===== [5b] photo .user.ini 내용 ====="
             cat "$P1/.user.ini" 2>/dev/null || echo "(없음)"
 
-            echo "===== [3] photo3 CAH_1.html 전체 (raw 8KB) ====="
-            cat "$P3/CAH_1.html"
+            echo "===== [6] RESTORE: backup-good → CAH_1.html ====="
+            sudo cp "$P3/CAH_1.html" "$P3/CAH_1.html.bak.before-restore.$(date +%s)"
+            sudo cp "$P3/CAH_1.html.backup-good" "$P3/CAH_1.html"
+            sudo chown www-data:www-data "$P3/CAH_1.html"
+            sudo chmod 644 "$P3/CAH_1.html"
+            echo "복원 완료"
+            echo "photo3/CAH_1.html: $(wc -c < "$P3/CAH_1.html") bytes, md5: $(md5sum "$P3/CAH_1.html" | cut -d" " -f1)"
 
-            echo "===== [4] photo CAH_1.html 전체 (raw 8KB) ====="
-            cat "$P1/CAH_1.html"
+            echo "===== [7] Apache reload ====="
+            sudo apachectl configtest 2>&1
+            sudo systemctl reload apache2 2>&1
 
-            echo "===== [5] photo3 bgl.js 첫 30줄 ====="
-            head -30 "$P3/bgl.js"
-
-            echo "===== [6] photo bgl.js 첫 30줄 ====="
-            head -30 "$P1/bgl.js"
-
-            echo "===== [7] photo3 경로 참조 grep ====="
-            grep -n "photo3\|photo2\|/photo/" "$P3/CAH_1.html" || echo "경로 참조 없음"
-
-            echo "===== [8] photo 경로 참조 grep ====="
-            grep -n "photo3\|photo2\|/photo/" "$P1/CAH_1.html" || echo "경로 참조 없음"
-
-            echo "===== [9] photo3 script src 경로 ====="
-            grep -oi "src=[\"'"'"'][^\"'"'"']*[\"'"'"']" "$P3/CAH_1.html" | head -20
-
-            echo "===== [10] photo script src 경로 ====="
-            grep -oi "src=[\"'"'"'][^\"'"'"']*[\"'"'"']" "$P1/CAH_1.html" | head -20
-
-            echo "===== [11] PHP error log photo3 관련 ====="
-            sudo tail -50 /var/log/apache2/error.log 2>/dev/null | grep -i "photo3" | tail -10 || echo "없음"
-
-            echo "===== [12] photo3 index.php 내용 ====="
-            cat "$P3/index.php" 2>/dev/null || echo "(없음)"
-
-            echo "===== [13] photo index.php 내용 ====="
-            cat "$P1/index.php" 2>/dev/null || echo "(없음)"
-
-            echo "===== [14] photo3 session_conf.php ====="
-            cat "$P3/session_conf.php" 2>/dev/null || echo "(없음)"
-
-            echo "===== [15] photo session_conf.php ====="
-            cat "$P1/session_conf.php" 2>/dev/null || echo "(없음)"
-
-            echo "===== [16] photo3 login.php 첫 20줄 ====="
-            head -20 "$P3/login.php" 2>/dev/null || echo "(없음)"
-
-            echo "===== [17] photo login.php 첫 20줄 ====="
-            head -20 "$P1/login.php" 2>/dev/null || echo "(없음)"
-
-            echo "===== [18] photo3 auth_check.php ====="
-            cat "$P3/auth_check.php" 2>/dev/null || echo "(없음)"
-
-            echo "===== [19] photo auth_check.php ====="
-            cat "$P1/auth_check.php" 2>/dev/null || echo "(없음)"
-
-            echo "===== [20] Cloudflare external - photo3 raw content check ====="
-            curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=deepcheck" 2>/dev/null | md5sum
-
-            echo "===== [21] Cloudflare external - photo raw content check ====="
-            curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html?ch=tak&_t=deepcheck" 2>/dev/null | md5sum
-
-            echo "===== [22] photo3 write.php 첫 30줄 (session guard?) ====="
-            head -30 "$P3/write.php" 2>/dev/null
-
-            echo "===== [23] photo write.php 첫 30줄 ====="
-            head -30 "$P1/write.php" 2>/dev/null
-
-            echo "===== [24] photo3 write.php bgl.js 버전 ====="
-            grep -n "bgl.js" "$P3/write.php" | head -5
-
-            echo "===== [25] photo write.php bgl.js 버전 ====="
-            grep -n "bgl.js" "$P1/write.php" | head -5
-
+            echo "===== [8] 검증 ====="
+            echo "--- photo3 localhost ---"
+            curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" | head -5
+            echo "--- photo3 응답 크기 ---"
+            curl -s "http://localhost/photo3/CAH_1.html?ch=tak" | wc -c
+            echo "--- photo localhost ---"
+            curl -sI "http://localhost/photo/CAH_1.html?ch=tak" | head -5
+            echo "--- photo 응답 크기 ---"
+            curl -s "http://localhost/photo/CAH_1.html?ch=tak" | wc -c
+            echo "--- photo3 리소스 접근 ---"
+            curl -sI "http://localhost/photo3/bgl.js" | head -3
+            curl -sI "http://localhost/photo3/dragon_fx.js" | head -3
+            curl -sI "http://localhost/photo3/data/sel_tak.json" | head -3
             echo "===== DONE ====="
             '
+
+      - name: External verify
+        if: always()
+        run: |
+          sleep 5
+          echo "=== photo3 외부 ==="
+          curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | head -10
+          echo ""
+          echo "=== photo3 외부 크기 ==="
+          curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | wc -c
+          echo "=== photo 외부 크기 ==="
+          curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | wc -c
+          echo ""
+          echo "=== CORS 확인 ==="
+          H=$(curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null)
+          echo "$H" | grep -i "access-control" && echo "FAIL" || echo "OK"
+          echo "$H" | grep -i "x-photo3" && echo "FAIL" || echo "OK"
