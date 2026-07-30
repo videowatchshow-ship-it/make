@@ -9,7 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Strip photo3 to match photo structure
+      - name: Copy photo CAH_1 to photo3 with tak guard
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -23,60 +23,49 @@ jobs:
               --ssh-flag="-o StrictHostKeyChecking=no" \
               --quiet \
               --command='
-            CAH="/var/www/sites/chamgyo/public/photo3/CAH_1.html"
-            REF="/var/www/sites/chamgyo/public/photo/CAH_1.html"
+            P3="/var/www/sites/chamgyo/public/photo3"
+            P1="/var/www/sites/chamgyo/public/photo"
 
-            sudo cp "$CAH" "${CAH}.bak.strip.$(date +%s)"
+            echo "===== BACKUP ====="
+            sudo cp "$P3/CAH_1.html" "$P3/CAH_1.html.bak.copy.$(date +%s)"
 
-            echo "===== REMOVE non-essential scripts ====="
-            sudo sed -i "/<script id=.chamgyo-mobile-fit-js.>/,/<\/script>/d" "$CAH"
-            sudo sed -i "/<script id=.homoglyph-js.>/,/<\/script>/d" "$CAH"
+            echo "===== COPY photo/CAH_1.html to photo3 ====="
+            sudo cp "$P1/CAH_1.html" "$P3/CAH_1.html"
+            sudo chown www-data:www-data "$P3/CAH_1.html"
 
-            echo "===== REMOVE non-essential styles ====="
-            sudo sed -i "/<style id=.photo-center-align.>/,/<\/style>/d" "$CAH"
-            sudo sed -i "/<style id=.photo-no-miniview.>/,/<\/style>/d" "$CAH"
-            sudo sed -i "/<style id=.chamgyo-mobile-fit.>/,/<\/style>/d" "$CAH"
-            sudo sed -i "/<style id=.marquee-blur-css.>/,/<\/style>/d" "$CAH"
-            sudo sed -i "/<style id=.anti-ocr-css.>/,/<\/style>/d" "$CAH"
-            sudo sed -i "/<style id=.three-fix-css.>/,/<\/style>/d" "$CAH"
-
-            echo "===== REMOVE bundle.js and hot-patch.js ====="
-            sudo sed -i "/modules\/dist\/bundle\.js/d" "$CAH"
-            sudo sed -i "/hot-patch\.js/d" "$CAH"
-
-            echo "===== REMOVE zoom refs ====="
-            sudo sed -i "/style\.zoom/d" "$CAH"
-
-            echo "===== REMOVE photo-center-align comment ====="
-            sudo sed -i "/photo-center-align removed/d" "$CAH"
-
-            echo "===== FIX height auto ====="
-            sudo sed -i "s/height: auto !important/height: 100vh !important/g" "$CAH"
-
-            echo "===== CLEAN empty lines ====="
-            sudo sed -i "/^$/N;/^\n$/d" "$CAH"
+            echo "===== ADD tak guard ====="
+            sudo sed -i "s|<body>|<script id=\"photo3-tak-only\">(function(){var p=new URLSearchParams(window.location.search);if(p.get(\"ch\")!==\"tak\"){document.documentElement.innerHTML=\"<body style=background:#000></body>\";return;}})()</script>\n<body>|" "$P3/CAH_1.html"
 
             echo "===== VERIFY ====="
-            echo "--- scripts remaining ---"
-            grep -n "<script" "$CAH" | head -15
-            echo "--- styles remaining ---"
-            grep -n "<style" "$CAH" | head -10
-            echo "--- photo scripts (reference) ---"
-            grep -n "<script" "$REF" | head -10
-            echo "--- body CSS ---"
-            grep -n "body{" "$CAH" | head -5
-            echo "--- zoom ---"
-            grep -c "zoom" "$CAH" || echo "0"
-            echo "--- file size ---"
-            wc -c "$CAH"
-            wc -c "$REF"
+            echo "--- photo3 size ---"
+            wc -c "$P3/CAH_1.html"
+            echo "--- photo size ---"
+            wc -c "$P1/CAH_1.html"
+            echo "--- tak guard ---"
+            grep -c "photo3-tak-only" "$P3/CAH_1.html"
+            echo "--- scripts ---"
+            grep -n "<script" "$P3/CAH_1.html"
+            echo "--- body ---"
+            grep -n "body{" "$P3/CAH_1.html" | head -3
+            echo "--- diff (should only be tak guard) ---"
+            diff "$P1/CAH_1.html" "$P3/CAH_1.html" || true
 
+            echo "===== SYMLINKS ====="
+            ls -la "$P3/data" 2>/dev/null || echo "data MISSING"
+            ls -la "$P3/bgl.js" 2>/dev/null || echo "bgl.js check"
+            ls -la "$P1/bgl.js" 2>/dev/null || echo "photo bgl.js check"
+            ls -la "$P3/dragon_fx.js" 2>/dev/null || echo "dragon_fx.js check"
+
+            echo "===== APACHE ====="
             sudo apachectl configtest 2>&1
             sudo systemctl reload apache2 2>&1 || echo "reload failed"
 
-            echo "--- curl test ---"
-            curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" | head -3
+            echo "===== CURL ====="
+            curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" | head -5
+            echo "---"
             curl -s "http://localhost/photo3/CAH_1.html?ch=tak" | wc -c
+            echo "---"
+            curl -s "http://localhost/photo/CAH_1.html?ch=tak" | wc -c
             echo "===== DONE ====="
             '
 
@@ -84,12 +73,12 @@ jobs:
         if: always()
         run: |
           sleep 5
-          BODY=$(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null)
-          echo "Size: $(echo "$BODY" | wc -c)"
-          echo "$BODY" | grep -o "body{[^}]*}" | head -3
-          echo "$BODY" | grep -q "bundle\.js" && echo "FAIL: bundle.js" || echo "OK: no bundle.js"
-          echo "$BODY" | grep -q "hot-patch" && echo "FAIL: hot-patch" || echo "OK: no hot-patch"
-          echo "$BODY" | grep -q "zoom" && echo "FAIL: zoom" || echo "OK: no zoom"
-          echo "$BODY" | grep -q "bgl\.js" && echo "OK: bgl.js present" || echo "FAIL: bgl.js missing"
-          echo "$BODY" | grep -q "dragon_fx" && echo "OK: dragon_fx present" || echo "FAIL: dragon_fx missing"
-          curl -so /dev/null -w "HTTP: %{http_code}\n" "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak" 2>/dev/null
+          P3=$(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null)
+          P1=$(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null)
+          echo "photo3 size: $(echo "$P3" | wc -c)"
+          echo "photo size: $(echo "$P1" | wc -c)"
+          echo "$P3" | grep -q "photo3-tak-only" && echo "OK: tak guard" || echo "FAIL: no tak guard"
+          echo "$P3" | grep -q "bgl\.js" && echo "OK: bgl.js" || echo "FAIL: no bgl.js"
+          echo "$P3" | grep -q "dragon_fx" && echo "OK: dragon_fx" || echo "FAIL: no dragon_fx"
+          curl -so /dev/null -w "photo3 HTTP: %{http_code}\n" "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak" 2>/dev/null
+          curl -so /dev/null -w "photo HTTP: %{http_code}\n" "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html?ch=tak" 2>/dev/null
