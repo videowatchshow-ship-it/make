@@ -144,7 +144,20 @@ jobs:
             export DISPLAY=:99
             sudo systemctl restart gauth
             sleep 3
-            curl -s http://localhost:4000/api/accounts | python3 -c "import json,sys; d=json.load(sys.stdin); print('API OK — accounts:', len(d) if isinstance(d,list) else d.get('total','?'))" 2>/dev/null || echo "API check skipped"
+            # Health check with retries
+            for i in 1 2 3 4 5; do
+              HTTP=$(curl -s -o /tmp/hc.txt -w "%{http_code}" http://localhost:4000/api/accounts 2>/dev/null || echo "000")
+              if [ "$HTTP" = "200" ]; then
+                python3 -c "import json; d=json.load(open('/tmp/hc.txt')); print('API OK — accounts:', len(d) if isinstance(d,list) else d.get('total','?'))" 2>/dev/null
+                break
+              fi
+              echo "  Health check attempt $i: HTTP $HTTP"
+              sleep 3
+            done
+
+            # Show service status and recent logs for debugging
+            sudo systemctl status gauth --no-pager -l 2>/dev/null | tail -20 || true
+            sudo journalctl -u gauth --no-pager -n 30 2>/dev/null || true
             echo "=== Deploy complete ==="
 
       - name: Summary
