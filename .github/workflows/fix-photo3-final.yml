@@ -1,21 +1,21 @@
-name: Diag photo3 vs photo ALL differences
+name: Fix photo3 htaccess to match photo
 
 on:
   workflow_dispatch:
 
 jobs:
-  diag:
+  fix:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Find EVERY difference between photo and photo3
+      - name: Replace photo3 htaccess with photo htaccess
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 300s
+          command_timeout: 180s
           script: |
             /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
               --zone=asia-northeast1-a \
@@ -26,388 +26,53 @@ jobs:
             P3="/var/www/sites/chamgyo/public/photo3"
             P1="/var/www/sites/chamgyo/public/photo"
 
-            echo "=========================================="
-            echo "DIAGNOSTIC ONLY - NO FIXES APPLIED"
-            echo "=========================================="
+            echo "===== BEFORE ====="
+            echo "--- photo3/.htaccess ---"
+            cat "$P3/.htaccess"
+            echo "--- photo/.htaccess ---"
+            cat "$P1/.htaccess"
 
-            echo ""
-            echo "===== [1] DIRECTORY LISTING photo3 ====="
-            ls -la "$P3/"
+            echo "===== BACKUP photo3/.htaccess ====="
+            sudo cp "$P3/.htaccess" "$P3/.htaccess.bak.$(date +%s)"
 
-            echo ""
-            echo "===== [2] DIRECTORY LISTING photo ====="
-            ls -la "$P1/"
+            echo "===== REPLACE photo3/.htaccess with photo/.htaccess ====="
+            sudo cp "$P1/.htaccess" "$P3/.htaccess"
+            sudo chown www-data:www-data "$P3/.htaccess"
+            sudo chmod 644 "$P3/.htaccess"
 
-            echo ""
-            echo "===== [3] FILE COUNT COMPARISON ====="
-            echo "photo3: $(find "$P3" -maxdepth 1 -type f | wc -l) files, $(find "$P3" -maxdepth 1 -type l | wc -l) symlinks, $(find "$P3" -maxdepth 1 -type d | wc -l) dirs"
-            echo "photo:  $(find "$P1" -maxdepth 1 -type f | wc -l) files, $(find "$P1" -maxdepth 1 -type l | wc -l) symlinks, $(find "$P1" -maxdepth 1 -type d | wc -l) dirs"
+            echo "===== AFTER ====="
+            echo "--- photo3/.htaccess (now) ---"
+            cat "$P3/.htaccess"
+            echo "--- diff ---"
+            diff "$P3/.htaccess" "$P1/.htaccess" && echo "IDENTICAL" || echo "DIFFER"
 
-            echo ""
-            echo "===== [4] FILES ONLY IN photo3 (not in photo) ====="
-            diff <(cd "$P3" && find . -maxdepth 2 -name ".*" -o -print | sort) <(cd "$P1" && find . -maxdepth 2 -name ".*" -o -print | sort) | grep "^<" || echo "NONE"
+            echo "===== APACHE RELOAD ====="
+            sudo apachectl configtest 2>&1
+            sudo systemctl reload apache2 2>&1
 
-            echo ""
-            echo "===== [5] FILES ONLY IN photo (not in photo3) ====="
-            diff <(cd "$P3" && find . -maxdepth 2 -name ".*" -o -print | sort) <(cd "$P1" && find . -maxdepth 2 -name ".*" -o -print | sort) | grep "^>" || echo "NONE"
-
-            echo ""
-            echo "===== [6] .htaccess photo3 ====="
-            if [ -f "$P3/.htaccess" ]; then
-              echo "EXISTS - size: $(stat -c%s "$P3/.htaccess") bytes"
-              cat "$P3/.htaccess"
-            else
-              echo "DOES NOT EXIST"
-            fi
-
-            echo ""
-            echo "===== [7] .htaccess photo ====="
-            if [ -f "$P1/.htaccess" ]; then
-              echo "EXISTS - size: $(stat -c%s "$P1/.htaccess") bytes"
-              cat "$P1/.htaccess"
-            else
-              echo "DOES NOT EXIST"
-            fi
-
-            echo ""
-            echo "===== [8] FILE PERMISSIONS photo3 ====="
-            stat -c "%a %U:%G %n" "$P3"/*.html "$P3"/*.js "$P3"/.htaccess 2>/dev/null || echo "stat failed"
-
-            echo ""
-            echo "===== [9] FILE PERMISSIONS photo ====="
-            stat -c "%a %U:%G %n" "$P1"/*.html "$P1"/*.js "$P1"/.htaccess 2>/dev/null || echo "stat failed"
-
-            echo ""
-            echo "===== [10] SYMLINK TARGETS photo3 ====="
-            find "$P3" -maxdepth 1 -type l -exec ls -la {} \;
-
-            echo ""
-            echo "===== [11] SYMLINK TARGETS photo ====="
-            find "$P1" -maxdepth 1 -type l -exec ls -la {} \;
-
-            echo ""
-            echo "===== [12] MD5 COMPARISON key files ====="
-            for f in CAH_1.html bgl.js dragon_fx.js; do
-              echo "--- $f ---"
-              md5sum "$P3/$f" 2>/dev/null || echo "photo3: MISSING"
-              md5sum "$P1/$f" 2>/dev/null || echo "photo:  MISSING"
-            done
-
-            echo ""
-            echo "===== [13] RESPONSE HEADERS photo3 CAH_1.html ====="
-            curl -sI "http://localhost/photo3/CAH_1.html?ch=tak"
-
-            echo ""
-            echo "===== [14] RESPONSE HEADERS photo CAH_1.html ====="
-            curl -sI "http://localhost/photo/CAH_1.html?ch=tak"
-
-            echo ""
-            echo "===== [15] RESPONSE HEADERS photo3 bgl.js ====="
-            curl -sI "http://localhost/photo3/bgl.js?v=52"
-
-            echo ""
-            echo "===== [16] RESPONSE HEADERS photo bgl.js ====="
-            curl -sI "http://localhost/photo/bgl.js?v=52"
-
-            echo ""
-            echo "===== [17] RESPONSE HEADERS photo3 dragon_fx.js ====="
-            curl -sI "http://localhost/photo3/dragon_fx.js"
-
-            echo ""
-            echo "===== [18] RESPONSE HEADERS photo dragon_fx.js ====="
-            curl -sI "http://localhost/photo/dragon_fx.js"
-
-            echo ""
-            echo "===== [19] RESPONSE HEADERS photo3 data/sel_tak.json ====="
-            curl -sI "http://localhost/photo3/data/sel_tak.json"
-
-            echo ""
-            echo "===== [20] RESPONSE HEADERS photo data/sel_tak.json ====="
-            curl -sI "http://localhost/photo/data/sel_tak.json"
-
-            echo ""
-            echo "===== [21] RESPONSE HEADERS photo3 write.php ====="
-            curl -sI "http://localhost/photo3/write.php"
-
-            echo ""
-            echo "===== [22] RESPONSE HEADERS photo write.php ====="
-            curl -sI "http://localhost/photo/write.php"
-
-            echo ""
-            echo "===== [23] CONTENT-TYPE COMPARISON (all files) ====="
-            for f in CAH_1.html bgl.js dragon_fx.js hot-patch.js; do
-              P3CT=$(curl -sI "http://localhost/photo3/$f" 2>/dev/null | grep -i "content-type" || echo "N/A")
-              P1CT=$(curl -sI "http://localhost/photo/$f" 2>/dev/null | grep -i "content-type" || echo "N/A")
-              echo "$f:"
-              echo "  photo3: $P3CT"
-              echo "  photo:  $P1CT"
-              if [ "$P3CT" = "$P1CT" ]; then echo "  MATCH"; else echo "  DIFFER <<<"; fi
-            done
-
-            echo ""
-            echo "===== [24] RESPONSE SIZE COMPARISON ====="
-            for f in "CAH_1.html?ch=tak" "bgl.js?v=52" "dragon_fx.js"; do
-              P3S=$(curl -s "http://localhost/photo3/$f" 2>/dev/null | wc -c)
-              P1S=$(curl -s "http://localhost/photo/$f" 2>/dev/null | wc -c)
-              echo "$f:"
-              echo "  photo3: ${P3S} bytes"
-              echo "  photo:  ${P1S} bytes"
-              if [ "$P3S" = "$P1S" ]; then echo "  MATCH"; else echo "  DIFFER <<<"; fi
-            done
-
-            echo ""
-            echo "===== [25] RESPONSE BODY DIFF CAH_1.html ====="
-            diff <(curl -s "http://localhost/photo3/CAH_1.html?ch=tak" 2>/dev/null) <(curl -s "http://localhost/photo/CAH_1.html?ch=tak" 2>/dev/null) && echo "IDENTICAL" || echo "DIFFER <<<<<"
-
-            echo ""
-            echo "===== [26] Apache vhost config ====="
-            sudo cat /etc/apache2/sites-enabled/*chamgyo* 2>/dev/null || echo "not found by name"
-            echo "---"
-            sudo grep -rl "chamgyo" /etc/apache2/sites-enabled/ 2>/dev/null | while read f; do
-              echo "=== $f ==="
-              sudo cat "$f"
-            done
-
-            echo ""
-            echo "===== [27] Apache Directory/Location blocks for photo/photo3 ====="
-            sudo grep -rn "photo3\|photo[^23]" /etc/apache2/sites-enabled/ 2>/dev/null | head -30
-            sudo grep -rn "photo3\|photo[^23]" /etc/apache2/sites-available/ 2>/dev/null | head -30
-
-            echo ""
-            echo "===== [28] Apache conf.d and mods for photo ====="
-            sudo grep -rn "photo" /etc/apache2/conf-enabled/ 2>/dev/null | head -20
-            sudo grep -rn "photo" /etc/apache2/conf-available/ 2>/dev/null | head -20
-
-            echo ""
-            echo "===== [29] PHP handler / AddType / AddHandler ====="
-            grep -rn "AddHandler\|AddType.*php\|php_value\|auto_prepend\|auto_append" /etc/apache2/ 2>/dev/null | grep -i "html\|photo" | head -20
-            grep -rn "AddHandler\|AddType.*php" "$P3/.htaccess" "$P1/.htaccess" 2>/dev/null || echo "no PHP handler in htaccess"
-
-            echo ""
-            echo "===== [30] Apache modules loaded ====="
-            sudo apachectl -M 2>/dev/null | grep -i "headers\|rewrite\|expires\|deflate\|php\|proxy\|ssl" | sort
-
-            echo ""
-            echo "===== [31] OWNER/GROUP of directories ====="
-            stat -c "%a %U:%G %n" "$P3" "$P1"
-            stat -c "%a %U:%G %n" "$P3/.."
-
-            echo ""
-            echo "===== [32] BACKUP FILES in photo3 ====="
-            find "$P3" -maxdepth 1 -name "*.bak*" -o -name "*.orig" -o -name "*.old" -o -name "*~" 2>/dev/null | head -20
-
-            echo ""
-            echo "===== [33] BACKUP FILES in photo ====="
-            find "$P1" -maxdepth 1 -name "*.bak*" -o -name "*.orig" -o -name "*.old" -o -name "*~" 2>/dev/null | head -20
-
-            echo ""
-            echo "===== [34] EXTRA HEADERS COMPARISON (curl -v) ====="
+            echo "===== VERIFY HEADERS ====="
             echo "--- photo3 ---"
-            curl -sv "http://localhost/photo3/CAH_1.html?ch=tak" -o /dev/null 2>&1 | grep -i "< "
-            echo ""
+            curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" | head -20
             echo "--- photo ---"
-            curl -sv "http://localhost/photo/CAH_1.html?ch=tak" -o /dev/null 2>&1 | grep -i "< "
+            curl -sI "http://localhost/photo/CAH_1.html?ch=tak" | head -20
 
-            echo ""
-            echo "===== [35] HEADER DIFF ====="
-            diff <(curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" 2>/dev/null | sort) <(curl -sI "http://localhost/photo/CAH_1.html?ch=tak" 2>/dev/null | sort) || echo "HEADERS DIFFER"
-
-            echo ""
-            echo "===== [36] X- CUSTOM HEADERS ====="
-            echo "photo3:"
-            curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" 2>/dev/null | grep -i "^X-"
-            echo "photo:"
-            curl -sI "http://localhost/photo/CAH_1.html?ch=tak" 2>/dev/null | grep -i "^X-"
-
-            echo ""
-            echo "===== [37] CORS HEADERS ====="
-            echo "photo3:"
-            curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" 2>/dev/null | grep -i "access-control"
-            echo "photo:"
-            curl -sI "http://localhost/photo/CAH_1.html?ch=tak" 2>/dev/null | grep -i "access-control"
-
-            echo ""
-            echo "===== [38] CACHE HEADERS ====="
-            echo "photo3:"
-            curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" 2>/dev/null | grep -i "cache-control\|pragma\|expires\|etag\|last-modified"
-            echo "photo:"
-            curl -sI "http://localhost/photo/CAH_1.html?ch=tak" 2>/dev/null | grep -i "cache-control\|pragma\|expires\|etag\|last-modified"
-
-            echo ""
-            echo "===== [39] NO-CACHE META TAGS in HTML ====="
-            echo "photo3:"
-            grep -i "http-equiv.*cache\|http-equiv.*pragma\|http-equiv.*expires" "$P3/CAH_1.html" | head -5
-            echo "photo:"
-            grep -i "http-equiv.*cache\|http-equiv.*pragma\|http-equiv.*expires" "$P1/CAH_1.html" | head -5
-
-            echo ""
-            echo "===== [40] VIEWPORT META ====="
-            echo "photo3:"
-            grep -i "viewport" "$P3/CAH_1.html" || echo "NO VIEWPORT"
-            echo "photo:"
-            grep -i "viewport" "$P1/CAH_1.html" || echo "NO VIEWPORT"
-
-            echo ""
-            echo "===== [41] HEAD SECTION COMPARISON ====="
-            echo "--- photo3 first 30 lines ---"
-            head -30 "$P3/CAH_1.html"
-            echo ""
-            echo "--- photo first 30 lines ---"
-            head -30 "$P1/CAH_1.html"
-
-            echo ""
-            echo "===== [42] TAIL SECTION COMPARISON ====="
-            echo "--- photo3 last 50 lines ---"
-            tail -50 "$P3/CAH_1.html"
-            echo ""
-            echo "--- photo last 50 lines ---"
-            tail -50 "$P1/CAH_1.html"
-
-            echo ""
-            echo "===== [43] DATA DIRECTORY CONTENTS ====="
-            echo "photo3/data:"
-            ls -la "$P3/data/" 2>/dev/null | head -20
-            echo "photo/data:"
-            ls -la "$P1/data/" 2>/dev/null | head -20
-
-            echo ""
-            echo "===== [44] DATA SYMLINK CHAIN ====="
-            readlink -f "$P3/data" 2>/dev/null || echo "photo3/data: NOT A SYMLINK OR MISSING"
-            readlink -f "$P1/data" 2>/dev/null || echo "photo/data: NOT A SYMLINK OR MISSING"
-
-            echo ""
-            echo "===== [45] sel_tak.json CONTENT COMPARISON ====="
-            diff <(cat "$P3/data/sel_tak.json" 2>/dev/null) <(cat "$P1/data/sel_tak.json" 2>/dev/null) && echo "IDENTICAL" || echo "DIFFER"
-
-            echo ""
-            echo "===== [46] MODULES DIRECTORY ====="
-            echo "photo3/modules:"
-            ls -la "$P3/modules/" 2>/dev/null | head -10 || echo "MISSING"
-            echo "photo/modules:"
-            ls -la "$P1/modules/" 2>/dev/null | head -10 || echo "MISSING"
-
-            echo ""
-            echo "===== [47] HOT-PATCH FILE ====="
-            echo "photo3:"
-            ls -la "$P3/hot-patch.js" 2>/dev/null || echo "MISSING"
-            echo "photo:"
-            ls -la "$P1/hot-patch.js" 2>/dev/null || echo "MISSING"
-
-            echo ""
-            echo "===== [48] HOT_PATCHES.JSON ====="
-            echo "photo3:"
-            ls -la "$P3/hot_patches.json" 2>/dev/null || echo "MISSING"
-            echo "photo:"
-            ls -la "$P1/hot_patches.json" 2>/dev/null || echo "MISSING"
-
-            echo ""
-            echo "===== [49] WRITE.PHP COMPARISON ====="
-            echo "photo3:"
-            ls -la "$P3/write.php" 2>/dev/null || echo "MISSING"
-            echo "photo:"
-            ls -la "$P1/write.php" 2>/dev/null || echo "MISSING"
-            if [ -f "$P3/write.php" ] && [ -f "$P1/write.php" ]; then
-              diff "$P3/write.php" "$P1/write.php" && echo "IDENTICAL" || echo "DIFFER"
-            fi
-
-            echo ""
-            echo "===== [50] APACHE ERROR LOG (recent photo3) ====="
-            sudo tail -50 /var/log/apache2/error.log 2>/dev/null | grep -i "photo3" | tail -10 || echo "no photo3 errors"
-
-            echo ""
-            echo "===== [51] APACHE ACCESS LOG (recent photo3) ====="
-            sudo tail -100 /var/log/apache2/access.log 2>/dev/null | grep "photo3" | tail -10 || echo "no recent photo3 access"
-
-            echo ""
-            echo "===== [52] CHAMGYO ACCESS LOG ====="
-            sudo tail -100 /chamgyo_access.log 2>/dev/null | grep "photo3" | tail -10 || echo "no chamgyo log"
-
-            echo ""
-            echo "===== [53] SSL/TLS CONFIG ====="
-            sudo grep -rn "SSLEngine\|SSLCertificate\|SSLProtocol" /etc/apache2/sites-enabled/ 2>/dev/null | head -10
-
-            echo ""
-            echo "===== [54] REDIRECT/REWRITE RULES ====="
-            echo "photo3 htaccess rewrites:"
-            grep -i "rewrite\|redirect" "$P3/.htaccess" 2>/dev/null || echo "NONE"
-            echo "photo htaccess rewrites:"
-            grep -i "rewrite\|redirect" "$P1/.htaccess" 2>/dev/null || echo "NONE"
-            echo "Apache vhost rewrites:"
-            sudo grep -rn "rewrite\|redirect" /etc/apache2/sites-enabled/ 2>/dev/null | grep -i "photo" | head -10 || echo "NONE"
-
-            echo ""
-            echo "===== [55] CONTENT-SECURITY-POLICY HEADERS ====="
-            echo "photo3:"
-            curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" 2>/dev/null | grep -i "content-security-policy\|x-frame-options\|x-content-type"
-            echo "photo:"
-            curl -sI "http://localhost/photo/CAH_1.html?ch=tak" 2>/dev/null | grep -i "content-security-policy\|x-frame-options\|x-content-type"
-
-            echo ""
-            echo "===== [56] TRANSFER-ENCODING / CONTENT-ENCODING ====="
-            echo "photo3:"
-            curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" 2>/dev/null | grep -i "transfer-encoding\|content-encoding\|content-length"
-            echo "photo:"
-            curl -sI "http://localhost/photo/CAH_1.html?ch=tak" 2>/dev/null | grep -i "transfer-encoding\|content-encoding\|content-length"
-
-            echo ""
-            echo "===== [57] HTTPS RESPONSE HEADERS (via external) ====="
-            echo "photo3:"
-            curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | head -20 || echo "FAILED"
-            echo "photo:"
-            curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | head -20 || echo "FAILED"
-
-            echo ""
-            echo "===== [58] CLOUDFLARE HEADERS DIFF ====="
-            diff <(curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | sort) <(curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | sort) || echo "EXTERNAL HEADERS DIFFER"
-
-            echo ""
-            echo "===== [59] CLOUDFLARE CF-CACHE-STATUS ====="
-            echo "photo3:"
-            curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | grep -i "cf-cache-status\|cf-ray\|age"
-            echo "photo:"
-            curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | grep -i "cf-cache-status\|cf-ray\|age"
-
-            echo ""
-            echo "===== [60] EXTERNAL CONTENT SIZE ====="
-            P3EXT=$(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | wc -c)
-            P1EXT=$(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | wc -c)
-            echo "photo3: ${P3EXT} bytes"
-            echo "photo:  ${P1EXT} bytes"
-
-            echo ""
-            echo "===== [61] EXTERNAL CONTENT DIFF ====="
-            diff <(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null) <(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null) && echo "EXTERNAL CONTENT IDENTICAL" || echo "EXTERNAL CONTENT DIFFERS <<<<<<"
-
-            echo ""
-            echo "===== [62] CRON JOBS for photo3 ====="
-            sudo cat /etc/cron.d/chamgyo-photo3-collector 2>/dev/null || echo "no cron file"
-            sudo crontab -l 2>/dev/null | grep "photo3" || echo "no photo3 in crontab"
-
-            echo ""
-            echo "===== [63] RUNNING PROCESSES for photo3 ====="
-            ps aux | grep "photo3" | grep -v grep || echo "no photo3 processes"
-
-            echo ""
-            echo "=========================================="
-            echo "DIAGNOSTIC COMPLETE - NO FIXES APPLIED"
-            echo "=========================================="
+            echo "===== DONE ====="
             '
 
-      - name: External double check
+      - name: Verify external headers match
         if: always()
         run: |
-          sleep 3
-          echo "=== EXTERNAL HEADER DIFF ==="
-          echo "--- photo3 ---"
+          sleep 5
+          echo "=== photo3 external headers ==="
           curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null
           echo ""
-          echo "--- photo ---"
+          echo "=== photo external headers ==="
           curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null
           echo ""
-          echo "=== CONTENT SIZE ==="
-          P3=$(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null)
-          P1=$(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null)
-          echo "photo3: $(echo "$P3" | wc -c) bytes"
-          echo "photo:  $(echo "$P1" | wc -c) bytes"
-          echo "=== CONTENT DIFF ==="
-          diff <(echo "$P3") <(echo "$P1") && echo "IDENTICAL" || echo "DIFFERS"
+          echo "=== HEADER DIFF ==="
+          diff <(curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | grep -iv "cf-ray\|report-to\|nel:\|date:\|last-modified\|alt-svc" | sort) <(curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | grep -iv "cf-ray\|report-to\|nel:\|date:\|last-modified\|alt-svc" | sort) && echo "HEADERS NOW IDENTICAL" || echo "HEADERS STILL DIFFER"
+          echo ""
+          echo "=== CORS CHECK (should be gone from photo3) ==="
+          H=$(curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null)
+          echo "$H" | grep -i "access-control" && echo "FAIL: CORS still present" || echo "OK: No CORS headers"
+          echo "$H" | grep -i "x-photo3-fix" && echo "FAIL: custom header still present" || echo "OK: No custom header"
