@@ -9,7 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Diagnose and fix column gap
+      - name: Fix render function - remove DPR scaling
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -24,80 +24,93 @@ jobs:
               --quiet \
               --command='
             P3="/var/www/sites/chamgyo/public/photo3"
-            P2="/var/www/sites/chamgyo/public/photo2"
             P1="/var/www/sites/chamgyo/public/photo"
 
-            echo "===== [1] bgl.js 버전 비교 ====="
-            echo "photo3/bgl.js: $(wc -c < "$P3/bgl.js") bytes, md5: $(md5sum "$P3/bgl.js" | cut -d" " -f1)"
-            echo "photo2/bgl.js: $(wc -c < "$P2/bgl.js") bytes, md5: $(md5sum "$P2/bgl.js" | cut -d" " -f1)"
-            echo "photo/bgl.js:  $(wc -c < "$P1/bgl.js") bytes, md5: $(md5sum "$P1/bgl.js" | cut -d" " -f1)"
-
-            echo "===== [2] dragon_fx.js 버전 비교 ====="
-            echo "photo3/dragon_fx.js: $(wc -c < "$P3/dragon_fx.js") bytes, md5: $(md5sum "$P3/dragon_fx.js" | cut -d" " -f1)"
-            echo "photo2/dragon_fx.js: $(wc -c < "$P2/dragon_fx.js") bytes, md5: $(md5sum "$P2/dragon_fx.js" | cut -d" " -f1)"
-            echo "photo/dragon_fx.js:  $(wc -c < "$P1/dragon_fx.js") bytes, md5: $(md5sum "$P1/dragon_fx.js" | cut -d" " -f1)"
-
-            echo "===== [3] bgl.js 심볼릭 상태 ====="
-            ls -la "$P3/bgl.js"
-            ls -la "$P2/bgl.js"
-            ls -la "$P1/bgl.js"
-
-            echo "===== [4] CAH_1.html bgl.js 참조 버전 ====="
-            echo "photo3:" && grep -o "bgl\.js[^\"]*" "$P3/CAH_1.html" | head -3
-            echo "photo:" && grep -o "bgl\.js[^\"]*" "$P1/CAH_1.html" | head -3
-
-            echo "===== [5] CAH_1.html canvas/칸/column 관련 코드 비교 ====="
-            echo "--- photo3 canvas config ---"
-            grep -n "col\|column\|gap\|spacing\|beadW\|beadH\|cellW\|cellH\|gridW\|gridH\|cntX\|cntY\|ballR\|rad\|diam" "$P3/CAH_1.html" | grep -iv "color\|background" | head -30
-            echo "--- photo canvas config ---"
-            grep -n "col\|column\|gap\|spacing\|beadW\|beadH\|cellW\|cellH\|gridW\|gridH\|cntX\|cntY\|ballR\|rad\|diam" "$P1/CAH_1.html" | grep -iv "color\|background" | head -30
-
-            echo "===== [6] CAH_1.html 크기 비교 ====="
+            echo "===== BEFORE ====="
             echo "photo3: $(wc -c < "$P3/CAH_1.html") bytes"
-            echo "photo: $(wc -c < "$P1/CAH_1.html") bytes"
+            grep -c "_dpr\|_fit\|devicePixelRatio\|더블버퍼링\|oB=render\|oC=render" "$P3/CAH_1.html" || echo "0 matches"
 
-            echo "===== [7] SYNC bgl.js: photo → photo3 ====="
-            if ! diff -q "$P1/bgl.js" "$P3/bgl.js" > /dev/null 2>&1; then
-              echo "bgl.js 다름 — photo 버전으로 동기화"
-              sudo cp "$P3/bgl.js" "$P3/bgl.js.bak.$(date +%s)"
-              sudo cp "$P1/bgl.js" "$P3/bgl.js"
-              sudo chown www-data:www-data "$P3/bgl.js"
-              echo "bgl.js 동기화 완료: $(wc -c < "$P3/bgl.js") bytes"
-            else
-              echo "bgl.js 동일 — 동기화 불필요"
-            fi
+            echo "===== BACKUP ====="
+            sudo cp "$P3/CAH_1.html" "$P3/CAH_1.html.bak.gap.$(date +%s)"
 
-            echo "===== [8] SYNC dragon_fx.js: photo → photo3 ====="
-            if ! diff -q "$P1/dragon_fx.js" "$P3/dragon_fx.js" > /dev/null 2>&1; then
-              echo "dragon_fx.js 다름 — photo 버전으로 동기화"
-              sudo cp "$P3/dragon_fx.js" "$P3/dragon_fx.js.bak.$(date +%s)"
-              sudo cp "$P1/dragon_fx.js" "$P3/dragon_fx.js"
-              sudo chown www-data:www-data "$P3/dragon_fx.js"
-              echo "dragon_fx.js 동기화 완료: $(wc -c < "$P3/dragon_fx.js") bytes"
-            else
-              echo "dragon_fx.js 동일 — 동기화 불필요"
-            fi
+            echo "===== FIX: Python render replacement ====="
+            sudo python3 - "$P3/CAH_1.html" "$P1/CAH_1.html" << "PYEOF"
+import re, sys, shutil
 
-            echo "===== [9] CAH_1.html diff (photo vs photo3) — 주요 차이 ====="
-            diff "$P1/CAH_1.html" "$P3/CAH_1.html" | head -80 || echo "diff 없음"
+p3_path = sys.argv[1]
+p1_path = sys.argv[2]
 
-            echo "===== [10] photo CAH_1.html 에만 있는 코드 (gap fix 후보) ====="
-            diff "$P3/CAH_1.html" "$P1/CAH_1.html" | grep "^>" | head -40
+with open(p3_path, "r") as f:
+    p3 = f.read()
+with open(p1_path, "r") as f:
+    p1 = f.read()
 
-            echo "===== [11] photo3 CAH_1.html 에만 있는 코드 ====="
-            diff "$P3/CAH_1.html" "$P1/CAH_1.html" | grep "^<" | head -40
+# Extract simple render from photo
+m1 = re.search(r"(function render\(nums\)\{nums=nums\|\|\[\].*?render\(\[\]\);BGL\.start\(render\);)", p1, re.DOTALL)
+if not m1:
+    print("ERROR: render not found in photo")
+    sys.exit(1)
+simple = m1.group(1)
+print("photo render: %d chars" % len(simple))
 
-            echo "===== [12] Apache reload ====="
+# Find complex render in photo3
+m3 = re.search(r"function render\(nums\)\{nums=nums\|\|\[\].*?render\(\[\]\);BGL\.start\(render\);", p3, re.DOTALL)
+if not m3:
+    print("ERROR: render not found in photo3")
+    sys.exit(1)
+print("photo3 render: %d chars" % len(m3.group(0)))
+
+# Check for DPR code
+if "_dpr" in m3.group(0):
+    print("CONFIRMED: photo3 has DPR scaling code")
+else:
+    print("WARNING: no DPR code found")
+
+# Replace
+result = p3[:m3.start()] + simple + p3[m3.end():]
+print("Result: %d -> %d bytes" % (len(p3), len(result)))
+
+with open(p3_path, "w") as f:
+    f.write(result)
+print("WRITTEN OK")
+PYEOF
+
+            sudo chown www-data:www-data "$P3/CAH_1.html"
+            sudo chmod 644 "$P3/CAH_1.html"
+
+            echo "===== AFTER ====="
+            echo "photo3: $(wc -c < "$P3/CAH_1.html") bytes"
+            echo "photo:  $(wc -c < "$P1/CAH_1.html") bytes"
+            echo "--- DPR references (should be 0) ---"
+            grep -c "_dpr\|_fit\|devicePixelRatio\|더블버퍼링" "$P3/CAH_1.html" || echo "0 — OK"
+            echo "--- render function check ---"
+            grep -o "function render(nums){[^}]*" "$P3/CAH_1.html" | head -1 | cut -c1-120
+            echo "--- drawBead call ---"
+            grep -o "BGL.drawBead[^;]*" "$P3/CAH_1.html" | head -1
+            echo "--- photo3 extras still present ---"
+            grep -c "shfOverlay\|OneStoreMobilePop\|api_img_ver\|isolation:isolate" "$P3/CAH_1.html"
+
+            echo "===== APACHE RELOAD ====="
             sudo apachectl configtest 2>&1
             sudo systemctl reload apache2 2>&1
 
-            echo "===== [13] 검증 ====="
-            echo "photo3/bgl.js: $(md5sum "$P3/bgl.js" | cut -d" " -f1)"
-            echo "photo/bgl.js:  $(md5sum "$P1/bgl.js" | cut -d" " -f1)"
-            echo "photo3/dragon_fx.js: $(md5sum "$P3/dragon_fx.js" | cut -d" " -f1)"
-            echo "photo/dragon_fx.js:  $(md5sum "$P1/dragon_fx.js" | cut -d" " -f1)"
-            curl -sI "http://localhost/photo3/bgl.js" | head -3
-            curl -sI "http://localhost/photo3/dragon_fx.js" | head -3
+            echo "===== VERIFY ====="
             curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" | head -3
+            echo "photo3 size: $(curl -s "http://localhost/photo3/CAH_1.html?ch=tak" | wc -c)"
+            echo "photo size:  $(curl -s "http://localhost/photo/CAH_1.html?ch=tak" | wc -c)"
             echo "===== DONE ====="
             '
+
+      - name: External verify
+        if: always()
+        run: |
+          sleep 5
+          echo "=== External ==="
+          SZ=$(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | wc -c)
+          echo "photo3 size: $SZ"
+          BODY=$(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null)
+          echo "$BODY" | grep -c "_dpr\|_fit\|devicePixelRatio" && echo "FAIL: DPR still present" || echo "OK: DPR removed"
+          echo "$BODY" | grep -c "shfOverlay\|OneStoreMobilePop" && echo "OK: photo3 extras present" || echo "WARN: photo3 extras missing"
+          echo "$BODY" | grep -o "BGL.drawBead[^;]*" | head -1
+          STATUS=$(curl -so /dev/null -w '%{http_code}' "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak" 2>/dev/null)
+          echo "HTTP: $STATUS"
