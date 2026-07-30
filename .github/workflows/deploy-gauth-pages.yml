@@ -5,6 +5,7 @@ on:
     branches: [claude/auto-test-debugging-local-n0xjkg, claude/gauth-frontend-backend-fixes-cg2icv]
     paths:
       - 'gauth/index.html'
+      - 'gauth/xlsx.core.min.js'
 
 permissions:
   contents: read
@@ -28,6 +29,7 @@ jobs:
         run: |
           mkdir -p _site
           cp gauth/index.html _site/index.html
+          cp gauth/xlsx.core.min.js _site/xlsx.core.min.js
 
       - name: Setup Pages
         uses: actions/configure-pages@v4

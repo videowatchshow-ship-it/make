@@ -2,10 +2,11 @@ name: Deploy gauth to server
 on:
   workflow_dispatch:
   push:
-    branches: [claude/auto-test-debugging-local-n0xjkg, claude/gauth-frontend-backend-fixes-cg2icv]
+    branches: [claude/gauth-frontend-backend-fixes-cg2icv, claude/gauth-frontend-backend-fixes-cg2icv]
     paths:
       - 'gauth/index.html'
       - 'gauth/upload_excels.js'
+      - 'gauth/xlsx.core.min.js'
 
 jobs:
   deploy:
@@ -43,9 +44,10 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           script: |
             cd /opt/gauth-full
-            curl -sL "https://raw.githubusercontent.com/videowatchshow-ship-it/make/claude/auto-test-debugging-local-n0xjkg/gauth/upload_excels.js" -o upload_excels.js
-            curl -sL "https://raw.githubusercontent.com/videowatchshow-ship-it/make/claude/auto-test-debugging-local-n0xjkg/gauth/auto_deploy.js" -o auto_deploy.js
-            curl -sL "https://raw.githubusercontent.com/videowatchshow-ship-it/make/claude/auto-test-debugging-local-n0xjkg/gauth/index.html" -o /var/www/sites/gauth/public/index.html
+            curl -sL "https://raw.githubusercontent.com/videowatchshow-ship-it/make/claude/gauth-frontend-backend-fixes-cg2icv/gauth/upload_excels.js" -o upload_excels.js
+            curl -sL "https://raw.githubusercontent.com/videowatchshow-ship-it/make/claude/gauth-frontend-backend-fixes-cg2icv/gauth/auto_deploy.js" -o auto_deploy.js
+            curl -sL "https://raw.githubusercontent.com/videowatchshow-ship-it/make/claude/gauth-frontend-backend-fixes-cg2icv/gauth/index.html" -o /var/www/sites/gauth/public/index.html
+            curl -sL "https://raw.githubusercontent.com/videowatchshow-ship-it/make/claude/gauth-frontend-backend-fixes-cg2icv/gauth/xlsx.core.min.js" -o /var/www/sites/gauth/public/xlsx.core.min.js
             grep -q "auto_deploy" rebrowser-login.js || echo "require('./auto_deploy.js')(app);" >> rebrowser-login.js
             sudo systemctl restart gauth
             sleep 2
