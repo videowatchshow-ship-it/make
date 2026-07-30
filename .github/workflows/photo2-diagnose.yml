@@ -1,0 +1,98 @@
+name: Diagnose photo2
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ssh-diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Auth to GCP
+        id: gcp_auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+        continue-on-error: true
+
+      - name: Setup gcloud
+        if: steps.gcp_auth.outcome == 'success'
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Diagnose via gcloud SSH
+        if: steps.gcp_auth.outcome == 'success'
+        run: |
+          gcloud compute ssh videowatch_show@my-site-1 \
+            --zone=asia-northeast1-a \
+            --project=quantum-bonus-455522-b4 \
+            --ssh-flag="-o StrictHostKeyChecking=no" \
+            --command="bash -s" < photo2/diagnose-photo2.sh
+
+      - name: Diagnose via SSH key (fallback)
+        if: steps.gcp_auth.outcome != 'success'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 34.104.233.35
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 90s
+          script_file: photo2/diagnose-photo2.sh
+
+  puppeteer-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install puppeteer
+        run: npm install puppeteer@23
+
+      - name: Run diagnostic against all 4 channels
+        run: |
+          cat > /tmp/p2check.js <<'EOF'
+          const puppeteer = require('puppeteer');
+          const channels = ['tak', 'cent', 'jay', 'otuki'];
+
+          (async () => {
+            const browser = await puppeteer.launch({ args: ['--no-sandbox'] });
+            for (const ch of channels) {
+              const page = await browser.newPage();
+              await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) PRISMLive');
+              await page.setViewport({ width: 414, height: 896, deviceScaleFactor: 3, isMobile: true });
+              const errs = [];
+              const net4xx = [];
+              page.on('console', m => { if (m.type() === 'error') errs.push(m.text().slice(0, 200)); });
+              page.on('response', r => { if (r.status() >= 400) net4xx.push(r.status() + ' ' + r.url()); });
+              let ok = true;
+              try {
+                await page.goto(`https://xn--9d0bw2fjtyymch7de9d.info/photo2/CAH_1.html?ch=${ch}`, { waitUntil: 'networkidle2', timeout: 30000 });
+              } catch (e) {
+                ok = false;
+                console.log(`=== ch=${ch} NAVIGATION FAILED: ${e.message} ===`);
+              }
+              await new Promise(r => setTimeout(r, 5000));
+              const d = await page.evaluate(() => ({
+                title: document.title,
+                bodyLen: document.body.innerHTML.length,
+                cBead: document.querySelector('#cBead') ? { cw: document.querySelector('#cBead').clientWidth, ch: document.querySelector('#cBead').clientHeight } : null,
+                cBox: document.querySelector('#cBox') ? { cw: document.querySelector('#cBox').clientWidth, ch: document.querySelector('#cBox').clientHeight } : null,
+                zoom: getComputedStyle(document.body).zoom
+              }));
+              console.log(`=== ch=${ch} nav=${ok} ===`);
+              console.log(JSON.stringify(d));
+              console.log('ERR:', JSON.stringify(errs));
+              console.log('4xx:', JSON.stringify(net4xx));
+              const buf = await page.screenshot({ fullPage: true });
+              require('fs').writeFileSync(`/tmp/p2-${ch}.png`, buf);
+              await page.close();
+            }
+            await browser.close();
+          })();
+          EOF
+          node /tmp/p2check.js
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: photo2-screenshots
+          path: /tmp/p2-*.png
+          retention-days: 7
