@@ -9,7 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Copy photo CAH_1 to photo3 with tak guard
+      - name: Diagnose photo3 PRISM issue
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -26,31 +26,47 @@ jobs:
             P3="/var/www/sites/chamgyo/public/photo3"
             P1="/var/www/sites/chamgyo/public/photo"
 
-            echo "===== COPY photo/CAH_1.html to photo3 ====="
-            sudo cp "$P1/CAH_1.html" "$P3/CAH_1.html"
-            sudo chown www-data:www-data "$P3/CAH_1.html"
+            echo "===== [1] write.php content ====="
+            cat "$P3/write.php"
 
-            echo "===== ADD tak guard (first body only) ====="
-            sudo sed -i "0,/<body>/s|<body>|<body><script id=\"photo3-tak-only\">(function(){var p=new URLSearchParams(window.location.search);if(p.get(\"ch\")!==\"tak\"){document.documentElement.innerHTML=\"\";document.body.style.background=\"#000\";return;}})()</script>|" "$P3/CAH_1.html"
+            echo "===== [2] write.php output (curl) ====="
+            curl -s "http://localhost/photo3/write.php"
 
-            echo "===== ALSO COPY bgl.js and dragon_fx.js from photo ====="
-            sudo cp "$P1/bgl.js" "$P3/bgl.js"
-            sudo cp "$P1/dragon_fx.js" "$P3/dragon_fx.js"
-            sudo chown www-data:www-data "$P3/bgl.js" "$P3/dragon_fx.js"
+            echo "===== [3] photo3 CAH_1.html first 20 lines ====="
+            head -20 "$P3/CAH_1.html"
 
-            echo "===== VERIFY ====="
+            echo "===== [4] photo CAH_1.html first 20 lines ====="
+            head -20 "$P1/CAH_1.html"
+
+            echo "===== [5] photo3 lines around body tag ====="
+            grep -n "<body\|</body\|<script\|</script\|<head\|</head" "$P3/CAH_1.html"
+
+            echo "===== [6] photo lines around body tag ====="
+            grep -n "<body\|</body\|<script\|</script\|<head\|</head" "$P1/CAH_1.html"
+
+            echo "===== [7] file sizes ====="
             wc -c "$P3/CAH_1.html" "$P1/CAH_1.html"
-            grep -c "photo3-tak-only" "$P3/CAH_1.html"
-            diff "$P1/CAH_1.html" "$P3/CAH_1.html" || true
+            md5sum "$P3/CAH_1.html" "$P1/CAH_1.html"
 
-            echo "===== APACHE ====="
-            sudo apachectl configtest 2>&1
-            sudo systemctl reload apache2 2>&1 || echo "reload failed"
+            echo "===== [8] photo3 curl WITHOUT ch=tak ====="
+            curl -s "http://localhost/photo3/CAH_1.html" | head -5
+            curl -s "http://localhost/photo3/CAH_1.html" | wc -c
 
-            echo "===== CURL ====="
-            curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" | head -5
+            echo "===== [9] photo3 curl WITH ch=tak ====="
+            curl -s "http://localhost/photo3/CAH_1.html?ch=tak" | head -5
             curl -s "http://localhost/photo3/CAH_1.html?ch=tak" | wc -c
-            curl -s "http://localhost/photo/CAH_1.html?ch=tak" | wc -c
+
+            echo "===== [10] photo curl (no ch param) ====="
+            curl -s "http://localhost/photo/CAH_1.html" | head -5
+            curl -s "http://localhost/photo/CAH_1.html" | wc -c
+
+            echo "===== [11] symlinks and data ====="
+            ls -la "$P3/data" "$P3/bgl.js" "$P3/dragon_fx.js" 2>&1
+            ls -la "$P1/data" "$P1/bgl.js" "$P1/dragon_fx.js" 2>&1
+
+            echo "===== [12] photo write.php ====="
+            cat "$P1/write.php" 2>/dev/null || echo "NO write.php in photo"
+
             echo "===== DONE ====="
             '
 
