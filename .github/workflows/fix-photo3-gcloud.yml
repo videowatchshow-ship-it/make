@@ -1,0 +1,87 @@
+name: Fix photo3 CSS via gcloud from gauth
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fix photo3 via gauth gcloud SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            echo "===== gcloud auth check ====="
+            gcloud auth list 2>&1 | head -5
+            gcloud config get-value project 2>&1
+            echo ""
+            echo "===== SSH to my-site-1 via gcloud ====="
+            gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="
+                set -e
+                echo CONNECTED
+                hostname
+                P3=/var/www/sites/chamgyo/public/photo3
+                CAH=\$P3/CAH_1.html
+                echo ===== BEFORE =====
+                grep -o 'body{[^}]*}' \$CAH | head -1
+                grep -o '\.full_box{[^}]*}' \$CAH | head -1
+                echo ===== FIXING CSS =====
+                sudo cp \$CAH \${CAH}.bak.\$(date +%s)
+                sudo sed -i 's/body{height:auto !important/body{height:100vh !important/g' \$CAH
+                sudo sed -i 's/background:transparent !important/background:#000 !important/g' \$CAH
+                sudo sed -i 's/\.full_box{height:auto !important;min-height:0 !important/.full_box{height:100vh !important;min-height:100vh !important/g' \$CAH
+                echo ===== AFTER =====
+                grep -o 'body{[^}]*}' \$CAH | head -1
+                grep -o '\.full_box{[^}]*}' \$CAH | head -1
+                echo ===== SYMLINKS =====
+                cd \$P3
+                P2=/var/www/sites/chamgyo/public/photo2
+                for f in bgl.js dragon_fx.js; do
+                  [ ! -e \$f ] && [ -e \$P2/\$f ] && sudo ln -sfn \$P2/\$f \$f && echo Linked_\$f || echo \${f}_OK
+                done
+                [ ! -e images ] && [ -d \$P2/images ] && sudo ln -sfn \$P2/images images && echo Linked_images || echo images_OK
+                [ ! -e data ] && sudo ln -sfn \$P2/data data && echo Linked_data || echo data_OK
+                [ ! -e hot-patch.js ] && sudo ln -sfn \$P2/hot-patch.js hot-patch.js && echo Linked_hotpatch || echo hotpatch_OK
+                [ ! -e modules ] && sudo ln -sfn \$P2/modules modules && echo Linked_modules || echo modules_OK
+                echo ===== HTACCESS =====
+                printf 'Options +FollowSymLinks\n' | sudo tee \$P3/.htaccess > /dev/null
+                echo ===== APACHE =====
+                sudo apachectl configtest 2>&1 || true
+                sudo systemctl reload apache2 2>&1 || echo reload_failed
+                echo ===== VERIFY =====
+                for f in bgl.js dragon_fx.js images data modules hot-patch.js CAH_1.html; do
+                  [ -e \$P3/\$f ] && echo OK:\$f || echo MISSING:\$f
+                done
+                curl -sI http://localhost/photo3/CAH_1.html?ch=tak | head -3
+                echo CSS_FINAL:
+                grep -o 'body{[^}]*}' \$CAH | head -1
+                echo DONE
+              " 2>&1 || echo "gcloud SSH failed"
+
+      - name: Verify from outside
+        if: always()
+        run: |
+          sleep 3
+          BASE="https://xn--9d0bw2fjtyymch7de9d.info"
+          curl -s "$BASE/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" -o /tmp/v.html
+          echo "Size: $(wc -c < /tmp/v.html)"
+          echo "CSS body:"
+          grep -o 'body{[^}]*}' /tmp/v.html | head -1
+          echo "CSS full_box:"
+          grep -o '\.full_box{[^}]*}' /tmp/v.html | head -1
+          if grep -q 'height:100vh' /tmp/v.html; then
+            echo "FIX APPLIED SUCCESSFULLY"
+          else
+            echo "FIX NOT APPLIED - CSS still has height:auto"
+          fi
