@@ -1,0 +1,134 @@
+name: Fix photo3 PRISM final
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fix remaining CSS issues for WKWebView
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='
+            CAH="/var/www/sites/chamgyo/public/photo3/CAH_1.html"
+
+            echo "===== BEFORE ====="
+            echo "--- photo-center-align block ---"
+            sed -n "/<style id=\"photo-center-align\">/,/<\/style>/p" "$CAH"
+            echo "--- line 791 area (full_box height auto) ---"
+            grep -n "full_box.*height.*auto\|height.*auto.*full_box" "$CAH" | head -5
+            echo "--- mobile-fit zoom ---"
+            grep -n "style.zoom" "$CAH" | head -5
+            echo "--- all body display:flex ---"
+            grep -n "display.*flex" "$CAH" | grep -i "body\|photo-center" | head -10
+
+            echo "===== BACKUP ====="
+            sudo cp "$CAH" "${CAH}.bak.final.$(date +%s)"
+
+            echo "===== FIX 1: Replace entire photo-center-align style block ====="
+            sudo python3 -c "
+import re
+with open(\"$CAH\", \"r\") as f:
+    content = f.read()
+
+# Remove the photo-center-align style block entirely
+content = re.sub(
+    r'<style id=\"photo-center-align\">.*?</style>',
+    '<!-- photo-center-align removed for WKWebView -->',
+    content,
+    flags=re.DOTALL
+)
+
+# Fix full_box height:auto to height:100vh (line 791 area)
+content = re.sub(
+    r'\.full_box\s*\{\s*transform:\s*none\s*!important;\s*min-height:\s*100vh;\s*height:\s*auto\s*!important;\s*\}',
+    '.full_box { transform: none !important; min-height: 100vh; height: 100vh !important; }',
+    content
+)
+
+# Replace mobile-fit zoom with transform scale (WKWebView compatible)
+content = re.sub(
+    r'document\.body\.style\.zoom\s*=\s*ratio',
+    'document.body.style.transform=\"scale(\"+ratio+\")\";document.body.style.transformOrigin=\"0 0\";document.body.style.width=(100/ratio)+\"%\"',
+    content
+)
+
+with open(\"$CAH\", \"w\") as f:
+    f.write(content)
+print(\"Python fixes applied\")
+"
+
+            echo "===== AFTER ====="
+            echo "--- photo-center-align (should be gone) ---"
+            grep -n "photo-center-align" "$CAH" | head -5
+            echo "--- body display flex (should be gone from center-align) ---"
+            grep -n "display.*flex" "$CAH" | grep -i "body" | head -5
+            echo "--- full_box height (should be 100vh) ---"
+            grep -n "full_box.*height\|height.*full_box" "$CAH" | head -10
+            echo "--- zoom (should be transform now) ---"
+            grep -n "style.zoom\|style.transform" "$CAH" | head -5
+            echo "--- body override at bottom ---"
+            grep -n "body{" "$CAH" | head -5
+
+            echo "===== APACHE RELOAD ====="
+            sudo apachectl configtest 2>&1
+            sudo systemctl reload apache2 2>&1 || echo "reload failed"
+
+            echo "===== VERIFY ====="
+            curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" | head -5
+            echo "---"
+            BODY=$(curl -s "http://localhost/photo3/CAH_1.html?ch=tak")
+            echo "body CSS:"
+            echo "$BODY" | grep -o "body{[^}]*}" | head -3
+            echo "full_box CSS:"
+            echo "$BODY" | grep -oP "\.full_box\s*\{[^}]*\}" | head -5
+            echo "display:flex check:"
+            echo "$BODY" | grep -c "display.*flex.*align-items.*center" || echo "0 matches (good)"
+            echo "zoom check:"
+            echo "$BODY" | grep -c "style.zoom" || echo "0 zoom refs (good)"
+            echo "transform check:"
+            echo "$BODY" | grep -c "style.transform" || echo "0 transform refs"
+            echo "===== DONE ====="
+            '
+
+      - name: Verify external
+        if: always()
+        run: |
+          sleep 5
+          echo "=== External check ==="
+          BODY=$(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null)
+          echo "Size: $(echo "$BODY" | wc -c)"
+          echo "body CSS:"
+          echo "$BODY" | grep -o "body{[^}]*}" | head -3
+          echo "full_box CSS:"
+          echo "$BODY" | grep -oP "\.full_box\s*\{[^}]*\}" | head -5 || echo "n/a"
+          if echo "$BODY" | grep -q "display: flex.*align-items: center"; then
+            echo "FAIL: center-align block still present"
+          else
+            echo "OK: center-align removed"
+          fi
+          if echo "$BODY" | grep -q "height: auto !important"; then
+            echo "FAIL: height:auto still present"
+          else
+            echo "OK: height:auto removed"
+          fi
+          if echo "$BODY" | grep -q "style.zoom"; then
+            echo "WARN: zoom still present"
+          else
+            echo "OK: zoom replaced with transform"
+          fi
+          STATUS=$(curl -so /dev/null -w '%{http_code}' "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak" 2>/dev/null)
+          echo "HTTP: $STATUS"
