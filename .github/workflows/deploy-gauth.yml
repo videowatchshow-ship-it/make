@@ -20,10 +20,12 @@ jobs:
         id: api_deploy
         continue-on-error: true
         run: |
+          BRANCH="${GITHUB_REF_NAME}"
           HTTP_CODE=$(curl -s -o /tmp/resp.txt -w "%{http_code}" \
             -X POST https://gauth.cent-solution.online/api/deploy \
             -H "Content-Type: application/json" \
-            --connect-timeout 15 --max-time 90)
+            -d "{\"branch\":\"${BRANCH}\"}" \
+            --connect-timeout 15 --max-time 180)
           echo "HTTP $HTTP_CODE"
           cat /tmp/resp.txt 2>/dev/null || true
           if [ "$HTTP_CODE" = "200" ]; then
