@@ -9,13 +9,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Write photo3-specific htaccess
+      - name: Diagnose and fix photo3 ONLY
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 180s
+          command_timeout: 300s
           script: |
             /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
               --zone=asia-northeast1-a \
@@ -24,63 +24,113 @@ jobs:
               --quiet \
               --command='
             P3="/var/www/sites/chamgyo/public/photo3"
+            P1="/var/www/sites/chamgyo/public/photo"
 
-            echo "===== CURRENT photo3/.htaccess ====="
-            cat "$P3/.htaccess"
+            echo "===== [A] photo3 디렉토리 전체 ====="
+            ls -la "$P3/"
 
-            echo "===== BACKUP ====="
-            sudo cp "$P3/.htaccess" "$P3/.htaccess.bak.$(date +%s)"
+            echo "===== [B] photo3/.htaccess 현재 내용 ====="
+            cat "$P3/.htaccess" 2>/dev/null || echo "(없음)"
 
-            echo "===== WRITE photo3-specific .htaccess ====="
-            sudo tee "$P3/.htaccess" > /dev/null << '"'"'HTEOF'"'"'
-            Options +FollowSymLinks
+            echo "===== [C] photo/.htaccess 현재 내용 (참고용) ====="
+            cat "$P1/.htaccess" 2>/dev/null || echo "(없음)"
 
-            <FilesMatch "^(CAW_[0-9]+|CAH_[0-9]+)\.html$">
-              Header set Cache-Control "no-cache, no-store, must-revalidate"
-              Header set Pragma "no-cache"
-              Header set Expires "0"
-            </FilesMatch>
+            echo "===== [D] photo3 심볼릭 링크 상태 ====="
+            find "$P3" -maxdepth 1 -type l -exec ls -la {} \;
 
-            <FilesMatch "^bgl\.js$">
-              Header set Cache-Control "no-cache, no-store, must-revalidate"
-            </FilesMatch>
+            echo "===== [E] photo3 CAH_1.html md5 ====="
+            md5sum "$P3/CAH_1.html" 2>/dev/null
 
-            <FilesMatch "^(api_selected_room|write_select_room|write)\.php$">
-              Header set Cache-Control "no-cache, no-store, must-revalidate"
-              Header set Pragma "no-cache"
-              Header set Expires "0"
-            </FilesMatch>
-            HTEOF
-            sudo chown www-data:www-data "$P3/.htaccess"
-            sudo chmod 644 "$P3/.htaccess"
+            echo "===== [F] photo CAH_1.html md5 ====="
+            md5sum "$P1/CAH_1.html" 2>/dev/null
 
-            echo "===== NEW photo3/.htaccess ====="
-            cat "$P3/.htaccess"
+            echo "===== [G] photo3 응답 크기 + 헤더 (localhost) ====="
+            curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" 2>/dev/null
 
-            echo "===== APACHE RELOAD ====="
-            sudo apachectl configtest 2>&1
-            sudo systemctl reload apache2 2>&1
+            echo "===== [H] photo 응답 크기 + 헤더 (localhost) ====="
+            curl -sI "http://localhost/photo/CAH_1.html?ch=tak" 2>/dev/null
 
-            echo "===== VERIFY ====="
-            echo "--- photo3 headers ---"
-            curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" | head -20
-            echo "--- photo headers ---"
-            curl -sI "http://localhost/photo/CAH_1.html?ch=tak" | head -20
-            echo "--- CORS check ---"
-            curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" | grep -i "access-control\|x-photo3" && echo "FAIL" || echo "OK: no extra headers"
-            echo "--- symlink check ---"
-            curl -sI "http://localhost/photo3/data/sel_tak.json" | head -3
+            echo "===== [I] photo3 응답 본문 크기 ====="
+            curl -s "http://localhost/photo3/CAH_1.html?ch=tak" 2>/dev/null | wc -c
+
+            echo "===== [J] photo 응답 본문 크기 ====="
+            curl -s "http://localhost/photo/CAH_1.html?ch=tak" 2>/dev/null | wc -c
+
+            echo "===== [K] photo3 응답 첫 5줄 ====="
+            curl -s "http://localhost/photo3/CAH_1.html?ch=tak" 2>/dev/null | head -5
+
+            echo "===== [L] photo 응답 첫 5줄 ====="
+            curl -s "http://localhost/photo/CAH_1.html?ch=tak" 2>/dev/null | head -5
+
+            echo "===== [M] photo3 응답 마지막 30줄 ====="
+            curl -s "http://localhost/photo3/CAH_1.html?ch=tak" 2>/dev/null | tail -30
+
+            echo "===== [N] photo 응답 마지막 30줄 ====="
+            curl -s "http://localhost/photo/CAH_1.html?ch=tak" 2>/dev/null | tail -30
+
+            echo "===== [O] photo3 body CSS 추출 ====="
+            curl -s "http://localhost/photo3/CAH_1.html?ch=tak" 2>/dev/null | grep -o "body{[^}]*}" | head -5
+            curl -s "http://localhost/photo3/CAH_1.html?ch=tak" 2>/dev/null | grep -o "body *{[^}]*}" | head -5
+
+            echo "===== [P] photo body CSS 추출 ====="
+            curl -s "http://localhost/photo/CAH_1.html?ch=tak" 2>/dev/null | grep -o "body{[^}]*}" | head -5
+            curl -s "http://localhost/photo/CAH_1.html?ch=tak" 2>/dev/null | grep -o "body *{[^}]*}" | head -5
+
+            echo "===== [Q] photo3 vs photo 응답 diff ====="
+            diff <(curl -s "http://localhost/photo3/CAH_1.html?ch=tak" 2>/dev/null) <(curl -s "http://localhost/photo/CAH_1.html?ch=tak" 2>/dev/null) | head -50 || echo "IDENTICAL"
+
+            echo "===== [R] Apache vhost 중 photo3 관련 설정 ====="
+            sudo grep -rn "photo3\|photo2\|photo/" /etc/apache2/sites-enabled/ 2>/dev/null | head -20
+
+            echo "===== [S] Apache 모듈 상태 ====="
+            sudo apachectl -M 2>/dev/null | grep -i "headers\|rewrite\|expires\|php" | head -10
+
+            echo "===== [T] PHP 처리 확인 (photo3 vs photo) ====="
+            echo "photo3 content-type:"
+            curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" 2>/dev/null | grep -i content-type
+            echo "photo content-type:"
+            curl -sI "http://localhost/photo/CAH_1.html?ch=tak" 2>/dev/null | grep -i content-type
+
+            echo "===== [U] photo3 bgl.js 접근 ====="
+            curl -sI "http://localhost/photo3/bgl.js" 2>/dev/null | head -5
+
+            echo "===== [V] photo3 dragon_fx.js 접근 ====="
+            curl -sI "http://localhost/photo3/dragon_fx.js" 2>/dev/null | head -5
+
+            echo "===== [W] photo3 data/sel_tak.json 접근 ====="
+            curl -sI "http://localhost/photo3/data/sel_tak.json" 2>/dev/null | head -5
+
+            echo "===== [X] photo3 write.php 접근 ====="
+            curl -sI "http://localhost/photo3/write.php" 2>/dev/null | head -5
+
+            echo "===== [Y] photo3 hot-patch.js 접근 ====="
+            curl -sI "http://localhost/photo3/hot-patch.js" 2>/dev/null | head -5
+
+            echo "===== [Z] photo3 modules/dist/bundle.js 접근 ====="
+            curl -sI "http://localhost/photo3/modules/dist/bundle.js" 2>/dev/null | head -5
+
             echo "===== DONE ====="
             '
 
-      - name: Verify external
+      - name: External verify
         if: always()
         run: |
           sleep 5
-          echo "=== photo3 ==="
+          echo "=== photo3 외부 헤더 ==="
           curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null
           echo ""
-          echo "=== CORS gone? ==="
+          echo "=== photo 외부 헤더 ==="
+          curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null
+          echo ""
+          echo "=== photo3 외부 응답 크기 ==="
+          curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | wc -c
+          echo "=== photo 외부 응답 크기 ==="
+          curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | wc -c
+          echo ""
+          echo "=== CORS 확인 ==="
           H=$(curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null)
-          echo "$H" | grep -i "access-control" && echo "FAIL" || echo "OK"
-          echo "$H" | grep -i "x-photo3" && echo "FAIL" || echo "OK"
+          echo "$H" | grep -i "access-control" && echo "FAIL" || echo "OK: CORS 없음"
+          echo "$H" | grep -i "x-photo3" && echo "FAIL" || echo "OK: 커스텀헤더 없음"
+          echo ""
+          echo "=== photo3 vs photo 외부 응답 diff ==="
+          diff <(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null) <(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null) | head -30 || echo "IDENTICAL"
