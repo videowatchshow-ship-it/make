@@ -1,0 +1,28 @@
+name: Purge Cloudflare cache (chamgyo)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Purge Cloudflare cache for photo API/JS
+        run: |
+          curl -s -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data '{
+              "files": [
+                "https://xn--9d0bw2fjtyymch7de9d.info/photo/api_selected_room.php",
+                "https://xn--9d0bw2fjtyymch7de9d.info/photo/bgl.js",
+                "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html",
+                "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAW_1.html",
+                "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAW_2.html",
+                "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAW_3.html",
+                "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAW_4.html",
+                "https://xn--9d0bw2fjtyymch7de9d.info/photo/write_select_room.php"
+              ]
+            }' | python3 -m json.tool
+          echo "Cloudflare cache purged"
