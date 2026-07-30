@@ -319,7 +319,8 @@ async function advancedGoogleLogin(account, options = {}) {
     const {
         headless = false,
         timeout = 60000,
-        captchaWaitTime = 120000
+        captchaWaitTime = 120000,
+        executablePath = null
     } = options;
 
     console.log(`\n${c.cyan}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${c.reset}`);
@@ -329,22 +330,59 @@ async function advancedGoogleLogin(account, options = {}) {
     const profilePath = path.join(__dirname, 'profiles', account.email.replace(/[^a-z0-9]/gi, '_'));
     let browser, page;
 
+    // 실제 Chrome 경로 탐색 (Chromium보다 탐지 회피 우수)
+    const chromePaths = [
+        '/usr/bin/google-chrome-stable',
+        '/usr/bin/google-chrome',
+        '/usr/bin/chromium-browser',
+        '/usr/bin/chromium',
+        '/snap/bin/chromium'
+    ];
+    let foundChrome = executablePath;
+    if (!foundChrome) {
+        for (const p of chromePaths) {
+            if (fs.existsSync(p)) { foundChrome = p; break; }
+        }
+    }
+
     try {
-        // ✅ 공식 Puppeteer API로 브라우저 시작
-        browser = await puppeteer.launch({
-            headless: headless,
+        // Google은 headless 모드를 감지하여 차단함 (2025-2026 확인)
+        // headed 모드 + 실제 Chrome + userDataDir가 유일한 작동 방식
+        // 서버에서는 Xvfb로 가상 디스플레이 사용
+        const launchOpts = {
+            headless: false,
             userDataDir: profilePath,
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--start-maximized',
-                '--disable-blink-features=AutomationControlled'
+                '--disable-blink-features=AutomationControlled',
+                '--disable-features=IsolateOrigins,site-per-process',
+                '--flag-switches-begin',
+                '--flag-switches-end'
             ],
+            ignoreDefaultArgs: ['--enable-automation'],
             defaultViewport: null
-        });
+        };
+        if (foundChrome) {
+            launchOpts.executablePath = foundChrome;
+            console.log(`${c.green}✓${c.reset} Chrome: ${foundChrome}`);
+        }
 
-        page = await browser.newPage();
-        await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36');
+        browser = await puppeteer.launch(launchOpts);
+
+        page = (await browser.pages())[0] || await browser.newPage();
+
+        // CDP navigator.webdriver 제거
+        await page.evaluateOnNewDocument(() => {
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            delete navigator.__proto__.webdriver;
+            const originalQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) =>
+                parameters.name === 'notifications'
+                    ? Promise.resolve({ state: Notification.permission })
+                    : originalQuery(parameters);
+        });
 
         // Google 계정 페이지로 이동
         console.log(`${c.blue}[1]${c.reset} Google 접속 중...`);
