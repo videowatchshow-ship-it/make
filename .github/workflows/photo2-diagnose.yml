@@ -2,6 +2,12 @@ name: Diagnose photo2
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-diagnose.yml'
+      - 'photo2/**'
 
 jobs:
   ssh-diagnose:
