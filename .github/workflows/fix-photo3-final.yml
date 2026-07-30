@@ -9,7 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Diagnose photo3 PRISM issue
+      - name: Copy photo to photo3 exactly (no tak guard)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -26,47 +26,27 @@ jobs:
             P3="/var/www/sites/chamgyo/public/photo3"
             P1="/var/www/sites/chamgyo/public/photo"
 
-            echo "===== [1] write.php content ====="
-            cat "$P3/write.php"
+            echo "===== COPY EVERYTHING FROM PHOTO ====="
+            sudo cp "$P1/CAH_1.html" "$P3/CAH_1.html"
+            sudo cp "$P1/bgl.js" "$P3/bgl.js"
+            sudo cp "$P1/dragon_fx.js" "$P3/dragon_fx.js"
+            sudo chown www-data:www-data "$P3/CAH_1.html" "$P3/bgl.js" "$P3/dragon_fx.js"
 
-            echo "===== [2] write.php output (curl) ====="
-            curl -s "http://localhost/photo3/write.php"
-
-            echo "===== [3] photo3 CAH_1.html first 20 lines ====="
-            head -20 "$P3/CAH_1.html"
-
-            echo "===== [4] photo CAH_1.html first 20 lines ====="
-            head -20 "$P1/CAH_1.html"
-
-            echo "===== [5] photo3 lines around body tag ====="
-            grep -n "<body\|</body\|<script\|</script\|<head\|</head" "$P3/CAH_1.html"
-
-            echo "===== [6] photo lines around body tag ====="
-            grep -n "<body\|</body\|<script\|</script\|<head\|</head" "$P1/CAH_1.html"
-
-            echo "===== [7] file sizes ====="
-            wc -c "$P3/CAH_1.html" "$P1/CAH_1.html"
+            echo "===== VERIFY IDENTICAL ====="
             md5sum "$P3/CAH_1.html" "$P1/CAH_1.html"
+            md5sum "$P3/bgl.js" "$P1/bgl.js"
+            md5sum "$P3/dragon_fx.js" "$P1/dragon_fx.js"
+            diff "$P1/CAH_1.html" "$P3/CAH_1.html" && echo "FILES IDENTICAL" || echo "FILES DIFFER"
 
-            echo "===== [8] photo3 curl WITHOUT ch=tak ====="
-            curl -s "http://localhost/photo3/CAH_1.html" | head -5
-            curl -s "http://localhost/photo3/CAH_1.html" | wc -c
+            echo "===== APACHE ====="
+            sudo apachectl configtest 2>&1
+            sudo systemctl reload apache2 2>&1 || echo "reload failed"
 
-            echo "===== [9] photo3 curl WITH ch=tak ====="
-            curl -s "http://localhost/photo3/CAH_1.html?ch=tak" | head -5
+            echo "===== CURL TEST ====="
             curl -s "http://localhost/photo3/CAH_1.html?ch=tak" | wc -c
-
-            echo "===== [10] photo curl (no ch param) ====="
-            curl -s "http://localhost/photo/CAH_1.html" | head -5
+            curl -s "http://localhost/photo/CAH_1.html?ch=tak" | wc -c
+            curl -s "http://localhost/photo3/CAH_1.html" | wc -c
             curl -s "http://localhost/photo/CAH_1.html" | wc -c
-
-            echo "===== [11] symlinks and data ====="
-            ls -la "$P3/data" "$P3/bgl.js" "$P3/dragon_fx.js" 2>&1
-            ls -la "$P1/data" "$P1/bgl.js" "$P1/dragon_fx.js" 2>&1
-
-            echo "===== [12] photo write.php ====="
-            cat "$P1/write.php" 2>/dev/null || echo "NO write.php in photo"
-
             echo "===== DONE ====="
             '
 
