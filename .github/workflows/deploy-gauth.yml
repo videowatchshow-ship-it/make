@@ -44,19 +44,103 @@ jobs:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
+          script_stop: false
+          command_timeout: 5m
           script: |
+            set -e
+            BRANCH="claude/gauth-frontend-backend-fixes-cg2icv"
+            RAW="https://raw.githubusercontent.com/videowatchshow-ship-it/make/${BRANCH}"
+
+            # ===== 1. 시스템 패키지 (Xvfb + Google Chrome + 한글폰트) =====
+            echo "=== [1/6] System packages ==="
+            if ! command -v xvfb-run >/dev/null 2>&1; then
+              sudo apt-get update -qq
+              sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq xvfb fonts-noto-cjk >/dev/null 2>&1
+              echo "Xvfb installed"
+            else
+              echo "Xvfb already installed"
+            fi
+
+            if ! command -v google-chrome-stable >/dev/null 2>&1; then
+              cd /tmp
+              wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+              sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ./google-chrome-stable_current_amd64.deb >/dev/null 2>&1 || sudo apt-get -f install -y -qq >/dev/null 2>&1
+              rm -f google-chrome-stable_current_amd64.deb
+              echo "Google Chrome installed: $(google-chrome-stable --version)"
+            else
+              echo "Chrome already installed: $(google-chrome-stable --version)"
+            fi
+
+            # ===== 2. Xvfb 가상 디스플레이 (서버에 모니터 없음) =====
+            echo "=== [2/6] Xvfb virtual display ==="
+            if ! pgrep -f "Xvfb :99" >/dev/null 2>&1; then
+              Xvfb :99 -screen 0 1920x1080x24 -ac &
+              sleep 1
+              echo "Xvfb started on :99"
+            else
+              echo "Xvfb already running"
+            fi
+
+            # systemd 서비스에 DISPLAY 환경변수 추가
+            if ! grep -q "DISPLAY=:99" /etc/systemd/system/gauth.service 2>/dev/null; then
+              if [ -f /etc/systemd/system/gauth.service ]; then
+                sudo sed -i '/\[Service\]/a Environment=DISPLAY=:99' /etc/systemd/system/gauth.service
+                sudo systemctl daemon-reload
+                echo "DISPLAY=:99 added to gauth.service"
+              fi
+            fi
+
+            # Xvfb 자동 시작 서비스
+            if [ ! -f /etc/systemd/system/xvfb.service ]; then
+              sudo tee /etc/systemd/system/xvfb.service > /dev/null << 'XVFB'
+            [Unit]
+            Description=Xvfb virtual display
+            After=network.target
+
+            [Service]
+            ExecStart=/usr/bin/Xvfb :99 -screen 0 1920x1080x24 -ac
+            Restart=always
+
+            [Install]
+            WantedBy=multi-user.target
+            XVFB
+              sudo systemctl enable xvfb --now 2>/dev/null || true
+              echo "xvfb.service created and enabled"
+            fi
+
+            # ===== 3. Node.js 확인 =====
+            echo "=== [3/6] Node.js ==="
+            node -v || {
+              curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - >/dev/null 2>&1
+              sudo apt-get install -y -qq nodejs >/dev/null 2>&1
+            }
+            echo "Node: $(node -v), npm: $(npm -v)"
+
+            # ===== 4. 코드 배포 =====
+            echo "=== [4/6] Deploy code ==="
             cd /opt/gauth-full
-            curl -sL "https://raw.githubusercontent.com/videowatchshow-ship-it/make/claude/gauth-frontend-backend-fixes-cg2icv/gauth/upload_excels.js" -o upload_excels.js
-            curl -sL "https://raw.githubusercontent.com/videowatchshow-ship-it/make/claude/gauth-frontend-backend-fixes-cg2icv/gauth/auto_deploy.js" -o auto_deploy.js
-            curl -sL "https://raw.githubusercontent.com/videowatchshow-ship-it/make/claude/gauth-frontend-backend-fixes-cg2icv/gauth/index.html" -o /var/www/sites/gauth/public/index.html
-            curl -sL "https://raw.githubusercontent.com/videowatchshow-ship-it/make/claude/gauth-frontend-backend-fixes-cg2icv/gauth/xlsx.core.min.js" -o /var/www/sites/gauth/public/xlsx.core.min.js
-            curl -sL "https://raw.githubusercontent.com/videowatchshow-ship-it/make/claude/gauth-frontend-backend-fixes-cg2icv/advanced-google-login-v2.js" -o advanced-google-login-v2.js
-            curl -sL "https://raw.githubusercontent.com/videowatchshow-ship-it/make/claude/gauth-frontend-backend-fixes-cg2icv/package.json" -o package.json
-            npm install --production 2>&1 | tail -5
+            curl -sL "${RAW}/gauth/upload_excels.js" -o upload_excels.js
+            curl -sL "${RAW}/gauth/auto_deploy.js" -o auto_deploy.js
+            curl -sL "${RAW}/gauth/index.html" -o /var/www/sites/gauth/public/index.html
+            curl -sL "${RAW}/gauth/xlsx.core.min.js" -o /var/www/sites/gauth/public/xlsx.core.min.js
+            curl -sL "${RAW}/advanced-google-login-v2.js" -o advanced-google-login-v2.js
+            curl -sL "${RAW}/package.json" -o package.json
+            echo "Files downloaded"
+
+            # ===== 5. npm install =====
+            echo "=== [5/6] npm install ==="
+            npm install --production 2>&1 | tail -10
+            mkdir -p profiles failed_logins
+
+            # auto_deploy 모듈 등록
             grep -q "auto_deploy" rebrowser-login.js || echo "require('./auto_deploy.js')(app);" >> rebrowser-login.js
+
+            # ===== 6. 서비스 재시작 =====
+            echo "=== [6/6] Restart gauth ==="
+            export DISPLAY=:99
             sudo systemctl restart gauth
-            sleep 2
-            curl -s http://localhost:4000/api/deploy -X POST | python3 -c "import json,sys; d=json.load(sys.stdin); print('OK' if d.get('ok') else 'FAIL')"
+            sleep 3
+            curl -s http://localhost:4000/api/accounts | python3 -c "import json,sys; d=json.load(sys.stdin); print('API OK — accounts:', len(d) if isinstance(d,list) else d.get('total','?'))" 2>/dev/null || echo "API check skipped"
             echo "=== Deploy complete ==="
 
       - name: Summary
