@@ -1,4 +1,4 @@
-name: Fix photo3 PRISM final
+name: Fix photo3 htaccess independent
 
 on:
   workflow_dispatch:
@@ -9,13 +9,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Aggressive fix for PRISM WKWebView
+      - name: Restore photo3 original and fix
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 180s
+          command_timeout: 300s
           script: |
             /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
               --zone=asia-northeast1-a \
@@ -23,69 +23,84 @@ jobs:
               --ssh-flag="-o StrictHostKeyChecking=no" \
               --quiet \
               --command='
-            CAH="/var/www/sites/chamgyo/public/photo3/CAH_1.html"
-            REF="/var/www/sites/chamgyo/public/photo/CAH_1.html"
+            P3="/var/www/sites/chamgyo/public/photo3"
+            P1="/var/www/sites/chamgyo/public/photo"
 
-            echo "===== BACKUP ====="
-            sudo cp "$CAH" "${CAH}.bak.aggressive.$(date +%s)"
+            echo "===== [1] 현재 상태 ====="
+            echo "photo3/CAH_1.html: $(wc -c < "$P3/CAH_1.html") bytes, md5: $(md5sum "$P3/CAH_1.html" | cut -d" " -f1)"
+            echo "photo/CAH_1.html:  $(wc -c < "$P1/CAH_1.html") bytes, md5: $(md5sum "$P1/CAH_1.html" | cut -d" " -f1)"
 
-            echo "===== REMOVE mobile-fit-js entirely ====="
-            sudo sed -i "/<script id=.chamgyo-mobile-fit-js.>/,/<\/script>/d" "$CAH"
+            echo "===== [2] 백업 파일 목록 ====="
+            ls -la "$P3/CAH_1.html"*
 
-            echo "===== REMOVE photo-center-align if still exists ====="
-            sudo sed -i "/<style id=.photo-center-align.>/,/<\/style>/d" "$CAH"
+            echo "===== [3] backup-good 내용 확인 ====="
+            echo "크기: $(wc -c < "$P3/CAH_1.html.backup-good") bytes"
+            echo "md5: $(md5sum "$P3/CAH_1.html.backup-good" | cut -d" " -f1)"
+            echo "--- 첫 10줄 ---"
+            head -10 "$P3/CAH_1.html.backup-good"
+            echo "--- script src ---"
+            grep -oi "src=[\"'"'"'][^\"'"'"']*[\"'"'"']" "$P3/CAH_1.html.backup-good" | head -20
+            echo "--- 경로 참조 ---"
+            grep -n "photo3\|photo2\|/photo/" "$P3/CAH_1.html.backup-good" || echo "경로 참조 없음"
+            echo "--- body CSS ---"
+            grep -o "body{[^}]*}" "$P3/CAH_1.html.backup-good" | head -5
+            echo "--- 마지막 10줄 ---"
+            tail -10 "$P3/CAH_1.html.backup-good"
 
-            echo "===== REMOVE photo-no-miniview style ====="
-            sudo sed -i "/<style id=.photo-no-miniview.>/,/<\/style>/d" "$CAH"
+            echo "===== [4] bak-1785203263 확인 (Jul 28 원본) ====="
+            echo "크기: $(wc -c < "$P3/CAH_1.html.bak-1785203263") bytes"
+            echo "md5: $(md5sum "$P3/CAH_1.html.bak-1785203263" | cut -d" " -f1)"
+            echo "--- 첫 5줄 ---"
+            head -5 "$P3/CAH_1.html.bak-1785203263"
+            echo "--- script src ---"
+            grep -oi "src=[\"'"'"'][^\"'"'"']*[\"'"'"']" "$P3/CAH_1.html.bak-1785203263" | head -20
 
-            echo "===== FIX all height:auto to 100vh ====="
-            sudo sed -i "s/height: auto !important/height: 100vh !important/g" "$CAH"
+            echo "===== [5] photo3 .user.ini 내용 ====="
+            cat "$P3/.user.ini" 2>/dev/null || echo "(없음)"
+            echo "===== [5b] photo .user.ini 내용 ====="
+            cat "$P1/.user.ini" 2>/dev/null || echo "(없음)"
 
-            echo "===== REMOVE any remaining zoom refs ====="
-            sudo sed -i "/style\.zoom/d" "$CAH"
+            echo "===== [6] RESTORE: backup-good → CAH_1.html ====="
+            sudo cp "$P3/CAH_1.html" "$P3/CAH_1.html.bak.before-restore.$(date +%s)"
+            sudo cp "$P3/CAH_1.html.backup-good" "$P3/CAH_1.html"
+            sudo chown www-data:www-data "$P3/CAH_1.html"
+            sudo chmod 644 "$P3/CAH_1.html"
+            echo "복원 완료"
+            echo "photo3/CAH_1.html: $(wc -c < "$P3/CAH_1.html") bytes, md5: $(md5sum "$P3/CAH_1.html" | cut -d" " -f1)"
 
-            echo "===== REMOVE all added style blocks after body tag ====="
-            sudo sed -i "/photo-center-align removed/d" "$CAH"
-
-            echo "===== VERIFY REMAINING STRUCTURE ====="
-            echo "--- zoom refs ---"
-            grep -cn "zoom" "$CAH"
-            echo "--- display flex refs ---"
-            grep -n "display.*flex" "$CAH" | head -10
-            echo "--- body overrides ---"
-            grep -n "body{" "$CAH" | head -5
-            echo "--- full_box ---"
-            grep -n "full_box" "$CAH" | grep "height" | head -5
-            echo "--- scripts ---"
-            grep -n "<script" "$CAH" | head -20
-            echo "--- styles ---"
-            grep -n "<style" "$CAH" | head -10
-            echo "--- photo reference body ---"
-            grep -n "body{" "$REF" | head -3
-            echo "--- photo reference scripts ---"
-            grep -n "<script" "$REF" | head -10
-
-            echo "===== APACHE RELOAD ====="
+            echo "===== [7] Apache reload ====="
             sudo apachectl configtest 2>&1
-            sudo systemctl reload apache2 2>&1 || echo "reload failed"
+            sudo systemctl reload apache2 2>&1
 
-            echo "===== CURL TEST ====="
+            echo "===== [8] 검증 ====="
+            echo "--- photo3 localhost ---"
             curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" | head -5
-            echo "---"
-            curl -s "http://localhost/photo3/CAH_1.html?ch=tak" | grep -o "body{[^}]*}" | head -3
-            echo "---"
-            curl -s "http://localhost/photo3/CAH_1.html?ch=tak" | grep -c "zoom" || echo "0 zoom"
+            echo "--- photo3 응답 크기 ---"
+            curl -s "http://localhost/photo3/CAH_1.html?ch=tak" | wc -c
+            echo "--- photo localhost ---"
+            curl -sI "http://localhost/photo/CAH_1.html?ch=tak" | head -5
+            echo "--- photo 응답 크기 ---"
+            curl -s "http://localhost/photo/CAH_1.html?ch=tak" | wc -c
+            echo "--- photo3 리소스 접근 ---"
+            curl -sI "http://localhost/photo3/bgl.js" | head -3
+            curl -sI "http://localhost/photo3/dragon_fx.js" | head -3
+            curl -sI "http://localhost/photo3/data/sel_tak.json" | head -3
             echo "===== DONE ====="
             '
 
-      - name: Verify external
+      - name: External verify
         if: always()
         run: |
           sleep 5
-          BODY=$(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null)
-          echo "Size: $(echo "$BODY" | wc -c)"
-          echo "$BODY" | grep -o "body{[^}]*}" | head -3
-          echo "$BODY" | grep -q "display: flex.*align-items: center" && echo "FAIL: flex" || echo "OK: no body flex"
-          echo "$BODY" | grep -q "style\.zoom" && echo "FAIL: zoom" || echo "OK: no zoom"
-          echo "$BODY" | grep -q "chamgyo-mobile-fit" && echo "FAIL: mobile-fit" || echo "OK: no mobile-fit"
-          curl -so /dev/null -w "HTTP: %{http_code}\n" "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak" 2>/dev/null
+          echo "=== photo3 외부 ==="
+          curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | head -10
+          echo ""
+          echo "=== photo3 외부 크기 ==="
+          curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | wc -c
+          echo "=== photo 외부 크기 ==="
+          curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null | wc -c
+          echo ""
+          echo "=== CORS 확인 ==="
+          H=$(curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null)
+          echo "$H" | grep -i "access-control" && echo "FAIL" || echo "OK"
+          echo "$H" | grep -i "x-photo3" && echo "FAIL" || echo "OK"
