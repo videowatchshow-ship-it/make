@@ -1,0 +1,79 @@
+name: Diagnose chamgyo CAH_1 room selection bug
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read CAH_1.html and related files
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 34.104.233.35
+          username: ${{ secrets.CHAMGYO_USER }}
+          key: ${{ secrets.CHAMGYO_SSH_KEY }}
+          command_timeout: 30s
+          script: |
+            echo "===== CAH_1.html ====="
+            cat /var/www/sites/chamgyo/public/photo/CAH_1.html 2>/dev/null || echo "FILE NOT FOUND"
+            echo ""
+            echo "===== api_selected_room.php ====="
+            cat /var/www/sites/chamgyo/public/photo/api_selected_room.php 2>/dev/null || echo "FILE NOT FOUND"
+            echo ""
+            echo "===== write_select_room.php ====="
+            cat /var/www/sites/chamgyo/public/photo/write_select_room.php 2>/dev/null || echo "FILE NOT FOUND"
+            echo ""
+            echo "===== sel_cent.json ====="
+            cat /var/www/sites/chamgyo/public/photo/data/sel_cent.json 2>/dev/null || echo "FILE NOT FOUND"
+            echo ""
+            echo "===== hot_patches.json ====="
+            cat /var/www/sites/chamgyo/public/photo2/hot_patches.json 2>/dev/null || echo "FILE NOT FOUND"
+            echo ""
+            echo "===== JS files list ====="
+            ls -la /var/www/sites/chamgyo/public/photo/*.js 2>/dev/null || echo "NO JS FILES"
+            echo ""
+            echo "===== All files in photo/ ====="
+            ls -la /var/www/sites/chamgyo/public/photo/ 2>/dev/null || echo "DIR NOT FOUND"
+            echo ""
+            echo "===== data/ dir ====="
+            ls -la /var/www/sites/chamgyo/public/photo/data/ 2>/dev/null || echo "DIR NOT FOUND"
+
+      - name: Fallback - try with gauth credentials
+        if: failure()
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 34.104.233.35
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 30s
+          script: |
+            echo "===== CAH_1.html ====="
+            cat /var/www/sites/chamgyo/public/photo/CAH_1.html 2>/dev/null || echo "FILE NOT FOUND"
+            echo ""
+            echo "===== api_selected_room.php ====="
+            cat /var/www/sites/chamgyo/public/photo/api_selected_room.php 2>/dev/null || echo "FILE NOT FOUND"
+            echo ""
+            echo "===== write_select_room.php ====="
+            cat /var/www/sites/chamgyo/public/photo/write_select_room.php 2>/dev/null || echo "FILE NOT FOUND"
+            echo ""
+            echo "===== sel_cent.json ====="
+            cat /var/www/sites/chamgyo/public/photo/data/sel_cent.json 2>/dev/null || echo "FILE NOT FOUND"
+            echo ""
+            echo "===== hot_patches.json ====="
+            cat /var/www/sites/chamgyo/public/photo2/hot_patches.json 2>/dev/null || echo "FILE NOT FOUND"
+            echo ""
+            echo "===== JS files ====="
+            for f in /var/www/sites/chamgyo/public/photo/*.js; do
+              echo "--- $f ---"
+              cat "$f" 2>/dev/null
+              echo ""
+            done
+            echo ""
+            echo "===== All files in photo/ ====="
+            ls -la /var/www/sites/chamgyo/public/photo/ 2>/dev/null || echo "DIR NOT FOUND"
+            echo ""
+            echo "===== data/ dir ====="
+            ls -la /var/www/sites/chamgyo/public/photo/data/ 2>/dev/null || echo "DIR NOT FOUND"
