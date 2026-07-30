@@ -9,7 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Aggressive fix for PRISM WKWebView
+      - name: Strip photo3 to match photo structure
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -26,55 +26,57 @@ jobs:
             CAH="/var/www/sites/chamgyo/public/photo3/CAH_1.html"
             REF="/var/www/sites/chamgyo/public/photo/CAH_1.html"
 
-            echo "===== BACKUP ====="
-            sudo cp "$CAH" "${CAH}.bak.aggressive.$(date +%s)"
+            sudo cp "$CAH" "${CAH}.bak.strip.$(date +%s)"
 
-            echo "===== REMOVE mobile-fit-js entirely ====="
+            echo "===== REMOVE non-essential scripts ====="
             sudo sed -i "/<script id=.chamgyo-mobile-fit-js.>/,/<\/script>/d" "$CAH"
+            sudo sed -i "/<script id=.homoglyph-js.>/,/<\/script>/d" "$CAH"
 
-            echo "===== REMOVE photo-center-align if still exists ====="
+            echo "===== REMOVE non-essential styles ====="
             sudo sed -i "/<style id=.photo-center-align.>/,/<\/style>/d" "$CAH"
-
-            echo "===== REMOVE photo-no-miniview style ====="
             sudo sed -i "/<style id=.photo-no-miniview.>/,/<\/style>/d" "$CAH"
+            sudo sed -i "/<style id=.chamgyo-mobile-fit.>/,/<\/style>/d" "$CAH"
+            sudo sed -i "/<style id=.marquee-blur-css.>/,/<\/style>/d" "$CAH"
+            sudo sed -i "/<style id=.anti-ocr-css.>/,/<\/style>/d" "$CAH"
+            sudo sed -i "/<style id=.three-fix-css.>/,/<\/style>/d" "$CAH"
 
-            echo "===== FIX all height:auto to 100vh ====="
-            sudo sed -i "s/height: auto !important/height: 100vh !important/g" "$CAH"
+            echo "===== REMOVE bundle.js and hot-patch.js ====="
+            sudo sed -i "/modules\/dist\/bundle\.js/d" "$CAH"
+            sudo sed -i "/hot-patch\.js/d" "$CAH"
 
-            echo "===== REMOVE any remaining zoom refs ====="
+            echo "===== REMOVE zoom refs ====="
             sudo sed -i "/style\.zoom/d" "$CAH"
 
-            echo "===== REMOVE all added style blocks after body tag ====="
+            echo "===== REMOVE photo-center-align comment ====="
             sudo sed -i "/photo-center-align removed/d" "$CAH"
 
-            echo "===== VERIFY REMAINING STRUCTURE ====="
-            echo "--- zoom refs ---"
-            grep -cn "zoom" "$CAH"
-            echo "--- display flex refs ---"
-            grep -n "display.*flex" "$CAH" | head -10
-            echo "--- body overrides ---"
-            grep -n "body{" "$CAH" | head -5
-            echo "--- full_box ---"
-            grep -n "full_box" "$CAH" | grep "height" | head -5
-            echo "--- scripts ---"
-            grep -n "<script" "$CAH" | head -20
-            echo "--- styles ---"
-            grep -n "<style" "$CAH" | head -10
-            echo "--- photo reference body ---"
-            grep -n "body{" "$REF" | head -3
-            echo "--- photo reference scripts ---"
-            grep -n "<script" "$REF" | head -10
+            echo "===== FIX height auto ====="
+            sudo sed -i "s/height: auto !important/height: 100vh !important/g" "$CAH"
 
-            echo "===== APACHE RELOAD ====="
+            echo "===== CLEAN empty lines ====="
+            sudo sed -i "/^$/N;/^\n$/d" "$CAH"
+
+            echo "===== VERIFY ====="
+            echo "--- scripts remaining ---"
+            grep -n "<script" "$CAH" | head -15
+            echo "--- styles remaining ---"
+            grep -n "<style" "$CAH" | head -10
+            echo "--- photo scripts (reference) ---"
+            grep -n "<script" "$REF" | head -10
+            echo "--- body CSS ---"
+            grep -n "body{" "$CAH" | head -5
+            echo "--- zoom ---"
+            grep -c "zoom" "$CAH" || echo "0"
+            echo "--- file size ---"
+            wc -c "$CAH"
+            wc -c "$REF"
+
             sudo apachectl configtest 2>&1
             sudo systemctl reload apache2 2>&1 || echo "reload failed"
 
-            echo "===== CURL TEST ====="
-            curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" | head -5
-            echo "---"
-            curl -s "http://localhost/photo3/CAH_1.html?ch=tak" | grep -o "body{[^}]*}" | head -3
-            echo "---"
-            curl -s "http://localhost/photo3/CAH_1.html?ch=tak" | grep -c "zoom" || echo "0 zoom"
+            echo "--- curl test ---"
+            curl -sI "http://localhost/photo3/CAH_1.html?ch=tak" | head -3
+            curl -s "http://localhost/photo3/CAH_1.html?ch=tak" | wc -c
             echo "===== DONE ====="
             '
 
@@ -85,7 +87,9 @@ jobs:
           BODY=$(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null)
           echo "Size: $(echo "$BODY" | wc -c)"
           echo "$BODY" | grep -o "body{[^}]*}" | head -3
-          echo "$BODY" | grep -q "display: flex.*align-items: center" && echo "FAIL: flex" || echo "OK: no body flex"
-          echo "$BODY" | grep -q "style\.zoom" && echo "FAIL: zoom" || echo "OK: no zoom"
-          echo "$BODY" | grep -q "chamgyo-mobile-fit" && echo "FAIL: mobile-fit" || echo "OK: no mobile-fit"
+          echo "$BODY" | grep -q "bundle\.js" && echo "FAIL: bundle.js" || echo "OK: no bundle.js"
+          echo "$BODY" | grep -q "hot-patch" && echo "FAIL: hot-patch" || echo "OK: no hot-patch"
+          echo "$BODY" | grep -q "zoom" && echo "FAIL: zoom" || echo "OK: no zoom"
+          echo "$BODY" | grep -q "bgl\.js" && echo "OK: bgl.js present" || echo "FAIL: bgl.js missing"
+          echo "$BODY" | grep -q "dragon_fx" && echo "OK: dragon_fx present" || echo "FAIL: dragon_fx missing"
           curl -so /dev/null -w "HTTP: %{http_code}\n" "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak" 2>/dev/null
