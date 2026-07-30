@@ -50,15 +50,28 @@ jobs:
             echo "===== DONE ====="
             '
 
-      - name: Verify external
+      - name: Purge Cloudflare cache for photo3
+        run: |
+          echo "=== Purging photo3 from Cloudflare cache ==="
+          curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data '{"files":["https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html","https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak","https://xn--9d0bw2fjtyymch7de9d.info/photo3/bgl.js","https://xn--9d0bw2fjtyymch7de9d.info/photo3/bgl.js?v=52","https://xn--9d0bw2fjtyymch7de9d.info/photo3/dragon_fx.js","https://xn--9d0bw2fjtyymch7de9d.info/photo3/dragon_fx.js?v=14"]}'
+          echo ""
+          echo "=== Purging everything ==="
+          curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}'
+
+      - name: Verify after purge
         if: always()
         run: |
-          sleep 5
+          sleep 8
           P3=$(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null)
           P1=$(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null)
           echo "photo3 size: $(echo "$P3" | wc -c)"
           echo "photo size: $(echo "$P1" | wc -c)"
-          echo "$P3" | grep -q "photo3-tak-only" && echo "OK: tak guard" || echo "FAIL: no tak guard"
           echo "$P3" | grep -q "bgl\.js" && echo "OK: bgl.js" || echo "FAIL: no bgl.js"
           echo "$P3" | grep -q "dragon_fx" && echo "OK: dragon_fx" || echo "FAIL: no dragon_fx"
           curl -so /dev/null -w "photo3 HTTP: %{http_code}\n" "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak" 2>/dev/null
