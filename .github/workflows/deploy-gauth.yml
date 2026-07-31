@@ -252,11 +252,44 @@ jobs:
             PATCHEOF
             node /tmp/patch_totp.js 2>&1 || echo "  patch failed"
 
-            # 6. 비표준 TOTP 시크릿 마이그레이션 (잘못 파싱된 데이터 정리)
-            echo "--- Migrating non-standard TOTP secrets ---"
-            node -e "
-              const fs = require('fs');
-              const dataFile = '/opt/gauth-full/accounts_normalized.json';
+            # 6. 원본 엑셀 전체 재파싱 (수정된 파서로 TOTP 시크릿 교정)
+            echo "--- Full re-parse of all Excel files ---"
+            cat > /tmp/reparse_all.js << 'REPARSEEOF'
+            const fs = require('fs');
+            const path = require('path');
+            const dataFile = '/opt/gauth-full/accounts_normalized.json';
+
+            // 엑셀 파일 경로 탐색 (업로드 디렉토리들)
+            const SEARCH_DIRS = [
+              '/opt/gauth-full/uploads',
+              '/opt/gauth-full/excels',
+              '/opt/gauth-full',
+              '/var/www/sites/gauth/uploads',
+              '/tmp/gauth-uploads'
+            ];
+
+            function findExcels(dirs) {
+              const files = [];
+              for (const dir of dirs) {
+                if (!fs.existsSync(dir)) continue;
+                try {
+                  const items = fs.readdirSync(dir);
+                  for (const item of items) {
+                    if (/\.(xlsx|xls|csv)$/i.test(item) && !item.startsWith('~$')) {
+                      files.push(path.join(dir, item));
+                    }
+                  }
+                } catch(e) {}
+              }
+              return files;
+            }
+
+            const excelFiles = findExcels(SEARCH_DIRS);
+            console.log('Found', excelFiles.length, 'Excel files:', excelFiles.map(f=>path.basename(f)));
+
+            if (excelFiles.length === 0) {
+              console.log('No Excel files found — fixing existing data with length check');
+              // 엑셀 없으면 기존 데이터에서 비표준 시크릿만 정리
               if (!fs.existsSync(dataFile)) { console.log('no data file'); process.exit(0); }
               const data = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
               const accounts = Array.isArray(data) ? data : (data.accounts || []);
@@ -266,20 +299,153 @@ jobs:
                 if (!a.totp_secret) continue;
                 const n = String(a.totp_secret).toUpperCase().replace(/[\s\-_=]/g, '').replace(/[^A-Z2-7]/g, '');
                 if (n.length > 0 && !VALID.has(n.length)) {
-                  console.log('  fix:', a.email, 'secret len', n.length, '->', 'cleared (was:', a.totp_secret.slice(0,20) + ')');
+                  console.log('  clear:', a.email, 'len=' + n.length, 'was:', a.totp_secret.slice(0,25));
                   if (!a.extra) a.extra = [];
                   a.extra.push('old_totp:' + a.totp_secret);
                   a.totp_secret = '';
                   fixed++;
                 }
               }
-              if (fixed > 0) {
-                fs.writeFileSync(dataFile, JSON.stringify(Array.isArray(data) ? accounts : { ...data, accounts }, null, 2));
-                console.log('Fixed', fixed, 'accounts with non-standard TOTP secrets');
-              } else {
-                console.log('No non-standard TOTP secrets found');
+              if (fixed) {
+                fs.writeFileSync(dataFile, JSON.stringify(Array.isArray(data) ? accounts : {...data, accounts}, null, 2));
+                console.log('Cleared', fixed, 'non-standard secrets');
               }
-            " 2>&1 || echo "  migration failed"
+              process.exit(0);
+            }
+
+            // 엑셀 있으면 전체 재파싱
+            let parseModule;
+            try {
+              parseModule = require('/opt/gauth-full/upload_excels.js');
+            } catch(e) {
+              console.log('Cannot load upload_excels:', e.message);
+              process.exit(1);
+            }
+
+            const { parseExcelFile } = parseModule;
+            const freshAccounts = [];
+            for (const fp of excelFiles) {
+              try {
+                const accs = parseExcelFile(fp);
+                console.log('  Parsed', path.basename(fp), ':', accs.length, 'accounts');
+                freshAccounts.push(...accs);
+              } catch(e) {
+                console.log('  ERROR parsing', path.basename(fp), ':', e.message);
+              }
+            }
+
+            if (freshAccounts.length === 0) {
+              console.log('No accounts extracted from Excel files');
+              process.exit(0);
+            }
+
+            // 새로 파싱한 데이터로 기존 데이터의 TOTP 시크릿 업데이트
+            if (!fs.existsSync(dataFile)) {
+              console.log('No existing data — writing fresh');
+              fs.writeFileSync(dataFile, JSON.stringify(freshAccounts, null, 2));
+              console.log('Wrote', freshAccounts.length, 'accounts');
+              process.exit(0);
+            }
+
+            const data = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
+            const existing = Array.isArray(data) ? data : (data.accounts || []);
+            const emailMap = new Map();
+            for (const a of existing) {
+              if (a.email) emailMap.set(a.email.toLowerCase(), a);
+            }
+
+            let updated = 0, added = 0, totpFixed = 0;
+            const VALID = new Set([16, 26, 32, 52, 64]);
+            for (const fresh of freshAccounts) {
+              if (!fresh.email) continue;
+              const key = fresh.email.toLowerCase();
+              const old = emailMap.get(key);
+              if (old) {
+                // TOTP 시크릿: 새 파서가 유효한 시크릿을 찾았고, 기존과 다르면 교체
+                if (fresh.totp_secret && fresh.totp_secret !== old.totp_secret) {
+                  const n = String(fresh.totp_secret).replace(/[^A-Z2-7]/gi,'');
+                  if (VALID.has(n.length)) {
+                    console.log('  TOTP fix:', fresh.email, old.totp_secret ? old.totp_secret.slice(0,20) : '(empty)', '->', fresh.totp_secret.slice(0,20));
+                    old.totp_secret = fresh.totp_secret;
+                    totpFixed++;
+                  }
+                }
+                // 비밀번호: 새 데이터에 있고 기존에 없으면 채움
+                if (fresh.password && !old.password) old.password = fresh.password;
+                // 복구 이메일
+                if (fresh.recovery_email && !old.recovery_email) old.recovery_email = fresh.recovery_email;
+                updated++;
+              } else {
+                emailMap.set(key, fresh);
+                added++;
+              }
+            }
+
+            // 기존 데이터에서 비표준 시크릿 정리 (재파싱으로 안 잡힌 것)
+            let cleared = 0;
+            for (const [, a] of emailMap) {
+              if (!a.totp_secret) continue;
+              const n = String(a.totp_secret).toUpperCase().replace(/[\s\-_=]/g,'').replace(/[^A-Z2-7]/g,'');
+              if (n.length > 0 && !VALID.has(n.length)) {
+                console.log('  clear bad:', a.email, 'len=' + n.length, 'was:', a.totp_secret.slice(0,25));
+                if (!a.extra) a.extra = [];
+                a.extra.push('old_totp:' + a.totp_secret);
+                a.totp_secret = '';
+                cleared++;
+              }
+            }
+
+            const result = Array.from(emailMap.values());
+            fs.writeFileSync(dataFile, JSON.stringify(Array.isArray(data) ? result : {...data, accounts: result}, null, 2));
+            console.log('Done: updated=' + updated + ' added=' + added + ' totp_fixed=' + totpFixed + ' cleared=' + cleared + ' total=' + result.length);
+
+            // bb01055781838 진단
+            const bb = result.find(a => a.email && a.email.includes('bb01055781838'));
+            if (bb) {
+              console.log('--- bb01055781838 after fix ---');
+              console.log('  email:', bb.email);
+              console.log('  password:', bb.password ? bb.password.slice(0,15) + '...' : '(none)');
+              console.log('  totp_secret:', bb.totp_secret || '(empty)');
+              console.log('  totp_secret len:', (bb.totp_secret||'').length);
+              console.log('  extra:', JSON.stringify(bb.extra || []));
+            }
+            REPARSEEOF
+            cd /opt/gauth-full && node /tmp/reparse_all.js 2>&1 || echo "  reparse failed"
+
+            # 7. bb01055781838 원본 엑셀 raw 데이터 덤프 (디버깅)
+            echo "--- bb01055781838 raw Excel dump ---"
+            node -e "
+              const XLSX = require('xlsx');
+              const fs = require('fs');
+              const path = require('path');
+              const DIRS = ['/opt/gauth-full/uploads','/opt/gauth-full/excels','/opt/gauth-full','/var/www/sites/gauth/uploads','/tmp/gauth-uploads'];
+              for (const dir of DIRS) {
+                if (!fs.existsSync(dir)) continue;
+                const files = fs.readdirSync(dir).filter(f => /\.(xlsx|xls)$/i.test(f) && !f.startsWith('~\$'));
+                for (const file of files) {
+                  try {
+                    const wb = XLSX.readFile(path.join(dir, file));
+                    for (const sn of wb.SheetNames) {
+                      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], {header:1, defval:''});
+                      for (let i=0; i<rows.length; i++) {
+                        const row = rows[i];
+                        const rowStr = JSON.stringify(row);
+                        if (rowStr.toLowerCase().includes('bb01055781838') || rowStr.toLowerCase().includes('bb0105578')) {
+                          console.log('FOUND in', file, 'sheet:', sn, 'row:', i);
+                          console.log('  ALL CELLS:', JSON.stringify(row));
+                          for (let c=0; c<row.length; c++) {
+                            const v = String(row[c]||'').trim();
+                            if (!v) continue;
+                            const norm = v.toUpperCase().replace(/[\s\-_=]/g,'').replace(/[^A-Z2-7]/g,'');
+                            console.log('  col'+c+':', JSON.stringify(v), 'type:', typeof row[c], 'base32_norm_len:', norm.length, 'looks_totp:', [16,26,32,52,64].includes(norm.length));
+                          }
+                        }
+                      }
+                    }
+                  } catch(e) { /* skip */ }
+                }
+              }
+            " 2>&1 || echo "  raw dump failed"
 
             # ===== 6. 서비스 재시작 =====
             echo "=== [6/6] Restart gauth ==="
