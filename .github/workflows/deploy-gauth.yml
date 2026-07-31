@@ -155,26 +155,88 @@ jobs:
             # auto_deploy 모듈 등록
             grep -q "auto_deploy" rebrowser-login.js || echo "require('./auto_deploy.js')(app);" >> rebrowser-login.js
 
-            # ===== 5.5 TOTP 정규화 패치 =====
-            echo "=== [5.5/6] Patch TOTP normalization in rebrowser-login.js ==="
-            # /codes/ 엔드포인트에서 시크릿을 Base32 정규화
-            if grep -q "'/codes/'" rebrowser-login.js; then
-              # generateTOTP 함수가 있으면 패치
-              if grep -q "function generateTOTP" rebrowser-login.js; then
-                # 기존 정규화가 [^A-Z2-7] 제거를 포함하지 않으면 패치
-                if ! grep -q "\[^A-Z2-7\]" rebrowser-login.js; then
-                  sed -i "s|secret\.replace(/\[\\\\s-\]/g, '')\.toUpperCase()|String(secret).toUpperCase().replace(/[\\\\s\\\\-_=]/g, '').replace(/[^A-Z2-7]/g, '')|g" rebrowser-login.js
-                  echo "  generateTOTP patched with Base32 normalization"
-                else
-                  echo "  generateTOTP already has Base32 normalization"
-                fi
-              fi
-              # /codes/ 핸들러에서 직접 authenticator.generate 호출하면 패치
-              if grep -q "authenticator.generate(req" rebrowser-login.js || grep -q "authenticator.generate(secret" rebrowser-login.js; then
-                echo "  /codes/ endpoint uses authenticator.generate — checking normalization"
+            # ===== 5.5 TOTP 디버깅 + 패치 =====
+            echo "=== [5.5/6] TOTP debug & patch ==="
+
+            # 1. rebrowser-login.js에서 /codes/ 관련 코드 덤프
+            echo "--- /codes/ endpoint code ---"
+            grep -n -A10 "codes" rebrowser-login.js | head -40 || echo "  no /codes/ found"
+            echo "--- generateTOTP function ---"
+            grep -n -A10 "function generateTOTP" rebrowser-login.js || echo "  no generateTOTP found"
+            echo "--- authenticator usage ---"
+            grep -n "authenticator" rebrowser-login.js || echo "  no authenticator usage"
+
+            # 2. bb01055781838 계정의 시크릿 확인
+            echo "--- bb01055781838 account secret ---"
+            node -e "
+              const d = require('/opt/gauth-full/accounts_normalized.json');
+              const accs = Array.isArray(d) ? d : (d.accounts || []);
+              const a = accs.find(x => x.email && x.email.includes('bb01055781838'));
+              if(a) { console.log('email:', a.email); console.log('totp_secret:', a.totp_secret); console.log('twoFA:', a.twoFA); console.log('secret length:', (a.totp_secret||'').length); }
+              else console.log('account not found');
+            " 2>&1 || echo "  failed to read accounts"
+
+            # 3. TOTP 코드 생성 테스트
+            echo "--- TOTP generation test ---"
+            node -e "
+              const { authenticator } = require('otplib');
+              const d = require('/opt/gauth-full/accounts_normalized.json');
+              const accs = Array.isArray(d) ? d : (d.accounts || []);
+              const a = accs.find(x => x.email && x.email.includes('bb01055781838'));
+              if(!a) { console.log('no account'); process.exit(0); }
+              const raw = a.totp_secret || a.twoFA || '';
+              console.log('raw secret:', JSON.stringify(raw));
+              console.log('raw secret hex:', Buffer.from(raw).toString('hex'));
+
+              // Method 1: as-is
+              try { console.log('code (as-is):', authenticator.generate(raw)); } catch(e) { console.log('as-is error:', e.message); }
+
+              // Method 2: strip spaces/hyphens only
+              const s2 = raw.replace(/[\s-]/g, '').toUpperCase();
+              try { console.log('code (strip ws):', authenticator.generate(s2)); } catch(e) { console.log('strip-ws error:', e.message); }
+
+              // Method 3: full Base32 normalize
+              const s3 = raw.toUpperCase().replace(/[\s\-_=]/g, '').replace(/[^A-Z2-7]/g, '');
+              console.log('normalized:', JSON.stringify(s3), 'len:', s3.length);
+              try { console.log('code (base32):', authenticator.generate(s3)); } catch(e) { console.log('base32 error:', e.message); }
+
+              console.log('server time:', new Date().toISOString());
+              console.log('epoch:', Math.floor(Date.now()/1000));
+              console.log('totp step:', Math.floor(Math.floor(Date.now()/1000)/30));
+            " 2>&1 || echo "  TOTP test failed"
+
+            # 4. /codes/ 엔드포인트 실제 응답 확인
+            echo "--- /codes/ API test ---"
+            node -e "
+              const d = require('/opt/gauth-full/accounts_normalized.json');
+              const accs = Array.isArray(d) ? d : (d.accounts || []);
+              const a = accs.find(x => x.email && x.email.includes('bb01055781838'));
+              if(!a || !a.totp_secret) { console.log('no secret'); process.exit(0); }
+              const http = require('http');
+              http.get('http://localhost:4000/codes/'+a.totp_secret, r => {
+                let b=''; r.on('data',c=>b+=c); r.on('end',()=>console.log('/codes/ response:', b));
+              }).on('error', e => console.log('/codes/ error:', e.message));
+            " 2>&1 || echo "  /codes/ test failed"
+
+            # 5. generateTOTP 패치 (서버 rebrowser-login.js)
+            if grep -q "function generateTOTP" rebrowser-login.js; then
+              if ! grep -q "\[^A-Z2-7\]" rebrowser-login.js; then
+                sed -i "/function generateTOTP/,/^}/c\\
+function generateTOTP(secret) {\\
+    try {\\
+        secret = String(secret).toUpperCase().replace(/[\\\\s\\\\-_=]/g, '').replace(/[^A-Z2-7]/g, '');\\
+        if (secret.length < 16) return null;\\
+        return authenticator.generate(secret);\\
+    } catch (error) {\\
+        return null;\\
+    }\\
+}" rebrowser-login.js
+                echo "  generateTOTP replaced with Base32 normalization"
+              else
+                echo "  generateTOTP already patched"
               fi
             else
-              echo "  No /codes/ endpoint found in rebrowser-login.js"
+              echo "  no generateTOTP in rebrowser-login.js"
             fi
 
             # ===== 6. 서비스 재시작 =====
