@@ -26,11 +26,11 @@ DELETE = {
     ("2026-07-25","14:20"),
     ("2026-07-25","14:21"),
     ("2026-07-31","04:04"),
+    ("2026-07-25","13:29"),  # $666 파서 오탐 (₩1,000,000 환산 오류 — 실존 안 함)
 }
 ASSIGN = {
-    ("2026-07-25","13:29"): "김성삼",
     ("2026-07-25","14:25"): "김성삼",
-    ("2026-07-26","03:11"): "마키아벨리",
+    ("2026-07-26","03:11"): "박진숙",
     ("2026-07-27","04:07"): "마키아벨리",
     ("2026-07-08","00:34"): "니우니우",
 }
@@ -47,9 +47,9 @@ for m in ms:
     if is_misang(m) and "테더" in (m.get("note") or ""):
         print(f"  테더→마키아벨리: {k[0]} {k[1]} ${m.get('deposit')}")
         m["name"] = "마키아벨리"
-    if k in ASSIGN and is_misang(m):
+    if k in ASSIGN and m.get("name") != ASSIGN[k]:
+        print(f"  이름확정: {k[0]} {k[1]} ${m.get('deposit')} {m.get('name')} → {ASSIGN[k]}")
         m["name"] = ASSIGN[k]
-        print(f"  이름확정: {k[0]} {k[1]} ${m.get('deposit')} → {ASSIGN[k]}")
     kept.append(m)
 ms = kept
 print(f"after-clean: {len(ms)}")
