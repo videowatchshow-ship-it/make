@@ -78,22 +78,22 @@ settlement-data/                          # 웹루트 밖 (외부 접근 불가)
 
 ---
 
-## 5. auth 게이트 (정규식)
+## 5. auth 게이트 (정규식 · PHP-FPM 호환)
 
-`.htaccess` 에서 정규식 `FilesMatch` 로 보호 대상 지정:
+서버는 PHP-FPM 이라 `.htaccess` 의 `php_value` 가 안 먹는다.
+대신 `mod_rewrite` 정규식으로 HTML 요청을 PHP 래퍼로 돌린다:
 
 ```apache
-# HTML 4종 → PHP 로 해석 후 auth_check 자동 include
-<FilesMatch "^(index|excel|udongka|원장)\.html$">
-    SetHandler application/x-httpd-php
-    php_value auto_prepend_file "/var/www/sites/chamgyo/public/정산표/auth_check.php"
-</FilesMatch>
-
-# 데이터 API 3종
-<FilesMatch "^(?:[a-z]+-)?data\.php$">
-    php_value auto_prepend_file "/var/www/sites/chamgyo/public/정산표/auth_check.php"
-</FilesMatch>
+DirectoryIndex index.php index.html
+RewriteEngine On
+# HTML 4종 → 동명 PHP 래퍼 (auth_check 후 readfile)
+RewriteRule "^(index|excel|udongka|원장)\.html$" "$1.php" [L]
+# 세션 폴더 차단
+RewriteRule "^data(/|$)" - [F,L]
 ```
+
+- `index.php` / `excel.php` / `udongka.php` / `원장.php` = `require auth_check.php` 후 원본 HTML `readfile()`.
+- 데이터 API (`data.php` 등) 는 파일 첫 줄에서 직접 `require auth_check.php`.
 
 - `login.php` · `login_check.php` · `logout.php` 는 정규식에 포함 안 됨 → 인증 없이 접근 가능.
 - 미인증 페이지 요청 → `302 Location: login.php`.
@@ -116,9 +116,11 @@ settlement-data/                          # 웹루트 밖 (외부 접근 불가)
   "saved_at":"2026-07-07 21:00:00"
 }
 ```
-- 수익: `result === "Lose"` 일 때만 `(deposit − rolling) × 30%`.
-- 환전(`type=환전`) 은 출금 → 입금 소계 제외.
-- 월별(6월/7월…) 구분 · 소계 자동 표시.
+- 수익: `Lose` → `(deposit − rolling) × 30%` / `Win` → `−deposit × 30%` (손님 승 = 손실).
+- 환전(`type=환전`) 은 역송(출금) → 역송액 칸에 표시, 입금 소계 제외.
+- 입금액·역송액 칸: 위 = 해당 건 금액, 아래 = **그 달 첫 행부터의 전체 누적 합계** (마지막 행 누적 = 월 소계).
+- 월별(6월/7월…) 구분 · 월 상단 컬럼 헤더 반복 · 소계 자동 표시.
+- **6월 데이터는 확정본** — 정리 스크립트가 절대 건드리지 않음.
 
 ### excel.json
 ```jsonc
@@ -142,6 +144,9 @@ SheetJS `sheet_to_json({header:1})` / `aoa_to_sheet` 그대로.
 - 저장할 때마다 `settlement-data/backups/{data,excel,udongka}-YYYYMMDD-HHMMSS.json` 자동 백업.
 - 원자적 쓰기: 임시파일 기록 → `rename()` 교체 (읽기 도중 깨진 JSON 없음).
 - 세션 만료 후 저장 시 fetch 응답 401 반환 → 페이지 새로고침 → 로그인 페이지로 이동.
+- **낙관적 잠금**: 저장 요청에 `base_saved_at` (마지막으로 불러온 시각) 포함.
+  서버의 `saved_at` 과 다르면 **409 거부** → 화면이 자동으로 최신 데이터를 다시 불러옴.
+  오래된 탭이 최신 데이터를 통째로 덮어쓰는 사고(삭제 행 부활·중복 증식) 원천 차단.
 
 ---
 
