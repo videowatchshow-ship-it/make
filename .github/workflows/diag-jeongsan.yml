@@ -9,7 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch settlement JSONs
+      - name: Fetch current HTMLs (index / excel / udongka / 원장)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -23,9 +23,12 @@ jobs:
               --ssh-flag="-o StrictHostKeyChecking=no" \
               --quiet \
               --command='
-            echo "===== DATA.JSON ====="
-            sudo cat /var/www/sites/chamgyo/settlement-data/data.json
-            echo ""
-            echo "===== UDONGKA.JSON ====="
-            sudo cat /var/www/sites/chamgyo/settlement-data/udongka.json
+            for f in index.html excel.html udongka.html 원장.html; do
+              echo "===== $f ====="
+              echo "size: $(sudo wc -c < /var/www/sites/chamgyo/public/정산표/$f)"
+              sudo cat "/var/www/sites/chamgyo/public/정산표/$f"
+              echo ""
+              echo "===== END $f ====="
+              echo ""
+            done
             '
