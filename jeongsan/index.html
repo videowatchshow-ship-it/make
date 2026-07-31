@@ -286,6 +286,9 @@ function statusCell(r){
   if (r.result === "Win") return { cls:"win", text:"손님 승 −$ " + fmt((parseFloat(r.deposit)||0)*RATE) };
   return { cls:"lose", text:"$ " + fmt(profit(r)) };
 }
+/* 입금액 · 역송액 셀 분리 표시: type==환전 이면 역송, 아니면 입금 */
+function depCell(r){ return r.type === "환전" ? "" : esc(r.deposit); }
+function wdwCell(r){ return r.type === "환전" ? esc(r.deposit) : ""; }
 function renderMembers(){
   const tb = document.querySelector("#memberSheet tbody");
   tb.innerHTML = "";
@@ -315,8 +318,9 @@ function renderMembers(){
             <option ${r.type==="캐쉬"?"selected":""}>캐쉬</option>
             <option ${r.type==="환전"?"selected":""}>환전</option>
           </select></td>
-      <td class="num" data-label="입금액 $"><input value="${esc(r.deposit)}" data-t="m" data-i="${i}" data-k="deposit" placeholder="500"></td>
-      <td data-label="결과"><select data-t="m" data-i="${i}" data-k="result">
+      <td class="num dep" data-label="입금액 $"><input value="${depCell(r)}" data-t="m" data-i="${i}" data-k="dep_in" placeholder="500"></td>
+      <td class="num wdw" data-label="역송액 $"><input value="${wdwCell(r)}" data-t="m" data-i="${i}" data-k="dep_out" placeholder="0"></td>
+      <td class="res" data-label="결과"><select data-t="m" data-i="${i}" data-k="result" data-v="${esc(r.result||"Lose")}">
             <option ${r.result==="Lose"?"selected":""}>Lose</option>
             <option ${r.result==="Win"?"selected":""}>Win</option>
           </select></td>
@@ -400,7 +404,20 @@ function delLedger(i){
 document.addEventListener("input", e=>{
   const el = e.target; if(!el.dataset.k) return;
   const arr = el.dataset.t==="m" ? members : ledger;
-  arr[el.dataset.i][el.dataset.k] = el.value;
+  const row = arr[el.dataset.i];
+  const k = el.dataset.k;
+  /* 입금액 셀 편집 → deposit 저장 · 만약 현재 type='환전' 이면 유지  */
+  if (k === "dep_in") {
+    row.deposit = el.value;
+    if (row.type === "환전") { row.type = "테더"; row.result = "Lose"; renderMembers(); return save(); }
+  } else if (k === "dep_out") {
+    row.deposit = el.value;
+    row.type    = "환전";
+    row.result  = "Win";
+    if (el.value.trim() !== "") { renderMembers(); return save(); }
+  } else {
+    row[k] = el.value;
+  }
   if (el.dataset.t==="m") totalMembers(); else totalLedger();
 });
 document.addEventListener("change", e=>{

@@ -2,6 +2,11 @@ name: Import telegram entries to jeongsan data.json
 
 on:
   workflow_dispatch:
+  push:
+    branches: [claude/jeongsan-page-management-evm5h3]
+    paths:
+      - 'jeongsan-import/**'
+      - '.github/workflows/import-tg-entries.yml'
 
 jobs:
   import:
