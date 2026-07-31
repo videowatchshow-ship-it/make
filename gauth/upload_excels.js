@@ -24,7 +24,7 @@ const path = require('path');
 
 function normalizeTotp(s) {
   if (!s) return '';
-  return String(s).toUpperCase().replace(/[\s\-_]/g, '').replace(/[^A-Z2-7]/g, '');
+  return String(s).toUpperCase().replace(/[\s\-_=]/g, '').replace(/[^A-Z2-7]/g, '');
 }
 
 function isEmail(s) {

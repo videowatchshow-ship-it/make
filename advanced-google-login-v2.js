@@ -185,7 +185,8 @@ async function checkAnySelector(page, selectors) {
  */
 function generateTOTP(secret) {
     try {
-        secret = secret.replace(/[\s-]/g, '').toUpperCase();
+        secret = String(secret).toUpperCase().replace(/[\s\-_=]/g, '').replace(/[^A-Z2-7]/g, '');
+        if (secret.length < 16) return null;
         return authenticator.generate(secret);
     } catch (error) {
         return null;
