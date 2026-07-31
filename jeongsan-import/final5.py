@@ -90,6 +90,33 @@ with open(tmp, "w", encoding="utf-8") as f:
     json.dump(d, f, ensure_ascii=False, indent=4)
 os.rename(tmp, p)
 
+ms = d["members"]  # (정렬 반영본)
+
+# ---- 자금 장부: 개인 차용 5명 × 10칸 (제이·센트·탁·데니(퇴사)·하바드) ----
+# 금액은 공란 (사이트에서 직접 입력). AI 비용·회사 차입금·구명단 차용 행 제거.
+# 이미 새 명단 행이 있으면 입력된 금액 보존, 10칸 미만이면 빈 칸으로 채움.
+NAMES = ["제이", "센트", "탁", "데니(퇴사)", "하바드"]
+old_ledger = d.get("ledger", [])
+LEGACY = ("회사 차입금", "AI 비용", "cent 차용", "jay 차용", "tak 차용", "ha 차용", "점프대표 차용")
+new_ledger = []
+for nm in NAMES:
+    item = f"{nm} 차용"
+    keep_rows = [r for r in old_ledger if r.get("item") == item]
+    keep_rows = keep_rows[:10]
+    while len(keep_rows) < 10:
+        keep_rows.append({"date": "", "item": item, "sign": "+", "amount": "", "note": ""})
+    new_ledger.extend(keep_rows)
+removed = [r for r in old_ledger if r.get("item") in LEGACY]
+for r in removed:
+    print(f"  장부 삭제: {r.get('date')} {r.get('item')} {r.get('sign')}{r.get('amount')}")
+d["ledger"] = new_ledger
+print(f"장부: {len(new_ledger)}칸 (5명 × 10)")
+
+tmp2 = p + ".f5b.tmp"
+with open(tmp2, "w", encoding="utf-8") as f:
+    json.dump(d, f, ensure_ascii=False, indent=4)
+os.rename(tmp2, p)
+
 misang = [m for m in ms if is_misang(m)]
 print(f"미상 남음: {len(misang)}")
 for m in misang: print(f"  {m.get('date')} {m.get('start')} ${m.get('deposit')}")

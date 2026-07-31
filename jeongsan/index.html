@@ -506,12 +506,11 @@ function defaultMembers(){
   ];
 }
 function defaultLedger(){
-  const twoDaysAgo = new Date(Date.now()-2*86400000).toISOString().slice(0,10);
-  return [
-    {date:today(), item:"회사 차입금", sign:"+", amount:"700",  note:""},
-    {date:today(), item:"회사 차입금", sign:"+", amount:"1000", note:""},
-    {date:twoDaysAgo, item:"AI 비용", sign:"-", amount:"200", note:"회사 지출"},
-  ];
+  // 개인 차용 5명 × 10칸 (금액은 사이트에서 직접 입력)
+  const names = ["제이","센트","탁","데니(퇴사)","하바드"];
+  const rows = [];
+  names.forEach(n => { for (let k=0; k<10; k++) rows.push({date:"", item:n+" 차용", sign:"+", amount:"", note:""}); });
+  return rows;
 }
 /* ---------- 시작: 서버에서 불러오기 ---------- */
 async function boot(){
