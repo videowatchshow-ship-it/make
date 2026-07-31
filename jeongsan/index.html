@@ -38,11 +38,6 @@
   td.profit { font-weight: 700; text-align: right; padding-right: 10px; font-size: 14px; }
   td.profit.win { color: #f87171; font-size: 12.5px; }
   td.profit.lose { color: #6ee7b7; }
-  /* 입금/역송 컬럼 색 · 결과 셀 Lose=녹색 강조 */
-  td.num.dep input { color:#6ee7b7; font-weight:700; }        /* 입금액 = 녹색 */
-  td.num.wdw input { color:#f8b871; font-weight:700; }        /* 역송액 = 주황 */
-  td.res select[data-v="Lose"] { color:#6ee7b7; font-weight:700; }
-  td.res select[data-v="Win"]  { color:#f87171; font-weight:700; }
   td.del { text-align: center; }
   td.del button { padding: 4px 8px; font-size: 12px; background: transparent; border: none; color: #6b7280; }
   td.del button:hover { color: #ef4444; }
@@ -144,7 +139,6 @@
           <th style="min-width:130px">계좌번호</th>
           <th style="min-width:88px">입금종류</th>
           <th style="min-width:92px">입금액 $</th>
-          <th style="min-width:92px">역송액 $</th>
           <th style="min-width:64px">결과</th>
           <th style="min-width:84px">롤링금 $</th>
           <th style="min-width:118px">수익 / 상태</th>
@@ -286,9 +280,6 @@ function statusCell(r){
   if (r.result === "Win") return { cls:"win", text:"손님 승 −$ " + fmt((parseFloat(r.deposit)||0)*RATE) };
   return { cls:"lose", text:"$ " + fmt(profit(r)) };
 }
-/* 입금액 · 역송액 셀 분리 표시: type==환전 이면 역송, 아니면 입금 */
-function depCell(r){ return r.type === "환전" ? "" : esc(r.deposit); }
-function wdwCell(r){ return r.type === "환전" ? esc(r.deposit) : ""; }
 function renderMembers(){
   const tb = document.querySelector("#memberSheet tbody");
   tb.innerHTML = "";
@@ -318,9 +309,8 @@ function renderMembers(){
             <option ${r.type==="캐쉬"?"selected":""}>캐쉬</option>
             <option ${r.type==="환전"?"selected":""}>환전</option>
           </select></td>
-      <td class="num dep" data-label="입금액 $"><input value="${depCell(r)}" data-t="m" data-i="${i}" data-k="dep_in" placeholder="500"></td>
-      <td class="num wdw" data-label="역송액 $"><input value="${wdwCell(r)}" data-t="m" data-i="${i}" data-k="dep_out" placeholder="0"></td>
-      <td class="res" data-label="결과"><select data-t="m" data-i="${i}" data-k="result" data-v="${esc(r.result||"Lose")}">
+      <td class="num" data-label="입금액 $"><input value="${esc(r.deposit)}" data-t="m" data-i="${i}" data-k="deposit" placeholder="500"></td>
+      <td data-label="결과"><select data-t="m" data-i="${i}" data-k="result">
             <option ${r.result==="Lose"?"selected":""}>Lose</option>
             <option ${r.result==="Win"?"selected":""}>Win</option>
           </select></td>
@@ -404,20 +394,7 @@ function delLedger(i){
 document.addEventListener("input", e=>{
   const el = e.target; if(!el.dataset.k) return;
   const arr = el.dataset.t==="m" ? members : ledger;
-  const row = arr[el.dataset.i];
-  const k = el.dataset.k;
-  /* 입금액 셀 편집 → deposit 저장 · 만약 현재 type='환전' 이면 유지  */
-  if (k === "dep_in") {
-    row.deposit = el.value;
-    if (row.type === "환전") { row.type = "테더"; row.result = "Lose"; renderMembers(); return save(); }
-  } else if (k === "dep_out") {
-    row.deposit = el.value;
-    row.type    = "환전";
-    row.result  = "Win";
-    if (el.value.trim() !== "") { renderMembers(); return save(); }
-  } else {
-    row[k] = el.value;
-  }
+  arr[el.dataset.i][el.dataset.k] = el.value;
   if (el.dataset.t==="m") totalMembers(); else totalLedger();
 });
 document.addEventListener("change", e=>{
