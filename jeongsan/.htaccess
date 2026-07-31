@@ -1,38 +1,26 @@
-# 정산표 전용 Apache 설정
-# 참조:
-#   https://httpd.apache.org/docs/current/mod/core.html#filesmatch
-#   https://httpd.apache.org/docs/current/mod/mod_dir.html#directoryindex
-#   https://httpd.apache.org/docs/current/mod/mod_deflate.html
+# 정산표 전용 Apache 설정 (PHP-FPM 환경 · mod_rewrite 기반, php_value 사용 안 함)
+# 참조: https://httpd.apache.org/docs/current/mod/mod_rewrite.html
+#       https://httpd.apache.org/docs/current/mod/mod_dir.html#directoryindex
+#       https://www.php.net/manual/en/configuration.file.per-user.php
 
-DirectoryIndex index.html
+DirectoryIndex index.php index.html
 
-# ===== 보호 대상 파일 (정규식) =====
-# HTML 4종 (index / excel / udongka / 원장) → PHP 로 해석 + auth_check 자동 include
-<FilesMatch "^(index|excel|udongka|원장)\.html$">
-    SetHandler application/x-httpd-php
-    php_value auto_prepend_file "/var/www/sites/chamgyo/public/정산표/auth_check.php"
-</FilesMatch>
-
-# 데이터 API 3종 (data · excel-data · udongka-data) → auth_check 자동 include
-<FilesMatch "^(?:[a-z]+-)?data\.php$">
-    php_value auto_prepend_file "/var/www/sites/chamgyo/public/정산표/auth_check.php"
-</FilesMatch>
-
-# ===== 세션 파일 · 백업 · users 설정 · README.bak 등 직접 노출 차단 =====
-<FilesMatch "^(session_conf|auth_check)\.php$">
-    # include 전용, 직접 실행 되어도 세션 검사 만 하고 종료 됨 - 추가로 접근 금지
-    Require all denied
-</FilesMatch>
-
-<FilesMatch "\.(bak|old|backup|log|swp)$|~$|\.bak-">
-    Require all denied
-</FilesMatch>
-
-# data/ 폴더 (세션 저장) 완전 차단
 RewriteEngine On
-RewriteRule "^data(/|$)" - [F,L]
 
-# ===== 캐시 무효화 (dynamic PHP 는 이미 no-cache 헤더 있음) =====
+# ===== HTML → PHP wrapper (정규식 매칭, 내부 rewrite - URL 유지) =====
+# /정산표/index.html   → 서버가 index.php 실행
+# /정산표/excel.html   → excel.php
+# /정산표/udongka.html → udongka.php
+# /정산표/원장.html    → 원장.php
+RewriteRule "^(index|excel|udongka|원장)\.html$" "$1.php" [L]
+
+# ===== 세션 폴더 · 백업 파일 · users 설정 완전 차단 =====
+RewriteRule "^data(/|$)" - [F,L]
+RewriteRule "\.(bak|old|backup|log|swp)$" - [F,L]
+RewriteRule "\.bak-" - [F,L]
+RewriteRule "~$" - [F,L]
+
+# ===== 캐시 무효화 (동적 PHP 는 이미 no-cache) =====
 <IfModule mod_headers.c>
     <FilesMatch "\.(html|php)$">
         Header set Cache-Control "no-store, no-cache, must-revalidate"
