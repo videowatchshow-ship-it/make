@@ -1,0 +1,61 @@
+name: Nuke bad entries + dedup sessions
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/jeongsan-page-management-evm5h3]
+    paths:
+      - '.github/workflows/nuke-bad.yml'
+      - 'jeongsan-import/nuke_bad.py'
+
+jobs:
+  nuke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: "jeongsan-import/nuke_bad.py"
+          target: "/tmp/"
+          overwrite: true
+      - name: Run
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            set -e
+            /snap/bin/gcloud compute scp /tmp/jeongsan-import/nuke_bad.py \
+              videowatch_show@my-site-1:/tmp/nuke_bad.py \
+              --zone=asia-northeast1-a --project=quantum-bonus-455522-b4 \
+              --scp-flag="-o StrictHostKeyChecking=no" --quiet
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" --quiet \
+              --command='
+            set -e
+            SD="/var/www/sites/chamgyo/settlement-data"
+            TS=$(date +%s)
+            sudo cp "$SD/data.json" "$SD/backups/data.pre-nb-${TS}.json"
+            sudo python3 /tmp/nuke_bad.py
+            sudo chown www-data:www-data "$SD/data.json"
+            sudo chmod 644 "$SD/data.json"
+            sudo rm -f /tmp/nuke_bad.py
+            '
+      - name: CF purge
+        if: success()
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE:  ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          curl -sf -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/purge_everything" \
+            -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}' | head -c 200
+          echo ""
