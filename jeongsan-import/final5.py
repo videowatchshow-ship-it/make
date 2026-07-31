@@ -83,14 +83,39 @@ RESTORE = [
     row("2026-07-27","02:29","최명진","캐쉬","","Lose","바인 [이미지·금액미상] [tg:성천지]"),
     row("2026-07-27","03:29","마키아벨리","캐쉬","","Lose","리바인 [이미지·금액미상] [tg:성천지]"),
 ]
-existing = {(m.get("date",""), m.get("start",""), m.get("name","")) for m in ms}
-added = 0
+# 같은 (날짜,시각) 에 이미 행이 있으면 새로 넣지 않고 그 행에 이름/비고를 병합 (이중 생성 방지)
+by_time = {}
+for m in ms:
+    by_time.setdefault((m.get("date",""), m.get("start","")), []).append(m)
+added = merged = 0
 for r in RESTORE:
-    kk = (r["date"], r["start"], r["name"])
-    if kk not in existing:
-        ms.append(r); existing.add(kk); added += 1
-        print(f"  복원: {kk[0]} {kk[1]} {kk[2]} ${r['deposit'] or '미상'}")
-print(f"복원 추가: {added}건")
+    tk = (r["date"], r["start"])
+    slots = by_time.get(tk, [])
+    same_name = [m for m in slots if m.get("name","") == r["name"]]
+    if same_name:
+        continue  # 이미 이름까지 있는 행 존재
+    blank = [m for m in slots if m.get("name") in ("미상","성명미상","")]
+    if blank:
+        m = blank[0]
+        m["name"] = r["name"]
+        if not (m.get("note") or "").strip(): m["note"] = r["note"]
+        if not (m.get("type") or "").strip(): m["type"] = r["type"]
+        merged += 1
+        print(f"  병합(이름부여): {tk[0]} {tk[1]} → {r['name']}")
+    elif not slots:
+        ms.append(r); by_time.setdefault(tk, []).append(r); added += 1
+        print(f"  복원: {tk[0]} {tk[1]} {r['name']} ${r['deposit'] or '미상'}")
+print(f"복원 추가: {added}건 · 병합: {merged}건")
+# 같은 시각에 이름 있는 행과 미상 빈 행이 둘 다 있으면 미상 쪽 제거 (이중 표시 정리)
+drop = set()
+for tk, slots in by_time.items():
+    named = [m for m in slots if m.get("name") not in ("미상","성명미상","")]
+    if named:
+        for m in slots:
+            if m.get("name") in ("미상","성명미상","") and not str(m.get("deposit") or "").strip():
+                drop.add(id(m))
+                print(f"  미상중복 제거: {tk[0]} {tk[1]}")
+ms = [m for m in ms if id(m) not in drop]
 
 # 7월 중복 제거: (날짜, 시각, 이름, 금액, 종류) 동일 행은 1개만 유지 (note 긴 것 우선)
 # 6월 데이터는 확정본 — 어떤 규칙도 건드리지 않는다
