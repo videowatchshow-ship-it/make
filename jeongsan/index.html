@@ -290,20 +290,22 @@ function statusCell(r){
   if (r.result === "Win") return { cls:"win", text:"손님 승 −$ " + fmt((parseFloat(r.deposit)||0)*RATE) };
   return { cls:"lose", text:"$ " + fmt(profit(r)) };
 }
-/* 회원별 누적 입금(IN=type!=환전) · 누적 역송(OUT=type==환전) · 특정 row 까지 */
-function memberSumIn(nameKey, uptoIndex){
+/* 누적 합계: 그 달 첫 행부터 해당 행까지 전체 입금액/역송액 running total (마지막 행 = 월 소계) */
+function runSumIn(uptoIndex){
+  const ym = (members[uptoIndex].date||"").slice(0,7);
   let s = 0;
   for (let k=0; k<=uptoIndex; k++){
     const r = members[k];
-    if ((r.name||"") === nameKey && r.type !== "환전") s += parseFloat(r.deposit)||0;
+    if ((r.date||"").slice(0,7) === ym && r.type !== "환전") s += parseFloat(r.deposit)||0;
   }
   return s;
 }
-function memberSumOut(nameKey, uptoIndex){
+function runSumOut(uptoIndex){
+  const ym = (members[uptoIndex].date||"").slice(0,7);
   let s = 0;
   for (let k=0; k<=uptoIndex; k++){
     const r = members[k];
-    if ((r.name||"") === nameKey && r.type === "환전") s += parseFloat(r.deposit)||0;
+    if ((r.date||"").slice(0,7) === ym && r.type === "환전") s += parseFloat(r.deposit)||0;
   }
   return s;
 }
@@ -344,11 +346,11 @@ function renderMembers(){
           </select></td>
       <td class="dwcell dep" data-label="입금액 $">
         <span class="val"><input value="${esc(depValue(r))}" data-t="m" data-i="${i}" data-k="dep_in" placeholder=""></span>
-        <span class="sum">합계 $${fmt(memberSumIn(r.name||"", i))}</span>
+        <span class="sum">합계 $${fmt(runSumIn(i))}</span>
       </td>
       <td class="dwcell wdw" data-label="역송액 $">
         <span class="val"><input value="${esc(wdwValue(r))}" data-t="m" data-i="${i}" data-k="dep_out" placeholder=""></span>
-        <span class="sum">합계 $${fmt(memberSumOut(r.name||"", i))}</span>
+        <span class="sum">합계 $${fmt(runSumOut(i))}</span>
       </td>
       <td data-label="결과"><select data-t="m" data-i="${i}" data-k="result">
             <option ${r.result==="Lose"?"selected":""}>Lose</option>
