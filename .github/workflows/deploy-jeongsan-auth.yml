@@ -14,14 +14,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Prepare payload (tar)
+      - name: Prepare payload (tar in workspace)
         run: |
           cd jeongsan
-          tar czf /tmp/jeongsan-payload.tgz .
+          tar czf ../jeongsan-payload.tgz .
           echo "=== payload contents ==="
-          tar tzf /tmp/jeongsan-payload.tgz
+          tar tzf ../jeongsan-payload.tgz
           echo "=== payload size ==="
-          ls -la /tmp/jeongsan-payload.tgz
+          ls -la ../jeongsan-payload.tgz
 
       - name: SCP payload to bastion
         uses: appleboy/scp-action@v0.1.7
@@ -29,9 +29,9 @@ jobs:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          source: "/tmp/jeongsan-payload.tgz"
+          source: "jeongsan-payload.tgz"
           target: "/tmp/"
-          strip_components: 1
+          overwrite: true
 
       - name: Deploy via bastion → gcloud → my-site-1
         uses: appleboy/ssh-action@v1.0.3
