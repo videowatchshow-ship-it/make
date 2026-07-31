@@ -9,13 +9,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check photo auth pattern + jeongsan history for login
+      - name: Fetch settlement JSONs
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 300s
+          command_timeout: 120s
           script: |
             /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
               --zone=asia-northeast1-a \
@@ -23,42 +23,9 @@ jobs:
               --ssh-flag="-o StrictHostKeyChecking=no" \
               --quiet \
               --command='
-            set +e
-            PHOTO="/var/www/sites/chamgyo/public/photo"
-            J="/var/www/sites/chamgyo/public/정산표"
-            echo "===== photo/session_conf.php ====="
-            sudo cat "$PHOTO/session_conf.php"
-            echo "===== photo/auth_check.php ====="
-            sudo cat "$PHOTO/auth_check.php"
-            echo "===== photo/login.php ====="
-            sudo cat "$PHOTO/login.php"
-            echo "===== photo/logout.php ====="
-            sudo cat "$PHOTO/logout.php" 2>/dev/null | head -50
-            echo "===== photo listing (php files) ====="
-            sudo ls -la "$PHOTO/"*.php 2>/dev/null | head -30
-            echo "===== jeongsan backups for auth traces ====="
-            for f in $(sudo ls "$J/"*.bak* 2>/dev/null); do
-              hits=$(sudo grep -lE "login|auth_check|session_conf|password|비밀번호|로그인" "$f" 2>/dev/null)
-              if [ -n "$hits" ]; then
-                echo "--- HIT in backup: $f ---"
-                sudo grep -nE "login|auth_check|session_conf|password|비밀번호|로그인" "$f" | head -20
-              fi
-            done
-            echo "===== auth trace in current jeongsan ====="
-            sudo grep -nE "login|auth_check|session_conf|password|비밀번호|로그인|logout" "$J/"*.html "$J/"*.php 2>/dev/null | head -40
-            echo "===== data.php content (full) ====="
-            sudo cat "$J/data.php"
-            echo "===== excel-data.php (full) ====="
-            sudo cat "$J/excel-data.php"
-            echo "===== udongka-data.php (full) ====="
-            sudo cat "$J/udongka-data.php"
-            echo "===== settlement-data dir ====="
-            sudo ls -la /var/www/sites/chamgyo/settlement-data 2>&1 | head -15
-            echo "===== search whole repo for jeongsan+auth history ====="
-            sudo find /var/www/sites/chamgyo -name "*.bak*" -path "*정산표*" | head -20
-            echo "===== apache access - who visits jeongsan (last 24h) ====="
-            sudo tail -5000 /chamgyo_access.log 2>/dev/null | grep -aE "정산|%ec%a0%95%ec%82%b0%ed%91%9c" | awk "{print \$1}" | sort -u | head -30
-            echo "===== photo login users (accounts) ====="
-            sudo grep -nE "USERS|users|cent|jay|tak|jump|대표|otuki|password|pw" "$PHOTO/session_conf.php" "$PHOTO/login.php" "$PHOTO/auth_check.php" 2>/dev/null | head -60
-            echo "===== DONE ====="
+            echo "===== DATA.JSON ====="
+            sudo cat /var/www/sites/chamgyo/settlement-data/data.json
+            echo ""
+            echo "===== UDONGKA.JSON ====="
+            sudo cat /var/www/sites/chamgyo/settlement-data/udongka.json
             '
