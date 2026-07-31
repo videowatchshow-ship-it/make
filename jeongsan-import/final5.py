@@ -41,8 +41,8 @@ for m in ms:
     if k in DELETE:
         print(f"  삭제(확정): {k[0]} {k[1]} ${m.get('deposit')}")
         continue
-    if is_misang(m) and dep(m) == 0 and m.get("date","").startswith("2026-07"):
-        print(f"  삭제(빈금액): {k[0]} {k[1]}")
+    if dep(m) == 0 and m.get("date","").startswith("2026-07"):
+        print(f"  삭제(빈금액): {k[0]} {k[1]} {m.get('name')}")
         continue
     if is_misang(m) and "테더" in (m.get("note") or ""):
         print(f"  테더→마키아벨리: {k[0]} {k[1]} ${m.get('deposit')}")
