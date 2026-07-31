@@ -495,4 +495,68 @@ function parseMultipleFiles(filePaths) {
   return { accounts: allAccounts, report };
 }
 
-module.exports = { parseExcelFile, parseMultipleFiles, extractAccountsFromSheet, normalizeTotp, isTotpLike, isEmail, analyzeColumns, classifyValue, extractLabelValue, tryVerticalExtract, tryStackedExtract, tryLabelValueExtract };
+function mountRoutes(app) {
+  if (!app || typeof app.post !== 'function') return;
+
+  const multer = (() => { try { return require('multer'); } catch(e) { return null; } })();
+  if (!multer) { console.log('upload_excels: multer not installed, upload routes skipped'); return; }
+
+  const upload = multer({ dest: '/tmp/gauth-uploads/', limits: { fileSize: 200 * 1024 * 1024 } });
+
+  app.post('/api/upload-excel', upload.array('files', 50), (req, res) => {
+    try {
+      if (!req.files || !req.files.length) return res.status(400).json({ ok: false, error: 'no files' });
+      const dataFile = '/opt/gauth-full/accounts_normalized.json';
+      let existing = [];
+      try { const d = JSON.parse(fs.readFileSync(dataFile, 'utf8')); existing = Array.isArray(d) ? d : (d.accounts || []); } catch(e) {}
+      const byEmail = {};
+      for (const a of existing) byEmail[a.email] = a;
+
+      const results = [];
+      for (const f of req.files) {
+        try {
+          const accounts = parseExcelFile(f.path);
+          let added = 0, updated = 0;
+          for (const a of accounts) {
+            if (!a.email) continue;
+            if (byEmail[a.email]) {
+              const e = byEmail[a.email];
+              if (a.password && !e.password) e.password = a.password;
+              if (a.totp_secret && isTotpLike(a.totp_secret)) e.totp_secret = normalizeTotp(a.totp_secret);
+              if (a.recovery_email && !e.recovery_email) e.recovery_email = a.recovery_email;
+              updated++;
+            } else {
+              byEmail[a.email] = a;
+              added++;
+            }
+          }
+          results.push({ file: f.originalname, parsed: accounts.length, added, updated });
+        } catch(e) {
+          results.push({ file: f.originalname, error: e.message });
+        }
+        try { fs.unlinkSync(f.path); } catch(e) {}
+      }
+
+      const allAccounts = Object.values(byEmail);
+      fs.writeFileSync(dataFile, JSON.stringify(allAccounts, null, 2));
+      res.json({ ok: true, total: allAccounts.length, results });
+    } catch(e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+}
+
+const _exports = mountRoutes;
+_exports.parseExcelFile = parseExcelFile;
+_exports.parseMultipleFiles = parseMultipleFiles;
+_exports.extractAccountsFromSheet = extractAccountsFromSheet;
+_exports.normalizeTotp = normalizeTotp;
+_exports.isTotpLike = isTotpLike;
+_exports.isEmail = isEmail;
+_exports.analyzeColumns = analyzeColumns;
+_exports.classifyValue = classifyValue;
+_exports.extractLabelValue = extractLabelValue;
+_exports.tryVerticalExtract = tryVerticalExtract;
+_exports.tryStackedExtract = tryStackedExtract;
+_exports.tryLabelValueExtract = tryLabelValueExtract;
+module.exports = _exports;
