@@ -158,13 +158,13 @@ jobs:
             # ===== 5.5 TOTP 디버깅 + 패치 =====
             echo "=== [5.5/6] TOTP debug & patch ==="
 
-            # 1. rebrowser-login.js에서 /codes/ 관련 코드 덤프
-            echo "--- /codes/ endpoint code ---"
-            grep -n -A10 "codes" rebrowser-login.js | head -40 || echo "  no /codes/ found"
-            echo "--- generateTOTP function ---"
-            grep -n -A10 "function generateTOTP" rebrowser-login.js || echo "  no generateTOTP found"
-            echo "--- authenticator usage ---"
-            grep -n "authenticator" rebrowser-login.js || echo "  no authenticator usage"
+            # 1. totp_local 모듈 덤프 (핵심)
+            echo "--- lib/totp_local.js ---"
+            cat lib/totp_local.js 2>/dev/null || echo "  not found"
+            echo "--- generateTOTP + generateSync imports ---"
+            grep -n "generateSync\|generateTOTP\|totp_local\|otplib\|require.*totp\|require.*otp" rebrowser-login.js | head -20 || echo "  none"
+            echo "--- /codes/ endpoint ---"
+            grep -n -A10 "'/codes/" rebrowser-login.js | head -20 || echo "  no /codes/"
 
             # 2. bb01055781838 계정의 시크릿 확인
             echo "--- bb01055781838 account secret ---"
