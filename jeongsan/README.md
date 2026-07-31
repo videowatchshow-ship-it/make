@@ -21,21 +21,22 @@ photo · photo2 · photo3 · gauth 폴더와 **완전히 독립**된 하위 사�
 
 ---
 
-## 2. 로그인 (계정 5개)
+## 2. 로그인 (계정 5개 · rw 4개 + ro 1개)
 
 로그인 안 하면 어느 페이지도 접근 불가.
 
-| 아이디 | 초기 비밀번호 |
-|---|---|
-| cent  | cent1234 |
-| jay   | jay1234  |
-| tak   | tak1234  |
-| jump  | jump1234 |
-| 대표  | boss1234 |
+| 아이디 | 비밀번호 | 권한 |
+|---|---|---|
+| cent    | 1147 | rw (읽기+저장) |
+| ha      | 0830 | rw |
+| tak     | 7272 | rw |
+| jay     | 8282 | rw |
+| 점프대표 | 1147 | **ro (읽기전용 · 저장 불가)** |
 
-- 모든 계정은 동일한 데이터(회원/엑셀/일일/원장) 를 공유해서 편집.
-- 계정 변경/추가/삭제·비번 교체: 서버의 `/var/www/sites/chamgyo/settlement-data/jeongsan_users.php` 만 수정. 즉시 반영.
-- 세션은 1년 유지 (수동 로그아웃 전까지). 세션 쿠키 이름 `JSPSESSID` (photo 계열 `PHPSESSID` 와 격리).
+- `rw` 계정은 회원/엑셀/일일/원장 화면 자유롭게 편집·저장.
+- `ro` 계정 (점프대표) 은 로그인 · 모든 페이지 열람 가능, **저장 버튼 누르면 서버가 403** (읽기전용).
+- 계정 · 비번 · 권한 변경: 서버 `/var/www/sites/chamgyo/settlement-data/jeongsan_users.php` 만 수정 즉시 반영.
+- 세션 1년 유지. 세션 쿠키 이름 `JSPSESSID` (photo 계열 `PHPSESSID` 와 격리).
 
 ---
 

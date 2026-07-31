@@ -130,10 +130,10 @@ jobs:
             curl -sI "$BASE_LOCAL/data.php.bak-official-20260707-142054" | head -3
 
             echo ""
-            echo "-- 7) LOGIN flow (tak/tak1234) → GET data.php --"
+            echo "-- 7) LOGIN flow (tak/7272) → GET data.php --"
             CJ=$(mktemp)
             curl -si -c "$CJ" -X POST \
-              --data-urlencode "id=tak" --data-urlencode "passwd=tak1234" \
+              --data-urlencode "id=tak" --data-urlencode "passwd=7272" \
               "$BASE_LOCAL/login_check.php" | head -6
             echo ""
             echo "-- authed HEAD index.html (should 200, page served) --"
@@ -167,13 +167,18 @@ jobs:
               "$BASE_LOCAL/login_check.php" | head -4
 
             echo ""
-            echo "-- 10) 대표 (Korean) login --"
+            echo "-- 10) 점프대표 (Korean · read-only) login --"
             CJ2=$(mktemp)
             curl -si -c "$CJ2" -X POST \
-              --data-urlencode "id=대표" --data-urlencode "passwd=boss1234" \
+              --data-urlencode "id=점프대표" --data-urlencode "passwd=1147" \
               "$BASE_LOCAL/login_check.php" | head -4
+            echo ""
+            echo "-- 점프대표 GET data.php (허용) --"
             curl -s -b "$CJ2" "$BASE_LOCAL/data.php" | head -c 100
             echo ""
+            echo "-- 점프대표 POST data.php (403 예상) --"
+            curl -si -b "$CJ2" -X POST -H "Content-Type: application/json" -d "{\"members\":[]}" \
+              "$BASE_LOCAL/data.php" | head -10
             rm -f "$CJ" "$CJ2"
 
             echo ""
@@ -228,7 +233,7 @@ jobs:
           echo "=== [EXT] login as jump ==="
           CJ=$(mktemp)
           curl -si -c "$CJ" -X POST \
-            --data-urlencode "id=jump" --data-urlencode "passwd=jump1234" \
+            --data-urlencode "id=jay" --data-urlencode "passwd=8282" \
             "$BASE/login_check.php?_t=$T" | head -5
 
           echo ""

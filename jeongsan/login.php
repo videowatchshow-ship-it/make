@@ -61,7 +61,7 @@ $err = isset($_GET['err']) ? $_GET['err'] : '';
     <input type="password" id="passwd" name="passwd" required maxlength="40">
     <button type="submit">L O G I N</button>
     <div class="err"><?= $err === 'bad' ? '아이디 또는 비밀번호가 올바르지 않습니다.' : ($err === 'empty' ? '아이디와 비밀번호를 입력하세요.' : '') ?></div>
-    <div class="accounts">사용 계정: cent · jay · tak · jump · 대표</div>
+    <div class="accounts">사용 계정: cent · ha · tak · jay · 점프대표(읽기전용)</div>
   </form>
 </body>
 </html>

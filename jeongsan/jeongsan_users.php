@@ -1,14 +1,15 @@
 <?php
-/* 정산표 로그인 계정 — 절대 웹루트(public/) 안에 두지 않는다.
- * 배포 위치: /var/www/sites/chamgyo/settlement-data/jeongsan_users.php
- * 권한:      chmod 600, www-data:www-data
+/* 정산표 로그인 계정
+ * 배포 위치: /var/www/sites/chamgyo/settlement-data/jeongsan_users.php  (웹루트 밖 · 600)
  *
- * 비밀번호 변경 시 이 파일만 수정하면 즉시 반영.
+ * 형식: 'id' => ['pw' => '비번', 'role' => 'rw'|'ro']
+ *   rw = 읽기+쓰기 (저장 가능)
+ *   ro = 읽기전용 (저장 시 403)
  */
 return [
-    'cent' => 'cent1234',
-    'jay'  => 'jay1234',
-    'tak'  => 'tak1234',
-    'jump' => 'jump1234',
-    '대표' => 'boss1234',
+    'cent'    => ['pw' => '1147', 'role' => 'rw'],
+    'ha'      => ['pw' => '0830', 'role' => 'rw'],
+    'tak'     => ['pw' => '7272', 'role' => 'rw'],
+    'jay'     => ['pw' => '8282', 'role' => 'rw'],
+    '점프대표' => ['pw' => '1147', 'role' => 'ro'],
 ];
