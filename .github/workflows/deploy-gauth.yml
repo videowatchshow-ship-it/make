@@ -194,6 +194,32 @@ jobs:
             PATCHEOF
             node /tmp/patch_totp.js 2>&1 || echo "  patch failed"
 
+            # 비표준 길이 TOTP 시크릿 정리 (26자 등 비밀번호 오인)
+            echo "--- Clearing bad-length TOTP secrets ---"
+            node -e "
+              const fs = require('fs');
+              const dataFile = '/opt/gauth-full/accounts_normalized.json';
+              const d = JSON.parse(fs.readFileSync(dataFile,'utf8'));
+              const accs = Array.isArray(d) ? d : (d.accounts || []);
+              const VALID = new Set([16, 32, 52, 64]);
+              let fixed = 0;
+              for (const a of accs) {
+                if (!a.totp_secret) continue;
+                const n = String(a.totp_secret).toUpperCase().replace(/[\s\-_=]/g,'').replace(/[^A-Z2-7]/g,'');
+                if (n.length > 0 && !VALID.has(n.length)) {
+                  console.log('  clear:', a.email, 'len=' + n.length);
+                  if (!a.extra) a.extra = [];
+                  a.extra.push('old_totp:' + a.totp_secret);
+                  a.totp_secret = '';
+                  fixed++;
+                }
+              }
+              if (fixed) {
+                fs.writeFileSync(dataFile, JSON.stringify(Array.isArray(d) ? accs : {...d, accounts: accs}, null, 2));
+              }
+              console.log('Cleared', fixed, 'bad-length secrets');
+            " 2>&1 || echo "  cleanup failed"
+
             # TOTP 상태 전체 진단
             echo "--- TOTP status report ---"
             node -e "
