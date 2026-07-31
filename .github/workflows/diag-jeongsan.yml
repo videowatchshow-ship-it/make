@@ -1,0 +1,81 @@
+name: Diagnose jeongsan page
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/jeongsan-page-management-evm5h3]
+    paths:
+      - '.github/workflows/diag-jeongsan.yml'
+      - 'trigger/diag-jeongsan.txt'
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: SSH bastion → gcloud → my-site-1 diagnostics
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 300s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='
+            set +e
+            DIR="/var/www/sites/chamgyo/public/정산표"
+            echo "===== EXIST ====="
+            sudo test -d "$DIR" && echo "OK dir exists" || echo "MISS dir"
+            echo "===== LS ====="
+            sudo ls -la "$DIR" 2>&1 | head -60
+            echo "===== TREE (2 deep) ====="
+            sudo find "$DIR" -maxdepth 2 -printf "%y %s %p\n" 2>&1 | head -80
+            echo "===== README ====="
+            for f in "$DIR/README.md" "$DIR/README.txt" "$DIR/readme.md" "$DIR/README"; do
+              if sudo test -f "$f"; then
+                echo "--- FOUND: $f ---"
+                sudo cat "$f"
+                break
+              fi
+            done
+            echo "===== INDEX ====="
+            for f in "$DIR/index.php" "$DIR/index.html" "$DIR/index.htm"; do
+              if sudo test -f "$f"; then
+                echo "--- FIRST 80 lines: $f ($(sudo wc -c < "$f") bytes) ---"
+                sudo head -80 "$f"
+                break
+              fi
+            done
+            echo "===== HTACCESS ====="
+            sudo test -f "$DIR/.htaccess" && sudo cat "$DIR/.htaccess" || echo "no .htaccess"
+            echo "===== FILE TYPES ====="
+            sudo find "$DIR" -maxdepth 3 -type f \( -name "*.php" -o -name "*.html" -o -name "*.js" -o -name "*.css" -o -name "*.json" -o -name "*.md" \) 2>&1 | head -40
+            echo "===== LOCAL HTTP ====="
+            curl -sI "http://localhost/%ec%a0%95%ec%82%b0%ed%91%9c/" 2>&1 | head -20
+            echo "===== APACHE ERR (last 30, filtered jeongsan/정산표) ====="
+            sudo tail -300 /chamgyo_error.log 2>/dev/null | grep -aE "정산|jeongsan|xn--" | tail -30
+            echo "===== APACHE ACCESS (last 20, jeongsan) ====="
+            sudo tail -500 /chamgyo_access.log 2>/dev/null | grep -aE "정산|%ec%a0%95%ec%82%b0%ed%91%9c" | tail -20
+            echo "===== PHP-FPM SOCK ====="
+            ls -la /run/php/*.sock 2>&1 | head
+            echo "===== SESSION CONF (shared?) ====="
+            sudo find /var/www/sites/chamgyo/public -maxdepth 3 -name "session_conf.php" 2>&1
+            echo "===== DONE ====="
+            '
+
+      - name: External check (via GH runner)
+        if: always()
+        run: |
+          echo "=== curl -I 정산표 ==="
+          curl -sI "https://xn--9d0bw2fjtyymch7de9d.info/%ec%a0%95%ec%82%b0%ed%91%9c/" | head -15
+          echo "=== curl body (first 400 chars) ==="
+          curl -s "https://xn--9d0bw2fjtyymch7de9d.info/%ec%a0%95%ec%82%b0%ed%91%9c/" | head -c 400
+          echo ""
+          echo "=== curl body size ==="
+          curl -s "https://xn--9d0bw2fjtyymch7de9d.info/%ec%a0%95%ec%82%b0%ed%91%9c/" | wc -c
