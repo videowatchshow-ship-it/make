@@ -1,0 +1,34 @@
+name: Fetch June settlement data
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch data.json + backups list
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='
+            echo "===== data.json ====="
+            sudo cat /var/www/sites/chamgyo/settlement-data/data.json
+            echo ""
+            echo "===== udongka.json ====="
+            sudo cat /var/www/sites/chamgyo/settlement-data/udongka.json
+            echo ""
+            echo "===== excel.json ====="
+            sudo cat /var/www/sites/chamgyo/settlement-data/excel.json
+            '
