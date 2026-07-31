@@ -719,7 +719,7 @@ async function lookup(){
           <div style="color:#8a95a5">비밀번호</div>
           <div class="mono" style="color:#3ddc84;font-size:15px">${local.password||'—'}${cp(local.password)}</div>
           <div style="color:#8a95a5">2FA 시크릿</div>
-          <div class="mono">${local.totp_secret||'—'}${cp(local.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${local.email}','lookup-sec')">✏️</button></div>
+          <div class="mono"><span id="lookup-sec-local">${local.totp_secret||'—'}</span>${cp(local.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${local.email}','lookup-sec-local')">✏️</button></div>
           <div style="color:#8a95a5">2FA 코드 (지금)</div>
           <div class="mono" style="color:#7dabff;font-size:22px;font-weight:700;letter-spacing:3px"><span id="lookup-code">${code2}</span>${local.totp_secret?cp('_','lookup-code'):''} ${local.totp_secret?`<button style="background:#2a323c;padding:4px 10px;font-size:12px;margin-left:8px;color:#c9d2dc" onclick="lookupRefreshCode('${local.totp_secret}',this)">🔄 새로고침</button>`:''}</div>
           <div style="color:#8a95a5">출처</div><div class="mono" style="font-size:11px;color:#8a95a5">${local.source_file||'—'}</div>
@@ -748,7 +748,7 @@ async function lookup(){
       <div style="color:#8a95a5">비밀번호</div>
       <div class="mono" style="color:#3ddc84;font-size:15px">${j.password||'—'}${cp(j.password)}</div>
       <div style="color:#8a95a5">2FA 시크릿</div>
-      <div class="mono">${j.totp_secret||'—'}${cp(j.totp_secret)}</div>
+      <div class="mono"><span id="lookup-sec-api">${j.totp_secret||'—'}</span>${cp(j.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${j.email}','lookup-sec-api')">✏️</button></div>
       <div style="color:#8a95a5">2FA 코드 (지금)</div>
       <div class="mono" style="color:#7dabff;font-size:22px;font-weight:700;letter-spacing:3px"><span id="lookup-code">${code}</span>${j.totp_secret?cp('_','lookup-code'):cp(code!=='—'?code:'')}${j.totp_secret?`<button style="background:#2a323c;padding:4px 10px;font-size:12px;margin-left:8px;color:#c9d2dc" onclick="lookupRefreshCode('${j.totp_secret}',this)">🔄 새로고침</button>`:''} ${cp('_', null)?'':''}<button style="background:#7c3aed;margin-left:8px" onclick="programLogin('${j.email}',this)">🔑 프로그램 로그인</button></div>
       <div style="color:#8a95a5">YouTube URL</div>
