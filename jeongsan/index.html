@@ -344,11 +344,11 @@ function renderMembers(){
           </select></td>
       <td class="dwcell dep" data-label="입금액 $">
         <span class="val"><input value="${esc(depValue(r))}" data-t="m" data-i="${i}" data-k="dep_in" placeholder=""></span>
-        <span class="sum">Σ $ ${fmt(memberSumIn(r.name||"", i))}</span>
+        <span class="sum">합계 $${fmt(memberSumIn(r.name||"", i))}</span>
       </td>
       <td class="dwcell wdw" data-label="역송액 $">
         <span class="val"><input value="${esc(wdwValue(r))}" data-t="m" data-i="${i}" data-k="dep_out" placeholder=""></span>
-        <span class="sum">Σ $ ${fmt(memberSumOut(r.name||"", i))}</span>
+        <span class="sum">합계 $${fmt(memberSumOut(r.name||"", i))}</span>
       </td>
       <td data-label="결과"><select data-t="m" data-i="${i}" data-k="result">
             <option ${r.result==="Lose"?"selected":""}>Lose</option>
