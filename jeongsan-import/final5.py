@@ -52,6 +52,19 @@ for m in ms:
         m["name"] = ASSIGN[k]
     kept.append(m)
 ms = kept
+
+# 전역 중복 제거: (날짜, 시각, 이름, 금액, 종류) 동일 행은 1개만 유지 (note 긴 것 우선)
+seen = {}
+for m in ms:
+    key = (m.get("date",""), m.get("start",""), m.get("name",""), str(m.get("deposit","")), m.get("type",""))
+    if key in seen:
+        if len(m.get("note") or "") > len(seen[key].get("note") or ""):
+            seen[key] = m
+    else:
+        seen[key] = m
+if len(seen) != len(ms):
+    print(f"중복 제거: {len(ms) - len(seen)}건")
+ms = list(seen.values())
 print(f"after-clean: {len(ms)}")
 
 ms.sort(key=lambda x: (x.get("date",""), x.get("start","")))
