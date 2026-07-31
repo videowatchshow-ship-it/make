@@ -168,29 +168,36 @@
     </table>
   </div>
   <!-- ============ 회사 자금 장부 ============ -->
-  <h2>② 회사 자금 장부 (차입금 · 지출)</h2>
-  <div class="hint">항목마다 <b>＋</b>(들어온 돈/차입금) 또는 <b>－</b>(나간 돈/지출)을 선택하면 잔액이 자동 계산돼요.</div>
+  <h2>② 개인 차용 장부</h2>
+  <div class="hint">사람별 가로 열 · 칸에 금액만 입력하면 사람별 합계와 총합이 자동 계산돼요.</div>
   <div class="toolbar">
-    <button class="green" onclick="addLedger()">＋ 항목 추가</button>
+    <button class="green" onclick="addLedger()">＋ 줄 추가 (5명 전체)</button>
   </div>
   <div class="wrap">
     <table id="ledgerSheet">
       <thead>
         <tr>
-          <th style="min-width:108px">날짜</th>
-          <th style="min-width:140px">항목</th>
-          <th style="min-width:74px">＋ / －</th>
-          <th style="min-width:100px">금액 $</th>
-          <th style="min-width:200px">비고</th>
-          <th style="min-width:38px"></th>
+          <th style="min-width:40px">#</th>
+          <th style="min-width:110px">제이</th>
+          <th style="min-width:110px">센트</th>
+          <th style="min-width:110px">탁</th>
+          <th style="min-width:110px">데니(퇴사)</th>
+          <th style="min-width:110px">하바드</th>
         </tr>
       </thead>
       <tbody></tbody>
       <tfoot>
         <tr>
-          <td class="totlabel" colspan="3">현재 잔액</td>
+          <td class="totlabel">합계</td>
+          <td class="tot" id="lt0">0</td>
+          <td class="tot" id="lt1">0</td>
+          <td class="tot" id="lt2">0</td>
+          <td class="tot" id="lt3">0</td>
+          <td class="tot" id="lt4">0</td>
+        </tr>
+        <tr>
+          <td class="totlabel" colspan="5">총 차용 합계</td>
           <td class="tot balance" id="ledgerTotal">0</td>
-          <td colspan="2"></td>
         </tr>
       </tfoot>
     </table>
@@ -423,41 +430,47 @@ function signed(r){
   const amt = parseFloat(r.amount)||0;
   return (r.sign==="-" ? -1 : 1) * amt;
 }
+/* 개인 차용 장부 — 사람별 가로 열 그리드 */
+const LNAMES = ["제이","센트","탁","데니(퇴사)","하바드"];
+function personRows(nm){ return ledger.filter(r=>r.item===nm+" 차용"); }
 function renderLedger(){
+  // 사람마다 최소 10칸 보장
+  LNAMES.forEach(nm=>{ let c=personRows(nm).length; for(;c<10;c++) ledger.push({date:"",item:nm+" 차용",sign:"+",amount:"",note:""}); });
+  const maxRows = Math.max(...LNAMES.map(nm=>personRows(nm).length));
   const tb = document.querySelector("#ledgerSheet tbody");
   tb.innerHTML = "";
-  ledger.forEach((r,i)=>{
+  for (let i=0; i<maxRows; i++){
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td data-label="날짜"><select data-t="l" data-i="${i}" data-k="date">${dateOptions(r.date)}</select></td>
-      <td data-label="항목"><input value="${esc(r.item)}" data-t="l" data-i="${i}" data-k="item" placeholder="차입금 / AI 비용"></td>
-      <td data-label="＋ / －"><select data-t="l" data-i="${i}" data-k="sign" class="${r.sign==='-'?'minus':'plus'}">
-            <option value="+" ${r.sign!=="-"?"selected":""}>＋</option>
-            <option value="-" ${r.sign==="-"?"selected":""}>－</option>
-          </select></td>
-      <td class="num ${r.sign==='-'?'minus':'plus'}" data-label="금액 $"><input value="${esc(r.amount)}" data-t="l" data-i="${i}" data-k="amount" placeholder="700"></td>
-      <td data-label="비고"><input value="${esc(r.note)}" data-t="l" data-i="${i}" data-k="note" placeholder="메모"></td>
-      <td class="del" data-label=""><button onclick="delLedger(${i})">✕ 이 줄 삭제</button></td>`;
+    let html = `<td class="num" style="color:#5b6b80">${i+1}</td>`;
+    LNAMES.forEach(nm=>{
+      const r = personRows(nm)[i];
+      html += r
+        ? `<td class="num" data-label="${esc(nm)}"><input value="${esc(r.amount)}" data-li="${ledger.indexOf(r)}" placeholder=""></td>`
+        : `<td></td>`;
+    });
+    tr.innerHTML = html;
     tb.appendChild(tr);
-  });
+  }
   totalLedger();
 }
 function totalLedger(){
-  const bal = ledger.reduce((s,r)=>s+signed(r),0);
+  let g = 0;
+  LNAMES.forEach((nm,idx)=>{
+    const s = personRows(nm).reduce((a,r)=>a+(parseFloat(r.amount)||0),0);
+    g += s;
+    const el = document.getElementById("lt"+idx);
+    if (el) el.textContent = "$ " + fmt(s);
+  });
   const el = document.getElementById("ledgerTotal");
-  el.textContent = "$ " + fmt(bal);
-  el.className = "tot balance " + (bal<0?"minus":"plus");
+  el.textContent = "$ " + fmt(g);
+  el.className = "tot balance " + (g<0?"minus":"plus");
 }
-function addLedger(){ ledger.push({date:today(),item:"",sign:"+",amount:"",note:""}); renderLedger(); save(); }
-function ledgerFilled(r){ return [r.item,r.amount,r.note].some(v=>v && String(v).trim()!==""); }
-function delLedger(i){
-  if (ledgerFilled(ledger[i]) && !confirm("이미 기입된 내용이 있습니다.\n정말 삭제하시겠습니까?")) return;
-  ledger.splice(i,1); renderLedger(); save();
-}
+function addLedger(){ LNAMES.forEach(nm=>ledger.push({date:"",item:nm+" 차용",sign:"+",amount:"",note:""})); renderLedger(); save(); }
 /* ---------- 공통 ---------- */
 document.addEventListener("input", e=>{
   const el = e.target;
   if (el.dataset.rc !== undefined){ rollcomm[el.dataset.rc] = el.value; totalMembers(); return save(); }
+  if (el.dataset.li !== undefined){ ledger[el.dataset.li].amount = el.value; totalLedger(); return save(); }
   if(!el.dataset.k) return;
   const arr = el.dataset.t==="m" ? members : ledger;
   const row = arr[el.dataset.i];
