@@ -161,7 +161,8 @@
         <tr>
           <td class="totlabel" colspan="11">합계 수익</td>
           <td class="tot" id="memberTotal">0</td>
-          <td colspan="2"></td>
+          <td class="totlabel">최종수익(실제)</td>
+          <td class="tot" id="finalTotal">미확정</td>
         </tr>
       </tfoot>
     </table>
@@ -368,6 +369,17 @@ function renderMembers(){
 function __depSum(ym){ return members.filter(m=>(m.date||"").slice(0,7)===ym && m.type!=="환전").reduce((s,m)=>s+(parseFloat(m.deposit)||0),0); }
 function __wdwSum(ym){ return members.filter(m=>(m.date||"").slice(0,7)===ym && m.type==="환전").reduce((s,m)=>s+(parseFloat(m.deposit)||0),0); }
 function __profSum(ym){ return members.filter(m=>(m.date||"").slice(0,7)===ym).reduce((s,m)=>s+profit(m),0); }
+/* 최종수익(실제) = (루징머니[그 달 입금−역송] − 롤링커미션) × 30%  · 롤링커미션 미입력 → 미확정 */
+function __finalProfit(ym){
+  const rc = (rollcomm[ym] ?? "").toString().trim();
+  if (rc === "") return null;
+  const losing = __depSum(ym) - __wdwSum(ym);
+  return (losing - (parseFloat(rc)||0)) * RATE;
+}
+function __finalText(ym){
+  const v = __finalProfit(ym);
+  return v === null ? "최종 미확정" : "최종 $ " + fmt(v);
+}
 function appendMonthSub(tb, ym){
   const MONTHNM = {"2026-06":"2026년 6월","2026-07":"2026년 7월"};
   const nm = MONTHNM[ym]||ym;
@@ -375,7 +387,8 @@ function appendMonthSub(tb, ym){
   tr.innerHTML = `<td colspan="8" style="text-align:right;font-weight:800;background:#0c1420;padding:9px 12px;">${nm} 소계 →</td>`
     + `<td class="num" data-subdep="${ym}" style="background:#0c1420;font-weight:800;color:#6ee7b7;">IN $ ${fmt(__depSum(ym))}</td>`
     + `<td class="num" data-subwdw="${ym}" style="background:#0c1420;font-weight:800;color:#f8b871;">OUT $ ${fmt(__wdwSum(ym))}</td>`
-    + `<td style="background:#0c1420;"></td><td style="background:#0c1420;"></td>`
+    + `<td style="background:#0c1420;" data-label="롤링커미션"><input data-rc="${ym}" value="${esc(rollcomm[ym]||"")}" placeholder="롤링커미션" style="width:92px"></td>`
+    + `<td class="num" data-subfinal="${ym}" style="background:#0c1420;font-weight:800;color:#ffd166;">${__finalText(ym)}</td>`
     + `<td class="profit win" data-subprof="${ym}" style="background:#0c1420;font-weight:800;">수익 $ ${fmt(__profSum(ym))}</td>`
     + `<td style="background:#0c1420;"></td><td style="background:#0c1420;"></td>`;
   tb.appendChild(tr);
@@ -392,6 +405,12 @@ function totalMembers(){
   document.querySelectorAll("#memberSheet tbody td[data-subwdw]").forEach(c=>{ c.textContent = "OUT $ " + fmt(__wdwSum(c.dataset.subwdw)); });
   document.querySelectorAll("#memberSheet tbody td[data-subprof]").forEach(c=>{ c.textContent = "수익 $ " + fmt(__profSum(c.dataset.subprof)); });
   document.getElementById("memberTotal").textContent = "$ " + fmt(members.reduce((s,r)=>s+profit(r),0));
+  document.querySelectorAll("#memberSheet tbody td[data-subfinal]").forEach(c=>{ c.textContent = __finalText(c.dataset.subfinal); });
+  const yms = [...new Set(members.map(m=>(m.date||"").slice(0,7)).filter(Boolean))];
+  const vals = yms.map(__finalProfit);
+  const ft = document.getElementById("finalTotal");
+  if (vals.some(v=>v===null)) ft.textContent = "미확정 (롤링커미션 입력 대기)";
+  else ft.textContent = "$ " + fmt(vals.reduce((s,v)=>s+v,0));
 }
 function addMember(){ members.push({date:today(),start:"",end:"",nick:"",name:"",phone:"",account:"",type:"테더",deposit:"",result:"Lose",rolling:"",note:""}); renderMembers(); save(); }
 function memberFilled(r){ return [r.nick,r.name,r.phone,r.account,r.deposit,r.rolling,r.note,r.start,r.end].some(v=>v && String(v).trim()!==""); }
@@ -437,7 +456,9 @@ function delLedger(i){
 }
 /* ---------- 공통 ---------- */
 document.addEventListener("input", e=>{
-  const el = e.target; if(!el.dataset.k) return;
+  const el = e.target;
+  if (el.dataset.rc !== undefined){ rollcomm[el.dataset.rc] = el.value; totalMembers(); return save(); }
+  if(!el.dataset.k) return;
   const arr = el.dataset.t==="m" ? members : ledger;
   const row = arr[el.dataset.i];
   const k = el.dataset.k;
@@ -468,19 +489,20 @@ function copyText(id, btn){
   });
 }
 // 로컬 임시저장(자동) — 입력 중 끊겨도 안 날아가게
-function save(){ localStorage.setItem("settle_v7", JSON.stringify({members, ledger})); }
+function save(){ localStorage.setItem("settle_v7", JSON.stringify({members, ledger, rollcomm})); }
 // 저장 버튼 → 서버에 저장(팀원 전체 공유)
 function setLastSaved(ts){
   const el = document.getElementById("lastSaved");
   if (el) el.textContent = "마지막 저장(백업): " + (ts ? ts + " (캄보디아)" : "—");
 }
 let baseSavedAt = null; // 서버에서 마지막으로 받은 saved_at (낙관적 잠금)
+let rollcomm = {};      // 월별 롤링커미션 {"2026-07":"금액"} — 미입력이면 최종수익 미확정
 async function saveData(btn){
   save();
   const old = btn ? btn.textContent : null;
   if (btn){ btn.textContent = "저장 중…"; btn.disabled = true; }
   try {
-    const res = await fetch('data.php', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({members, ledger, base_saved_at: baseSavedAt})});
+    const res = await fetch('data.php', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({members, ledger, rollcomm, base_saved_at: baseSavedAt})});
     const j = await res.json();
     if (j.ok){ baseSavedAt = j.saved_at; setLastSaved(j.saved_at); alert("✅ 서버에 저장 + 백업 완료!\n저장 시각: " + j.saved_at + " (캄보디아)\n팀원들은 새로고침하면 보입니다."); }
     else if (res.status === 409){
@@ -520,13 +542,14 @@ async function boot(){
     if (d && (Array.isArray(d.members) || Array.isArray(d.ledger))){
       members = d.members || [];
       ledger  = d.ledger  || [];
+      rollcomm = d.rollcomm || {};
       baseSavedAt = d.saved_at || null;
       if (d.saved_at) setLastSaved(d.saved_at);
     }
   } catch(e){
     // 서버 못 받으면(파일로 직접 열었거나 오프라인) 로컬 임시저장 사용
     const saved = localStorage.getItem("settle_v7");
-    if (saved){ const d = JSON.parse(saved); members = d.members||[]; ledger = d.ledger||[]; }
+    if (saved){ const d = JSON.parse(saved); members = d.members||[]; ledger = d.ledger||[]; rollcomm = d.rollcomm||{}; }
   }
   if (!members.length) members = defaultMembers();
   if (!ledger.length)  ledger  = defaultLedger();
