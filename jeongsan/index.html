@@ -38,6 +38,11 @@
   td.profit { font-weight: 700; text-align: right; padding-right: 10px; font-size: 14px; }
   td.profit.win { color: #f87171; font-size: 12.5px; }
   td.profit.lose { color: #6ee7b7; }
+  td.num.dep input { color:#6ee7b7; font-weight:700; }
+  td.num.wdw input { color:#f8b871; font-weight:700; }
+  td.num.sum { color:#7db8ff; font-weight:800; text-align:right; padding-right:10px; }
+  td.num.sum.neg { color:#f87171; }
+  tr.mhead td { background:#12232b; color:#9dd4e4; font-weight:800; font-size:12px; padding:8px 6px; text-align:center; }
   td.del { text-align: center; }
   td.del button { padding: 4px 8px; font-size: 12px; background: transparent; border: none; color: #6b7280; }
   td.del button:hover { color: #ef4444; }
@@ -138,7 +143,9 @@
           <th style="min-width:110px">연락처</th>
           <th style="min-width:130px">계좌번호</th>
           <th style="min-width:88px">입금종류</th>
-          <th style="min-width:92px">입금액 $</th>
+          <th style="min-width:92px;color:#6ee7b7">입금액 $</th>
+          <th style="min-width:92px;color:#f8b871">역송액 $</th>
+          <th style="min-width:92px;color:#7db8ff">합계 $</th>
           <th style="min-width:64px">결과</th>
           <th style="min-width:84px">롤링금 $</th>
           <th style="min-width:118px">수익 / 상태</th>
@@ -280,6 +287,13 @@ function statusCell(r){
   if (r.result === "Win") return { cls:"win", text:"손님 승 −$ " + fmt((parseFloat(r.deposit)||0)*RATE) };
   return { cls:"lose", text:"$ " + fmt(profit(r)) };
 }
+/* 입금액/역송액/합계 분리 표시 (type==환전 이면 역송, 아니면 입금) */
+function depValue(r){ return r.type === "환전" ? "" : esc(r.deposit); }
+function wdwValue(r){ return r.type === "환전" ? esc(r.deposit) : ""; }
+function sumValue(r){
+  const v = parseFloat(r.deposit)||0;
+  return r.type === "환전" ? -v : v;
+}
 function renderMembers(){
   const tb = document.querySelector("#memberSheet tbody");
   tb.innerHTML = "";
@@ -291,8 +305,12 @@ function renderMembers(){
       if (__prevYM !== null) appendMonthSub(tb, __prevYM);
       __prevYM = __ym;
       const h = document.createElement("tr"); h.className="mgrp";
-      h.innerHTML = `<td colspan="14" style="background:#0e2233;color:#7db8ff;font-weight:800;padding:11px 12px;font-size:15px;border-top:2px solid #1d3a52;">\uD83D\uDCC5 ${MONTHNM[__ym]||__ym} 정산</td>`;
+      h.innerHTML = `<td colspan="16" style="background:#0e2233;color:#7db8ff;font-weight:800;padding:11px 12px;font-size:15px;border-top:2px solid #1d3a52;">\uD83D\uDCC5 ${MONTHNM[__ym]||__ym} 정산</td>`;
       tb.appendChild(h);
+      /* 각 월 상단에 컬럼 헤더 반복 (사용자 요청) */
+      const hh = document.createElement("tr"); hh.className="mhead";
+      hh.innerHTML = "<td>날짜</td><td>출발시간</td><td>종료시간</td><td>닉네임</td><td>실명(예금주)</td><td>연락처</td><td>계좌번호</td><td>입금종류</td><td style=\"color:#6ee7b7\">입금액 $</td><td style=\"color:#f8b871\">역송액 $</td><td style=\"color:#7db8ff\">합계 $</td><td>결과</td><td>롤링금 $</td><td>수익/상태</td><td>비고</td><td></td>";
+      tb.appendChild(hh);
     }
     const s = statusCell(r);
     const tr = document.createElement("tr");
@@ -309,7 +327,9 @@ function renderMembers(){
             <option ${r.type==="캐쉬"?"selected":""}>캐쉬</option>
             <option ${r.type==="환전"?"selected":""}>환전</option>
           </select></td>
-      <td class="num" data-label="입금액 $"><input value="${esc(r.deposit)}" data-t="m" data-i="${i}" data-k="deposit" placeholder="500"></td>
+      <td class="num dep" data-label="입금액 $"><input value="${depValue(r)}" data-t="m" data-i="${i}" data-k="dep_in" placeholder="500"></td>
+      <td class="num wdw" data-label="역송액 $"><input value="${wdwValue(r)}" data-t="m" data-i="${i}" data-k="dep_out" placeholder="0"></td>
+      <td class="num sum ${sumValue(r)<0?'neg':''}" data-label="합계 $">${sumValue(r)>=0?'$ ':'−$ '}${fmt(Math.abs(sumValue(r)))}</td>
       <td data-label="결과"><select data-t="m" data-i="${i}" data-k="result">
             <option ${r.result==="Lose"?"selected":""}>Lose</option>
             <option ${r.result==="Win"?"selected":""}>Win</option>
@@ -324,14 +344,18 @@ function renderMembers(){
   totalMembers();
 }
 function __depSum(ym){ return members.filter(m=>(m.date||"").slice(0,7)===ym && m.type!=="환전").reduce((s,m)=>s+(parseFloat(m.deposit)||0),0); }
+function __wdwSum(ym){ return members.filter(m=>(m.date||"").slice(0,7)===ym && m.type==="환전").reduce((s,m)=>s+(parseFloat(m.deposit)||0),0); }
 function __profSum(ym){ return members.filter(m=>(m.date||"").slice(0,7)===ym).reduce((s,m)=>s+profit(m),0); }
 function appendMonthSub(tb, ym){
   const MONTHNM = {"2026-06":"2026년 6월","2026-07":"2026년 7월"};
   const nm = MONTHNM[ym]||ym;
   const tr = document.createElement("tr"); tr.className="msub";
-  tr.innerHTML = `<td colspan="8" style="text-align:right;font-weight:800;background:#0c1420;padding:9px 12px;">${nm} 소계 (입금/수익) \u2192</td>`
-    + `<td class="num" data-subdep="${ym}" style="background:#0c1420;font-weight:800;">$ ${fmt(__depSum(ym))}</td>`
-    + `<td style="background:#0c1420;"></td><td style="background:#0c1420;"></td>`
+  tr.innerHTML = `<td colspan="8" style="text-align:right;font-weight:800;background:#0c1420;padding:9px 12px;">${nm} 소계 (입금·역송·합계·수익) \u2192</td>`
+    + `<td class="num sum" data-subdep="${ym}" style="background:#0c1420;font-weight:800;color:#6ee7b7;">$ ${fmt(__depSum(ym))}</td>`
+    + `<td class="num sum" data-subwdw="${ym}" style="background:#0c1420;font-weight:800;color:#f8b871;">$ ${fmt(__wdwSum(ym))}</td>`
+    + `<td class="num sum" data-subnet="${ym}" style="background:#0c1420;font-weight:800;color:#7db8ff;">$ ${fmt(__depSum(ym)-__wdwSum(ym))}</td>`
+    + `<td style="background:#0c1420;"></td>`
+    + `<td style="background:#0c1420;"></td>`
     + `<td class="profit win" data-subprof="${ym}" style="background:#0c1420;font-weight:800;">수익 $ ${fmt(__profSum(ym))}</td>`
     + `<td style="background:#0c1420;"></td><td style="background:#0c1420;"></td>`;
   tb.appendChild(tr);
@@ -345,6 +369,8 @@ function totalMembers(){
     cell.setAttribute("data-i", i);
   });
   document.querySelectorAll("#memberSheet tbody td[data-subdep]").forEach(c=>{ c.textContent = "$ " + fmt(__depSum(c.dataset.subdep)); });
+  document.querySelectorAll("#memberSheet tbody td[data-subwdw]").forEach(c=>{ c.textContent = "$ " + fmt(__wdwSum(c.dataset.subwdw)); });
+  document.querySelectorAll("#memberSheet tbody td[data-subnet]").forEach(c=>{ c.textContent = "$ " + fmt(__depSum(c.dataset.subnet)-__wdwSum(c.dataset.subnet)); });
   document.querySelectorAll("#memberSheet tbody td[data-subprof]").forEach(c=>{ c.textContent = "수익 $ " + fmt(__profSum(c.dataset.subprof)); });
   document.getElementById("memberTotal").textContent = "$ " + fmt(members.reduce((s,r)=>s+profit(r),0));
 }
@@ -394,7 +420,17 @@ function delLedger(i){
 document.addEventListener("input", e=>{
   const el = e.target; if(!el.dataset.k) return;
   const arr = el.dataset.t==="m" ? members : ledger;
-  arr[el.dataset.i][el.dataset.k] = el.value;
+  const row = arr[el.dataset.i];
+  const k = el.dataset.k;
+  if (k === "dep_in") {
+    row.deposit = el.value;
+    if (row.type === "환전") { row.type = "테더"; row.result = "Lose"; renderMembers(); return save(); }
+  } else if (k === "dep_out") {
+    row.deposit = el.value;
+    if (el.value.trim() !== "") { row.type = "환전"; row.result = "Win"; renderMembers(); return save(); }
+  } else {
+    row[k] = el.value;
+  }
   if (el.dataset.t==="m") totalMembers(); else totalLedger();
 });
 document.addEventListener("change", e=>{
