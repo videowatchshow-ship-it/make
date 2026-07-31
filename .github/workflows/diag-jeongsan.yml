@@ -9,7 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch current HTMLs (index / excel / udongka / 원장)
+      - name: Fetch bak-split + bak-win30 backups (원본 찾기)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -23,12 +23,19 @@ jobs:
               --ssh-flag="-o StrictHostKeyChecking=no" \
               --quiet \
               --command='
-            for f in index.html excel.html udongka.html 원장.html; do
-              echo "===== $f ====="
-              echo "size: $(sudo wc -c < /var/www/sites/chamgyo/public/정산표/$f)"
-              sudo cat "/var/www/sites/chamgyo/public/정산표/$f"
-              echo ""
-              echo "===== END $f ====="
-              echo ""
-            done
+            J="/var/www/sites/chamgyo/public/정산표"
+            echo "===== ALL BAK FILES ====="
+            sudo ls -la "$J/"*.bak* 2>&1 | head -40
+            echo ""
+            echo "===== BAK-SPLIT ====="
+            echo "size: $(sudo wc -c < $J/index.html.bak-split-20260707-140834)"
+            sudo cat "$J/index.html.bak-split-20260707-140834"
+            echo ""
+            echo "===== END BAK-SPLIT ====="
+            echo ""
+            echo "===== BAK-WIN30 ====="
+            echo "size: $(sudo wc -c < $J/index.html.bak-win30-20260707-175118)"
+            sudo cat "$J/index.html.bak-win30-20260707-175118"
+            echo ""
+            echo "===== END BAK-WIN30 ====="
             '

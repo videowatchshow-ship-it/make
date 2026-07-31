@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>테더 입금 정산 / 회사 자금 장부</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    margin: 0; padding: 16px 18px 40px; background: #0f1115; color: #e7e9ee;
+  }
+  h1 { font-size: 19px; margin: 0 0 2px; }
+  h2 { font-size: 16px; margin: 28px 0 8px; color: #c9cdd6; }
+  .hint { font-size: 12.5px; color: #9aa0ac; margin: 0 0 12px; }
+  .hint b { color: #6ee7b7; }
+  .toolbar { margin-bottom: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button {
+    font-size: 13px; padding: 8px 14px; border: 1px solid #2a2f3a;
+    background: #1a1f29; color: #e7e9ee; border-radius: 9px; cursor: pointer;
+  }
+  button:hover { background: #232936; }
+  button.green { background: #0e3b2e; border-color: #14543f; color: #6ee7b7; }
+  .wrap { overflow: auto; border: 1px solid #232936; border-radius: 12px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #232936; padding: 0; height: 38px; }
+  th {
+    background: #161b24; font-size: 12px; font-weight: 600; color: #9aa0ac;
+    padding: 0 8px; white-space: nowrap; position: sticky; top: 0;
+  }
+  td { background: #12151c; }
+  td input, td select {
+    width: 100%; height: 100%; border: none; background: transparent;
+    color: #e7e9ee; font-size: 13.5px; font-family: inherit; padding: 0 8px; outline: none;
+  }
+  td input:focus { background: #1c2330; box-shadow: inset 0 0 0 2px #2563eb; }
+  td.num input, td.num { text-align: right; }
+  td.profit { font-weight: 700; text-align: right; padding-right: 10px; font-size: 14px; }
+  td.profit.win { color: #f87171; font-size: 12.5px; }
+  td.profit.lose { color: #6ee7b7; }
+  /* 입금/역송 컬럼 색 · 결과 셀 Lose=녹색 강조 */
+  td.num.dep input { color:#6ee7b7; font-weight:700; }        /* 입금액 = 녹색 */
+  td.num.wdw input { color:#f8b871; font-weight:700; }        /* 역송액 = 주황 */
+  td.res select[data-v="Lose"] { color:#6ee7b7; font-weight:700; }
+  td.res select[data-v="Win"]  { color:#f87171; font-weight:700; }
+  td.del { text-align: center; }
+  td.del button { padding: 4px 8px; font-size: 12px; background: transparent; border: none; color: #6b7280; }
+  td.del button:hover { color: #ef4444; }
+  select option { background: #161b24; }
+  tfoot td { background: #161b24; font-weight: 700; font-size: 14px; height: 44px; }
+  .totlabel { text-align: right; padding-right: 10px; color: #9aa0ac; }
+  .tot { text-align: right; padding-right: 10px; color: #6ee7b7; font-size: 16px; }
+  .plus { color: #6ee7b7 !important; }
+  .minus { color: #f87171 !important; }
+  .balance { font-size: 17px; }
+  .note { font-size: 12px; color: #f59e0b; background:#241b08; border:1px solid #3a2c0a; padding:8px 12px; border-radius:9px; margin: 14px 0 0; }
+  .card { border:1px solid #232936; border-radius:12px; background:#12151c; margin-bottom:12px; overflow:hidden; max-width:560px; }
+  .card-head { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:#161b24; border-bottom:1px solid #232936; }
+  .card-title { font-size:13.5px; font-weight:700; color:#c9cdd6; }
+  .copybtn { font-size:12.5px; padding:6px 14px; background:#1d4ed8; border:none; color:#fff; border-radius:8px; cursor:pointer; }
+  .copybtn:hover { background:#2563eb; }
+  .copybtn.done { background:#0e7a55; }
+  .card pre { margin:0; padding:14px; font-family:inherit; font-size:13px; line-height:1.6; color:#e7e9ee; white-space:pre-wrap; }
+  /* ===== 모바일 반응형: 표 → 카드 (라벨+넓은 입력칸, 빠지는 항목 없음) ===== */
+  @media (max-width: 760px){
+    body { padding: 12px 10px 36px; }
+    h1 { font-size: 17px; line-height:1.3; }
+    .wrap { border:none; overflow: visible; }
+    table, thead, tbody, tr, td, tfoot { display:block; width:100%; }
+    thead { display:none; }                 /* 헤더는 각 칸 라벨로 대체 */
+    #memberSheet tbody tr, #ledgerSheet tbody tr{
+      border:1px solid #2a3142; border-radius:12px; background:#12151c;
+      margin:0 0 12px; padding:6px 10px 10px; overflow:hidden;
+    }
+    td{
+      display:flex; align-items:center; gap:10px;
+      border:none; border-bottom:1px solid #1c2230; height:auto; min-height:44px; padding:6px 0;
+    }
+    #memberSheet tbody tr td:last-child, #ledgerSheet tbody tr td:last-child{ border-bottom:none; }
+    td::before{
+      content: attr(data-label);
+      flex: 0 0 92px; font-size:12px; font-weight:700; color:#9aa0ac; white-space:nowrap;
+    }
+    td[data-label=""]::before{ display:none; }
+    td input, td select{
+      flex:1; min-height:40px; font-size:16px;       /* 16px = iOS 자동확대 방지 + 입력 편함 */
+      background:#1a2030; border:1px solid #2a3142; border-radius:8px; padding:0 10px;
+    }
+    td.num input{ text-align:left; }
+    td.profit{ justify-content:flex-start; font-size:16px; padding:10px 0; }
+    td.profit::before{ color:#9aa0ac; }
+    td.del{ justify-content:center; padding-top:10px; }
+    td.del button{ width:100%; padding:12px; font-size:14px; color:#fca5a5; border:1px solid #4a2230; border-radius:8px; background:#1e1116; }
+    /* 합계 줄 */
+    tfoot tr{ display:flex; justify-content:space-between; align-items:center; padding:6px 4px; }
+    tfoot td{ display:inline-block; width:auto; height:auto; }
+    .totlabel{ text-align:left; padding:0; }
+    .card{ max-width:100%; }
+    .toolbar button{ flex:1 1 auto; }
+    #lastSaved{ flex-basis:100%; margin:6px 0 0; }
+  }
+</style>
+</head>
+<body>
+  <a href="https://panda-avata.cc/" style="display:inline-block;margin-bottom:10px;padding:8px 16px;background:#1f6feb;color:#fff;border-radius:9px;text-decoration:none;font-size:13px;font-weight:700;">🏠 홈으로</a>
+  <a href="https://xn--9d0bw2fjtyymch7de9d.info/photo/" style="display:inline-block;margin:0 0 10px 6px;padding:8px 16px;background:#b8860b;color:#fff;border-radius:9px;text-decoration:none;font-size:13px;font-weight:700;">🎰 참교육 카지노</a>
+  <h1>💵 테더/캐쉬 정산 · 회사 자금 장부</h1>
+<details open style="margin:10px 0 16px;background:#141922;border:1px solid #2a3140;border-radius:12px;padding:2px 14px;color:#cbd5e1;line-height:1.75;font-size:14px;">
+<summary style="cursor:pointer;font-weight:800;color:#ffd766;font-size:15px;padding:10px 0;">📖 사용 설명서 (눌러서 펼치기 / 접기)</summary>
+<div style="padding:4px 2px 14px;">
+<b>💵 이 페이지 = 회원별 테더/캐쉬 입금 정산</b><br>
+회원 한 명 한 명의 입금 건을 한 줄씩 기록하는 표입니다.<br><br>
+<b>■ 입력 방법</b><br>
+① <b>＋ 회원 추가</b> 버튼 → 빈 줄 생성<br>
+② 각 칸(날짜·출발·종료·닉네임·실명·입금종류·입금액·결과·롤링금·비고) 클릭해서 입력<br>
+&nbsp;&nbsp;· <b>입금종류</b>: 테더 / 캐쉬<br>
+&nbsp;&nbsp;· <b>결과</b>: <b>Lose</b>=손님 패(우리팀 수익) / <b>Win</b>=손님 승(마감, 수익 0)<br>
+&nbsp;&nbsp;· <b>수익</b>은 자동 계산: (입금액 − 롤링금) × 30%<br>
+③ 다 넣으면 <b>💾 서버에 저장</b> → 팀원 전체 공유 + 자동 백업<br><br>
+<b>■ 엑셀로 뽑기</b><br>
+이 페이지엔 엑셀 다운로드 버튼이 없습니다. 엑셀(.xlsx)이 필요하면
+상단 <a href="excel.html" style="color:#7db8ff">→ 엑셀 정산표</a> 페이지에서 <b>⬇️ 엑셀로 내보내기</b>를 쓰세요.<br><br>
+<b>■ 페이지 이동</b> — 위 링크로 <a href="excel.html" style="color:#7db8ff">엑셀 정산표</a> · <a href="udongka.html" style="color:#7db8ff">일일정산(우동카)</a> 이동.
+</div>
+</details>
+  <p class="hint">회원 수익 = (입금액 − 롤링금) × 30% &nbsp;·&nbsp; <b>Lose</b>=우리팀 수익 / <b>Win</b>=손님 승(마감)<br>
+  <a href="udongka.html" style="color:#7aa2ff;text-decoration:none;">→ 일일정산</a> &nbsp;·&nbsp;
+  <a href="excel.html" style="color:#7aa2ff;text-decoration:none;">→ 엑셀 정산표</a></p>
+  <!-- ============ 회원 정산표 ============ -->
+  <h2>① 회원 입금 정산표</h2>
+  <div class="toolbar">
+    <button class="green" onclick="addMember()">＋ 손님 추가</button>
+  </div>
+  <div class="wrap">
+    <table id="memberSheet">
+      <thead>
+        <tr>
+          <th style="min-width:104px">날짜</th>
+          <th style="min-width:78px">출발시간</th>
+          <th style="min-width:78px">종료시간</th>
+          <th style="min-width:80px">닉네임</th>
+          <th style="min-width:90px">실명(예금주)</th>
+          <th style="min-width:110px">연락처</th>
+          <th style="min-width:130px">계좌번호</th>
+          <th style="min-width:88px">입금종류</th>
+          <th style="min-width:92px">입금액 $</th>
+          <th style="min-width:92px">역송액 $</th>
+          <th style="min-width:64px">결과</th>
+          <th style="min-width:84px">롤링금 $</th>
+          <th style="min-width:118px">수익 / 상태</th>
+          <th style="min-width:140px">비고</th>
+          <th style="min-width:38px"></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+      <tfoot>
+        <tr>
+          <td class="totlabel" colspan="11">합계 수익</td>
+          <td class="tot" id="memberTotal">0</td>
+          <td colspan="2"></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  <!-- ============ 회사 자금 장부 ============ -->
+  <h2>② 회사 자금 장부 (차입금 · 지출)</h2>
+  <div class="hint">항목마다 <b>＋</b>(들어온 돈/차입금) 또는 <b>－</b>(나간 돈/지출)을 선택하면 잔액이 자동 계산돼요.</div>
+  <div class="toolbar">
+    <button class="green" onclick="addLedger()">＋ 항목 추가</button>
+  </div>
+  <div class="wrap">
+    <table id="ledgerSheet">
+      <thead>
+        <tr>
+          <th style="min-width:108px">날짜</th>
+          <th style="min-width:140px">항목</th>
+          <th style="min-width:74px">＋ / －</th>
+          <th style="min-width:100px">금액 $</th>
+          <th style="min-width:200px">비고</th>
+          <th style="min-width:38px"></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+      <tfoot>
+        <tr>
+          <td class="totlabel" colspan="3">현재 잔액</td>
+          <td class="tot balance" id="ledgerTotal">0</td>
+          <td colspan="2"></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  <!-- ============ 안내 문구 (복붙용) ============ -->
+  <h2>③ 안내 문구 (복붙용)</h2>
+  <div class="hint">버튼을 누르면 클립보드에 복사돼요. 손님에게 바로 붙여넣기 하세요.</div>
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title">📋 참교육 아바타 신규 가입 절차</span>
+      <button class="copybtn" onclick="copyText('msg-join', this)">복사</button>
+    </div>
+    <pre id="msg-join">참교육 아바타 신규 가입 절차*
+1. 예금주(성함)
+2. 환전 받으실 계좌번호(토스,케이뱅크,카카오페이증권 불가❌)
+3. 연락처
+4. 유튜브 닉네임
+5. 신분증 사진(통장주 본인확인용으로만 사용)
+신규 대표님의 블랙조회를 위해 위 5가지 사항 기재해 주시면 간단한 조회후 바인 진행 도와드리겠습니다!</pre>
+  </div>
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title">💱 환전 수수료 안내</span>
+      <button class="copybtn" onclick="copyText('msg-fee', this)">복사</button>
+    </div>
+    <pre id="msg-fee">※환전 수수료※
+이해를 돕기 위해 환율 적용 기준 안내드리겠습니다 저희는 현재 네이버 환율을 기준으로 하고 있습니다.
+원화를 달러로 입금하실 때는 1달러당 50원을 더한 환율로 계산됩니다.</pre>
+  </div>
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title">🎰 홍보 멘트 (참여 문의)</span>
+      <button class="copybtn" onclick="copyText('msg-promo', this)">복사</button>
+    </div>
+    <pre id="msg-promo">🎰 @sky1833 텔레 주세요! 💬
+http://xn--9d0bw2fjtyymch7de9d.info/
+💵 매일 출석 이벤트가 있는 홈페이지 방문
+⚡ 초보자라 생소하시다구요?
+⏱ 한 슈에 10분씩 잡고 진행!
+⚡ 참여는 3분 컷!
+🚀 캄보디아 1등 신속 처리팀!
+🔥 500콩 출발 가능 🔥
+🎲 24시간 문의 환영 🎲</pre>
+  </div>
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title">🎥 방송 멘트</span>
+      <button class="copybtn" onclick="copyText('msg-live', this)">복사</button>
+    </div>
+    <pre id="msg-live">🎥 대표님 실제 겜 방송중입니다! 🎰🔴
+픽은 자제, 응원 부탁드립니다 🙏💬🔥</pre>
+  </div>
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title">🚀 출발 멘트</span>
+      <button class="copybtn" onclick="copyText('msg-go', this)">복사</button>
+    </div>
+    <pre id="msg-go">🚀🎁 USD 무심사! 바로 출발! 🚀🎁
+500콩부터 시작 가능~ 🔥🎰</pre>
+  </div>
+  <div class="toolbar" style="margin-top:16px">
+    <button class="green" onclick="saveData(this)">💾 서버에 저장</button>
+    <button onclick="clearAll(this)">🗑 전체 지우기</button>
+    <span id="lastSaved" style="font-size:12.5px; color:#9aa0ac; margin-left:6px;">마지막 저장(백업): —</span>
+  </div>
+  <p class="note">✅ 수정한 뒤 <b>💾 서버에 저장</b>을 누르면 서버에 저장돼 팀원 모두가 같은 내용을 봅니다. (다른 사람은 새로고침하면 최신 내용 표시) · 저장 안 누른 변경은 내 화면에만 임시 보관됩니다.</p>
+<script>
+const RATE = 0.30;
+let members = [];
+let ledger = [];
+const today = () => new Date().toISOString().slice(0,10);
+// 6월(2026-06-01 ~ 2026-06-30) 전체 날짜 옵션
+function juneDates(){
+  const arr = [];
+  for (let d=1; d<=30; d++) arr.push("2026-06-" + String(d).padStart(2,"0"));
+  for (let d=1; d<=31; d++) arr.push("2026-07-" + String(d).padStart(2,"0"));
+  return arr;
+}
+function dateOptions(sel){
+  let arr = juneDates();
+  if (sel && arr.indexOf(sel) === -1) arr = [sel].concat(arr);
+  return arr.map(d=>`<option ${d===sel?"selected":""}>${d}</option>`).join("");
+}
+function fmt(n){ return (Math.round(n*100)/100).toLocaleString(undefined,{minimumFractionDigits:0, maximumFractionDigits:2}); }
+function esc(s){ return (s==null?"":String(s)).replace(/"/g,"&quot;"); }
+/* ---------- 회원 정산표 ---------- */
+function profit(r){
+  if (r.result === "Lose"){
+    const p = ((parseFloat(r.deposit)||0) - (parseFloat(r.rolling)||0)) * RATE;
+    return p > 0 ? p : 0;
+  }
+  if (r.result === "Win"){
+    return -((parseFloat(r.deposit)||0) * RATE);   // 손님 승 → 우리 손실 = 이겨간 금액의 30%
+  }
+  return 0;
+}
+function statusCell(r){
+  if (r.result === "Win") return { cls:"win", text:"손님 승 −$ " + fmt((parseFloat(r.deposit)||0)*RATE) };
+  return { cls:"lose", text:"$ " + fmt(profit(r)) };
+}
+function renderMembers(){
+  const tb = document.querySelector("#memberSheet tbody");
+  tb.innerHTML = "";
+  const MONTHNM = {"2026-06":"2026년 6월","2026-07":"2026년 7월"};
+  let __prevYM = null;
+  members.forEach((r,i)=>{
+    const __ym = (r.date||"").slice(0,7);
+    if (__ym !== __prevYM) {
+      if (__prevYM !== null) appendMonthSub(tb, __prevYM);
+      __prevYM = __ym;
+      const h = document.createElement("tr"); h.className="mgrp";
+      h.innerHTML = `<td colspan="14" style="background:#0e2233;color:#7db8ff;font-weight:800;padding:11px 12px;font-size:15px;border-top:2px solid #1d3a52;">\uD83D\uDCC5 ${MONTHNM[__ym]||__ym} 정산</td>`;
+      tb.appendChild(h);
+    }
+    const s = statusCell(r);
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td data-label="날짜"><select data-t="m" data-i="${i}" data-k="date">${dateOptions(r.date)}</select></td>
+      <td data-label="출발시간"><input value="${esc(r.start)}" data-t="m" data-i="${i}" data-k="start" placeholder="16:32"></td>
+      <td data-label="종료시간"><input value="${esc(r.end)}" data-t="m" data-i="${i}" data-k="end" placeholder="16:50"></td>
+      <td data-label="닉네임"><input value="${esc(r.nick)}" data-t="m" data-i="${i}" data-k="nick" placeholder="용"></td>
+      <td data-label="실명(예금주)"><input value="${esc(r.name)}" data-t="m" data-i="${i}" data-k="name" placeholder="홍길동"></td>
+      <td data-label="연락처"><input value="${esc(r.phone)}" data-t="m" data-i="${i}" data-k="phone" placeholder="010-0000-0000"></td>
+      <td data-label="계좌번호"><input value="${esc(r.account)}" data-t="m" data-i="${i}" data-k="account" placeholder="은행/계좌번호"></td>
+      <td data-label="입금종류"><select data-t="m" data-i="${i}" data-k="type">
+            <option ${r.type==="테더"?"selected":""}>테더</option>
+            <option ${r.type==="캐쉬"?"selected":""}>캐쉬</option>
+            <option ${r.type==="환전"?"selected":""}>환전</option>
+          </select></td>
+      <td class="num" data-label="입금액 $"><input value="${esc(r.deposit)}" data-t="m" data-i="${i}" data-k="deposit" placeholder="500"></td>
+      <td data-label="결과"><select data-t="m" data-i="${i}" data-k="result">
+            <option ${r.result==="Lose"?"selected":""}>Lose</option>
+            <option ${r.result==="Win"?"selected":""}>Win</option>
+          </select></td>
+      <td class="num" data-label="롤링금 $"><input value="${esc(r.rolling)}" data-t="m" data-i="${i}" data-k="rolling" placeholder="4"></td>
+      <td class="profit ${s.cls}" data-i="${i}" data-label="수익/상태">${s.text}</td>
+      <td data-label="비고"><input value="${esc(r.note)}" data-t="m" data-i="${i}" data-k="note" placeholder="메모"></td>
+      <td class="del" data-label=""><button onclick="delMember(${i})">✕ 이 줄 삭제</button></td>`;
+    tb.appendChild(tr);
+  });
+  if (__prevYM !== null) appendMonthSub(tb, __prevYM);
+  totalMembers();
+}
+function __depSum(ym){ return members.filter(m=>(m.date||"").slice(0,7)===ym && m.type!=="환전").reduce((s,m)=>s+(parseFloat(m.deposit)||0),0); }
+function __profSum(ym){ return members.filter(m=>(m.date||"").slice(0,7)===ym).reduce((s,m)=>s+profit(m),0); }
+function appendMonthSub(tb, ym){
+  const MONTHNM = {"2026-06":"2026년 6월","2026-07":"2026년 7월"};
+  const nm = MONTHNM[ym]||ym;
+  const tr = document.createElement("tr"); tr.className="msub";
+  tr.innerHTML = `<td colspan="8" style="text-align:right;font-weight:800;background:#0c1420;padding:9px 12px;">${nm} 소계 (입금/수익) \u2192</td>`
+    + `<td class="num" data-subdep="${ym}" style="background:#0c1420;font-weight:800;">$ ${fmt(__depSum(ym))}</td>`
+    + `<td style="background:#0c1420;"></td><td style="background:#0c1420;"></td>`
+    + `<td class="profit win" data-subprof="${ym}" style="background:#0c1420;font-weight:800;">수익 $ ${fmt(__profSum(ym))}</td>`
+    + `<td style="background:#0c1420;"></td><td style="background:#0c1420;"></td>`;
+  tb.appendChild(tr);
+}
+function totalMembers(){
+  document.querySelectorAll("#memberSheet tbody td.profit[data-i]").forEach(cell=>{
+    const i = +cell.dataset.i;
+    const s = statusCell(members[i]);
+    cell.textContent = s.text;
+    cell.className = "profit " + s.cls;
+    cell.setAttribute("data-i", i);
+  });
+  document.querySelectorAll("#memberSheet tbody td[data-subdep]").forEach(c=>{ c.textContent = "$ " + fmt(__depSum(c.dataset.subdep)); });
+  document.querySelectorAll("#memberSheet tbody td[data-subprof]").forEach(c=>{ c.textContent = "수익 $ " + fmt(__profSum(c.dataset.subprof)); });
+  document.getElementById("memberTotal").textContent = "$ " + fmt(members.reduce((s,r)=>s+profit(r),0));
+}
+function addMember(){ members.push({date:today(),start:"",end:"",nick:"",name:"",phone:"",account:"",type:"테더",deposit:"",result:"Lose",rolling:"",note:""}); renderMembers(); save(); }
+function memberFilled(r){ return [r.nick,r.name,r.phone,r.account,r.deposit,r.rolling,r.note,r.start,r.end].some(v=>v && String(v).trim()!==""); }
+function delMember(i){
+  if (memberFilled(members[i]) && !confirm("이미 기입된 내용이 있습니다.\n정말 삭제하시겠습니까?")) return;
+  members.splice(i,1); renderMembers(); save();
+}
+/* ---------- 회사 자금 장부 ---------- */
+function signed(r){
+  const amt = parseFloat(r.amount)||0;
+  return (r.sign==="-" ? -1 : 1) * amt;
+}
+function renderLedger(){
+  const tb = document.querySelector("#ledgerSheet tbody");
+  tb.innerHTML = "";
+  ledger.forEach((r,i)=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td data-label="날짜"><select data-t="l" data-i="${i}" data-k="date">${dateOptions(r.date)}</select></td>
+      <td data-label="항목"><input value="${esc(r.item)}" data-t="l" data-i="${i}" data-k="item" placeholder="차입금 / AI 비용"></td>
+      <td data-label="＋ / －"><select data-t="l" data-i="${i}" data-k="sign" class="${r.sign==='-'?'minus':'plus'}">
+            <option value="+" ${r.sign!=="-"?"selected":""}>＋</option>
+            <option value="-" ${r.sign==="-"?"selected":""}>－</option>
+          </select></td>
+      <td class="num ${r.sign==='-'?'minus':'plus'}" data-label="금액 $"><input value="${esc(r.amount)}" data-t="l" data-i="${i}" data-k="amount" placeholder="700"></td>
+      <td data-label="비고"><input value="${esc(r.note)}" data-t="l" data-i="${i}" data-k="note" placeholder="메모"></td>
+      <td class="del" data-label=""><button onclick="delLedger(${i})">✕ 이 줄 삭제</button></td>`;
+    tb.appendChild(tr);
+  });
+  totalLedger();
+}
+function totalLedger(){
+  const bal = ledger.reduce((s,r)=>s+signed(r),0);
+  const el = document.getElementById("ledgerTotal");
+  el.textContent = "$ " + fmt(bal);
+  el.className = "tot balance " + (bal<0?"minus":"plus");
+}
+function addLedger(){ ledger.push({date:today(),item:"",sign:"+",amount:"",note:""}); renderLedger(); save(); }
+function ledgerFilled(r){ return [r.item,r.amount,r.note].some(v=>v && String(v).trim()!==""); }
+function delLedger(i){
+  if (ledgerFilled(ledger[i]) && !confirm("이미 기입된 내용이 있습니다.\n정말 삭제하시겠습니까?")) return;
+  ledger.splice(i,1); renderLedger(); save();
+}
+/* ---------- 공통 ---------- */
+document.addEventListener("input", e=>{
+  const el = e.target; if(!el.dataset.k) return;
+  const arr = el.dataset.t==="m" ? members : ledger;
+  arr[el.dataset.i][el.dataset.k] = el.value;
+  if (el.dataset.t==="m") totalMembers(); else totalLedger();
+});
+document.addEventListener("change", e=>{
+  const el = e.target; if(!el.dataset.k) return;
+  if (el.dataset.k==="sign" || el.dataset.k==="result"){
+    (el.dataset.t==="m"?renderMembers:renderLedger)();
+  }
+  save();
+});
+document.addEventListener("blur", save, true);
+function copyText(id, btn){
+  const t = document.getElementById(id).innerText;
+  navigator.clipboard.writeText(t).then(()=>{
+    const o = btn.textContent; btn.textContent = "복사됨 ✓"; btn.classList.add("done");
+    setTimeout(()=>{ btn.textContent = o; btn.classList.remove("done"); }, 1500);
+  });
+}
+// 로컬 임시저장(자동) — 입력 중 끊겨도 안 날아가게
+function save(){ localStorage.setItem("settle_v7", JSON.stringify({members, ledger})); }
+// 저장 버튼 → 서버에 저장(팀원 전체 공유)
+function setLastSaved(ts){
+  const el = document.getElementById("lastSaved");
+  if (el) el.textContent = "마지막 저장(백업): " + (ts ? ts + " (캄보디아)" : "—");
+}
+async function saveData(btn){
+  save();
+  const old = btn ? btn.textContent : null;
+  if (btn){ btn.textContent = "저장 중…"; btn.disabled = true; }
+  try {
+    const res = await fetch('data.php', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({members, ledger})});
+    const j = await res.json();
+    if (j.ok){ setLastSaved(j.saved_at); alert("✅ 서버에 저장 + 백업 완료!\n저장 시각: " + j.saved_at + " (캄보디아)\n팀원들은 새로고침하면 보입니다."); }
+    else alert("저장 실패: " + (j.err||"알 수 없는 오류"));
+  } catch(e){
+    alert("⚠️ 서버 저장 실패 (인터넷/주소 확인). 로컬에는 임시저장됨.\n" + e.message);
+  } finally {
+    if (btn){ btn.textContent = old; btn.disabled = false; }
+  }
+}
+function clearAll(btn){ if(confirm("전체 지울까요? (서버에도 반영됩니다)")){ members=[]; ledger=[]; renderMembers(); renderLedger(); saveData(btn); } }
+/* ---------- 기본값 ---------- */
+function defaultMembers(){
+  return [
+    {date:today(),start:"",end:"",nick:"용",type:"테더",deposit:"500",result:"Lose",rolling:"",note:""},
+    {date:today(),start:"16:32",end:"16:50",nick:"",type:"테더",deposit:"1263",result:"Lose",rolling:"",note:"일요일 게임"},
+    {date:"2026-06-22",start:"12:50",end:"",nick:"",type:"테더",deposit:"943",result:"Lose",rolling:"",note:"손님 입금 1"},
+    {date:"2026-06-22",start:"13:06",end:"",nick:"",type:"테더",deposit:"943",result:"Lose",rolling:"",note:"손님 입금 2"},
+    {date:"2026-06-22",start:"13:16",end:"",nick:"",type:"테더",deposit:"1257.5",result:"Lose",rolling:"",note:"손님 입금 3"},
+  ];
+}
+function defaultLedger(){
+  const twoDaysAgo = new Date(Date.now()-2*86400000).toISOString().slice(0,10);
+  return [
+    {date:today(), item:"회사 차입금", sign:"+", amount:"700",  note:""},
+    {date:today(), item:"회사 차입금", sign:"+", amount:"1000", note:""},
+    {date:twoDaysAgo, item:"AI 비용", sign:"-", amount:"200", note:"회사 지출"},
+  ];
+}
+/* ---------- 시작: 서버에서 불러오기 ---------- */
+async function boot(){
+  try {
+    const res = await fetch('data.php?_=' + new Date().getTime());
+    const d = await res.json();
+    if (d && (Array.isArray(d.members) || Array.isArray(d.ledger))){
+      members = d.members || [];
+      ledger  = d.ledger  || [];
+      if (d.saved_at) setLastSaved(d.saved_at);
+    }
+  } catch(e){
+    // 서버 못 받으면(파일로 직접 열었거나 오프라인) 로컬 임시저장 사용
+    const saved = localStorage.getItem("settle_v7");
+    if (saved){ const d = JSON.parse(saved); members = d.members||[]; ledger = d.ledger||[]; }
+  }
+  if (!members.length) members = defaultMembers();
+  if (!ledger.length)  ledger  = defaultLedger();
+  renderMembers();
+  renderLedger();
+}
+boot();
+</script>
+<button id="fabSave" onclick="saveData(this)" title="서버에 저장">💾 저장</button>
+<style>
+#fabSave{position:fixed;right:22px;bottom:22px;z-index:99999;background:#16a34a;color:#fff;border:none;
+  border-radius:40px;padding:15px 24px;font-size:16px;font-weight:900;box-shadow:0 6px 22px rgba(0,0,0,.45);
+  cursor:pointer;user-select:none;-webkit-user-select:none;}
+#fabSave:hover{background:#15a34a;filter:brightness(1.08);}
+</style>
+</body>
+</html>
