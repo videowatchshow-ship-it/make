@@ -63,6 +63,28 @@ module.exports = function(app) {
     }
   });
 
+  app.post('/api/update-secret', (req, res) => {
+    try {
+      const { email, totp_secret } = req.body || {};
+      if (!email || !totp_secret) return res.status(400).json({ ok: false, error: 'email and totp_secret required' });
+      const normalized = String(totp_secret).toUpperCase().replace(/[\s\-_=]/g, '').replace(/[^A-Z2-7]/g, '');
+      if (normalized.length < 16) return res.status(400).json({ ok: false, error: 'secret too short (min 16 Base32 chars)' });
+      if (normalized.length !== 16 && normalized.length !== 32 && normalized.length !== 52 && normalized.length !== 64) {
+        console.log(`Warning: secret length ${normalized.length} is non-standard (expected 16 or 32)`);
+      }
+      const dataFile = '/opt/gauth-full/accounts_normalized.json';
+      const data = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
+      const accounts = Array.isArray(data) ? data : (data.accounts || []);
+      const account = accounts.find(a => a.email === email);
+      if (!account) return res.status(404).json({ ok: false, error: 'account not found' });
+      account.totp_secret = normalized;
+      fs.writeFileSync(dataFile, JSON.stringify(Array.isArray(data) ? accounts : { ...data, accounts }, null, 2));
+      res.json({ ok: true, email, secret_length: normalized.length });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
   app.get('/api/deploy-status', (req, res) => {
     const checks = {};
     try { checks.chrome = execSync('which google-chrome-stable 2>/dev/null || which chromium 2>/dev/null', { encoding: 'utf8' }).trim(); } catch (e) { checks.chrome = 'not-found'; }

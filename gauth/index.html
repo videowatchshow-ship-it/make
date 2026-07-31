@@ -719,7 +719,7 @@ async function lookup(){
           <div style="color:#8a95a5">비밀번호</div>
           <div class="mono" style="color:#3ddc84;font-size:15px">${local.password||'—'}${cp(local.password)}</div>
           <div style="color:#8a95a5">2FA 시크릿</div>
-          <div class="mono">${local.totp_secret||'—'}${cp(local.totp_secret)}</div>
+          <div class="mono">${local.totp_secret||'—'}${cp(local.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${local.email}','lookup-sec')">✏️</button></div>
           <div style="color:#8a95a5">2FA 코드 (지금)</div>
           <div class="mono" style="color:#7dabff;font-size:22px;font-weight:700;letter-spacing:3px"><span id="lookup-code">${code2}</span>${local.totp_secret?cp('_','lookup-code'):''} ${local.totp_secret?`<button style="background:#2a323c;padding:4px 10px;font-size:12px;margin-left:8px;color:#c9d2dc" onclick="lookupRefreshCode('${local.totp_secret}',this)">🔄 새로고침</button>`:''}</div>
           <div style="color:#8a95a5">출처</div><div class="mono" style="font-size:11px;color:#8a95a5">${local.source_file||'—'}</div>
@@ -834,7 +834,7 @@ async function tdRender(){
       <div style="display:grid;grid-template-columns:100px 1fr;gap:6px 12px;font-size:13px">
         <div style="color:#8a95a5">#${idx}</div><div><b style="color:#ffb469;font-size:14px">${a.email}</b>${cp(a.email)} ${accessBadge(a)}</div>
         <div style="color:#8a95a5">비밀번호</div><div class="mono" style="color:#3ddc84">${a.password||'—'}${cp(a.password)}</div>
-        <div style="color:#8a95a5">2FA 시크릿</div><div class="mono" style="font-size:11px">${a.totp_secret||'—'}${cp(a.totp_secret)}</div>
+        <div style="color:#8a95a5">2FA 시크릿</div><div class="mono" style="font-size:11px"><span id="sec-${idx}">${a.totp_secret||'—'}</span>${cp(a.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${a.email}','sec-${idx}')">✏️</button></div>
         <div style="color:#8a95a5">2FA 코드</div><div class="mono" style="color:#7dabff;font-size:18px;font-weight:700;letter-spacing:2px"><span id="tdcode-${idx}">${codes[i]}</span>${a.totp_secret?cp('_', 'tdcode-'+idx):cp(codes[i]!=='—'?codes[i]:'')}${a.totp_secret?`<button style="background:#2a323c;padding:3px 8px;font-size:11px;margin-left:6px;color:#c9d2dc" onclick="tdRefreshCode(${idx},'${a.totp_secret}',this)">🔄 새로고침</button>`:''}</div>
         <div style="color:#8a95a5">동작</div><div><button style="background:#7c3aed" onclick="programLogin('${a.email}',this)">🔑 프로그램 로그인</button></div>
         <div style="color:#8a95a5">YouTube</div><div class="mono" style="color:#ff8a8a;font-size:11px">${yt?`<a href="${yt}" target="_blank" style="color:#ff8a8a">${yt}</a>${cp(yt)}`:'—'}</div>
@@ -874,6 +874,17 @@ async function lookupRefreshCode(secret, btn){
     row.querySelectorAll('button.cp').forEach(cb => { cb.textContent = '복사' })
     btn.textContent = '✓ 새코드'; setTimeout(()=>btn.textContent = old, 900)
   }catch{btn.textContent='❌';setTimeout(()=>btn.textContent=old, 1200)}
+}
+async function editSecret(email, spanId){
+  const cur = document.getElementById(spanId)?.textContent || ''
+  const ns = prompt('새 TOTP 시크릿 (Base32, 16자 이상):', cur === '—' ? '' : cur)
+  if(!ns) return
+  try{
+    const r = await fetch('/api/update-secret',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,totp_secret:ns})})
+    const j = await r.json()
+    if(j.ok){ alert('저장 완료 (길이:'+j.secret_length+')'); location.reload() }
+    else alert('오류: '+(j.error||'unknown'))
+  }catch(e){ alert('저장 실패: '+e.message) }
 }
 async function tdRefreshCode(idx, secret, btn){
   const el = document.getElementById('tdcode-'+idx)

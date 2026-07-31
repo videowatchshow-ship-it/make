@@ -224,6 +224,17 @@ jobs:
             let code = fs.readFileSync('rebrowser-login.js','utf8');
             if (!/function generateTOTP/.test(code)) { console.log('no generateTOTP found'); process.exit(0); }
             if (/\[^A-Z2-7\]/.test(code)) { console.log('already patched'); process.exit(0); }
+
+            // Ensure authenticator is available (server only has generateSync)
+            if (!/\bauthenticator\b/.test(code) && /\bgenerateSync\b/.test(code)) {
+              // Add authenticator import near the top
+              code = code.replace(
+                /const\s*\{\s*generateSync\s*\}\s*=\s*require\(['"]otplib['"]\)/,
+                "const { generateSync, authenticator } = require('otplib')"
+              );
+              console.log('added authenticator import');
+            }
+
             const newFn = [
               'function generateTOTP(secret) {',
               '    try {',
