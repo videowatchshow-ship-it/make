@@ -19,6 +19,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         http_response_code(400);
         echo json_encode(['ok' => false, 'err' => 'bad json']); exit;
     }
+    /* 낙관적 잠금: 오래된 탭이 최신 데이터를 덮어쓰는 것 차단 */
+    $base = $data['base_saved_at'] ?? null;
+    unset($data['base_saved_at']);
+    if (is_readable($file) && filesize($file) > 0) {
+        $cur = json_decode(file_get_contents($file), true);
+        $curSaved = is_array($cur) ? ($cur['saved_at'] ?? null) : null;
+        if ($curSaved !== null && $base !== $curSaved) {
+            http_response_code(409);
+            echo json_encode(['ok' => false, 'err' => 'stale',
+                'server_saved_at' => $curSaved], JSON_UNESCAPED_UNICODE); exit;
+        }
+    }
     $now = date('Y-m-d H:i:s');
     $data['saved_at'] = $now;
     $data['saved_by'] = $_SESSION['jsp_user'] ?? '';

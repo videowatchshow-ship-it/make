@@ -474,14 +474,19 @@ function setLastSaved(ts){
   const el = document.getElementById("lastSaved");
   if (el) el.textContent = "마지막 저장(백업): " + (ts ? ts + " (캄보디아)" : "—");
 }
+let baseSavedAt = null; // 서버에서 마지막으로 받은 saved_at (낙관적 잠금)
 async function saveData(btn){
   save();
   const old = btn ? btn.textContent : null;
   if (btn){ btn.textContent = "저장 중…"; btn.disabled = true; }
   try {
-    const res = await fetch('data.php', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({members, ledger})});
+    const res = await fetch('data.php', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({members, ledger, base_saved_at: baseSavedAt})});
     const j = await res.json();
-    if (j.ok){ setLastSaved(j.saved_at); alert("✅ 서버에 저장 + 백업 완료!\n저장 시각: " + j.saved_at + " (캄보디아)\n팀원들은 새로고침하면 보입니다."); }
+    if (j.ok){ baseSavedAt = j.saved_at; setLastSaved(j.saved_at); alert("✅ 서버에 저장 + 백업 완료!\n저장 시각: " + j.saved_at + " (캄보디아)\n팀원들은 새로고침하면 보입니다."); }
+    else if (res.status === 409){
+      alert("⚠️ 다른 곳에서 먼저 저장되어 이 탭의 데이터가 오래됐습니다.\n최신 데이터를 다시 불러옵니다. 방금 수정한 내용은 다시 입력해 주세요.");
+      await boot();
+    }
     else alert("저장 실패: " + (j.err||"알 수 없는 오류"));
   } catch(e){
     alert("⚠️ 서버 저장 실패 (인터넷/주소 확인). 로컬에는 임시저장됨.\n" + e.message);
@@ -516,6 +521,7 @@ async function boot(){
     if (d && (Array.isArray(d.members) || Array.isArray(d.ledger))){
       members = d.members || [];
       ledger  = d.ledger  || [];
+      baseSavedAt = d.saved_at || null;
       if (d.saved_at) setLastSaved(d.saved_at);
     }
   } catch(e){
