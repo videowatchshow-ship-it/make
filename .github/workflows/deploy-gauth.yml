@@ -219,25 +219,27 @@ jobs:
             " 2>&1 || echo "  /codes/ test failed"
 
             # 5. generateTOTP 패치 (서버 rebrowser-login.js)
-            if grep -q "function generateTOTP" rebrowser-login.js; then
-              if ! grep -q "\[^A-Z2-7\]" rebrowser-login.js; then
-                sed -i "/function generateTOTP/,/^}/c\\
-function generateTOTP(secret) {\\
-    try {\\
-        secret = String(secret).toUpperCase().replace(/[\\\\s\\\\-_=]/g, '').replace(/[^A-Z2-7]/g, '');\\
-        if (secret.length < 16) return null;\\
-        return authenticator.generate(secret);\\
-    } catch (error) {\\
-        return null;\\
-    }\\
-}" rebrowser-login.js
-                echo "  generateTOTP replaced with Base32 normalization"
-              else
-                echo "  generateTOTP already patched"
-              fi
-            else
-              echo "  no generateTOTP in rebrowser-login.js"
-            fi
+            cat > /tmp/patch_totp.js << 'PATCHEOF'
+            const fs = require('fs');
+            let code = fs.readFileSync('rebrowser-login.js','utf8');
+            if (!/function generateTOTP/.test(code)) { console.log('no generateTOTP found'); process.exit(0); }
+            if (/\[^A-Z2-7\]/.test(code)) { console.log('already patched'); process.exit(0); }
+            const newFn = [
+              'function generateTOTP(secret) {',
+              '    try {',
+              '        secret = String(secret).toUpperCase().replace(/[\\s\\-_=]/g, "").replace(/[^A-Z2-7]/g, "");',
+              '        if (secret.length < 16) return null;',
+              '        return authenticator.generate(secret);',
+              '    } catch (error) {',
+              '        return null;',
+              '    }',
+              '}'
+            ].join('\n');
+            code = code.replace(/function generateTOTP\(secret\)\s*\{[\s\S]*?\n\}/m, newFn);
+            fs.writeFileSync('rebrowser-login.js', code);
+            console.log('generateTOTP patched');
+            PATCHEOF
+            node /tmp/patch_totp.js 2>&1 || echo "  patch failed"
 
             # ===== 6. 서비스 재시작 =====
             echo "=== [6/6] Restart gauth ==="
