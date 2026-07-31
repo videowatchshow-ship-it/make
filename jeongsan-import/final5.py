@@ -21,6 +21,7 @@ def dep(m):
     except ValueError: return 0
 
 DELETE = {
+    ("2026-07-20","21:00"),  # 강시원 중복 — 여신 $3000 은 20:58 1건뿐 (절대 2건 아님)
     ("2026-07-22","01:04"),
     ("2026-07-25","14:20"),
     ("2026-07-25","14:21"),
@@ -63,7 +64,6 @@ def row(date, start, name, typ, depv, result, note, nick="", phone="", account="
             "phone": phone, "account": account, "type": typ, "deposit": depv,
             "result": result, "rolling": "", "note": note}
 RESTORE = [
-    row("2026-07-20","21:00","강시원","캐쉬","3000","Lose","여신 더블 2건째 (20:58과 별개 확정)"),
     row("2026-07-08","06:45","최동학","캐쉬","","Lose","신규 바인 [이미지 2장·금액미상] [tg:보물섬]",
         phone="01064743313", account="카카오뱅크 3333212353835"),
     row("2026-07-22","00:59","마키아벨리","테더","","Lose","바인 [이미지·금액미상] [tg:성천지]"),
