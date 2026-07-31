@@ -252,6 +252,35 @@ jobs:
             PATCHEOF
             node /tmp/patch_totp.js 2>&1 || echo "  patch failed"
 
+            # 6. 비표준 TOTP 시크릿 마이그레이션 (잘못 파싱된 데이터 정리)
+            echo "--- Migrating non-standard TOTP secrets ---"
+            node -e "
+              const fs = require('fs');
+              const dataFile = '/opt/gauth-full/accounts_normalized.json';
+              if (!fs.existsSync(dataFile)) { console.log('no data file'); process.exit(0); }
+              const data = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
+              const accounts = Array.isArray(data) ? data : (data.accounts || []);
+              const VALID = new Set([16, 26, 32, 52, 64]);
+              let fixed = 0;
+              for (const a of accounts) {
+                if (!a.totp_secret) continue;
+                const n = String(a.totp_secret).toUpperCase().replace(/[\s\-_=]/g, '').replace(/[^A-Z2-7]/g, '');
+                if (n.length > 0 && !VALID.has(n.length)) {
+                  console.log('  fix:', a.email, 'secret len', n.length, '->', 'cleared (was:', a.totp_secret.slice(0,20) + ')');
+                  if (!a.extra) a.extra = [];
+                  a.extra.push('old_totp:' + a.totp_secret);
+                  a.totp_secret = '';
+                  fixed++;
+                }
+              }
+              if (fixed > 0) {
+                fs.writeFileSync(dataFile, JSON.stringify(Array.isArray(data) ? accounts : { ...data, accounts }, null, 2));
+                console.log('Fixed', fixed, 'accounts with non-standard TOTP secrets');
+              } else {
+                console.log('No non-standard TOTP secrets found');
+              }
+            " 2>&1 || echo "  migration failed"
+
             # ===== 6. 서비스 재시작 =====
             echo "=== [6/6] Restart gauth ==="
             export DISPLAY=:99

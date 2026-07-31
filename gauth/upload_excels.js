@@ -39,7 +39,14 @@ function isTotpLike(s) {
   if (/^https?:\/\//i.test(s)) return false;
   if (/[\/\\:;!#$%^&*()=+\[\]{}|<>?]/.test(s)) return false;
   const n = normalizeTotp(s);
-  return n.length >= 16 && n.length <= 128;
+  // Google TOTP secrets: 16자(80bit) 또는 32자(160bit) 가 표준
+  // 비표준 길이는 비밀번호/기타 데이터가 오인된 것
+  const VALID_LENGTHS = [16, 26, 32, 52, 64];
+  if (!VALID_LENGTHS.includes(n.length)) return false;
+  // 원본에서 Base32 비율이 80% 미만이면 비밀번호일 가능성 높음
+  const raw = String(s).replace(/[\s\-_=]/g, '');
+  if (raw.length > 0 && n.length / raw.length < 0.8) return false;
+  return true;
 }
 
 function isUrlLike(s) {
