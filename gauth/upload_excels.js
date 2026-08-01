@@ -580,9 +580,7 @@ function mountRoutes(app) {
       }
 
       const allAccounts = Object.values(byEmail);
-      const tmpFile = dataFile + '.tmp';
-      fs.writeFileSync(tmpFile, JSON.stringify(allAccounts, null, 2));
-      fs.renameSync(tmpFile, dataFile);
+      fs.writeFileSync(dataFile, JSON.stringify(allAccounts, null, 2));
       res.json({ ok: true, total_master: allAccounts.length, total_parsed: totalParsed, added: totalAdded, updated: totalUpdated, files, conflicts_count: 0, conflicts: [] });
     } catch(e) {
       console.error('[upload-excels] error:', e);
