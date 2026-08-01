@@ -465,31 +465,40 @@ async function advancedGoogleLogin(account, options = {}) {
             return { success: false, result: LoginResult.FAIL_PHONE_VERIFICATION };
         }
 
-        // ===== 비밀번호 입력 =====
-        console.log(`${c.blue}[4]${c.reset} 비밀번호 입력 중...`);
-        const passwordSelector = await waitForAnySelector(page, SELECTORS.PASSWORD, 10000);
-        
-        if (!passwordSelector) {
-            throw new Error('비밀번호 입력 필드를 찾을 수 없습니다');
-        }
+        // ===== 2FA 페이지 먼저 감지 (Google이 비밀번호 건너뛸 때) =====
+        const earlyTwoFA = await waitForAnySelector(page, SELECTORS.TWO_FA, 2000);
+        const pageText = await page.evaluate(() => document.body ? document.body.innerText : '').catch(() => '');
+        const isVerifyPage = /verification code|authenticator|인증.*코드|Verify it.*you|본인 확인/i.test(pageText);
 
-        await delay(1000, 2000);
-        await page.click(passwordSelector);
-        await delay(200, 500);
-        await page.type(passwordSelector, account.password, { delay: 100 });
-        
-        console.log(`${c.green}✓${c.reset} 비밀번호 입력 완료`);
-        await delay(500, 1000);
-        
-        // 다음 버튼 클릭
-        const passwordNextSelector = await waitForAnySelector(page, SELECTORS.PASSWORD_NEXT, 5000);
-        if (passwordNextSelector) {
-            await page.click(passwordNextSelector);
+        if (earlyTwoFA || isVerifyPage) {
+            console.log(`${c.yellow}⚠️  비밀번호 단계 건너뜀 — 바로 2FA 페이지${c.reset}`);
         } else {
-            await page.keyboard.press('Enter');
+            // ===== 비밀번호 입력 =====
+            console.log(`${c.blue}[4]${c.reset} 비밀번호 입력 중...`);
+            const passwordSelector = await waitForAnySelector(page, SELECTORS.PASSWORD, 10000);
+
+            if (!passwordSelector) {
+                throw new Error('비밀번호 입력 필드를 찾을 수 없습니다');
+            }
+
+            await delay(1000, 2000);
+            await page.click(passwordSelector);
+            await delay(200, 500);
+            await page.type(passwordSelector, account.password, { delay: 100 });
+
+            console.log(`${c.green}✓${c.reset} 비밀번호 입력 완료`);
+            await delay(500, 1000);
+
+            // 다음 버튼 클릭
+            const passwordNextSelector = await waitForAnySelector(page, SELECTORS.PASSWORD_NEXT, 5000);
+            if (passwordNextSelector) {
+                await page.click(passwordNextSelector);
+            } else {
+                await page.keyboard.press('Enter');
+            }
+
+            await delay(2000, 3000);
         }
-        
-        await delay(2000, 3000);
 
         // ===== 패스키/기기승인 감지 =====
         const hasPasskey = await checkAnySelector(page, SELECTORS.PASSKEY_OR_DEVICE);
