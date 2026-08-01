@@ -116,5 +116,52 @@ module.exports = function(app) {
     res.json(checks);
   });
 
-  console.log('[auto_deploy] 4 routes registered: /api/deploy, /api/update-secret, /api/search-account, /api/deploy-status');
+  // 개별 로그인 (Puppeteer 기반)
+  const loginQueue = new Map();
+  app.post('/api/login-one', async (req, res) => {
+    const { email } = req.body || {};
+    if (!email) return res.status(400).json({ success: false, reason: 'email required' });
+
+    if (loginQueue.has(email)) return res.status(409).json({ success: false, reason: 'LOGIN_IN_PROGRESS' });
+
+    const dataFile = '/opt/gauth-full/accounts_normalized.json';
+    let account;
+    try {
+      const data = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
+      const accounts = Array.isArray(data) ? data : (data.accounts || []);
+      account = accounts.find(a => a.email === email);
+    } catch (e) {
+      return res.status(500).json({ success: false, reason: 'DATA_READ_ERROR', error: e.message });
+    }
+    if (!account) return res.status(404).json({ success: false, reason: 'ACCOUNT_NOT_FOUND' });
+    if (!account.password) return res.status(400).json({ success: false, reason: 'UNKNOWN_PASSWORD' });
+
+    loginQueue.set(email, Date.now());
+    let loginModule;
+    try {
+      loginModule = require(path.join(__dirname, 'advanced-google-login-v2.js'));
+    } catch (e) {
+      loginQueue.delete(email);
+      return res.status(500).json({ success: false, reason: 'LOGIN_MODULE_ERROR', error: e.message });
+    }
+
+    try {
+      const result = await loginModule.advancedGoogleLogin(
+        { email: account.email, password: account.password, twoFA: account.totp_secret || '' },
+        { headless: false, timeout: 90000 }
+      );
+      loginQueue.delete(email);
+      if (result && result.success) {
+        if (result.browser) try { await result.browser.close(); } catch (_) {}
+        return res.json({ success: true, result: result.result });
+      }
+      if (result && result.browser) try { await result.browser.close(); } catch (_) {}
+      return res.json({ success: false, reason: result ? result.result : 'UNKNOWN_ERROR' });
+    } catch (e) {
+      loginQueue.delete(email);
+      return res.status(500).json({ success: false, reason: 'LOGIN_EXCEPTION', error: e.message });
+    }
+  });
+
+  console.log('[auto_deploy] 5 routes registered: /api/deploy, /api/update-secret, /api/search-account, /api/deploy-status, /api/login-one');
 };
