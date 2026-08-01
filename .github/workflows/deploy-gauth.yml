@@ -10,6 +10,7 @@ on:
       - 'gauth/xlsx.core.min.js'
       - 'advanced-google-login-v2.js'
       - 'package.json'
+      - '.github/workflows/deploy-gauth.yml'
 
 jobs:
   deploy:
@@ -181,9 +182,12 @@ jobs:
               console.log('  auto_deploy + upload_excels registered');
             " 2>&1 || echo "  module registration failed"
 
-            # 업로드 디렉토리 생성 (모든 유저 쓰기 가능 — 서비스 유저와 배포 유저가 다를 수 있음)
+            # 업로드 디렉토리 + 데이터 파일 권한 (서비스 유저와 배포 유저가 다름)
             mkdir -p /opt/gauth-full/uploads
             chmod 1777 /opt/gauth-full/uploads
+            touch /opt/gauth-full/accounts_normalized.json
+            chmod 666 /opt/gauth-full/accounts_normalized.json
+            chmod 777 /opt/gauth-full
 
             # ===== 5.5 TOTP 패치 + 진단 =====
             echo "=== [5.5/6] TOTP patch & diagnostics ==="
