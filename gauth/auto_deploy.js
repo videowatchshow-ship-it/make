@@ -8,7 +8,7 @@ function authMiddleware(req, res, next) {
     || (req.query && req.query.token) || '';
   const expected = process.env.GAUTH_API_TOKEN || '';
   if (!expected) return next();
-  if (!token || !crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected))) {
+  if (!token || token.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected))) {
     return res.status(401).json({ ok: false, error: 'unauthorized' });
   }
   next();
