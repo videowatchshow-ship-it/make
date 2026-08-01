@@ -527,7 +527,7 @@ function mountRoutes(app) {
 
   const upload = multer({ dest: '/tmp/gauth-uploads/', limits: { fileSize: 200 * 1024 * 1024 } });
 
-  app.post('/api/upload-excel', upload.array('files', 50), (req, res) => {
+  app.post('/api/upload-excels', upload.array('files', 50), (req, res) => {
     try {
       if (!req.files || !req.files.length) return res.status(400).json({ ok: false, error: 'no files' });
       const dataFile = '/opt/gauth-full/accounts_normalized.json';
