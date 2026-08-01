@@ -241,8 +241,9 @@ function accessBadge(a){
                 if(k[0]==='!') return;
                 var c = ws[k];
                 if(c && c.l && c.l.Target && /^mailto:/i.test(String(c.l.Target))){
-                  var t = String(c.l.Target).replace(/^mailto:/i,'');
-                  if(t.includes('@') && !String(c.v||'').includes('@')){
+                  var t = String(c.l.Target).replace(/^mailto:/i,'').replace(/\?.*$/,'');
+                  var cv = String(c.v||'').trim();
+                  if(t.includes('@') && (!cv || cv === t.split('@')[0] || cv.toLowerCase() === t.toLowerCase())){
                     c.v = t; c.w = t; changed = true;
                   }
                 }

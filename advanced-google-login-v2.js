@@ -292,7 +292,11 @@ function saveFailedLogin(account, result, error, screenshot = null) {
         logs.push(logEntry);
     }
 
-    try { fs.writeFileSync(logFile, JSON.stringify(logs, null, 2)); } catch (_) {}
+    try {
+        const tmp = logFile + '.tmp.' + process.pid;
+        fs.writeFileSync(tmp, JSON.stringify(logs, null, 2));
+        fs.renameSync(tmp, logFile);
+    } catch (_) {}
     console.log(`${c.yellow}📝 실패 로그 저장: ${logFile}${c.reset}`);
 }
 
@@ -318,7 +322,11 @@ function saveSuccessLogin(account, result) {
     } catch (_) { logs = []; }
     logs.push(logEntry);
 
-    try { fs.writeFileSync(successFile, JSON.stringify(logs, null, 2)); } catch (_) {}
+    try {
+        const tmp = successFile + '.tmp.' + process.pid;
+        fs.writeFileSync(tmp, JSON.stringify(logs, null, 2));
+        fs.renameSync(tmp, successFile);
+    } catch (_) {}
 }
 
 /**

@@ -46,7 +46,7 @@ function isTotpLike(s) {
   if (s.includes('@')) return false;
   if (/^[0-9]+$/.test(s)) return false;
   if (/^https?:\/\//i.test(s)) return false;
-  if (/[\/\\:;!#$%^&*()=+\[\]{}|<>?]/.test(s)) return false;
+  if (/[\/\\:;!#$%^&*()+=\[\]{}|<>?]/.test(s) && !/^[A-Z2-7]+=*$/i.test(s)) return false;
   const n = normalizeTotp(s);
   if (n.length < 16) return false;
   if (n.length > 128) return false;

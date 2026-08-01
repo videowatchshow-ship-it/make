@@ -89,7 +89,7 @@ make/
 
 | 메서드 | 경로 | 인증 | 핸들러 | 공식 문서 참조 |
 |--------|------|------|--------|---------------|
-| POST | `/api/upload-excels` | 없음 | multer `.array('files', 50)` → `parseExcelFile()` → atomic write | multer: https://github.com/expressjs/multer#arrayfieldname-maxcount |
+| POST | `/api/upload-excels` | `Authorization: Bearer <token>` (`crypto.timingSafeEqual`) | multer `.array('files', 50)` → `parseExcelFile()` → atomic write | multer: https://github.com/expressjs/multer#arrayfieldname-maxcount, crypto: https://github.com/nodejs/node/blob/main/doc/api/crypto.md#cryptotimingsafeequala-b |
 
 사용하는 SheetJS API:
 - `XLSX.readFile(path)` — https://github.com/SheetJS/sheetjs (README "Parsing Workbooks")
@@ -138,6 +138,16 @@ if (tokenBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(tokenBuf, 
 | GET | `/api/vm/list` | GCP VM 목록 | index.html:1054 |
 | POST | `/api/vm/start` | VM 시작 | index.html:1038 |
 | POST | `/api/vm/stop` | VM 정지 | index.html:1040 |
+
+---
+
+## 프론트엔드 인증
+
+| 항목 | 값 | 공식 문서 |
+|------|-----|-----------|
+| 저장소 | `sessionStorage` 키 `gauth_token` | https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage |
+| UI | `<input id="apiToken">` — 🔑 API 토큰 입력 필드 | — |
+| 전송 | `Authorization: Bearer <token>` 헤더 (`authHeaders()`) 또는 `?token=` 쿼리 (`authQuery()`) | https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch |
 
 ---
 
