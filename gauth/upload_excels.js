@@ -525,9 +525,19 @@ function mountRoutes(app) {
   const multer = (() => { try { return require('multer'); } catch(e) { return null; } })();
   if (!multer) { console.log('upload_excels: multer not installed, upload routes skipped'); return; }
 
-  const upload = multer({ dest: '/tmp/gauth-uploads/', limits: { fileSize: 200 * 1024 * 1024 } });
+  const uploadDir = '/tmp/gauth-uploads/';
+  try { fs.mkdirSync(uploadDir, { recursive: true }); } catch(e) {}
+  const upload = multer({ dest: uploadDir, limits: { fileSize: 200 * 1024 * 1024 } });
 
-  app.post('/api/upload-excels', upload.array('files', 50), (req, res) => {
+  app.post('/api/upload-excels', (req, res, next) => {
+    upload.array('files', 50)(req, res, (err) => {
+      if (err) {
+        console.error('[upload-excels] multer error:', err);
+        return res.status(500).json({ ok: false, error: 'upload failed: ' + err.message });
+      }
+      next();
+    });
+  }, (req, res) => {
     try {
       if (!req.files || !req.files.length) return res.status(400).json({ ok: false, error: 'no files' });
       const dataFile = '/opt/gauth-full/accounts_normalized.json';

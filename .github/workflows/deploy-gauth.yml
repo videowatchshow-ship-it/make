@@ -385,7 +385,10 @@ jobs:
 
             # Show service status and recent logs for debugging
             sudo systemctl status gauth --no-pager -l 2>/dev/null | tail -20 || true
-            sudo journalctl -u gauth --no-pager -n 30 2>/dev/null || true
+            echo "=== Upload error logs ==="
+            sudo journalctl -u gauth --no-pager -n 100 2>/dev/null | grep -i -A3 "upload-excels\|error\|Error\|ENOSPC\|ENOMEM\|Cannot\|fatal" || echo "  no errors found"
+            echo "=== Recent gauth logs ==="
+            sudo journalctl -u gauth --no-pager -n 50 2>/dev/null || true
             echo "=== Deploy complete ==="
 
       - name: Cloudflare security level
