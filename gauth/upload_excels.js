@@ -546,9 +546,9 @@ function mountRoutes(app) {
             if (!a.email) continue;
             if (byEmail[a.email]) {
               const e = byEmail[a.email];
-              if (a.password && !e.password) e.password = a.password;
+              if (a.password) e.password = a.password;
               if (a.totp_secret && isTotpLike(a.totp_secret)) e.totp_secret = normalizeTotp(a.totp_secret);
-              if (a.recovery_email && !e.recovery_email) e.recovery_email = a.recovery_email;
+              if (a.recovery_email) e.recovery_email = a.recovery_email;
               updated++;
             } else {
               byEmail[a.email] = a;
