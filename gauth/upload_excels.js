@@ -525,7 +525,7 @@ function mountRoutes(app) {
   const multer = (() => { try { return require('multer'); } catch(e) { return null; } })();
   if (!multer) { console.log('upload_excels: multer not installed, upload routes skipped'); return; }
 
-  const uploadDir = '/tmp/gauth-uploads/';
+  const uploadDir = path.join(__dirname, 'uploads') + '/';
   try { fs.mkdirSync(uploadDir, { recursive: true }); } catch(e) {}
   const upload = multer({ dest: uploadDir, limits: { fileSize: 200 * 1024 * 1024 } });
 

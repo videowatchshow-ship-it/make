@@ -180,8 +180,10 @@ jobs:
               console.log('  auto_deploy + upload_excels registered');
             " 2>&1 || echo "  module registration failed"
 
-            # 업로드 디렉토리 생성
-            mkdir -p /tmp/gauth-uploads /opt/gauth-full/uploads
+            # 업로드 디렉토리 생성 (gauth 서비스 유저 소유)
+            mkdir -p /opt/gauth-full/uploads
+            chown $(whoami) /opt/gauth-full/uploads
+            chmod 755 /opt/gauth-full/uploads
 
             # ===== 5.5 TOTP 패치 + 진단 =====
             echo "=== [5.5/6] TOTP patch & diagnostics ==="
