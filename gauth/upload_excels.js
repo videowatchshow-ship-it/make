@@ -530,6 +530,8 @@ function mountRoutes(app) {
   const upload = multer({ dest: uploadDir, limits: { fileSize: 200 * 1024 * 1024 } });
 
   app.post('/api/upload-excels', (req, res, next) => {
+    req.setTimeout(600000);
+    res.setTimeout(600000);
     upload.array('files', 50)(req, res, (err) => {
       if (err) {
         console.error('[upload-excels] multer error:', err);
@@ -574,14 +576,17 @@ function mountRoutes(app) {
           files.push({ name: f.originalname, accounts: 0, error: e.message });
         }
         try { fs.unlinkSync(f.path); } catch(e) {}
+        if (global.gc) global.gc();
       }
 
       const allAccounts = Object.values(byEmail);
-      fs.writeFileSync(dataFile, JSON.stringify(allAccounts, null, 2));
+      const tmpFile = dataFile + '.tmp';
+      fs.writeFileSync(tmpFile, JSON.stringify(allAccounts, null, 2));
+      fs.renameSync(tmpFile, dataFile);
       res.json({ ok: true, total_master: allAccounts.length, total_parsed: totalParsed, added: totalAdded, updated: totalUpdated, files, conflicts_count: 0, conflicts: [] });
     } catch(e) {
       console.error('[upload-excels] error:', e);
-      res.status(500).json({ ok: false, error: e.message });
+      if (!res.headersSent) res.status(500).json({ ok: false, error: e.message });
     }
   });
 }

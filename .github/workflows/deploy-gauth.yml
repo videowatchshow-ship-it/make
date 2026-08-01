@@ -25,6 +25,7 @@ jobs:
           HTTP_CODE=$(curl -s -o /tmp/resp.txt -w "%{http_code}" \
             -X POST https://gauth.cent-solution.online/api/deploy \
             -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.GAUTH_API_TOKEN }}" \
             -d "{\"branch\":\"${BRANCH}\"}" \
             --connect-timeout 15 --max-time 180)
           echo "HTTP $HTTP_CODE"
@@ -315,6 +316,34 @@ jobs:
               console.log('Had old_totp cleared:', hasOldTotp);
               if (badExamples.length) { console.log('Bad examples:', JSON.stringify(badExamples)); }
             " 2>&1 || echo "  diagnostics failed"
+
+            # ===== 5.6 Node.js 메모리 제한 증가 (38+ 엑셀 파일 OOM 방지) =====
+            echo "=== [5.6/6] Node memory config ==="
+            if [ -f /etc/systemd/system/gauth.service ]; then
+              if ! grep -q "max-old-space-size" /etc/systemd/system/gauth.service 2>/dev/null; then
+                sudo sed -i 's|ExecStart=.*node |ExecStart=/usr/bin/env NODE_OPTIONS="--max-old-space-size=4096" node |' /etc/systemd/system/gauth.service 2>/dev/null || true
+                # fallback: add Environment line
+                if ! grep -q "max-old-space-size" /etc/systemd/system/gauth.service 2>/dev/null; then
+                  sudo sed -i '/\[Service\]/a Environment=NODE_OPTIONS=--max-old-space-size=4096' /etc/systemd/system/gauth.service
+                fi
+                sudo systemctl daemon-reload
+                echo "Node max-old-space-size=4096 set"
+              else
+                echo "Node memory config already set"
+              fi
+            fi
+
+            # GAUTH_API_TOKEN 환경변수 설정
+            if [ -f /etc/systemd/system/gauth.service ]; then
+              if ! grep -q "GAUTH_API_TOKEN" /etc/systemd/system/gauth.service 2>/dev/null; then
+                TOKEN=$(openssl rand -hex 32)
+                sudo sed -i "/\[Service\]/a Environment=GAUTH_API_TOKEN=${TOKEN}" /etc/systemd/system/gauth.service
+                sudo systemctl daemon-reload
+                echo "GAUTH_API_TOKEN generated and set"
+              else
+                echo "GAUTH_API_TOKEN already set"
+              fi
+            fi
 
             # ===== 6. 서비스 재시작 =====
             echo "=== [6/6] Restart gauth ==="

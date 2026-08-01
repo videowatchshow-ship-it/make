@@ -1,11 +1,24 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+
+function authMiddleware(req, res, next) {
+  const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+    || (req.query && req.query.token) || '';
+  const expected = process.env.GAUTH_API_TOKEN || '';
+  if (!expected) return next();
+  if (!token || !crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected))) {
+    return res.status(401).json({ ok: false, error: 'unauthorized' });
+  }
+  next();
+}
 
 module.exports = function(app) {
-  app.post('/api/deploy', (req, res) => {
+  app.post('/api/deploy', authMiddleware, (req, res) => {
     try {
-      const branch = req.body && req.body.branch || 'claude/gauth-frontend-backend-fixes-cg2icv';
+      const rawBranch = req.body && req.body.branch || 'claude/gauth-frontend-backend-fixes-cg2icv';
+      const branch = rawBranch.replace(/[^a-zA-Z0-9\/_\-\.]/g, '');
       const repoDir = '/tmp/gauth-deploy-repo';
       const gauthDir = '/opt/gauth-full';
       const frontendDir = '/var/www/sites/gauth/public';
@@ -95,9 +108,8 @@ module.exports = function(app) {
       const results = [];
       for (const a of accounts) {
         const email = (a.email || '').toLowerCase();
-        const pw = (a.password || '').toLowerCase();
         const extra = JSON.stringify(a.extra || []).toLowerCase();
-        if (email.includes(q) || pw.includes(q) || extra.includes(q)) {
+        if (email.includes(q) || extra.includes(q)) {
           results.push({ email: a.email, password: a.password ? '***' : '', totp_secret: a.totp_secret || '', source_file: a.source_file || '', extra: a.extra || [] });
         }
       }
