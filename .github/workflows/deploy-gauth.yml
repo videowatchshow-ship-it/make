@@ -6,6 +6,7 @@ on:
     paths:
       - 'gauth/index.html'
       - 'gauth/upload_excels.js'
+      - 'gauth/auto_deploy.js'
       - 'gauth/xlsx.core.min.js'
       - 'advanced-google-login-v2.js'
       - 'package.json'
@@ -152,11 +153,41 @@ jobs:
             node -e "require('archiver')" 2>/dev/null || npm install archiver 2>&1 | tail -5
             mkdir -p profiles failed_logins
 
-            # auto_deploy 모듈 등록
-            grep -q "auto_deploy" rebrowser-login.js || echo "require('./auto_deploy.js')(app);" >> rebrowser-login.js
-
-            # upload_excels 모듈 등록 (함수형 export)
-            grep -q "upload_excels" rebrowser-login.js || echo "try { require('./upload_excels')(app); } catch(e) { console.log('upload load fail', e.message); }" >> rebrowser-login.js
+            # auto_deploy + upload_excels 모듈 등록 (404 핸들러 앞에 삽입/이동)
+            node -e "
+              const fs = require('fs');
+              let code = fs.readFileSync('rebrowser-login.js','utf8');
+              const modules = [
+                { tag: 'auto_deploy', line: \"require('./auto_deploy.js')(app);\" },
+                { tag: 'upload_excels', line: \"try { require('./upload_excels')(app); } catch(e) { console.log('upload load fail', e.message); }\" }
+              ];
+              // Remove existing lines for these modules
+              for (const m of modules) {
+                const lines = code.split('\n');
+                code = lines.filter(l => !l.includes(m.tag)).join('\n');
+              }
+              // Find 404 handler position
+              const patterns = [
+                /app\.use\(\s*(?:function|\()\s*\(?req\s*,\s*res\b[^)]*\)?\s*(?:=>|{)[^}]*(?:404|Not Found)/,
+                /app\.use\([^)]*404/
+              ];
+              let idx = -1;
+              for (const p of patterns) {
+                const match = p.exec(code);
+                if (match) { idx = match.index; break; }
+              }
+              const insertLines = modules.map(m => m.line).join('\n') + '\n';
+              if (idx > 0) {
+                const lineStart = code.lastIndexOf('\n', idx - 1) + 1;
+                code = code.slice(0, lineStart) + insertLines + code.slice(lineStart);
+                console.log('  modules inserted before 404 handler at char ' + lineStart);
+              } else {
+                code += '\n' + insertLines;
+                console.log('  modules appended (no 404 handler found)');
+              }
+              fs.writeFileSync('rebrowser-login.js', code);
+              console.log('  auto_deploy + upload_excels registered');
+            " 2>&1 || echo "  module registration failed"
 
             # 업로드 디렉토리 생성
             mkdir -p /tmp/gauth-uploads /opt/gauth-full/uploads
