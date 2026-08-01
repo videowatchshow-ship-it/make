@@ -1,4 +1,4 @@
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -8,10 +8,22 @@ function authMiddleware(req, res, next) {
     || (req.query && req.query.token) || '';
   const expected = process.env.GAUTH_API_TOKEN || '';
   if (!expected) return next();
-  if (!token || token.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected))) {
+  const tokenBuf = Buffer.from(token);
+  const expectedBuf = Buffer.from(expected);
+  if (!token || tokenBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(tokenBuf, expectedBuf)) {
     return res.status(401).json({ ok: false, error: 'unauthorized' });
   }
   next();
+}
+
+function safeReadJSON(filePath) {
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const data = JSON.parse(raw);
+    return Array.isArray(data) ? data : (data.accounts || []);
+  } catch (e) {
+    return [];
+  }
 }
 
 module.exports = function(app) {
@@ -24,11 +36,11 @@ module.exports = function(app) {
       const frontendDir = '/var/www/sites/gauth/public';
 
       if (fs.existsSync(repoDir)) {
-        execSync('rm -rf ' + repoDir);
+        execFileSync('rm', ['-rf', repoDir]);
       }
 
-      execSync(
-        `git clone --depth 1 --branch "${branch}" https://github.com/videowatchshow-ship-it/make ${repoDir}`,
+      execFileSync('git', ['clone', '--depth', '1', '--branch', branch,
+        'https://github.com/videowatchshow-ship-it/make', repoDir],
         { timeout: 60000 }
       );
 
@@ -50,9 +62,8 @@ module.exports = function(app) {
         }
       }
 
-      execSync('rm -rf ' + repoDir);
+      execFileSync('rm', ['-rf', repoDir]);
 
-      // npm install if package.json was updated
       if (deployed.includes('package.json')) {
         try {
           execSync('cd /opt/gauth-full && npm install --production', { timeout: 120000 });
@@ -62,9 +73,8 @@ module.exports = function(app) {
         }
       }
 
-      // Restart gauth service
       try {
-        execSync('sudo systemctl restart gauth', { timeout: 30000 });
+        execFileSync('sudo', ['systemctl', 'restart', 'gauth'], { timeout: 30000 });
         deployed.push('service-restarted');
       } catch (e) {
         deployed.push('restart-failed:' + e.message.slice(0, 100));
@@ -76,7 +86,7 @@ module.exports = function(app) {
     }
   });
 
-  app.post('/api/update-secret', (req, res) => {
+  app.post('/api/update-secret', authMiddleware, (req, res) => {
     try {
       const { email, totp_secret } = req.body || {};
       if (!email || !totp_secret) return res.status(400).json({ ok: false, error: 'email and totp_secret required' });
@@ -86,25 +96,23 @@ module.exports = function(app) {
         console.log(`Warning: secret length ${normalized.length} is non-standard (expected 16 or 32)`);
       }
       const dataFile = '/opt/gauth-full/accounts_normalized.json';
-      const data = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
-      const accounts = Array.isArray(data) ? data : (data.accounts || []);
+      const accounts = safeReadJSON(dataFile);
       const account = accounts.find(a => a.email === email);
       if (!account) return res.status(404).json({ ok: false, error: 'account not found' });
       account.totp_secret = normalized;
-      fs.writeFileSync(dataFile, JSON.stringify(Array.isArray(data) ? accounts : { ...data, accounts }, null, 2));
+      fs.writeFileSync(dataFile, JSON.stringify(accounts, null, 2));
       res.json({ ok: true, email, secret_length: normalized.length });
     } catch (e) {
       res.status(500).json({ ok: false, error: e.message });
     }
   });
 
-  app.get('/api/search-account', (req, res) => {
+  app.get('/api/search-account', authMiddleware, (req, res) => {
     try {
       const q = (req.query.q || '').trim().toLowerCase();
       if (!q || q.length < 3) return res.status(400).json({ ok: false, error: 'query too short (min 3 chars)' });
       const dataFile = '/opt/gauth-full/accounts_normalized.json';
-      const data = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
-      const accounts = Array.isArray(data) ? data : (data.accounts || []);
+      const accounts = safeReadJSON(dataFile);
       const results = [];
       for (const a of accounts) {
         const email = (a.email || '').toLowerCase();
@@ -119,7 +127,7 @@ module.exports = function(app) {
     }
   });
 
-  app.get('/api/deploy-status', (req, res) => {
+  app.get('/api/deploy-status', authMiddleware, (req, res) => {
     const checks = {};
     try { checks.chrome = execSync('which google-chrome-stable 2>/dev/null || which chromium 2>/dev/null', { encoding: 'utf8' }).trim(); } catch (e) { checks.chrome = 'not-found'; }
     try { checks.xvfb = execSync('pgrep -f "Xvfb :99" >/dev/null 2>&1 && echo running || echo stopped', { encoding: 'utf8' }).trim(); } catch (e) { checks.xvfb = 'unknown'; }
@@ -128,19 +136,34 @@ module.exports = function(app) {
     res.json(checks);
   });
 
-  // 개별 로그인 (Puppeteer 기반)
   const loginQueue = new Map();
-  app.post('/api/login-one', async (req, res) => {
+  const LOGIN_TIMEOUT = 120000;
+
+  setInterval(() => {
+    const now = Date.now();
+    for (const [email, startTime] of loginQueue) {
+      if (now - startTime > LOGIN_TIMEOUT) {
+        loginQueue.delete(email);
+      }
+    }
+  }, 30000);
+
+  app.post('/api/login-one', authMiddleware, async (req, res) => {
     const { email } = req.body || {};
     if (!email) return res.status(400).json({ success: false, reason: 'email required' });
 
-    if (loginQueue.has(email)) return res.status(409).json({ success: false, reason: 'LOGIN_IN_PROGRESS' });
+    if (loginQueue.has(email)) {
+      const elapsed = Date.now() - loginQueue.get(email);
+      if (elapsed < LOGIN_TIMEOUT) {
+        return res.status(409).json({ success: false, reason: 'LOGIN_IN_PROGRESS' });
+      }
+      loginQueue.delete(email);
+    }
 
     const dataFile = '/opt/gauth-full/accounts_normalized.json';
     let account;
     try {
-      const data = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
-      const accounts = Array.isArray(data) ? data : (data.accounts || []);
+      const accounts = safeReadJSON(dataFile);
       account = accounts.find(a => a.email === email);
     } catch (e) {
       return res.status(500).json({ success: false, reason: 'DATA_READ_ERROR', error: e.message });

@@ -526,7 +526,7 @@ function mountRoutes(app) {
   if (!multer) { console.log('upload_excels: multer not installed, upload routes skipped'); return; }
 
   const uploadDir = path.join(__dirname, 'uploads') + '/';
-  try { fs.mkdirSync(uploadDir, { recursive: true }); } catch(e) {}
+  try { fs.mkdirSync(uploadDir, { recursive: true }); } catch(e) { console.error('[upload_excels] mkdirSync failed:', e.message); }
   const upload = multer({ dest: uploadDir, limits: { fileSize: 200 * 1024 * 1024 } });
 
   app.post('/api/upload-excels', (req, res, next) => {
@@ -575,7 +575,7 @@ function mountRoutes(app) {
         } catch(e) {
           files.push({ name: f.originalname, accounts: 0, error: e.message });
         }
-        try { fs.unlinkSync(f.path); } catch(e) {}
+        try { fs.unlinkSync(f.path); } catch(e) { console.warn('[upload_excels] temp file cleanup failed:', f.path, e.message); }
         if (global.gc) global.gc();
       }
 

@@ -132,12 +132,13 @@ const SELECTORS = {
 
 // 실패 로그 저장 경로
 const FAILED_LOGS_DIR = path.join(__dirname, 'failed_logins');
-const TODAY = new Date().toISOString().split('T')[0];
-const TODAY_LOG_FILE = path.join(FAILED_LOGS_DIR, `failed_${TODAY}.json`);
+try { fs.mkdirSync(FAILED_LOGS_DIR, { recursive: true }); } catch (_) {}
 
-// 실패 로그 디렉토리 생성
-if (!fs.existsSync(FAILED_LOGS_DIR)) {
-    fs.mkdirSync(FAILED_LOGS_DIR, { recursive: true });
+function getToday() { return new Date().toISOString().split('T')[0]; }
+function getTodayLogFile() { return path.join(FAILED_LOGS_DIR, `failed_${getToday()}.json`); }
+
+function sanitizeEmail(email) {
+  return String(email || '').replace(/[^a-zA-Z0-9@._-]/g, '_');
 }
 
 /**
@@ -273,10 +274,14 @@ function saveFailedLogin(account, result, error, screenshot = null) {
         attemptNumber: 1
     };
 
+    const logFile = getTodayLogFile();
     let logs = [];
-    if (fs.existsSync(TODAY_LOG_FILE)) {
-        logs = JSON.parse(fs.readFileSync(TODAY_LOG_FILE, 'utf-8'));
-    }
+    try {
+        if (fs.existsSync(logFile)) {
+            logs = JSON.parse(fs.readFileSync(logFile, 'utf-8'));
+            if (!Array.isArray(logs)) logs = [];
+        }
+    } catch (_) { logs = []; }
 
     const existing = logs.find(l => l.email === account.email);
     if (existing) {
@@ -287,16 +292,16 @@ function saveFailedLogin(account, result, error, screenshot = null) {
         logs.push(logEntry);
     }
 
-    fs.writeFileSync(TODAY_LOG_FILE, JSON.stringify(logs, null, 2));
-    console.log(`${c.yellow}📝 실패 로그 저장: ${TODAY_LOG_FILE}${c.reset}`);
+    try { fs.writeFileSync(logFile, JSON.stringify(logs, null, 2)); } catch (_) {}
+    console.log(`${c.yellow}📝 실패 로그 저장: ${logFile}${c.reset}`);
 }
 
 /**
  * 성공 로그 저장
  */
 function saveSuccessLogin(account, result) {
-    const SUCCESS_LOG_FILE = path.join(FAILED_LOGS_DIR, `success_${TODAY}.json`);
-    
+    const successFile = path.join(FAILED_LOGS_DIR, `success_${getToday()}.json`);
+
     const logEntry = {
         timestamp: new Date().toISOString(),
         email: account.email,
@@ -305,12 +310,15 @@ function saveSuccessLogin(account, result) {
     };
 
     let logs = [];
-    if (fs.existsSync(SUCCESS_LOG_FILE)) {
-        logs = JSON.parse(fs.readFileSync(SUCCESS_LOG_FILE, 'utf-8'));
-    }
+    try {
+        if (fs.existsSync(successFile)) {
+            logs = JSON.parse(fs.readFileSync(successFile, 'utf-8'));
+            if (!Array.isArray(logs)) logs = [];
+        }
+    } catch (_) { logs = []; }
     logs.push(logEntry);
 
-    fs.writeFileSync(SUCCESS_LOG_FILE, JSON.stringify(logs, null, 2));
+    try { fs.writeFileSync(successFile, JSON.stringify(logs, null, 2)); } catch (_) {}
 }
 
 /**
@@ -459,8 +467,8 @@ async function advancedGoogleLogin(account, options = {}) {
         // 전화번호 인증 감지
         if (state.state === 'PHONE_VERIFICATION') {
             console.log(`${c.red}✗ 전화번호 인증 필요 - 로그인 불가${c.reset}\n`);
-            await page.screenshot({ path: path.join(FAILED_LOGS_DIR, `${account.email}_phone.png`) });
-            saveFailedLogin(account, LoginResult.FAIL_PHONE_VERIFICATION, '전화번호 인증 필요', `${account.email}_phone.png`);
+            await page.screenshot({ path: path.join(FAILED_LOGS_DIR, `${sanitizeEmail(account.email)}_phone.png`) });
+            saveFailedLogin(account, LoginResult.FAIL_PHONE_VERIFICATION, '전화번호 인증 필요', `${sanitizeEmail(account.email)}_phone.png`);
             await browser.close();
             return { success: false, result: LoginResult.FAIL_PHONE_VERIFICATION };
         }
@@ -504,7 +512,7 @@ async function advancedGoogleLogin(account, options = {}) {
         const hasPasskey = await checkAnySelector(page, SELECTORS.PASSKEY_OR_DEVICE);
         if (hasPasskey) {
             console.log(`${c.red}✗ 패스키/기기승인 필요 — 자동화 불가${c.reset}\n`);
-            await page.screenshot({ path: path.join(FAILED_LOGS_DIR, `${account.email}_passkey.png`) }).catch(() => {});
+            await page.screenshot({ path: path.join(FAILED_LOGS_DIR, `${sanitizeEmail(account.email)}_passkey.png`) }).catch(() => {});
             saveFailedLogin(account, 'PASSKEY_REQUIRED', '패스키 또는 기기승인 필요');
             await browser.close();
             return { success: false, result: 'PASSKEY_REQUIRED' };
@@ -592,8 +600,8 @@ async function advancedGoogleLogin(account, options = {}) {
             };
         } else {
             console.log(`${c.red}✗ 로그인 실패 (알 수 없는 상태)${c.reset}\n`);
-            await page.screenshot({ path: path.join(FAILED_LOGS_DIR, `${account.email}_unknown.png`) });
-            saveFailedLogin(account, LoginResult.FAIL_UNKNOWN, `URL: ${currentUrl}`, `${account.email}_unknown.png`);
+            await page.screenshot({ path: path.join(FAILED_LOGS_DIR, `${sanitizeEmail(account.email)}_unknown.png`) });
+            saveFailedLogin(account, LoginResult.FAIL_UNKNOWN, `URL: ${currentUrl}`, `${sanitizeEmail(account.email)}_unknown.png`);
             await browser.close();
             return { success: false, result: LoginResult.FAIL_UNKNOWN };
         }
@@ -602,10 +610,10 @@ async function advancedGoogleLogin(account, options = {}) {
         console.error(`${c.red}✗ 오류 발생: ${error.message}${c.reset}\n`);
         
         if (page) {
-            await page.screenshot({ path: path.join(FAILED_LOGS_DIR, `${account.email}_error.png`) }).catch(() => {});
+            await page.screenshot({ path: path.join(FAILED_LOGS_DIR, `${sanitizeEmail(account.email)}_error.png`) }).catch(() => {});
         }
         
-        saveFailedLogin(account, LoginResult.FAIL_TIMEOUT, error.message, `${account.email}_error.png`);
+        saveFailedLogin(account, LoginResult.FAIL_TIMEOUT, error.message, `${sanitizeEmail(account.email)}_error.png`);
         
         if (browser) await browser.close();
         
@@ -635,8 +643,7 @@ async function loginMultipleWithTracking(accounts, options = {}) {
 
         if (result.success) {
             results.success.push({ email: account.email, result: result.result });
-            // 성공한 브라우저는 닫기
-            if (result.browser) await result.browser.close();
+            if (result.browser) try { await result.browser.close(); } catch (_) {}
         } else {
             results.failed.push({ email: account.email, result: result.result, error: result.error });
         }
@@ -679,7 +686,7 @@ async function loginMultipleWithTracking(accounts, options = {}) {
         console.log();
     }
 
-    console.log(`${c.yellow}📝 실패 로그: ${TODAY_LOG_FILE}${c.reset}\n`);
+    console.log(`${c.yellow}📝 실패 로그: ${getTodayLogFile()}${c.reset}\n`);
 
     return results;
 }
@@ -693,7 +700,9 @@ if (require.main === module) {
         process.exit(1);
     }
 
-    const allCredentials = JSON.parse(fs.readFileSync(credFile, 'utf-8'));
+    let allCredentials;
+    try { allCredentials = JSON.parse(fs.readFileSync(credFile, 'utf-8')); }
+    catch (e) { console.error(`${c.red}❌ JSON 파싱 실패: ${e.message}${c.reset}`); process.exit(1); }
     const testAccounts = allCredentials.slice(0, 3);
 
     loginMultipleWithTracking(testAccounts, {
