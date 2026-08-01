@@ -368,6 +368,20 @@ jobs:
               print('search 09073774615a:', json.dumps(d, indent=2, ensure_ascii=False))
             except: print('search-account parse fail')
             " || echo "  search-account endpoint unreachable"
+            # 비밀번호 데이터 무결성 확인
+            node -e "
+            const d=JSON.parse(require('fs').readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+            const accs=Array.isArray(d)?d:(d.accounts||[]);
+            const a=accs.find(x=>x.email==='09073774615a@gmail.com');
+            if(!a){console.log('09073774615a: NOT FOUND');process.exit();}
+            const p=a.password||'';
+            console.log('09073774615a pw length:',p.length);
+            console.log('09073774615a pw first3:',p.slice(0,3));
+            console.log('09073774615a pw last3:',p.slice(-3));
+            console.log('09073774615a totp:',a.totp_secret||'EMPTY');
+            console.log('09073774615a source:',a.source_file||'?');
+            console.log('09073774615a extra:',JSON.stringify(a.extra||[]));
+            " 2>&1 || echo "  pw check failed"
 
             # Show service status and recent logs for debugging
             sudo systemctl status gauth --no-pager -l 2>/dev/null | tail -20 || true
