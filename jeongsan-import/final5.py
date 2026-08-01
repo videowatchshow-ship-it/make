@@ -158,6 +158,16 @@ ms = [m for m in ms if not ((m.get("date"), m.get("start")) == ("2026-07-25","15
 if len(ms) != before_1527:
     print(f"  15:27 정리: 환전/빈 행 {before_1527 - len(ms)}건 제거 (바인 $1,000 만 유지)")
 
+# 결과값 정규화 (7월만): 환전=Win(역송), 나머지=Lose(입금) — 입금 행이 Win 으로 잘못 저장돼
+# 수익 소계가 마이너스로 나오던 원인 제거
+for m in ms:
+    if not m.get("date","").startswith("2026-07"):
+        continue
+    want = "Win" if m.get("type") == "환전" else "Lose"
+    if m.get("result") != want:
+        print(f"  결과정규화: {m.get('date')} {m.get('start')} {m.get('name')} {m.get('result')}→{want}")
+        m["result"] = want
+
 # 7월 중복 제거: (날짜, 시각, 이름, 금액, 종류) 동일 행은 1개만 유지 (note 긴 것 우선)
 # 6월 데이터는 확정본 — 어떤 규칙도 건드리지 않는다
 seen = {}

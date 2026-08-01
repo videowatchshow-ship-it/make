@@ -375,7 +375,8 @@ function renderMembers(){
 }
 function __depSum(ym){ return members.filter(m=>(m.date||"").slice(0,7)===ym && m.type!=="환전").reduce((s,m)=>s+(parseFloat(m.deposit)||0),0); }
 function __wdwSum(ym){ return members.filter(m=>(m.date||"").slice(0,7)===ym && m.type==="환전").reduce((s,m)=>s+(parseFloat(m.deposit)||0),0); }
-function __profSum(ym){ return members.filter(m=>(m.date||"").slice(0,7)===ym).reduce((s,m)=>s+profit(m),0); }
+/* 월 수익 = 루징머니(입금−역송) × 30%  — 행별 상태와 무관하게 IN−OUT 기준 */
+function __profSum(ym){ return (__depSum(ym) - __wdwSum(ym)) * RATE; }
 /* 최종수익(실제) = (루징머니[그 달 입금−역송] − 롤링커미션) × 30%  · 롤링커미션 미입력 → 미확정 */
 function __finalProfit(ym){
   const rc = (rollcomm[ym] ?? "").toString().trim();
@@ -411,7 +412,9 @@ function totalMembers(){
   document.querySelectorAll("#memberSheet tbody td[data-subdep]").forEach(c=>{ c.textContent = "IN $ " + fmt(__depSum(c.dataset.subdep)); });
   document.querySelectorAll("#memberSheet tbody td[data-subwdw]").forEach(c=>{ c.textContent = "OUT $ " + fmt(__wdwSum(c.dataset.subwdw)); });
   document.querySelectorAll("#memberSheet tbody td[data-subprof]").forEach(c=>{ c.textContent = "수익 $ " + fmt(__profSum(c.dataset.subprof)); });
-  document.getElementById("memberTotal").textContent = "$ " + fmt(members.reduce((s,r)=>s+profit(r),0));
+  const __allIn  = members.filter(m=>m.type!=="환전").reduce((s,m)=>s+(parseFloat(m.deposit)||0),0);
+  const __allOut = members.filter(m=>m.type==="환전").reduce((s,m)=>s+(parseFloat(m.deposit)||0),0);
+  document.getElementById("memberTotal").textContent = "$ " + fmt((__allIn - __allOut) * RATE);
   document.querySelectorAll("#memberSheet tbody td[data-subfinal]").forEach(c=>{ c.textContent = __finalText(c.dataset.subfinal); });
   const yms = [...new Set(members.map(m=>(m.date||"").slice(0,7)).filter(Boolean))];
   const vals = yms.map(__finalProfit);
