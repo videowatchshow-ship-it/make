@@ -236,6 +236,18 @@ authenticator.generate(secret);
 ]
 ```
 
+## 참조 공식 문서
+
+| 문제 | 공식 문서 |
+|------|-----------|
+| crypto.timingSafeEqual RangeError (버퍼 길이 불일치) | https://github.com/nodejs/node/blob/main/doc/api/crypto.md#cryptotimingsafeequala-b |
+| multer 파일 업로드 | https://github.com/expressjs/multer#readme |
+| XLSX (SheetJS) 파싱 | https://github.com/SheetJS/sheetjs#readme |
+| otplib TOTP 생성 | https://github.com/yeojz/otplib#readme |
+| Express req/res timeout | https://github.com/expressjs/express/blob/master/lib/request.js |
+| Node.js --max-old-space-size | https://github.com/nodejs/node/blob/main/doc/api/cli.md#--max-old-space-sizesize-in-mib |
+| fs.writeFileSync 권한 | https://github.com/nodejs/node/blob/main/doc/api/fs.md#fswritefilesyncfile-data-options |
+
 ## 제약사항
 
 - Google 보안 챌린지 (패스키/기기인증/전화인증) 자동화 불가
