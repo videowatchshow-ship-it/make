@@ -527,6 +527,7 @@ function render(){
     const tfa = a.totp_secret ? '<span class="badge b-2fa">2FA</span>' : ''
     const lock = a.lock_reason ? `<span class="badge b-lock" title="잠김 사유: ${escapeHtml(a.lock_reason)} (수동 처리 필요)">🔒 ${escapeHtml(a.lock_reason)}</span>` : ''
     const rec = a.recovery_email || a.recovery_phone || ''
+    const _e = escapeHtml(a.email)
     const _isLookup = _lookupEmail === a.email
     const _isLogin = _loginEmail === a.email
     const btnOpen = _isLookup
@@ -543,7 +544,6 @@ function render(){
     const _isNext = _curIdx>=0 && i===_curIdx+1
     const _hl = _isLookup ? 'background:#2a1a00;border-left:4px solid #ff9040;box-shadow:inset 0 0 20px rgba(255,144,64,0.1);' : _isLogin ? 'background:#2a2a00;border-left:4px solid #f5c842;box-shadow:inset 0 0 20px rgba(245,200,66,0.1);' : _isCur ? 'background:#0d2818;border-left:4px solid #3ddc84;box-shadow:inset 0 0 20px rgba(61,220,132,0.08);' : _isNext ? 'background:#0d1528;border-left:4px solid #7dabff;box-shadow:inset 0 0 20px rgba(125,171,255,0.08);' : ''
     const _label = _isCur ? '<span style="background:#3ddc84;color:#000;font-size:10px;font-weight:800;margin-left:8px;padding:1px 6px;border-radius:3px">★ 현재 조회</span>' : _isNext ? '<span style="background:#7dabff;color:#000;font-size:10px;font-weight:800;margin-left:8px;padding:1px 6px;border-radius:3px">▶ 다음</span>' : ''
-    const _e = escapeHtml(a.email)
     const _p = escapeHtml(a.password||'—')
     const _t = a.totp_secret ? escapeHtml(a.totp_secret.slice(0,20))+'…' : '—'
     const _r = escapeHtml(rec||'—')
