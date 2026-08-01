@@ -85,6 +85,28 @@ module.exports = function(app) {
     }
   });
 
+  app.get('/api/search-account', (req, res) => {
+    try {
+      const q = (req.query.q || '').trim().toLowerCase();
+      if (!q || q.length < 3) return res.status(400).json({ ok: false, error: 'query too short (min 3 chars)' });
+      const dataFile = '/opt/gauth-full/accounts_normalized.json';
+      const data = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
+      const accounts = Array.isArray(data) ? data : (data.accounts || []);
+      const results = [];
+      for (const a of accounts) {
+        const email = (a.email || '').toLowerCase();
+        const pw = (a.password || '').toLowerCase();
+        const extra = JSON.stringify(a.extra || []).toLowerCase();
+        if (email.includes(q) || pw.includes(q) || extra.includes(q)) {
+          results.push({ email: a.email, password: a.password ? '***' : '', totp_secret: a.totp_secret || '', source_file: a.source_file || '', extra: a.extra || [] });
+        }
+      }
+      res.json({ ok: true, query: q, total_accounts: accounts.length, found: results.length, results: results.slice(0, 50) });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
   app.get('/api/deploy-status', (req, res) => {
     const checks = {};
     try { checks.chrome = execSync('which google-chrome-stable 2>/dev/null || which chromium 2>/dev/null', { encoding: 'utf8' }).trim(); } catch (e) { checks.chrome = 'not-found'; }
