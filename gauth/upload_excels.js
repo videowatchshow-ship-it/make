@@ -7,8 +7,8 @@
  * 전략:
  * 1) 헤더 행이 있으면 → 헤더로 매핑
  * 2) 헤더 없으면 → 컬럼 전체 데이터를 샘플링해서 각 컬럼의 타입을 판별
- *    - 이메일 컬럼: @가 포함된 xxx@xxx.xxx 패턴이 70%+ → email
- *    - TOTP 컬럼: Base32(A-Z2-7, 공백/하이픈 구분) 16~128자가 60%+ → totp
+ *    - 이메일 컬럼: @가 포함된 xxx@xxx.xxx 패턴이 20%+ → email
+ *    - TOTP 컬럼: Base32(A-Z2-7, 공백/하이픈 구분) 16~128자가 20%+ → totp
  *    - 복구이메일 컬럼: 이메일 패턴이지만 메인 이메일 컬럼이 아닌 것 → recovery
  *    - URL 컬럼: http/youtube 포함 50%+ → youtube
  *    - 나머지 → password (가장 먼저 발견된 미할당 컬럼)
@@ -92,7 +92,7 @@ function detectHeaderMapping(row) {
 function analyzeColumns(rows) {
   if (!rows.length) return {};
 
-  const maxCols = Math.max(...rows.map(r => (r && r.length) || 0));
+  const maxCols = rows.reduce((mx, r) => Math.max(mx, (r && r.length) || 0), 0);
   if (maxCols === 0) return {};
 
   const stats = [];
@@ -208,7 +208,7 @@ function classifyValue(s) {
 // ── vertical/stacked layout detection ──
 
 function tryVerticalExtract(rows, sourceFile) {
-  const maxCols = Math.max(...rows.map(r => (r && r.length) || 0));
+  const maxCols = rows.reduce((mx, r) => Math.max(mx, (r && r.length) || 0), 0);
 
   const lvAccounts = tryLabelValueExtract(rows, maxCols, sourceFile);
   if (lvAccounts && lvAccounts.length) return lvAccounts;

@@ -431,10 +431,7 @@ updateUploadStatus();
     <option value="desc">최신 순 (엑셀 날짜 최신 → 오래됨)</option>
   </select>
   <button id="td-load" style="background:#ff9040">계정 조회</button>
-  <button id="td-prev" style="background:#555;display:none">◀ 이전</button>
-  <span id="td-pos" style="font-size:13px;color:#9aa5b5;display:none"></span>
-  <button id="td-next" style="background:#555;display:none">다음 ▶</button>
-  <div id="td-result" style="width:100%;display:none;background:#161a20;border:1px solid #2a323c;border-radius:8px;padding:16px;font-size:14px;margin-top:6px"></div>
+<div id="td-result" style="width:100%;display:none;background:#161a20;border:1px solid #2a323c;border-radius:8px;padding:16px;font-size:14px;margin-top:6px"></div>
 </div>
 
 <div class="controls">
@@ -638,11 +635,11 @@ document.addEventListener('click', async (e) => {
 async function unlockAccount(email, btn){
   if(!confirm(`${email}\n잠금 상태 해제 (다음 배치에서 다시 시도)?`)) return
   btn.disabled=true
-  const paths = ['/api/failed-accounts/','//api/failed-accounts/']
-  for(const base of paths){
-    try{ const r = await fetch(base+encodeURIComponent(email),{method:'DELETE'}); if(r.ok){ btn.textContent='✓ 해제'; setTimeout(()=>load(), 500); return } }catch{}
-  }
-  alert('해제 실패 — 로컬 서버(:4000) 필요'); btn.disabled=false
+  try{
+    const r = await fetch('/api/failed-accounts/'+encodeURIComponent(email),{method:'DELETE'})
+    if(r.ok){ btn.textContent='✓ 해제'; setTimeout(()=>load(), 500); return }
+  }catch{}
+  alert('해제 실패'); btn.disabled=false
 }
 // 잠금 성격 실패 = 사람 개입 필요 (재시도 무의미) → "실패"로만 표시
 const LOCK_REASONS = new Set([
@@ -653,39 +650,29 @@ const LOCK_REASONS = new Set([
 async function programLogin(email, btn){
   const orig = btn.textContent; btn.disabled=true; btn.textContent='⏳ 시도 중…'
   _loginEmail = email; render()
-  const endpoints = ['/api/login-one', '//api/login-one']
-  let reason = '', message = '', reachedServer = false
-  for(const url of endpoints){
-    try{
-      const r = await fetch(url, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email})})
-      const j = await r.json().catch(()=>({}))
-      // 서버가 응답한 경우 (도달함)
-      reachedServer = true
-      // 성공 판정: HTTP 2xx AND (success===true OR reason 없음)
-      if(r.ok && j.success !== false && !j.error){
-        _loginEmail = null
-        btn.textContent = '✅ 로그인 성공'
-        btn.style.background = '#3ddc84'
-        btn.style.color = '#000'
-        // 화면에 즉시 반영: 해당 카드의 미로그인 배지 → 로그인 로 교체
-        // 또는 안전하게 목록 다시 로드
-        try { await load() } catch { location.reload() }
-        setTimeout(()=>{btn.textContent=orig;btn.disabled=false;btn.style.background='';btn.style.color=''}, 3000)
-        return
-      }
-      // 서버가 응답했으나 실패 → 사유 표시
-      reason = j.reason || j.error || `HTTP ${r.status}`
-      break  // 서버 응답 받았으면 fallback 시도 안함
-    }catch(e){
-      reason = e.message
-      // 네트워크 오류면 다음 endpoint 시도
+  let reason = '', reachedServer = false
+  try{
+    const r = await fetch('/api/login-one', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email})})
+    const j = await r.json().catch(()=>({}))
+    reachedServer = true
+    if(r.ok && j.success !== false && !j.error){
+      _loginEmail = null
+      btn.textContent = '✅ 로그인 성공'
+      btn.style.background = '#3ddc84'
+      btn.style.color = '#000'
+      try { await load() } catch { location.reload() }
+      setTimeout(()=>{btn.textContent=orig;btn.disabled=false;btn.style.background='';btn.style.color=''}, 3000)
+      return
     }
+    reason = j.reason || j.error || `HTTP ${r.status}`
+  }catch(e){
+    reason = e.message
   }
   btn.textContent = '❌ 실패'
   btn.style.background = '#e0503a'
   if (reachedServer && LOCK_REASONS.has(reason)) {
     // 사람 개입 필요한 실패 (폰인증·패스키·기기승인·잘못된비번 등) → 간단히 표시
-    alert(`❌ ${email}\n실패: ${reason}${message?"\n\n"+message:""}\n\n(이 계정은 사람이 직접 로그인해야 합니다.)`)
+    alert(`❌ ${email}\n실패: ${reason}\n\n(이 계정은 사람이 직접 로그인해야 합니다.)`)
   } else if (reachedServer) {
     alert(`❌ ${email}\n실패: ${reason}`)
   } else {
@@ -914,8 +901,6 @@ function tdGoto(n){
 }
 document.getElementById('td-load').addEventListener('click', tdLoad)
 document.getElementById('td-order').addEventListener('change', ()=>{if(TD.length){tdLoad()}})
-// 이전/다음 버튼은 페이지네이션으로 대체됨 (숨김)
-;['td-prev','td-next','td-pos'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none'})
 // 페이지네이션으로 전환: 스크롤 렌더 제거
 document.getElementById('q').addEventListener('input', applyFilter)
 document.getElementById('filter').addEventListener('change', applyFilter)

@@ -2,7 +2,7 @@ name: Deploy gauth to server
 on:
   workflow_dispatch:
   push:
-    branches: [claude/gauth-frontend-backend-fixes-cg2icv, claude/gauth-frontend-backend-fixes-cg2icv]
+    branches: [claude/gauth-frontend-backend-fixes-cg2icv]
     paths:
       - 'gauth/index.html'
       - 'gauth/upload_excels.js'
