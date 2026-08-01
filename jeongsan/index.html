@@ -157,14 +157,8 @@
         </tr>
       </thead>
       <tbody></tbody>
-      <tfoot>
-        <tr>
-          <td class="totlabel" colspan="11">합계 수익</td>
-          <td class="tot" id="memberTotal">0</td>
-          <td class="totlabel">최종수익(실제)</td>
-          <td class="tot" id="finalTotal">미확정</td>
-        </tr>
-      </tfoot>
+      <!-- 전체 합계 줄 없음 — 정산은 각 월 소계 줄(수익 · 롤링커미션 · 최종수익)에서 -->
+      <tfoot></tfoot>
     </table>
   </div>
   <!-- ============ 회사 자금 장부 ============ -->
@@ -412,15 +406,7 @@ function totalMembers(){
   document.querySelectorAll("#memberSheet tbody td[data-subdep]").forEach(c=>{ c.textContent = "IN $ " + fmt(__depSum(c.dataset.subdep)); });
   document.querySelectorAll("#memberSheet tbody td[data-subwdw]").forEach(c=>{ c.textContent = "OUT $ " + fmt(__wdwSum(c.dataset.subwdw)); });
   document.querySelectorAll("#memberSheet tbody td[data-subprof]").forEach(c=>{ c.textContent = "수익 $ " + fmt(__profSum(c.dataset.subprof)); });
-  const __allIn  = members.filter(m=>m.type!=="환전").reduce((s,m)=>s+(parseFloat(m.deposit)||0),0);
-  const __allOut = members.filter(m=>m.type==="환전").reduce((s,m)=>s+(parseFloat(m.deposit)||0),0);
-  document.getElementById("memberTotal").textContent = "$ " + fmt((__allIn - __allOut) * RATE);
   document.querySelectorAll("#memberSheet tbody td[data-subfinal]").forEach(c=>{ c.textContent = __finalText(c.dataset.subfinal); });
-  const yms = [...new Set(members.map(m=>(m.date||"").slice(0,7)).filter(Boolean))];
-  const vals = yms.map(__finalProfit);
-  const ft = document.getElementById("finalTotal");
-  if (vals.some(v=>v===null)) ft.textContent = "미확정 (롤링커미션 입력 대기)";
-  else ft.textContent = "$ " + fmt(vals.reduce((s,v)=>s+v,0));
 }
 function addMember(){ members.push({date:today(),start:"",end:"",nick:"",name:"",phone:"",account:"",type:"테더",deposit:"",result:"Lose",rolling:"",note:""}); renderMembers(); save(); }
 function memberFilled(r){ return [r.nick,r.name,r.phone,r.account,r.deposit,r.rolling,r.note,r.start,r.end].some(v=>v && String(v).trim()!==""); }
