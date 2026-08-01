@@ -3,6 +3,9 @@ const fs = require('fs');
 const path = require('path');
 
 module.exports = function(app) {
+  // Save current stack length to re-insert routes before 404 catch-all
+  const stackBefore = app._router && app._router.stack ? app._router.stack.length : -1;
+
   app.post('/api/deploy', (req, res) => {
     try {
       const branch = req.body && req.body.branch || 'claude/gauth-frontend-backend-fixes-cg2icv';
@@ -115,4 +118,19 @@ module.exports = function(app) {
     try { checks.display = process.env.DISPLAY || 'not-set'; } catch (e) { checks.display = 'error'; }
     res.json(checks);
   });
+
+  // Move newly added routes before any 404 catch-all handler
+  if (stackBefore >= 0 && app._router && app._router.stack) {
+    const stack = app._router.stack;
+    const newLayers = stack.splice(stackBefore);
+    // Find first layer without a route (catch-all middleware like 404 handler)
+    let insertAt = stack.length;
+    for (let i = stack.length - 1; i >= 0; i--) {
+      if (!stack[i].route && stack[i].name !== 'query' && stack[i].name !== 'expressInit') {
+        insertAt = i;
+      }
+    }
+    stack.splice(insertAt, 0, ...newLayers);
+    console.log('[auto_deploy] routes inserted before 404 handler at position', insertAt);
+  }
 };
