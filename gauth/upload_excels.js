@@ -420,12 +420,17 @@ function bruteForceExtract(rows, sourceFile) {
         if (rv) rest.push(rv);
       }
       let password = '', totp_secret = '', recovery = '', youtube = '';
+      const passwordCandidates = [];
       for (const rv of rest) {
         if (!totp_secret && isOtpauthUrl(rv)) { totp_secret = extractTotpFromUrl(rv) || normalizeTotp(rv); }
         else if (!totp_secret && isTotpLike(rv)) { totp_secret = normalizeTotp(rv); }
         else if (!youtube && isUrlLike(rv)) { youtube = rv; }
         else if (!recovery && isEmail(rv)) { recovery = rv; }
-        else if (!password) { password = rv; }
+        else { passwordCandidates.push(rv); }
+      }
+      if (passwordCandidates.length > 0) {
+        const real = passwordCandidates.find(p => !/^\d{1,4}$/.test(p));
+        password = real || passwordCandidates[passwordCandidates.length - 1];
       }
       accounts.push({ email: v, password, totp_secret, recovery_email: recovery, youtube_url: youtube, extra: [], source_file: sourceFile || 'unknown' });
     }
@@ -530,8 +535,9 @@ function parseExcelFile(filePath) {
       if (k[0] === '!') continue;
       const c = sheet[k];
       if (c && c.l && c.l.Target && /^mailto:/i.test(String(c.l.Target))) {
-        const t = String(c.l.Target).replace(/^mailto:/i, '');
-        if (t.includes('@') && !String(c.v || '').includes('@')) {
+        const t = String(c.l.Target).replace(/^mailto:/i, '').replace(/\?.*$/, '');
+        const cv = String(c.v || '').trim();
+        if (t.includes('@') && (!cv || cv === t.split('@')[0] || cv.toLowerCase() === t.toLowerCase())) {
           c.v = t; c.w = t;
         }
       }
@@ -571,7 +577,21 @@ function mountRoutes(app) {
   try { fs.mkdirSync(uploadDir, { recursive: true }); } catch(e) { console.error('[upload_excels] mkdirSync failed:', e.message); }
   const upload = multer({ dest: uploadDir, limits: { fileSize: 200 * 1024 * 1024 } });
 
-  app.post('/api/upload-excels', (req, res, next) => {
+  const crypto = require('crypto');
+  function uploadAuthMiddleware(req, res, next) {
+    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+      || (req.query && req.query.token) || '';
+    const expected = process.env.GAUTH_API_TOKEN || '';
+    if (!expected) return res.status(503).json({ ok: false, error: 'GAUTH_API_TOKEN not configured' });
+    const tokenBuf = Buffer.from(token);
+    const expectedBuf = Buffer.from(expected);
+    if (!token || tokenBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(tokenBuf, expectedBuf)) {
+      return res.status(401).json({ ok: false, error: 'unauthorized' });
+    }
+    next();
+  }
+
+  app.post('/api/upload-excels', uploadAuthMiddleware, (req, res, next) => {
     req.setTimeout(600000);
     res.setTimeout(600000);
     upload.array('files', 50)(req, res, (err) => {
