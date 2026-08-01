@@ -74,7 +74,7 @@ function isOtpauthUrl(s) {
 // ── header detection ──
 
 const HEADER_PATTERNS = {
-  email:    /^(e[-_]?mail|login|account|user|gmail|아이디|계정|메일)/i,
+  email:    /^(e[-_]?mail|login|account|user|gmail|아이디|계정|이메일|메일)/i,
   password: /^(pass(word)?|pw|pwd|비밀번호|비번|암호)/i,
   totp:     /^(totp|2fa|secret|otp|mfa|인증|코드|시크릿)/i,
   recovery: /^(recover|backup|alt.*mail|second.*mail|복구|보조)/i,
@@ -214,7 +214,7 @@ function analyzeColumns(rows) {
 // ── label-value pair detection ──
 
 const LABEL_PATTERNS = {
-  email:    /^(e[-_]?mail|login|account|user|gmail|아이디|계정|메일)\s*[:：=]/i,
+  email:    /^(e[-_]?mail|login|account|user|gmail|아이디|계정|이메일|메일)\s*[:：=]/i,
   password: /^(pass(word)?|pw|pwd|비밀번호|비번|암호)\s*[:：=]/i,
   totp:     /^(totp|2fa|secret|otp|mfa|인증|코드|시크릿)\s*[:：=]/i,
   recovery: /^(recover|backup|alt.*mail|second.*mail|복구|보조)\s*[:：=]/i,
