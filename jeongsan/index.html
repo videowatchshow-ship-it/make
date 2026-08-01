@@ -322,7 +322,7 @@ function wdwValue(r){ return r.type === "환전" ? (r.deposit||"") : ""; }
 function renderMembers(){
   const tb = document.querySelector("#memberSheet tbody");
   tb.innerHTML = "";
-  const MONTHNM = {"2026-06":"2026년 6월","2026-07":"2026년 7월"};
+  const MONTHNM = {"2026-06":"2026년 6월","2026-07":"2026년 7월","2026-08":"2026년 8월"};
   let __prevYM = null;
   members.forEach((r,i)=>{
     const __ym = (r.date||"").slice(0,7);
@@ -389,7 +389,7 @@ function __finalText(ym){
   return v === null ? "최종 미확정" : "최종 $ " + fmt(v);
 }
 function appendMonthSub(tb, ym){
-  const MONTHNM = {"2026-06":"2026년 6월","2026-07":"2026년 7월"};
+  const MONTHNM = {"2026-06":"2026년 6월","2026-07":"2026년 7월","2026-08":"2026년 8월"};
   const nm = MONTHNM[ym]||ym;
   const tr = document.createElement("tr"); tr.className="msub";
   tr.innerHTML = `<td colspan="8" style="text-align:right;font-weight:800;background:#0c1420;padding:9px 12px;">${nm} 소계 →</td>`
