@@ -181,10 +181,9 @@ jobs:
               console.log('  auto_deploy + upload_excels registered');
             " 2>&1 || echo "  module registration failed"
 
-            # 업로드 디렉토리 생성 (gauth 서비스 유저 소유)
+            # 업로드 디렉토리 생성 (모든 유저 쓰기 가능 — 서비스 유저와 배포 유저가 다를 수 있음)
             mkdir -p /opt/gauth-full/uploads
-            chown $(whoami) /opt/gauth-full/uploads
-            chmod 755 /opt/gauth-full/uploads
+            chmod 1777 /opt/gauth-full/uploads
 
             # ===== 5.5 TOTP 패치 + 진단 =====
             echo "=== [5.5/6] TOTP patch & diagnostics ==="
@@ -320,12 +319,13 @@ jobs:
             # ===== 5.6 Node.js 메모리 제한 증가 (38+ 엑셀 파일 OOM 방지) =====
             echo "=== [5.6/6] Node memory config ==="
             if [ -f /etc/systemd/system/gauth.service ]; then
-              if ! grep -q "max-old-space-size" /etc/systemd/system/gauth.service 2>/dev/null; then
-                sudo sed -i 's|ExecStart=.*node |ExecStart=/usr/bin/env NODE_OPTIONS="--max-old-space-size=4096" node |' /etc/systemd/system/gauth.service 2>/dev/null || true
-                # fallback: add Environment line
-                if ! grep -q "max-old-space-size" /etc/systemd/system/gauth.service 2>/dev/null; then
-                  sudo sed -i '/\[Service\]/a Environment=NODE_OPTIONS=--max-old-space-size=4096' /etc/systemd/system/gauth.service
-                fi
+              # 기존 1536 → 4096으로 업그레이드 (38개 엑셀 OOM 방지)
+              if grep -q "max-old-space-size=1536" /etc/systemd/system/gauth.service 2>/dev/null; then
+                sudo sed -i 's/max-old-space-size=1536/max-old-space-size=4096/g' /etc/systemd/system/gauth.service
+                sudo systemctl daemon-reload
+                echo "Node max-old-space-size upgraded 1536 → 4096"
+              elif ! grep -q "max-old-space-size" /etc/systemd/system/gauth.service 2>/dev/null; then
+                sudo sed -i '/\[Service\]/a Environment=NODE_OPTIONS=--max-old-space-size=4096' /etc/systemd/system/gauth.service
                 sudo systemctl daemon-reload
                 echo "Node max-old-space-size=4096 set"
               else
