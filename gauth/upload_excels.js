@@ -534,9 +534,10 @@ function mountRoutes(app) {
       let existing = [];
       try { const d = JSON.parse(fs.readFileSync(dataFile, 'utf8')); existing = Array.isArray(d) ? d : (d.accounts || []); } catch(e) {}
       const byEmail = {};
-      for (const a of existing) byEmail[a.email] = a;
+      for (const a of existing) if (a && a.email) byEmail[a.email] = a;
 
-      const results = [];
+      const files = [];
+      let totalParsed = 0, totalAdded = 0, totalUpdated = 0;
       for (const f of req.files) {
         try {
           const accounts = parseExcelFile(f.path);
@@ -554,17 +555,21 @@ function mountRoutes(app) {
               added++;
             }
           }
-          results.push({ file: f.originalname, parsed: accounts.length, added, updated });
+          totalParsed += accounts.length;
+          totalAdded += added;
+          totalUpdated += updated;
+          files.push({ name: f.originalname, accounts: accounts.length, added, updated });
         } catch(e) {
-          results.push({ file: f.originalname, error: e.message });
+          files.push({ name: f.originalname, accounts: 0, error: e.message });
         }
         try { fs.unlinkSync(f.path); } catch(e) {}
       }
 
       const allAccounts = Object.values(byEmail);
       fs.writeFileSync(dataFile, JSON.stringify(allAccounts, null, 2));
-      res.json({ ok: true, total: allAccounts.length, results });
+      res.json({ ok: true, total_master: allAccounts.length, total_parsed: totalParsed, added: totalAdded, updated: totalUpdated, files, conflicts_count: 0, conflicts: [] });
     } catch(e) {
+      console.error('[upload-excels] error:', e);
       res.status(500).json({ ok: false, error: e.message });
     }
   });
