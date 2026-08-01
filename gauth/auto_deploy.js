@@ -7,7 +7,7 @@ function authMiddleware(req, res, next) {
   const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
     || (req.query && req.query.token) || '';
   const expected = process.env.GAUTH_API_TOKEN || '';
-  if (!expected) return next();
+  if (!expected) return res.status(503).json({ ok: false, error: 'GAUTH_API_TOKEN not configured' });
   const tokenBuf = Buffer.from(token);
   const expectedBuf = Buffer.from(expected);
   if (!token || tokenBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(tokenBuf, expectedBuf)) {
@@ -97,10 +97,12 @@ module.exports = function(app) {
       }
       const dataFile = '/opt/gauth-full/accounts_normalized.json';
       const accounts = safeReadJSON(dataFile);
-      const account = accounts.find(a => a.email === email);
+      const account = accounts.find(a => (a.email || '').toLowerCase() === email.toLowerCase());
       if (!account) return res.status(404).json({ ok: false, error: 'account not found' });
       account.totp_secret = normalized;
-      fs.writeFileSync(dataFile, JSON.stringify(accounts, null, 2));
+      const tmpFile = dataFile + '.tmp.' + process.pid;
+      fs.writeFileSync(tmpFile, JSON.stringify(accounts, null, 2));
+      fs.renameSync(tmpFile, dataFile);
       res.json({ ok: true, email, secret_length: normalized.length });
     } catch (e) {
       res.status(500).json({ ok: false, error: e.message });
@@ -138,6 +140,7 @@ module.exports = function(app) {
 
   const loginQueue = new Map();
   const LOGIN_TIMEOUT = 120000;
+  const MAX_CONCURRENT_LOGINS = 3;
 
   setInterval(() => {
     const now = Date.now();
@@ -158,6 +161,10 @@ module.exports = function(app) {
         return res.status(409).json({ success: false, reason: 'LOGIN_IN_PROGRESS' });
       }
       loginQueue.delete(email);
+    }
+
+    if (loginQueue.size >= MAX_CONCURRENT_LOGINS) {
+      return res.status(429).json({ success: false, reason: 'TOO_MANY_CONCURRENT', max: MAX_CONCURRENT_LOGINS });
     }
 
     const dataFile = '/opt/gauth-full/accounts_normalized.json';

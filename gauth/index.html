@@ -462,6 +462,8 @@ let ALL=[], FILTERED=[], PAGE=1
 let _lookupEmail = null, _loginEmail = null
 const vp = document.getElementById('viewport'), sp = document.getElementById('spacer')
 
+function escapeHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];})}
+
 let FAILED = {}
 async function load(){
   const [n, p, f] = await Promise.all([
@@ -844,16 +846,17 @@ async function tdRender(){
     const dt = a.source_mtime ? new Date(a.source_mtime).toLocaleString('ko-KR') : '—'
     const idx = s+i+1
     const yt = a.youtube_url || ''
+    const _em = escapeHtml(a.email), _pw = escapeHtml(a.password||'—'), _ts = escapeHtml(a.totp_secret||'—'), _yt = escapeHtml(yt), _rc = escapeHtml(a.recovery_email||a.recovery_phone||'—'), _sf = escapeHtml(a.source_file||'—')
     return `<div style="background:#161a20;border:1px solid #2a323c;border-radius:8px;padding:12px;margin-bottom:8px">
       <div style="display:grid;grid-template-columns:100px 1fr;gap:6px 12px;font-size:13px">
-        <div style="color:#8a95a5">#${idx}</div><div><b style="color:#ffb469;font-size:14px">${a.email}</b>${cp(a.email)} ${accessBadge(a)}</div>
-        <div style="color:#8a95a5">비밀번호</div><div class="mono" style="color:#3ddc84">${a.password||'—'}${cp(a.password)}</div>
-        <div style="color:#8a95a5">2FA 시크릿</div><div class="mono" style="font-size:11px"><span id="sec-${idx}">${a.totp_secret||'—'}</span>${cp(a.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${a.email}','sec-${idx}')">✏️</button></div>
-        <div style="color:#8a95a5">2FA 코드</div><div class="mono" style="color:#7dabff;font-size:18px;font-weight:700;letter-spacing:2px"><span id="tdcode-${idx}">${codes[i]}</span>${a.totp_secret?cp('_', 'tdcode-'+idx):cp(codes[i]!=='—'?codes[i]:'')}${a.totp_secret?`<button style="background:#2a323c;padding:3px 8px;font-size:11px;margin-left:6px;color:#c9d2dc" onclick="tdRefreshCode(${idx},'${a.totp_secret}',this)">🔄 새로고침</button>`:''}</div>
-        <div style="color:#8a95a5">동작</div><div><button style="background:#7c3aed" onclick="programLogin('${a.email}',this)">🔑 프로그램 로그인</button></div>
-        <div style="color:#8a95a5">YouTube</div><div class="mono" style="color:#ff8a8a;font-size:11px">${yt?`<a href="${yt}" target="_blank" style="color:#ff8a8a">${yt}</a>${cp(yt)}`:'—'}</div>
-        <div style="color:#8a95a5">복구</div><div class="mono" style="font-size:11px">${a.recovery_email||a.recovery_phone||'—'}</div>
-        <div style="color:#8a95a5">엑셀</div><div class="mono" style="font-size:11px;color:#8a95a5">${a.source_file} (row ${a.source_row}) · ${dt}</div>
+        <div style="color:#8a95a5">#${idx}</div><div><b style="color:#ffb469;font-size:14px">${_em}</b>${cp(a.email)} ${accessBadge(a)}</div>
+        <div style="color:#8a95a5">비밀번호</div><div class="mono" style="color:#3ddc84">${_pw}${cp(a.password)}</div>
+        <div style="color:#8a95a5">2FA 시크릿</div><div class="mono" style="font-size:11px"><span id="sec-${idx}">${_ts}</span>${cp(a.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${_em}','sec-${idx}')">✏️</button></div>
+        <div style="color:#8a95a5">2FA 코드</div><div class="mono" style="color:#7dabff;font-size:18px;font-weight:700;letter-spacing:2px"><span id="tdcode-${idx}">${codes[i]}</span>${a.totp_secret?cp('_', 'tdcode-'+idx):cp(codes[i]!=='—'?codes[i]:'')}${a.totp_secret?`<button style="background:#2a323c;padding:3px 8px;font-size:11px;margin-left:6px;color:#c9d2dc" onclick="tdRefreshCode(${idx},'${escapeHtml(a.totp_secret)}',this)">🔄 새로고침</button>`:''}</div>
+        <div style="color:#8a95a5">동작</div><div><button style="background:#7c3aed" onclick="programLogin('${_em}',this)">🔑 프로그램 로그인</button></div>
+        <div style="color:#8a95a5">YouTube</div><div class="mono" style="color:#ff8a8a;font-size:11px">${yt?`<a href="${_yt}" target="_blank" style="color:#ff8a8a">${_yt}</a>${cp(yt)}`:'—'}</div>
+        <div style="color:#8a95a5">복구</div><div class="mono" style="font-size:11px">${_rc}</div>
+        <div style="color:#8a95a5">엑셀</div><div class="mono" style="font-size:11px;color:#8a95a5">${_sf} (row ${a.source_row}) · ${dt}</div>
       </div>
     </div>`
   }).join('')

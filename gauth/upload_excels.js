@@ -625,7 +625,9 @@ function mountRoutes(app) {
       }
 
       const allAccounts = Object.values(byEmail);
-      fs.writeFileSync(dataFile, JSON.stringify(allAccounts, null, 2));
+      const tmpFile = dataFile + '.tmp.' + process.pid;
+      fs.writeFileSync(tmpFile, JSON.stringify(allAccounts, null, 2));
+      fs.renameSync(tmpFile, dataFile);
       res.json({ ok: true, total_master: allAccounts.length, total_parsed: totalParsed, added: totalAdded, updated: totalUpdated, files, conflicts_count: 0, conflicts: [] });
     } catch(e) {
       console.error('[upload-excels] error:', e);

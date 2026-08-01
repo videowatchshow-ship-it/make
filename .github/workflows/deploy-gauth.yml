@@ -32,8 +32,8 @@ jobs:
           echo "HTTP $HTTP_CODE"
           cat /tmp/resp.txt 2>/dev/null || true
           if [ "$HTTP_CODE" = "200" ]; then
-            echo "deploy_ok=true" >> "$GITHUB_OUTPUT"
             python3 -c "import json; d=json.load(open('/tmp/resp.txt')); print('Deployed:', d.get('deployed',[])); assert d.get('ok')"
+            echo "deploy_ok=true" >> "$GITHUB_OUTPUT"
           else
             echo "deploy_ok=false" >> "$GITHUB_OUTPUT"
             echo "API deploy returned HTTP $HTTP_CODE"
@@ -229,16 +229,18 @@ jobs:
               const dataFile = '/opt/gauth-full/accounts_normalized.json';
               const d = JSON.parse(fs.readFileSync(dataFile,'utf8'));
               const accs = Array.isArray(d) ? d : (d.accounts || []);
-              const VALID = new Set([16, 32, 52, 64]);
               let fixed = 0;
               for (const a of accs) {
                 if (!a.totp_secret) continue;
                 const n = String(a.totp_secret).toUpperCase().replace(/[\s\-_=]/g,'').replace(/[^A-Z2-7]/g,'');
-                if (n.length > 0 && !VALID.has(n.length)) {
-                  console.log('  clear:', a.email, 'len=' + n.length);
+                if (n.length > 0 && n.length < 16) {
+                  console.log('  clear (too short):', a.email, 'len=' + n.length);
                   if (!a.extra) a.extra = [];
                   a.extra.push('old_totp:' + a.totp_secret);
                   a.totp_secret = '';
+                  fixed++;
+                } else if (n !== a.totp_secret) {
+                  a.totp_secret = n;
                   fixed++;
                 }
               }
