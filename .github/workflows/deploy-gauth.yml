@@ -153,39 +153,30 @@ jobs:
             node -e "require('archiver')" 2>/dev/null || npm install archiver 2>&1 | tail -5
             mkdir -p profiles failed_logins
 
-            # auto_deploy + upload_excels 모듈 등록 (404 핸들러 앞에 삽입/이동)
+            # auto_deploy + upload_excels 모듈 등록 (app.listen 앞에 삽입)
             node -e "
               const fs = require('fs');
-              let code = fs.readFileSync('rebrowser-login.js','utf8');
-              const modules = [
-                { tag: 'auto_deploy', line: \"require('./auto_deploy.js')(app);\" },
-                { tag: 'upload_excels', line: \"try { require('./upload_excels')(app); } catch(e) { console.log('upload load fail', e.message); }\" }
+              let lines = fs.readFileSync('rebrowser-login.js','utf8').split('\n');
+              // 기존 라인 제거
+              lines = lines.filter(l => !l.includes('auto_deploy') && !l.includes('upload_excels'));
+              const insertLines = [
+                \"require('./auto_deploy.js')(app);\",
+                \"try { require('./upload_excels')(app); } catch(e) { console.log('upload load fail', e.message); }\"
               ];
-              // Remove existing lines for these modules
-              for (const m of modules) {
-                const lines = code.split('\n');
-                code = lines.filter(l => !l.includes(m.tag)).join('\n');
+              // app.listen 앞에 삽입 (가장 확실한 위치)
+              let idx = lines.findIndex(l => /app\.listen\s*\(/.test(l));
+              if (idx < 0) {
+                // fallback: 404/Not Found 핸들러 앞
+                idx = lines.findIndex(l => /404|Not Found/.test(l) && /app\.use/.test(l));
               }
-              // Find 404 handler position
-              const patterns = [
-                /app\.use\(\s*(?:function|\()\s*\(?req\s*,\s*res\b[^)]*\)?\s*(?:=>|{)[^}]*(?:404|Not Found)/,
-                /app\.use\([^)]*404/
-              ];
-              let idx = -1;
-              for (const p of patterns) {
-                const match = p.exec(code);
-                if (match) { idx = match.index; break; }
-              }
-              const insertLines = modules.map(m => m.line).join('\n') + '\n';
-              if (idx > 0) {
-                const lineStart = code.lastIndexOf('\n', idx - 1) + 1;
-                code = code.slice(0, lineStart) + insertLines + code.slice(lineStart);
-                console.log('  modules inserted before 404 handler at char ' + lineStart);
+              if (idx >= 0) {
+                lines.splice(idx, 0, ...insertLines);
+                console.log('  modules inserted at line ' + idx + ' (before: ' + lines[idx+insertLines.length].trim().slice(0,50) + ')');
               } else {
-                code += '\n' + insertLines;
-                console.log('  modules appended (no 404 handler found)');
+                lines.push(...insertLines);
+                console.log('  modules appended (no app.listen found)');
               }
-              fs.writeFileSync('rebrowser-login.js', code);
+              fs.writeFileSync('rebrowser-login.js', lines.join('\n'));
               console.log('  auto_deploy + upload_excels registered');
             " 2>&1 || echo "  module registration failed"
 
