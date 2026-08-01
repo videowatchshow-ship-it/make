@@ -27,8 +27,12 @@ function normalizeTotp(s) {
   return String(s).toUpperCase().replace(/[\s\-_=]/g, '').replace(/[^A-Z2-7]/g, '');
 }
 
+// RFC 5322 addr-spec (simplified): local@domain.tld
+// local: dot-atom — atext+(\.atext+)* where atext = [a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]
+// domain: dot-atom with at least one dot (TLD required)
+// Works on macOS/Windows/Linux (no lookbehind, no Unicode property escapes)
 function isEmail(s) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || '').trim());
+  return /^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(String(s || '').trim());
 }
 
 function isTotpLike(s) {
@@ -110,9 +114,9 @@ function analyzeColumns(rows) {
   const mapping = {};
   const used = new Set();
 
-  // 1. find ALL email-like columns (>50% email pattern)
+  // 1. find ALL email-like columns (>20% email pattern — sparse sheets have many blanks)
   const emailCols = stats
-    .filter(s => s.nonEmpty > 0 && s.emails / s.nonEmpty > 0.5)
+    .filter(s => s.nonEmpty > 0 && s.emails / s.nonEmpty > 0.2)
     .sort((a, b) => {
       const rd = (b.emails / b.nonEmpty) - (a.emails / a.nonEmpty);
       return rd !== 0 ? rd : a.col - b.col;
@@ -135,7 +139,7 @@ function analyzeColumns(rows) {
   for (const s of stats) {
     if (used.has(s.col) || s.nonEmpty === 0) continue;
     const ratio = s.totps / s.nonEmpty;
-    if (ratio > bestTotpRatio && ratio > 0.4) {
+    if (ratio > bestTotpRatio && ratio > 0.2) {
       bestTotpRatio = ratio;
       bestTotp = s.col;
     }
@@ -205,21 +209,14 @@ function classifyValue(s) {
 
 function tryVerticalExtract(rows, sourceFile) {
   const maxCols = Math.max(...rows.map(r => (r && r.length) || 0));
-  if (maxCols > 3) return null;
 
-  // Case 1: label-value pairs in 2 columns (label in col 0, value in col 1)
-  // Case 2: label:value in single column
-  // Case 3: stacked single column (email, password, totp in consecutive rows)
-
-  const accounts = [];
-
-  // try label-value pair extraction first
   const lvAccounts = tryLabelValueExtract(rows, maxCols, sourceFile);
   if (lvAccounts && lvAccounts.length) return lvAccounts;
 
-  // try stacked single/dual column (consecutive rows grouped by blank-line or by email detection)
-  const stackedAccounts = tryStackedExtract(rows, maxCols, sourceFile);
-  if (stackedAccounts && stackedAccounts.length) return stackedAccounts;
+  if (maxCols <= 3) {
+    const stackedAccounts = tryStackedExtract(rows, maxCols, sourceFile);
+    if (stackedAccounts && stackedAccounts.length) return stackedAccounts;
+  }
 
   return null;
 }
@@ -370,6 +367,35 @@ function tryStackedExtract(rows, maxCols, sourceFile) {
   }));
 }
 
+// ── brute-force fallback: scan every cell for emails ──
+
+function bruteForceExtract(rows, sourceFile) {
+  const accounts = [];
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row) continue;
+    for (let c = 0; c < row.length; c++) {
+      const v = String(row[c] || '').trim();
+      if (!isEmail(v)) continue;
+      const rest = [];
+      for (let c2 = 0; c2 < row.length; c2++) {
+        if (c2 === c) continue;
+        const rv = String(row[c2] || '').trim();
+        if (rv) rest.push(rv);
+      }
+      let password = '', totp_secret = '', recovery = '', youtube = '';
+      for (const rv of rest) {
+        if (!totp_secret && isTotpLike(rv)) { totp_secret = normalizeTotp(rv); }
+        else if (!youtube && isUrlLike(rv)) { youtube = rv; }
+        else if (!recovery && isEmail(rv)) { recovery = rv; }
+        else if (!password) { password = rv; }
+      }
+      accounts.push({ email: v, password, totp_secret, recovery_email: recovery, youtube_url: youtube, extra: [], source_file: sourceFile || 'unknown' });
+    }
+  }
+  return accounts;
+}
+
 // ── main extraction ──
 
 function extractAccountsFromSheet(sheet, sourceFile) {
@@ -389,13 +415,10 @@ function extractAccountsFromSheet(sheet, sourceFile) {
     }
   }
 
-  // no header → try vertical/stacked layout (1~2 columns, label-value pairs, etc.)
+  // no header → try vertical/stacked layout (label-value pairs, etc.)
   if (!mapping) {
-    const maxCols = Math.max(...rows.map(r => (r && r.length) || 0));
-    if (maxCols <= 3) {
-      const vertAccounts = tryVerticalExtract(rows, sourceFile);
-      if (vertAccounts && vertAccounts.length) return vertAccounts;
-    }
+    const vertAccounts = tryVerticalExtract(rows, sourceFile);
+    if (vertAccounts && vertAccounts.length) return vertAccounts;
   }
 
   // no header → analyze column data (standard horizontal layout)
@@ -408,12 +431,13 @@ function extractAccountsFromSheet(sheet, sourceFile) {
       }
     }
 
-    const sampleRows = rows.slice(sampleStart, sampleStart + Math.min(100, rows.length));
+    const sampleRows = rows.slice(sampleStart);
     mapping = analyzeColumns(sampleRows);
     startRow = sampleStart;
 
     if (!mapping || mapping.email === undefined) {
-      return [];
+      // Last resort: brute-force scan every cell for emails
+      return bruteForceExtract(rows, sourceFile);
     }
   }
 
@@ -559,4 +583,5 @@ _exports.extractLabelValue = extractLabelValue;
 _exports.tryVerticalExtract = tryVerticalExtract;
 _exports.tryStackedExtract = tryStackedExtract;
 _exports.tryLabelValueExtract = tryLabelValueExtract;
+_exports.bruteForceExtract = bruteForceExtract;
 module.exports = _exports;
