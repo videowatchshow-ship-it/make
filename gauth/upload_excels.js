@@ -559,6 +559,7 @@ function mountRoutes(app) {
               if (a.password) e.password = a.password;
               if (a.totp_secret && isTotpLike(a.totp_secret)) e.totp_secret = normalizeTotp(a.totp_secret);
               if (a.recovery_email) e.recovery_email = a.recovery_email;
+              if (a.youtube_url) e.youtube_url = a.youtube_url;
               updated++;
             } else {
               byEmail[a.email] = a;
