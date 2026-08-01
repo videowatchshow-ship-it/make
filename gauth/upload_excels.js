@@ -7,13 +7,18 @@
  * 전략:
  * 1) 헤더 행이 있으면 → 헤더로 매핑
  * 2) 헤더 없으면 → 컬럼 전체 데이터를 샘플링해서 각 컬럼의 타입을 판별
- *    - 이메일 컬럼: @가 포함된 xxx@xxx.xxx 패턴이 20%+ → email
- *    - TOTP 컬럼: Base32(A-Z2-7, 공백/하이픈 구분) 16~128자가 20%+ → totp
+ *    - 이메일 컬럼: @가 포함된 xxx@xxx.xxx 패턴이 10%+ → email
+ *    - TOTP 컬럼: Base32(A-Z2-7, 공백/하이픈 구분) 16~128자가 10%+ → totp
  *    - 복구이메일 컬럼: 이메일 패턴이지만 메인 이메일 컬럼이 아닌 것 → recovery
- *    - URL 컬럼: http/youtube 포함 50%+ → youtube
+ *    - URL 컬럼: http/youtube 포함 20%+ → youtube
  *    - 나머지 → password (가장 먼저 발견된 미할당 컬럼)
  *
  * Deploy: copy to /opt/gauth-full/upload_excels.js on gucci-yanolza
+ *
+ * Refs:
+ * - SheetJS sheet_to_json: https://github.com/SheetJS/sheetjs (raw:false returns formatted text, preserves leading zeros)
+ * - SheetJS merged cells: worksheet['!merges'] array (https://github.com/SheetJS/sheetjs)
+ * - Node.js fs: https://github.com/nodejs/node/blob/main/doc/api/fs.md
  */
 
 const XLSX = require('xlsx');
@@ -27,12 +32,12 @@ function normalizeTotp(s) {
   return String(s).toUpperCase().replace(/[\s\-_=]/g, '').replace(/[^A-Z2-7]/g, '');
 }
 
-// RFC 5322 addr-spec (simplified): local@domain.tld
-// local: dot-atom — atext+(\.atext+)* where atext = [a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]
-// domain: dot-atom with at least one dot (TLD required)
-// Works on macOS/Windows/Linux (no lookbehind, no Unicode property escapes)
 function isEmail(s) {
   return /^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(String(s || '').trim());
+}
+
+function normalizeEmail(s) {
+  return String(s || '').trim().toLowerCase();
 }
 
 function isTotpLike(s) {
@@ -43,14 +48,18 @@ function isTotpLike(s) {
   if (/^https?:\/\//i.test(s)) return false;
   if (/[\/\\:;!#$%^&*()=+\[\]{}|<>?]/.test(s)) return false;
   const n = normalizeTotp(s);
-  // Google TOTP secrets: 16자(80bit) 또는 32자(160bit) 가 표준
-  // 비표준 길이는 비밀번호/기타 데이터가 오인된 것
-  const VALID_LENGTHS = [16, 32, 52, 64];
-  if (!VALID_LENGTHS.includes(n.length)) return false;
-  // 원본에서 Base32 비율이 80% 미만이면 비밀번호일 가능성 높음
+  if (n.length < 16) return false;
+  if (n.length > 128) return false;
   const raw = String(s).replace(/[\s\-_=]/g, '');
   if (raw.length > 0 && n.length / raw.length < 0.8) return false;
   return true;
+}
+
+function extractTotpFromUrl(s) {
+  s = String(s || '').trim();
+  const m = s.match(/[?&]secret=([A-Z2-7]+)/i);
+  if (m) return m[1].toUpperCase();
+  return null;
 }
 
 function isUrlLike(s) {
@@ -58,10 +67,14 @@ function isUrlLike(s) {
   return /^https?:\/\//i.test(s) || /youtube\.com|youtu\.be/i.test(s);
 }
 
+function isOtpauthUrl(s) {
+  return /^otpauth:\/\//i.test(String(s || '').trim());
+}
+
 // ── header detection ──
 
 const HEADER_PATTERNS = {
-  email:    /^(e[-_]?mail|login|account|user|gmail|id|아이디|계정|메일)/i,
+  email:    /^(e[-_]?mail|login|account|user|gmail|아이디|계정|메일)/i,
   password: /^(pass(word)?|pw|pwd|비밀번호|비번|암호)/i,
   totp:     /^(totp|2fa|secret|otp|mfa|인증|코드|시크릿)/i,
   recovery: /^(recover|backup|alt.*mail|second.*mail|복구|보조)/i,
@@ -77,6 +90,7 @@ function detectHeaderMapping(row) {
     if (!cell) continue;
     for (const [field, pattern] of Object.entries(HEADER_PATTERNS)) {
       if (!mapping[field] && pattern.test(cell)) {
+        if (field === 'email' && /^id$/i.test(cell)) continue;
         mapping[field] = i;
         matched++;
         break;
@@ -85,6 +99,27 @@ function detectHeaderMapping(row) {
   }
   if (matched >= 2 && mapping.email !== undefined) return mapping;
   return null;
+}
+
+// ── merged cells expansion ──
+
+function expandMergedCells(sheet) {
+  const merges = sheet['!merges'];
+  if (!merges || !merges.length) return;
+  for (const merge of merges) {
+    const startCell = XLSX.utils.encode_cell({ r: merge.s.r, c: merge.s.c });
+    const val = sheet[startCell];
+    if (!val) continue;
+    for (let r = merge.s.r; r <= merge.e.r; r++) {
+      for (let c = merge.s.c; c <= merge.e.c; c++) {
+        if (r === merge.s.r && c === merge.s.c) continue;
+        const addr = XLSX.utils.encode_cell({ r, c });
+        if (!sheet[addr]) {
+          sheet[addr] = { t: val.t, v: val.v, w: val.w };
+        }
+      }
+    }
+  }
 }
 
 // ── column-level type analysis (no header) ──
@@ -105,8 +140,8 @@ function analyzeColumns(rows) {
       nonEmpty++;
       values.push(v);
       if (isEmail(v)) emails++;
-      if (isTotpLike(v)) totps++;
-      if (isUrlLike(v)) urls++;
+      if (isTotpLike(v) || isOtpauthUrl(v)) totps++;
+      if (isUrlLike(v) && !isOtpauthUrl(v)) urls++;
     }
     stats.push({ col: c, nonEmpty, emails, totps, urls, values });
   }
@@ -114,9 +149,8 @@ function analyzeColumns(rows) {
   const mapping = {};
   const used = new Set();
 
-  // 1. find ALL email-like columns (>20% email pattern — sparse sheets have many blanks)
   const emailCols = stats
-    .filter(s => s.nonEmpty > 0 && s.emails / s.nonEmpty > 0.2)
+    .filter(s => s.nonEmpty > 0 && s.emails / s.nonEmpty > 0.1)
     .sort((a, b) => {
       const rd = (b.emails / b.nonEmpty) - (a.emails / a.nonEmpty);
       return rd !== 0 ? rd : a.col - b.col;
@@ -124,22 +158,19 @@ function analyzeColumns(rows) {
 
   if (!emailCols.length) return {};
 
-  // first email column = main email (by ratio, then by position)
   mapping.email = emailCols[0].col;
   used.add(emailCols[0].col);
 
-  // second email column = recovery
   if (emailCols.length > 1) {
     mapping.recovery = emailCols[1].col;
     used.add(emailCols[1].col);
   }
 
-  // 3. totp column: highest totp ratio, >40%
   let bestTotp = null, bestTotpRatio = 0;
   for (const s of stats) {
     if (used.has(s.col) || s.nonEmpty === 0) continue;
     const ratio = s.totps / s.nonEmpty;
-    if (ratio > bestTotpRatio && ratio > 0.2) {
+    if (ratio > bestTotpRatio && ratio > 0.1) {
       bestTotpRatio = ratio;
       bestTotp = s.col;
     }
@@ -149,12 +180,11 @@ function analyzeColumns(rows) {
     used.add(bestTotp);
   }
 
-  // 4. youtube/url column: >30%
   let bestUrl = null, bestUrlRatio = 0;
   for (const s of stats) {
     if (used.has(s.col) || s.nonEmpty === 0) continue;
     const ratio = s.urls / s.nonEmpty;
-    if (ratio > bestUrlRatio && ratio > 0.3) {
+    if (ratio > bestUrlRatio && ratio > 0.2) {
       bestUrlRatio = ratio;
       bestUrl = s.col;
     }
@@ -164,10 +194,14 @@ function analyzeColumns(rows) {
     used.add(bestUrl);
   }
 
-  // 5. password: first unassigned column with data
+  // password: first unassigned column with data, but skip if it looks like a row-number/index column
   for (const s of stats) {
     if (used.has(s.col)) continue;
     if (s.nonEmpty > 0) {
+      const allNumbers = s.values.every(v => /^\d+$/.test(v));
+      const isSequential = allNumbers && s.values.length > 2 &&
+        s.values.every((v, i) => i === 0 || parseInt(v) === parseInt(s.values[i-1]) + 1);
+      if (isSequential) continue;
       mapping.password = s.col;
       used.add(s.col);
       break;
@@ -180,11 +214,11 @@ function analyzeColumns(rows) {
 // ── label-value pair detection ──
 
 const LABEL_PATTERNS = {
-  email:    /^(e[-_]?mail|login|account|user|gmail|id|아이디|계정|메일)\s*[:：]/i,
-  password: /^(pass(word)?|pw|pwd|비밀번호|비번|암호)\s*[:：]/i,
-  totp:     /^(totp|2fa|secret|otp|mfa|인증|코드|시크릿)\s*[:：]/i,
-  recovery: /^(recover|backup|alt.*mail|second.*mail|복구|보조)\s*[:：]/i,
-  youtube:  /^(youtube|yt|url|link|channel|채널|주소)\s*[:：]/i,
+  email:    /^(e[-_]?mail|login|account|user|gmail|아이디|계정|메일)\s*[:：=]/i,
+  password: /^(pass(word)?|pw|pwd|비밀번호|비번|암호)\s*[:：=]/i,
+  totp:     /^(totp|2fa|secret|otp|mfa|인증|코드|시크릿)\s*[:：=]/i,
+  recovery: /^(recover|backup|alt.*mail|second.*mail|복구|보조)\s*[:：=]/i,
+  youtube:  /^(youtube|yt|url|link|channel|채널|주소)\s*[:：=]/i,
 };
 
 function extractLabelValue(cell) {
@@ -213,7 +247,7 @@ function tryVerticalExtract(rows, sourceFile) {
   const lvAccounts = tryLabelValueExtract(rows, maxCols, sourceFile);
   if (lvAccounts && lvAccounts.length) return lvAccounts;
 
-  if (maxCols <= 3) {
+  if (maxCols <= 4) {
     const stackedAccounts = tryStackedExtract(rows, maxCols, sourceFile);
     if (stackedAccounts && stackedAccounts.length) return stackedAccounts;
   }
@@ -226,10 +260,8 @@ function tryLabelValueExtract(rows, maxCols, sourceFile) {
   for (let i = 0; i < Math.min(20, rows.length); i++) {
     const row = rows[i];
     if (!row) continue;
-    // check col 0 for "label: value" pattern
     const c0 = String((row[0]) || '').trim();
     if (extractLabelValue(c0)) { labelCount++; continue; }
-    // check if single-cell has "label: value"
     if (maxCols <= 2) {
       let found = false;
       for (let c = 0; c < (row.length || 0); c++) {
@@ -237,7 +269,6 @@ function tryLabelValueExtract(rows, maxCols, sourceFile) {
       }
       if (found) continue;
     }
-    // 2-col: col0 matches HEADER_PATTERNS (no colon), col1 = value
     if (maxCols === 2 && row.length >= 2) {
       const label = String((row[0]) || '').trim();
       for (const [, pattern] of Object.entries(HEADER_PATTERNS)) {
@@ -252,10 +283,14 @@ function tryLabelValueExtract(rows, maxCols, sourceFile) {
 
   function flushCur() {
     if (cur.email && isEmail(cur.email)) {
+      let totpVal = cur.totp || '';
+      if (isOtpauthUrl(totpVal)) {
+        totpVal = extractTotpFromUrl(totpVal) || totpVal;
+      }
       accounts.push({
         email: cur.email,
         password: cur.password || '',
-        totp_secret: cur.totp && isTotpLike(cur.totp) ? normalizeTotp(cur.totp) : (cur.totp || ''),
+        totp_secret: isTotpLike(totpVal) ? normalizeTotp(totpVal) : totpVal,
         recovery_email: cur.recovery || '',
         youtube_url: cur.youtube || '',
         extra: [],
@@ -277,7 +312,6 @@ function tryLabelValueExtract(rows, maxCols, sourceFile) {
       const cell = String(row[c] || '').trim();
       const lv = extractLabelValue(cell);
       if (lv) {
-        // value might be in next column
         let val = lv.value;
         if (!val && c + 1 < row.length) val = String(row[c + 1] || '').trim();
         if (lv.field === 'email' && cur.email && isEmail(cur.email)) flushCur();
@@ -287,7 +321,6 @@ function tryLabelValueExtract(rows, maxCols, sourceFile) {
       }
     }
 
-    // 2-col label-value: col0=label text (no colon), col1=value — matched by HEADER_PATTERNS
     if (!found && maxCols === 2) {
       const label = String((row[0]) || '').trim();
       const value = String((row[1]) || '').trim();
@@ -306,12 +339,11 @@ function tryLabelValueExtract(rows, maxCols, sourceFile) {
 }
 
 function tryStackedExtract(rows, maxCols, sourceFile) {
-  if (maxCols > 3) return null;
+  if (maxCols > 4) return null;
 
-  // collect all non-empty values in reading order
   const values = [];
   for (const row of rows) {
-    if (!row) { values.push(null); continue; } // blank row = separator
+    if (!row) { values.push(null); continue; }
     const allEmpty = row.every(c => !String(c || '').trim());
     if (allEmpty) { values.push(null); continue; }
     for (let c = 0; c < row.length; c++) {
@@ -320,7 +352,6 @@ function tryStackedExtract(rows, maxCols, sourceFile) {
     }
   }
 
-  // group by: start new account on each email found
   const accounts = [];
   let cur = null;
   let afterBlank = false;
@@ -345,8 +376,9 @@ function tryStackedExtract(rows, maxCols, sourceFile) {
 
     if (!cur) continue;
 
-    // classify and assign to first empty matching slot
-    if (isTotpLike(v) && !cur.totp) { cur.totp = v; }
+    if ((isTotpLike(v) || isOtpauthUrl(v)) && !cur.totp) {
+      cur.totp = isOtpauthUrl(v) ? (extractTotpFromUrl(v) || v) : v;
+    }
     else if (isUrlLike(v) && !cur.youtube) { cur.youtube = v; }
     else if (isEmail(v) && !cur.recovery) { cur.recovery = v; }
     else if (!cur.password) { cur.password = v; }
@@ -370,6 +402,7 @@ function tryStackedExtract(rows, maxCols, sourceFile) {
 // ── brute-force fallback: scan every cell for emails ──
 
 function bruteForceExtract(rows, sourceFile) {
+  const seen = new Set();
   const accounts = [];
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -377,6 +410,9 @@ function bruteForceExtract(rows, sourceFile) {
     for (let c = 0; c < row.length; c++) {
       const v = String(row[c] || '').trim();
       if (!isEmail(v)) continue;
+      const key = normalizeEmail(v);
+      if (seen.has(key)) continue;
+      seen.add(key);
       const rest = [];
       for (let c2 = 0; c2 < row.length; c2++) {
         if (c2 === c) continue;
@@ -385,7 +421,8 @@ function bruteForceExtract(rows, sourceFile) {
       }
       let password = '', totp_secret = '', recovery = '', youtube = '';
       for (const rv of rest) {
-        if (!totp_secret && isTotpLike(rv)) { totp_secret = normalizeTotp(rv); }
+        if (!totp_secret && isOtpauthUrl(rv)) { totp_secret = extractTotpFromUrl(rv) || normalizeTotp(rv); }
+        else if (!totp_secret && isTotpLike(rv)) { totp_secret = normalizeTotp(rv); }
         else if (!youtube && isUrlLike(rv)) { youtube = rv; }
         else if (!recovery && isEmail(rv)) { recovery = rv; }
         else if (!password) { password = rv; }
@@ -399,14 +436,15 @@ function bruteForceExtract(rows, sourceFile) {
 // ── main extraction ──
 
 function extractAccountsFromSheet(sheet, sourceFile) {
-  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+  expandMergedCells(sheet);
+
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
   if (!rows.length) return [];
 
   let mapping = null;
   let startRow = 0;
 
-  // try header detection in first 5 rows
-  for (let i = 0; i < Math.min(5, rows.length); i++) {
+  for (let i = 0; i < Math.min(10, rows.length); i++) {
     const m = detectHeaderMapping(rows[i]);
     if (m) {
       mapping = m;
@@ -415,19 +453,21 @@ function extractAccountsFromSheet(sheet, sourceFile) {
     }
   }
 
-  // no header → try vertical/stacked layout (label-value pairs, etc.)
   if (!mapping) {
     const vertAccounts = tryVerticalExtract(rows, sourceFile);
     if (vertAccounts && vertAccounts.length) return vertAccounts;
   }
 
-  // no header → analyze column data (standard horizontal layout)
   if (!mapping) {
     let sampleStart = 0;
     if (rows.length > 1) {
-      const firstCell = String((rows[0] && rows[0][0]) || '').trim();
-      if (firstCell && !isEmail(firstCell)) {
-        sampleStart = 1;
+      for (let i = 0; i < Math.min(3, rows.length); i++) {
+        const firstCell = String((rows[i] && rows[i][0]) || '').trim();
+        if (firstCell && !isEmail(firstCell) && !Object.values(HEADER_PATTERNS).some(p => p.test(firstCell))) {
+          sampleStart = i + 1;
+        } else {
+          break;
+        }
       }
     }
 
@@ -436,7 +476,6 @@ function extractAccountsFromSheet(sheet, sourceFile) {
     startRow = sampleStart;
 
     if (!mapping || mapping.email === undefined) {
-      // Last resort: brute-force scan every cell for emails
       return bruteForceExtract(rows, sourceFile);
     }
   }
@@ -452,9 +491,13 @@ function extractAccountsFromSheet(sheet, sourceFile) {
     if (!isEmail(email)) continue;
 
     const password = mapping.password !== undefined ? String(row[mapping.password] || '').trim() : '';
-    const totpRaw = mapping.totp !== undefined ? String(row[mapping.totp] || '').trim() : '';
+    let totpRaw = mapping.totp !== undefined ? String(row[mapping.totp] || '').trim() : '';
     const recovery = mapping.recovery !== undefined ? String(row[mapping.recovery] || '').trim() : '';
     const youtube = mapping.youtube !== undefined ? String(row[mapping.youtube] || '').trim() : '';
+
+    if (isOtpauthUrl(totpRaw)) {
+      totpRaw = extractTotpFromUrl(totpRaw) || totpRaw;
+    }
 
     const extra = [];
     for (let c = 0; c < row.length; c++) {
@@ -483,7 +526,6 @@ function parseExcelFile(filePath) {
 
   for (const sheetName of wb.SheetNames) {
     const sheet = wb.Sheets[sheetName];
-    // Restore hyperlink emails (mailto:xxx@gmail.com) that SheetJS strips to display text only
     for (const k of Object.keys(sheet)) {
       if (k[0] === '!') continue;
       const c = sheet[k];
@@ -546,7 +588,9 @@ function mountRoutes(app) {
       let existing = [];
       try { const d = JSON.parse(fs.readFileSync(dataFile, 'utf8')); existing = Array.isArray(d) ? d : (d.accounts || []); } catch(e) {}
       const byEmail = {};
-      for (const a of existing) if (a && a.email) byEmail[a.email] = a;
+      for (const a of existing) {
+        if (a && a.email) byEmail[normalizeEmail(a.email)] = a;
+      }
 
       const files = [];
       let totalParsed = 0, totalAdded = 0, totalUpdated = 0;
@@ -556,15 +600,16 @@ function mountRoutes(app) {
           let added = 0, updated = 0;
           for (const a of accounts) {
             if (!a.email) continue;
-            if (byEmail[a.email]) {
-              const e = byEmail[a.email];
+            const key = normalizeEmail(a.email);
+            if (byEmail[key]) {
+              const e = byEmail[key];
               if (a.password) e.password = a.password;
               if (a.totp_secret && isTotpLike(a.totp_secret)) e.totp_secret = normalizeTotp(a.totp_secret);
               if (a.recovery_email) e.recovery_email = a.recovery_email;
               if (a.youtube_url) e.youtube_url = a.youtube_url;
               updated++;
             } else {
-              byEmail[a.email] = a;
+              byEmail[key] = a;
               added++;
             }
           }
@@ -596,6 +641,7 @@ _exports.extractAccountsFromSheet = extractAccountsFromSheet;
 _exports.normalizeTotp = normalizeTotp;
 _exports.isTotpLike = isTotpLike;
 _exports.isEmail = isEmail;
+_exports.normalizeEmail = normalizeEmail;
 _exports.analyzeColumns = analyzeColumns;
 _exports.classifyValue = classifyValue;
 _exports.extractLabelValue = extractLabelValue;
@@ -603,4 +649,6 @@ _exports.tryVerticalExtract = tryVerticalExtract;
 _exports.tryStackedExtract = tryStackedExtract;
 _exports.tryLabelValueExtract = tryLabelValueExtract;
 _exports.bruteForceExtract = bruteForceExtract;
+_exports.expandMergedCells = expandMergedCells;
+_exports.extractTotpFromUrl = extractTotpFromUrl;
 module.exports = _exports;
