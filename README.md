@@ -47,86 +47,304 @@ make/
 
 ---
 
-## API 엔드포인트
+## 의존성 + 공식 문서 매핑
 
-### 엑셀 업로드 (`upload_excels.js`)
+### Node.js 핵심 모듈
 
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| POST | `/api/upload-excels` | 엑셀 파일 업로드 + 파싱 + 머지 |
+| 모듈 | 사용 위치 | 사용 API | 공식 문서 |
+|------|-----------|----------|-----------|
+| `fs` | upload_excels.js, auto_deploy.js, login-v2.js | `readFileSync`, `writeFileSync`, `renameSync`, `unlinkSync`, `mkdirSync`, `existsSync`, `copyFileSync` | https://github.com/nodejs/node/blob/main/doc/api/fs.md |
+| `path` | 전체 | `join`, `basename`, `resolve` | https://github.com/nodejs/node/blob/main/doc/api/path.md |
+| `crypto` | auto_deploy.js | `timingSafeEqual` | https://github.com/nodejs/node/blob/main/doc/api/crypto.md#cryptotimingsafeequala-b |
+| `child_process` | auto_deploy.js | `execSync`, `execFileSync` | https://github.com/nodejs/node/blob/main/doc/api/child_process.md#child_processexecfilesyncfile-args-options |
 
-- multer: 최대 50파일, 파일당 200MB
-- 업로드 임시 경로: `/opt/gauth-full/uploads/`
-- 파싱 후 임시 파일 자동 삭제
+### npm 패키지
 
-### 관리 API (`auto_deploy.js`)
+| 패키지 | 버전 | 사용 위치 | 용도 | 공식 문서 (GitHub 원본) |
+|--------|------|-----------|------|------------------------|
+| express | ^4.21.2 | rebrowser-login.js | HTTP 서버, 라우팅 | https://github.com/expressjs/express |
+| multer | ^1.4.5-lts.1 | upload_excels.js | multipart 파일 업로드 | https://github.com/expressjs/multer#readme |
+| xlsx (SheetJS) | ^0.18.5 | upload_excels.js, index.html | 엑셀 파싱 (`.xlsx`, `.xls`, `.csv`) | https://github.com/SheetJS/sheetjs |
+| otplib | ^12.0.1 | login-v2.js, rebrowser-login.js | TOTP 코드 생성 (RFC 6238) | https://github.com/yeojz/otplib |
+| hi-base32 | ^0.5.1 | (otplib 내부) | Base32 인코딩/디코딩 (RFC 4648) | https://github.com/nicosResworWorking/hi-base32 |
+| rebrowser-puppeteer | ^24.8.1 | login-v2.js | 봇 감지 회피 Puppeteer | https://github.com/nicosResworWorking/rebrowser-puppeteer |
+| puppeteer | ^25.0.0 | login-v2.js | 브라우저 자동화 | https://github.com/nicosResworWorking/puppeteer (공식: https://pptr.dev) |
+| puppeteer-extra | ^3.3.6 | login-v2.js | Puppeteer 플러그인 프레임워크 | https://github.com/berstend/puppeteer-extra |
+| puppeteer-extra-plugin-stealth | ^2.11.2 | login-v2.js | Stealth 플러그인 (봇 감지 회피) | https://github.com/berstend/puppeteer-extra/tree/master/packages/puppeteer-extra-plugin-stealth |
+| archiver | ^7.0.1 | rebrowser-login.js | ZIP 파일 생성 (엑셀 내보내기) | https://github.com/archiverjs/node-archiver |
+| ws | ^8.18.0 | (미사용 또는 WebSocket) | WebSocket 클라이언트 | https://github.com/websockets/ws |
+| dotenv | ^16.4.7 | (환경변수 로드) | `.env` 파일 파서 | https://github.com/motdotla/dotenv |
 
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| POST | `/api/deploy` | GitHub에서 코드 풀 + 서비스 재시작 |
-| POST | `/api/update-secret` | 개별 계정 TOTP 시크릿 수정 |
-| GET | `/api/search-account?q=` | 계정 검색 (최소 3글자) |
-| GET | `/api/deploy-status` | 서버 상태 (Chrome/Xvfb/Node) |
-| POST | `/api/login-one` | 개별 계정 Puppeteer 로그인 |
+### 프론트엔드 라이브러리
 
-### 메인 서버 (`rebrowser-login.js`)
-
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| GET | `/api/accounts` | 전체 계정 목록 |
-| GET | `/api/normalized-accounts` | 정규화된 계정 목록 |
-| GET | `/api/lookup/:email` | 개별 계정 조회 |
-| GET | `/codes/:secret` | TOTP 코드 실시간 생성 |
-| POST | `/api/start` | 배치 로그인 (동시성 8) |
-| POST | `/api/export-split` | N분할 엑셀 내보내기 (ZIP) |
+| 라이브러리 | 파일 | 용도 | 공식 문서 |
+|-----------|------|------|-----------|
+| SheetJS (xlsx.core.min.js) | gauth/xlsx.core.min.js | 클라이언트 측 mailto 하이퍼링크 복구 | https://github.com/SheetJS/sheetjs |
 
 ---
 
-## 엑셀 파싱 로직
+## API 엔드포인트 전체 매핑
+
+### `upload_excels.js` — 1개 라우트
+
+| 메서드 | 경로 | 인증 | 핸들러 | 공식 문서 참조 |
+|--------|------|------|--------|---------------|
+| POST | `/api/upload-excels` | 없음 | multer `.array('files', 50)` → `parseExcelFile()` → atomic write | multer: https://github.com/expressjs/multer#arrayfieldname-maxcount |
+
+사용하는 SheetJS API:
+- `XLSX.readFile(path)` — https://github.com/SheetJS/sheetjs (README "Parsing Workbooks")
+- `XLSX.utils.sheet_to_json(sheet, {header:1, defval:'', raw:false})` — `raw:false`는 포맷된 텍스트 반환, 선행 0 보존 (types/index.d.ts `Sheet2JSONOpts.raw`)
+- `XLSX.utils.encode_cell({r, c})` — 셀 주소 인코딩 (A1 형식)
+- `XLSX.utils.encode_range({s, e})` — 범위 인코딩
+- `worksheet['!merges']` — 병합 셀 배열 (README "Worksheet Object")
+- `cell.l.Target` — 하이퍼링크 (README "Cell Object" `.l` property)
+
+### `auto_deploy.js` — 5개 라우트 (전부 `authMiddleware` 적용)
+
+| 메서드 | 경로 | 핸들러 | 설명 | 참조 |
+|--------|------|--------|------|------|
+| POST | `/api/deploy` | git clone → 파일 복사 → npm install → systemctl restart | 코드 배포 | child_process.execFileSync: https://github.com/nodejs/node/blob/main/doc/api/child_process.md |
+| POST | `/api/update-secret` | JSON 읽기 → TOTP 수정 → atomic write | 개별 TOTP 시크릿 수정 | crypto.timingSafeEqual: https://github.com/nodejs/node/blob/main/doc/api/crypto.md |
+| GET | `/api/search-account?q=` | 이메일/extra 부분 검색 (최소 3글자) | 계정 검색 | |
+| GET | `/api/deploy-status` | Chrome/Xvfb/Node/Display 상태 | 서버 진단 | |
+| POST | `/api/login-one` | `advancedGoogleLogin()` 호출 (최대 3 동시) | 개별 Puppeteer 로그인 | |
+
+**authMiddleware 동작** (공식 문서 기반):
+```javascript
+// crypto.timingSafeEqual은 버퍼 길이가 같아야 함 (다르면 RangeError)
+// 공식: https://github.com/nodejs/node/blob/main/doc/api/crypto.md#cryptotimingsafeequala-b
+const tokenBuf = Buffer.from(token);
+const expectedBuf = Buffer.from(expected);
+if (tokenBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(tokenBuf, expectedBuf))
+```
+
+### `rebrowser-login.js` (서버 전용, 이 저장소에 없음) — 추정 라우트
+
+| 메서드 | 경로 | 설명 | 프론트엔드 호출 위치 |
+|--------|------|------|---------------------|
+| GET | `/api/accounts` | 전체 계정 (세션 정보 포함) | index.html:46 |
+| GET | `/api/normalized-accounts` | 정규화 계정 목록 | index.html:47,468 |
+| GET | `/api/profiles` | Puppeteer 프로필 디렉토리 목록 | index.html:469 |
+| GET | `/api/failed-accounts` | 실패 계정 목록 | index.html:470 |
+| DELETE | `/api/failed-accounts/:email` | 잠금 해제 | index.html:642 |
+| GET | `/api/lookup/:email` | 개별 계정 조회 | index.html:695 |
+| GET | `/api/parse-report` | 마지막 파싱 결과 | index.html:45 |
+| POST | `/api/open-profile` | Chrome 프로필 열기 | index.html:594 |
+| POST | `/api/login` | 기본 로그인 | index.html:600 |
+| POST | `/api/start` | 배치 로그인 시작 | index.html:937 |
+| POST | `/api/stop` | 배치 로그인 정지 | index.html:942 |
+| POST | `/api/export-split` | N분할 엑셀 ZIP 내보내기 | index.html:948 |
+| GET | `/codes/:secret` | TOTP 코드 실시간 생성 | index.html:706,840 |
+| GET | `/api/vm/list` | GCP VM 목록 | index.html:1054 |
+| POST | `/api/vm/start` | VM 시작 | index.html:1038 |
+| POST | `/api/vm/stop` | VM 정지 | index.html:1040 |
+
+---
+
+## 프론트엔드 버튼/기능 전체 매핑
+
+### 상단 통계 바
+| UI 요소 | 기능 | JS 함수 | API |
+|---------|------|---------|-----|
+| 📊 로딩 중... | 계정 통계 자동 로드 | `refreshAccStats()` | `/api/parse-report`, `/api/accounts`, `/api/normalized-accounts` |
+| 📁 파일별 계정 수 | 파일별 계정 통계 (접기/펼치기) | `refreshAccStats()` 내부 | 동일 |
+
+### 엑셀 업로드
+| 버튼 | 기능 | JS 함수 | API |
+|------|------|---------|-----|
+| 📁 폴더 전체 스캔 | `webkitdirectory`로 폴더 재귀 스캔 | `#folderInput` change | 없음 (클라이언트) |
+| 🗑 초기화 | 선택 파일 목록 초기화 | `renderList()` 내부 | 없음 |
+| ▶ 업로드 & 취합 | 엑셀 업로드 → 서버 파싱 → 머지 | `fixHyperlinksAndUpload()` → `doUpload()` | POST `/api/upload-excels` |
+
+### 계정 조회
+| 버튼 | 기능 | JS 함수 | API |
+|------|------|---------|-----|
+| 조회 (Enter) | 이메일로 계정 검색 | `lookup()` | GET `/api/lookup/:email`, 폴백: GET `/api/search-account?q=` |
+| ✏️ 시크릿 수정 | TOTP 시크릿 직접 편집 | `editSecret()` | POST `/api/update-secret` |
+| 🔄 새로고침 | TOTP 코드 재생성 | `lookupRefreshCode()` | GET `/codes/:secret` |
+| 🔑 프로그램 로그인 | Puppeteer 자동 로그인 | `programLogin()` | POST `/api/login-one` |
+| 🔓 Chrome 열기 | 기존 세션 브라우저 열기 | `openIt()` | POST `/api/open-profile` |
+
+### 계정 목록 (메인 테이블)
+| 버튼 | 기능 | JS 함수 | API |
+|------|------|---------|-----|
+| 이메일 클릭 | 빠른 조회 | `quickLookup()` | GET `/api/lookup/:email` |
+| 🔍 정보 | 세션 없는 계정 조회 | `quickLookup()` | 동일 |
+| 🔑 로그인 | 개별 자동 로그인 | `programLogin()` | POST `/api/login-one` |
+| 🔓 잠금해제 | 실패 잠금 해제 | `unlockAccount()` | DELETE `/api/failed-accounts/:email` |
+
+### 필터/내보내기
+| 버튼 | 기능 | JS 함수 | API |
+|------|------|---------|-----|
+| 🔍 필터 입력 | 이메일 부분 검색 | `applyFilter()` | 없음 (클라이언트) |
+| 전체/오늘/2FA/미접속/잠김 | 카테고리 필터 | `applyFilter()` | 없음 |
+| 📥 다운로드 | N분할 엑셀 ZIP | click handler | POST `/api/export-split` |
+| ▶ 미로그인만 로그인 | 배치 자동 로그인 | click handler | POST `/api/start` |
+| ■ 정지 | 배치 정지 | click handler | POST `/api/stop` |
+
+### 시간 순서 뷰
+| 버튼 | 기능 | JS 함수 | API |
+|------|------|---------|-----|
+| 계정 조회 | 시간순 정렬 로드 | `tdLoad()` | 없음 (인메모리 `ALL` 사용) |
+| 오래된순/최신순 | 정렬 방향 | select change → `tdLoad()` | 없음 |
+| 페이지네이션 «‹›» | 20개씩 페이지 | `tdGoto()` | 없음 |
+| ✏️ / 🔄 / 🔑 | 개별 시크릿 수정/코드 새로고침/로그인 | `editSecret()`, `tdRefreshCode()`, `programLogin()` | 동일 |
+
+### GCP VM 제어
+| 버튼 | 기능 | JS 함수 | API |
+|------|------|---------|-----|
+| 🔄 상태 새로고침 | VM 목록 로드 | `loadList()` | GET `/api/vm/list` |
+| ▶ 시작 | VM 시작 | delegated click | POST `/api/vm/start` |
+| ■ 정지 | VM 정지 (confirm 필요) | delegated click | POST `/api/vm/stop` |
+| 🖥 SSH | GCP Cloud Shell SSH | delegated click | 없음 (외부 URL 이동) |
+
+### 사이트맵 (하단)
+| 버튼 | 기능 |
+|------|------|
+| 🌐 | 사이트맵 팝업 열기 |
+| ✕ | 사이트맵 닫기 |
+
+### localStorage 사용
+
+| 키 | 용도 | 읽기 위치 | 쓰기 위치 |
+|----|------|-----------|-----------|
+| `gauth_uploading` | 업로드 진행 타임스탬프 | 84-111 (폴링) | 271 (업로드 시작) |
+| `gauth_last_upload` | 마지막 업로드 결과 JSON | 391-415 (`updateUploadStatus`) | 354-361 (업로드 완료) |
+| `gauth_last_lookup` | 마지막 조회 이메일 | 521, 816 (자동 복원) | 693, 704 (조회 시) |
+| `vm_admin_pw` | VM 관리 비밀번호 | 998 (읽기) | 997 (변경 시) |
+
+### 키보드 이벤트
+
+| 키 | 요소 | 동작 |
+|----|------|------|
+| Enter | `#lookup` 입력창 | `lookup()` 실행 |
+| input | `#q` 필터 입력창 | `applyFilter()` 실행 |
+
+---
+
+## 엑셀 파싱 로직 (공식 문서 기반)
+
+### 사용하는 SheetJS API와 공식 출처
+
+| API | 용도 | 공식 문서 위치 |
+|-----|------|---------------|
+| `XLSX.readFile(path)` | 엑셀 파일 읽기 | https://github.com/SheetJS/sheetjs — "Parsing Workbooks" |
+| `XLSX.utils.sheet_to_json(sheet, opts)` | 시트 → 2D 배열 변환 | https://github.com/SheetJS/sheetjs — "Utility Functions" |
+| `opts.header: 1` | 첫 행을 데이터로 취급 (헤더 사용 안 함) | types/index.d.ts `Sheet2JSONOpts` |
+| `opts.raw: false` | 포맷된 텍스트 반환 → 선행 0 보존 (`0812345` → `"0812345"`, `true`면 `812345`) | types/index.d.ts `Sheet2JSONOpts.raw` |
+| `opts.defval: ''` | 빈 셀을 빈 문자열로 | types/index.d.ts `Sheet2JSONOpts.defval` |
+| `XLSX.utils.encode_cell({r, c})` | `{r:0, c:0}` → `"A1"` | types/index.d.ts `encode_cell` |
+| `sheet['!merges']` | 병합 셀 범위 배열 `[{s:{r,c}, e:{r,c}}]` | README "Worksheet Object" |
+| `cell.l.Target` | 셀 하이퍼링크 (mailto:, http:) | README "Cell Object" |
+| `cell.v` | 셀 raw 값 | README "Cell Object" |
+| `cell.w` | 셀 formatted 텍스트 | README "Cell Object" |
+
+### 파싱 전략 (4단계 폴백)
 
 ```
 엑셀 파일 입력
   │
-  ├─ 1) 헤더 행 감지 (email/password/totp 패턴 매칭)
-  │     한국어/영어 헤더 모두 지원
+  ├─ 0) 전처리
+  │     ├─ expandMergedCells: sheet['!merges'] 배열에서 병합된 셀 값 복제
+  │     │   (공식: SheetJS "Worksheet Object" — !merges property)
+  │     └─ mailto 하이퍼링크 복구: cell.l.Target이 "mailto:"면 cell.v에 이메일 복원
+  │         (공식: SheetJS "Cell Object" — .l hyperlink property)
   │
-  ├─ 2) 헤더 없음 → 세로/라벨-값 레이아웃 감지
-  │     "이메일: xxx@gmail.com" 형식 / 2열 키-값 시트
+  ├─ 1) 헤더 행 감지 (detectHeaderMapping)
+  │     처음 10행 스캔, 정규식으로 email/password/totp/recovery/youtube 컬럼 매핑
+  │     한국어(이메일/비밀번호/시크릿/복구/채널) + 영어 헤더 모두 지원
+  │     조건: 2개 이상 필드 매칭 + email 필드 필수
+  │     bare "id"는 email로 매핑하지 않음 (오탐 방지)
   │
-  ├─ 3) 헤더 없음 → 컬럼 통계 분석
-  │     @포함 20%+ = 이메일 / Base32 20%+ = TOTP
-  │     URL 30%+ = YouTube / 나머지 = 비밀번호
+  ├─ 2) 헤더 없음 → 세로/라벨-값 레이아웃 (tryVerticalExtract)
+  │     ├─ 라벨-값: "이메일: xxx@gmail.com" / 2열 키-값 시트
+  │     │   구분자: `:`, `：` (전각), `=`
+  │     └─ 스택형: 1~4열 시트에서 이메일→비밀번호→TOTP 순서 추정
   │
-  └─ 4) 최후 수단 → 모든 셀 무차별 스캔
-        이메일 발견 시 같은 행 나머지 셀 자동 분류
+  ├─ 3) 헤더 없음 → 컬럼 통계 분석 (analyzeColumns)
+  │     각 컬럼의 전체 셀을 샘플링:
+  │     - @포함 10%+ → email (비율 높은 컬럼이 메인, 두번째는 recovery)
+  │     - Base32 10%+ → TOTP
+  │     - URL 20%+ → YouTube
+  │     - 순번 컬럼(1,2,3,...) 건너뜀
+  │     - 나머지 첫 번째 미할당 컬럼 → password
+  │
+  └─ 4) 최후 수단 → 브루트포스 (bruteForceExtract)
+        모든 셀 무차별 스캔, 이메일 발견 시 같은 행의 나머지 셀을 자동 분류
+        중복 이메일은 normalizeEmail()로 소문자 비교하여 건너뜀
 ```
 
-### TOTP 시크릿 검증
+### TOTP 시크릿 검증 (공식 기준)
 
-- Base32 문자만: `A-Z`, `2-7`
-- 유효 길이: 16자 (80bit), 32자 (160bit), 52자, 64자
-- 원본 대비 Base32 비율 80% 미만 → 비밀번호로 판정
+```
+RFC 4648 Base32: A-Z, 2-7 문자만 허용
+RFC 6238 TOTP: 30초 스텝, SHA-1, 6자리 코드
+
+정규화 (normalizeTotp):
+  1. 대문자 변환: .toUpperCase()
+  2. 공백/하이픈/패딩 제거: /[\s\-_=]/g → ''
+  3. 비-Base32 문자 제거: /[^A-Z2-7]/g → ''
+
+검증 (isTotpLike):
+  - @ 포함 → 이메일이므로 거부
+  - 숫자만 → 전화번호/순번이므로 거부
+  - http:// → URL이므로 거부
+  - 특수문자 포함 → 비밀번호이므로 거부
+  - 정규화 후 16자 미만 → 너무 짧아 거부
+  - 정규화 후 128자 초과 → 너무 길어 거부
+  - Base32 비율 80% 미만 → 비밀번호 오인 방지
+
+otpauth:// URL 지원:
+  - otpauth://totp/...?secret=XXXX&issuer=...
+  - secret= 파라미터 추출: /[?&]secret=([A-Z2-7]+)/i
+
+공식 문서:
+  - RFC 4648 (Base32): https://www.rfc-editor.org/rfc/rfc4648#section-6
+  - RFC 6238 (TOTP): https://www.rfc-editor.org/rfc/rfc6238
+  - otplib: https://github.com/yeojz/otplib
+```
 
 ### 데이터 머지 규칙
 
 ```
-기존 계정 발견 시:
+기존 계정 발견 시 (normalizeEmail로 소문자 비교):
   password     → 항상 덮어쓰기 (새 값이 있으면)
-  totp_secret  → 유효한 Base32만 덮어쓰기
+  totp_secret  → 유효한 Base32만 덮어쓰기 (isTotpLike 통과한 값만)
   recovery_email → 항상 덮어쓰기
   youtube_url  → 항상 덮어쓰기
 새 계정 → 그대로 추가
+
+저장: atomic write (tmp+rename) → accounts_normalized.json
+공식 문서: fs.renameSync — https://github.com/nodejs/node/blob/main/doc/api/fs.md#fsrenamesyncoldpath-newpath
 ```
 
 ---
 
-## Puppeteer 로그인 엔진
+## Puppeteer 로그인 엔진 (공식 문서 기반)
+
+### 사용하는 API와 공식 출처
+
+| API | 용도 | 공식 문서 |
+|-----|------|-----------|
+| `puppeteer.launch(opts)` | 브라우저 시작 | https://pptr.dev/api/puppeteer.puppeteernode.launch |
+| `page.goto(url)` | 페이지 이동 | https://pptr.dev/api/puppeteer.page.goto |
+| `page.waitForSelector(sel)` | DOM 요소 대기 | https://pptr.dev/api/puppeteer.page.waitforselector |
+| `page.type(sel, text, {delay})` | 키보드 입력 (지연 포함) | https://pptr.dev/api/puppeteer.page.type |
+| `page.click(sel)` | 요소 클릭 | https://pptr.dev/api/puppeteer.page.click |
+| `page.evaluate(fn)` | 페이지 내 JS 실행 | https://pptr.dev/api/puppeteer.page.evaluate |
+| `page.screenshot({path})` | 스크린샷 저장 | https://pptr.dev/api/puppeteer.page.screenshot |
+| `page.url()` | 현재 URL | https://pptr.dev/api/puppeteer.page.url |
+| `page.content()` | 페이지 HTML | https://pptr.dev/api/puppeteer.page.content |
+| `browser.close()` | 브라우저 종료 | https://pptr.dev/api/puppeteer.browser.close |
+| `StealthPlugin()` | 봇 감지 회피 | https://github.com/berstend/puppeteer-extra/tree/master/packages/puppeteer-extra-plugin-stealth |
+| `authenticator.generate(secret)` | TOTP 6자리 코드 생성 | https://github.com/yeojz/otplib |
 
 ### 로그인 흐름
 
 ```
 1. 브라우저 실행 (headed 모드 + stealth 플러그인)
    └─ userDataDir: ./profiles/<email>/ (세션 유지)
+       sanitizeEmail()로 경로 안전하게 처리
 
 2. myaccount.google.com 접속
    └─ 이미 로그인됨 → 즉시 반환
@@ -141,7 +359,7 @@ make/
 5. 비밀번호 입력 (조기 2FA가 아닌 경우)
 
 6. 2FA 처리 (TOTP)
-   └─ otplib authenticator.generate(secret)
+   └─ authenticator.generate(secret) — otplib
    └─ 6자리 코드 생성 → 150ms 딜레이로 입력
 
 7. 보안 챌린지 감지
@@ -152,32 +370,23 @@ make/
 8. 결과 반환 → {success, result, browser, page}
 ```
 
-### TOTP 코드 생성
+### 결과 타입 (LoginResult)
 
-```javascript
-// Base32 정규화 → otplib 생성 (RFC 6238, 30초 스텝)
-secret = secret.toUpperCase()
-  .replace(/[\s\-_=]/g, '')    // 공백/하이픈/패딩 제거
-  .replace(/[^A-Z2-7]/g, ''); // Base32 외 문자 제거
-authenticator.generate(secret);
-```
-
----
-
-## 프론트엔드 기능
-
-| 기능 | 설명 |
-|------|------|
-| 엑셀 업로드 | 드래그앤드롭 / 파일선택, 4단계 진행률 UI |
-| 계정 검색 | 이메일 검색, 상세 조회 |
-| 프로그램 로그인 | 개별 계정 Puppeteer 로그인 (🔑 버튼) |
-| TOTP 코드 | 실시간 코드 표시 + 복사 |
-| 배치 로그인 | 다중 계정 동시 로그인 |
-| 내보내기 | N분할 엑셀 ZIP 다운로드 |
+| 값 | 의미 | 자동 재시도 |
+|----|------|------------|
+| `SUCCESS` | 로그인 성공 | - |
+| `ALREADY_LOGGED` | 이미 로그인 상태 | - |
+| `WRONG_PASSWORD` | 비밀번호 틀림 | 수동 처리 필요 |
+| `WRONG_2FA` | 2FA 코드 틀림 | 수동 처리 필요 |
+| `PHONE_REQUIRED` | 전화 인증 요구 | 수동 처리 필요 |
+| `CAPTCHA_REQUIRED` | CAPTCHA 발생 | 120초 대기 |
+| `UNUSUAL_ACTIVITY` | 비정상 활동 감지 | 수동 처리 필요 |
+| `TIMEOUT` | 시간 초과 | 자동 재시도 가능 |
+| `UNKNOWN_ERROR` | 알 수 없는 오류 | 자동 재시도 가능 |
 
 ---
 
-## CI/CD 배포
+## CI/CD 배포 (deploy-gauth.yml)
 
 ### 트리거
 
@@ -189,6 +398,7 @@ authenticator.generate(secret);
 
 ```
 1. API 배포 시도 (POST /api/deploy)
+   └─ python3 assert d.get('ok') 통과 후에만 deploy_ok=true
    └─ 실패 시 SSH 배포 폴백
 
 2. SSH 배포 (6단계)
@@ -206,17 +416,19 @@ authenticator.generate(secret);
 
 ---
 
-## 의존성
+## 보안 구현 (공식 문서 기반)
 
-| 패키지 | 버전 | 용도 |
-|--------|------|------|
-| express | 4.21 | HTTP 서버 |
-| multer | 1.4 | 파일 업로드 |
-| xlsx | 0.18 | 엑셀 파싱 |
-| otplib | 12.x | TOTP 코드 생성 |
-| rebrowser-puppeteer | 24.x | 브라우저 자동화 |
-| puppeteer-extra-plugin-stealth | 2.11 | 봇 감지 회피 |
-| archiver | 7.x | ZIP 생성 |
+| 보안 항목 | 구현 | 공식 문서 |
+|-----------|------|-----------|
+| 타이밍 공격 방지 | `crypto.timingSafeEqual` (버퍼 길이 먼저 비교) | https://github.com/nodejs/node/blob/main/doc/api/crypto.md#cryptotimingsafeequala-b |
+| 셸 인젝션 방지 | `execFileSync` (인자 배열, 셸 미사용) | https://github.com/nodejs/node/blob/main/doc/api/child_process.md#child_processexecfilesyncfile-args-options |
+| XSS 방지 | `escapeHtml()` — `& < > " '` 이스케이프 | https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html |
+| 경로 탐색 방지 | `sanitizeEmail()` — `/[^a-z0-9]/gi` → `_` | OWASP Path Traversal |
+| Atomic write | `writeFileSync(tmp)` + `renameSync(tmp, target)` | https://github.com/nodejs/node/blob/main/doc/api/fs.md#fsrenamesyncoldpath-newpath |
+| 동시 로그인 제한 | `MAX_CONCURRENT_LOGINS = 3` + `loginQueue` Map | Express 자체 구현 |
+| 토큰 미설정 차단 | `GAUTH_API_TOKEN` 없으면 503 반환 | 자체 구현 |
+
+---
 
 ## 데이터 형식
 
@@ -236,17 +448,46 @@ authenticator.generate(secret);
 ]
 ```
 
-## 참조 공식 문서
+---
 
-| 문제 | 공식 문서 |
-|------|-----------|
-| crypto.timingSafeEqual RangeError (버퍼 길이 불일치) | https://github.com/nodejs/node/blob/main/doc/api/crypto.md#cryptotimingsafeequala-b |
-| multer 파일 업로드 | https://github.com/expressjs/multer#readme |
-| XLSX (SheetJS) 파싱 | https://github.com/SheetJS/sheetjs#readme |
-| otplib TOTP 생성 | https://github.com/yeojz/otplib#readme |
-| Express req/res timeout | https://github.com/expressjs/express/blob/master/lib/request.js |
-| Node.js --max-old-space-size | https://github.com/nodejs/node/blob/main/doc/api/cli.md#--max-old-space-sizesize-in-mib |
-| fs.writeFileSync 권한 | https://github.com/nodejs/node/blob/main/doc/api/fs.md#fswritefilesyncfile-data-options |
+## 참조 공식 문서 (전체)
+
+### Node.js 공식 (GitHub 원본)
+| 주제 | URL |
+|------|-----|
+| fs 모듈 | https://github.com/nodejs/node/blob/main/doc/api/fs.md |
+| path 모듈 | https://github.com/nodejs/node/blob/main/doc/api/path.md |
+| crypto.timingSafeEqual | https://github.com/nodejs/node/blob/main/doc/api/crypto.md#cryptotimingsafeequala-b |
+| child_process.execFileSync | https://github.com/nodejs/node/blob/main/doc/api/child_process.md#child_processexecfilesyncfile-args-options |
+| Buffer.from | https://github.com/nodejs/node/blob/main/doc/api/buffer.md#static-method-bufferfromstring-encoding |
+| --max-old-space-size | https://github.com/nodejs/node/blob/main/doc/api/cli.md#--max-old-space-sizesize-in-mib |
+
+### npm 패키지 (GitHub 원본)
+| 패키지 | URL |
+|--------|-----|
+| express | https://github.com/expressjs/express |
+| multer | https://github.com/expressjs/multer |
+| SheetJS (xlsx) | https://github.com/SheetJS/sheetjs |
+| otplib | https://github.com/yeojz/otplib |
+| puppeteer | https://pptr.dev / https://github.com/nicosResworWorking/puppeteer |
+| puppeteer-extra | https://github.com/berstend/puppeteer-extra |
+| puppeteer-extra-plugin-stealth | https://github.com/berstend/puppeteer-extra/tree/master/packages/puppeteer-extra-plugin-stealth |
+| archiver | https://github.com/archiverjs/node-archiver |
+| ws | https://github.com/websockets/ws |
+| dotenv | https://github.com/motdotla/dotenv |
+
+### RFC 표준
+| 표준 | URL |
+|------|-----|
+| RFC 4648 (Base32) | https://www.rfc-editor.org/rfc/rfc4648#section-6 |
+| RFC 6238 (TOTP) | https://www.rfc-editor.org/rfc/rfc6238 |
+| RFC 5321 (SMTP/이메일) | https://www.rfc-editor.org/rfc/rfc5321 |
+
+### 보안 가이드
+| 주제 | URL |
+|------|-----|
+| XSS 방지 | https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html |
+| 명령어 인젝션 방지 | https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html |
 
 ## 제약사항
 
