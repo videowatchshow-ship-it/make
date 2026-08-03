@@ -333,23 +333,70 @@ jobs:
             # Service status
             sudo systemctl status gauth --no-pager -l 2>/dev/null | tail -10 || true
 
-            # ===== Through-Cloudflare upload test =====
-            echo "=== [POST-DEPLOY] Upload test via public URL ==="
+            # ===== Real Excel upload + lookup E2E test =====
+            echo "=== [POST-DEPLOY] Real Excel upload + lookup test ==="
+            cd /opt/gauth-full
             node -e "
-              const https = require('https');
-              const boundary = '----CFTest' + Date.now();
-              const body = '--' + boundary + '\r\nContent-Disposition: form-data; name=\"files\"; filename=\"cftest.xlsx\"\r\nContent-Type: application/octet-stream\r\n\r\nfakedata\r\n--' + boundary + '--\r\n';
-              const req = https.request({hostname:'gauth.cent-solution.online',port:443,path:'/api/upload-excels',method:'POST',headers:{'Content-Type':'multipart/form-data; boundary='+boundary,'Content-Length':Buffer.byteLength(body)}}, res => {
-                let d=''; res.on('data',c=>d+=c); res.on('end',()=>console.log('CF upload test:', res.statusCode, d.slice(0,300)));
-              });
-              req.on('error', e => console.log('CF upload ERROR:', e.message));
-              req.write(body); req.end();
-            " 2>&1 || echo "CF upload test failed"
-            sleep 2
+              const XLSX = require('/var/www/sites/gauth/public/xlsx.core.min.js') || require('xlsx');
+              const http = require('http');
+              const fs = require('fs');
 
-            # ===== Lookup endpoint test =====
-            echo "=== [POST-DEPLOY] Lookup test ==="
-            curl -s http://localhost:4000/api/lookup/test@test.com 2>&1 | head -1 || echo "lookup test failed"
+              // 1) 실제 엑셀 생성
+              const wb = XLSX.utils.book_new();
+              const ws = XLSX.utils.aoa_to_sheet([
+                ['email','password','totp_secret'],
+                ['tak.e2e.test.001@gmail.com','E2EPass123','JBSWY3DPEHPK3PXP'],
+                ['tak.e2e.test.002@gmail.com','E2EPass456',''],
+                ['tak.e2e.한글테스트@gmail.com','KoreanPass','']
+              ]);
+              XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+              const buf = XLSX.write(wb, {type:'buffer', bookType:'xlsx'});
+              fs.writeFileSync('/tmp/e2e_test.xlsx', buf);
+              console.log('Excel created:', buf.length, 'bytes');
+
+              // 2) multipart upload to localhost
+              const boundary = '----E2E' + Date.now();
+              const parts = [];
+              parts.push('--' + boundary + '\r\n');
+              parts.push('Content-Disposition: form-data; name=\"files\"; filename=\"한글테스트.xlsx\"\r\n');
+              parts.push('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\r\n\r\n');
+              const header = Buffer.from(parts.join(''));
+              const footer = Buffer.from('\r\n--' + boundary + '--\r\n');
+              const body = Buffer.concat([header, buf, footer]);
+
+              const req = http.request({hostname:'127.0.0.1',port:4000,path:'/api/upload-excels',method:'POST',headers:{'Content-Type':'multipart/form-data; boundary='+boundary,'Content-Length':body.length}}, res => {
+                let d=''; res.on('data',c=>d+=c); res.on('end',()=>{
+                  console.log('Upload:', res.statusCode, d.slice(0,500));
+                  if(res.statusCode !== 200) { console.log('UPLOAD FAILED'); process.exit(1); }
+                  const j = JSON.parse(d);
+                  if(!j.ok) { console.log('UPLOAD NOT OK:', j.error); process.exit(1); }
+                  console.log('Parsed:', j.total_parsed, 'Added:', j.added, 'Updated:', j.updated);
+
+                  // 3) lookup test
+                  http.get('http://127.0.0.1:4000/api/lookup/tak.e2e.test.001@gmail.com', lr => {
+                    let ld=''; lr.on('data',c=>ld+=c); lr.on('end',()=>{
+                      console.log('Lookup:', lr.statusCode, ld.slice(0,300));
+                      if(lr.statusCode !== 200) { console.log('LOOKUP FAILED'); process.exit(1); }
+                      const lj = JSON.parse(ld);
+                      if(lj.email !== 'tak.e2e.test.001@gmail.com') { console.log('LOOKUP MISMATCH'); process.exit(1); }
+                      if(lj.password !== 'E2EPass123') { console.log('PASSWORD MISMATCH'); process.exit(1); }
+                      console.log('E2E TEST PASSED: upload + lookup OK');
+
+                      // 4) cleanup: remove test accounts
+                      const fs2 = require('fs');
+                      try {
+                        const data = JSON.parse(fs2.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+                        const cleaned = data.filter(a => !(a.email||'').startsWith('tak.e2e.'));
+                        fs2.writeFileSync('/opt/gauth-full/accounts_normalized.json', JSON.stringify(cleaned, null, 2));
+                        console.log('Cleanup: removed test accounts, remaining:', cleaned.length);
+                      } catch(e) { console.log('Cleanup failed:', e.message); }
+                    });
+                  });
+                });
+              });
+              req.write(body); req.end();
+            " 2>&1 || echo "E2E test failed"
+            sleep 2
 
             echo "=== Deploy complete ==="
 
