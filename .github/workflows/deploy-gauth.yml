@@ -436,13 +436,11 @@ jobs:
                       if(lj.password !== 'E2EPass123') { console.log('PASSWORD MISMATCH'); process.exit(1); }
                       console.log('E2E TEST PASSED: upload + lookup OK');
 
-                      // 4) cleanup: remove test accounts
-                      const fs2 = require('fs');
+                      // 4) cleanup: remove test accounts (via sudo)
+                      const { execSync: ex } = require('child_process');
                       try {
-                        const data = JSON.parse(fs2.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
-                        const cleaned = data.filter(a => !(a.email||'').startsWith('tak.e2e.'));
-                        fs2.writeFileSync('/opt/gauth-full/accounts_normalized.json', JSON.stringify(cleaned, null, 2));
-                        console.log('Cleanup: removed test accounts, remaining:', cleaned.length);
+                        ex('sudo node -e \"const fs=require(\\\"fs\\\");const d=JSON.parse(fs.readFileSync(\\\"/opt/gauth-full/accounts_normalized.json\\\",\\\"utf8\\\"));const c=d.filter(a=>!(a.email||\\\"\\\").startsWith(\\\"tak.e2e.\\\"));fs.writeFileSync(\\\"/opt/gauth-full/accounts_normalized.json\\\",JSON.stringify(c,null,2));console.log(\\\"Cleanup OK, remaining:\\\",c.length)\"');
+                        console.log('Cleanup done');
                       } catch(e) { console.log('Cleanup failed:', e.message); }
                     });
                   });
@@ -452,6 +450,33 @@ jobs:
             " 2>&1 || echo "E2E test failed"
             sleep 2
 
+            # ===== API response verification =====
+            echo "=== [POST-DEPLOY] API verification ==="
+
+            # 1) /api/accounts must return source:auto_deploy and total > 100
+            ACC=$(curl -s http://127.0.0.1:4000/api/accounts 2>/dev/null)
+            ACC_SRC=$(echo "$ACC" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('source','MISSING'))" 2>/dev/null)
+            ACC_TOTAL=$(echo "$ACC" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('total',0))" 2>/dev/null)
+            echo "/api/accounts → source=$ACC_SRC total=$ACC_TOTAL"
+            if [ "$ACC_SRC" != "auto_deploy" ]; then echo "FAIL: /api/accounts source is $ACC_SRC, expected auto_deploy"; fi
+            if [ "$ACC_TOTAL" -lt 100 ] 2>/dev/null; then echo "WARN: /api/accounts total=$ACC_TOTAL seems low"; fi
+
+            # 2) /api/normalized-accounts must return accounts array + summary
+            NORM=$(curl -s http://127.0.0.1:4000/api/normalized-accounts 2>/dev/null)
+            NORM_TOTAL=$(echo "$NORM" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('summary',{}).get('total',0))" 2>/dev/null)
+            NORM_FILES=$(echo "$NORM" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('summary',{}).get('files_scanned',0))" 2>/dev/null)
+            echo "/api/normalized-accounts → total=$NORM_TOTAL files=$NORM_FILES"
+
+            # 3) /api/profiles
+            PROF=$(curl -s http://127.0.0.1:4000/api/profiles 2>/dev/null)
+            PROF_CT=$(echo "$PROF" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('profiles',[])))" 2>/dev/null)
+            echo "/api/profiles → count=$PROF_CT"
+
+            # 4) /api/failed-accounts
+            FAIL=$(curl -s http://127.0.0.1:4000/api/failed-accounts 2>/dev/null)
+            echo "/api/failed-accounts → $(echo "$FAIL" | python3 -c "import json,sys; d=json.load(sys.stdin); print(type(d).__name__, len(d) if isinstance(d,dict) else '?')" 2>/dev/null)"
+
+            echo "=== All API checks done ==="
             echo "=== Deploy complete ==="
 
       - name: Cloudflare security level
