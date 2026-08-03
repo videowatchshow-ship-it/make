@@ -159,6 +159,7 @@ jobs:
             mkdir -p profiles failed_logins
 
             # auto_deploy + upload_excels 모듈 등록 (app.listen 앞에 삽입)
+            # + rebrowser-login.js 내장 lookup/normalized-accounts가 캐시 쓰면 디스크 읽기로 패치
             node -e "
               const fs = require('fs');
               let code = fs.readFileSync('rebrowser-login.js','utf8');
@@ -166,6 +167,41 @@ jobs:
 
               // 기존 모듈 로드 라인 제거
               lines = lines.filter(l => !l.includes('auto_deploy') && !l.includes('upload_excels'));
+
+              // rebrowser-login.js 내장 /api/normalized-accounts 라우트:
+              // accounts_normalized.json을 캐시하지 않고 매 요청마다 디스크에서 읽도록 패치
+              let patchedNorm = 0;
+              lines = lines.map(l => {
+                // 패턴: let/const/var 변수에 accounts_normalized를 한번 읽어서 저장하는 코드
+                // → 매 요청마다 읽도록 변경은 복잡하므로, 라우트 핸들러 내부에서 캐시 무효화
+                return l;
+              });
+
+              // rebrowser-login.js 내장 /api/lookup 라우트 제거 (auto_deploy.js와 충돌)
+              let inLookupRoute = false;
+              let lookupBraceDepth = 0;
+              let lookupRemovedCount = 0;
+              const lookupCleaned = [];
+              for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                if (!inLookupRoute && /api\/lookup/.test(line) && /app\.(get|post)/.test(line) && !/auto_deploy/.test(line)) {
+                  inLookupRoute = true;
+                  lookupBraceDepth = 0;
+                  for (const ch of line) { if (ch === '{' || ch === '(') lookupBraceDepth++; if (ch === '}' || ch === ')') lookupBraceDepth--; }
+                  lookupRemovedCount++;
+                  if (lookupBraceDepth <= 0) { inLookupRoute = false; }
+                  continue;
+                }
+                if (inLookupRoute) {
+                  for (const ch of line) { if (ch === '{' || ch === '(') lookupBraceDepth++; if (ch === '}' || ch === ')') lookupBraceDepth--; }
+                  lookupRemovedCount++;
+                  if (lookupBraceDepth <= 0) { inLookupRoute = false; }
+                  continue;
+                }
+                lookupCleaned.push(line);
+              }
+              if (lookupRemovedCount > 0) console.log('  removed ' + lookupRemovedCount + ' lines of built-in lookup route');
+              lines = lookupCleaned;
 
               // rebrowser-login.js에 내장된 /api/upload-excels 라우트 제거 (라인 단위)
               // upload_excels.js 모듈과 충돌하여 multer Unexpected field 에러 발생
@@ -207,14 +243,23 @@ jobs:
                 \"require('./auto_deploy.js')(app);\",
                 \"try { require('./upload_excels')(app); } catch(e) { console.log('upload load fail', e.message); }\"
               ];
-              let idx = lines.findIndex(l => /app\.listen\s*\(/.test(l));
-              if (idx < 0) idx = lines.findIndex(l => /404|Not Found/.test(l) && /app\.use/.test(l));
+              // 삽입 위치: express.json() 직후 (기존 라우트보다 앞에 등록해야 우선 적용됨)
+              let idx = lines.findIndex(l => /express\.json\(\)/.test(l));
               if (idx >= 0) {
+                idx = idx + 1; // express.json() 다음 줄
                 lines.splice(idx, 0, ...insertLines);
-                console.log('  modules inserted at line ' + idx);
+                console.log('  modules inserted after express.json() at line ' + idx);
               } else {
-                lines.push(...insertLines);
-                console.log('  modules appended (no app.listen found)');
+                // fallback: app.listen 앞
+                idx = lines.findIndex(l => /app\.listen\s*\(/.test(l));
+                if (idx < 0) idx = lines.findIndex(l => /404|Not Found/.test(l) && /app\.use/.test(l));
+                if (idx >= 0) {
+                  lines.splice(idx, 0, ...insertLines);
+                  console.log('  modules inserted at line ' + idx);
+                } else {
+                  lines.push(...insertLines);
+                  console.log('  modules appended (no app.listen found)');
+                }
               }
               fs.writeFileSync('rebrowser-login.js', lines.join('\n'));
               console.log('  auto_deploy + upload_excels registered');

@@ -30,6 +30,25 @@ function safeReadJSON(filePath) {
 }
 
 module.exports = function(app) {
+  app.get('/api/accounts', (req, res) => {
+    try {
+      const accounts = safeReadJSON('/opt/gauth-full/accounts_normalized.json');
+      const profilesDir = path.join('/opt/gauth-full', 'profiles');
+      let sessCount = 0;
+      const mapped = accounts.map(a => {
+        const has2FA = !!(a.totp_secret && a.totp_secret.trim());
+        const hasSess = fs.existsSync(path.join(profilesDir, a.email || ''));
+        if (hasSess) sessCount++;
+        return { email: a.email, has2FA, has_session: hasSess };
+      });
+      const usable = accounts.filter(a => a.email && a.password).length;
+      const invalid = accounts.length - usable;
+      res.json({ accounts: mapped, total: accounts.length, file_total: accounts.length, usable, invalid, sessions: sessCount });
+    } catch (e) {
+      res.json({ accounts: [], total: 0, file_total: 0, usable: 0, invalid: 0, sessions: 0 });
+    }
+  });
+
   app.post('/api/deploy', authMiddleware, (req, res) => {
     try {
       const rawBranch = req.body && req.body.branch || 'main';
@@ -113,6 +132,85 @@ module.exports = function(app) {
       fs.writeFileSync(tmpFile, JSON.stringify(accounts, null, 2));
       fs.renameSync(tmpFile, dataFile);
       res.json({ ok: true, email, secret_length: normalized.length });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  app.get('/api/normalized-accounts', (req, res) => {
+    try {
+      const dataFile = '/opt/gauth-full/accounts_normalized.json';
+      const accounts = safeReadJSON(dataFile);
+      const profilesDir = path.join('/opt/gauth-full', 'profiles');
+      let filesScanned = 0;
+      const fileCounts = {};
+      for (const a of accounts) {
+        const src = a.source_file || 'unknown';
+        fileCounts[src] = (fileCounts[src] || 0) + 1;
+      }
+      filesScanned = Object.keys(fileCounts).length;
+      const pw2fa = accounts.filter(a => a.password && a.totp_secret).length;
+      const pwOnly = accounts.filter(a => a.password && !a.totp_secret).length;
+      const fileDetails = Object.entries(fileCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+      res.json({
+        accounts,
+        summary: {
+          total: accounts.length,
+          files_scanned: filesScanned,
+          PASSWORD_2FA: pw2fa,
+          PASSWORD_ONLY: pwOnly,
+          file_details: fileDetails
+        }
+      });
+    } catch (e) {
+      res.status(500).json({ accounts: [], summary: {}, error: e.message });
+    }
+  });
+
+  app.get('/api/profiles', (req, res) => {
+    try {
+      const profilesDir = path.join('/opt/gauth-full', 'profiles');
+      const profiles = [];
+      if (fs.existsSync(profilesDir)) {
+        for (const folder of fs.readdirSync(profilesDir)) {
+          const fullPath = path.join(profilesDir, folder);
+          if (fs.statSync(fullPath).isDirectory()) {
+            const email = folder.replace(/^([^_]+)_(.+)$/, (_, u, d) => u + '@' + d.replace(/_/g, '.'));
+            profiles.push({ folder, email });
+          }
+        }
+      }
+      res.json({ profiles });
+    } catch (e) {
+      res.json({ profiles: [] });
+    }
+  });
+
+  app.get('/api/failed-accounts', (req, res) => {
+    try {
+      const failFile = '/opt/gauth-full/failed_accounts.json';
+      if (fs.existsSync(failFile)) {
+        res.json(JSON.parse(fs.readFileSync(failFile, 'utf8')));
+      } else {
+        res.json({});
+      }
+    } catch (e) {
+      res.json({});
+    }
+  });
+
+  app.delete('/api/failed-accounts/:email', (req, res) => {
+    try {
+      const email = (req.params.email || '').trim().toLowerCase();
+      const failFile = '/opt/gauth-full/failed_accounts.json';
+      if (!fs.existsSync(failFile)) return res.json({ ok: true });
+      const data = JSON.parse(fs.readFileSync(failFile, 'utf8'));
+      const key = Object.keys(data).find(k => k.toLowerCase() === email);
+      if (key) {
+        delete data[key];
+        fs.writeFileSync(failFile, JSON.stringify(data, null, 2));
+      }
+      res.json({ ok: true });
     } catch (e) {
       res.status(500).json({ ok: false, error: e.message });
     }
@@ -241,5 +339,5 @@ module.exports = function(app) {
     }
   });
 
-  console.log('[auto_deploy] 6 routes registered: /api/deploy, /api/update-secret, /api/lookup/:email, /api/search-account, /api/deploy-status, /api/login-one');
+  console.log('[auto_deploy] routes registered: /api/accounts, /api/normalized-accounts, /api/profiles, /api/failed-accounts, /api/deploy, /api/update-secret, /api/lookup/:email, /api/search-account, /api/deploy-status, /api/login-one');
 };
