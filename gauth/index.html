@@ -160,7 +160,7 @@ function accessBadge(a){
     var list = document.getElementById('excelFileList');
     if(!list) return;
     if(window._picked.length===0){ list.innerHTML=''; return; }
-    var arr = window._picked.map(function(f,i){ return (i+1)+'. '+f.name+' ('+Math.round(f.size/1024)+'KB)'; });
+    var arr = window._picked.map(function(f,i){ return (i+1)+'. '+_esc(f.name)+' ('+Math.round(f.size/1024)+'KB)'; });
     list.innerHTML = '📎 <b>' + window._picked.length + '개 선택됨:</b> <button id="_clearFiles" style="padding:2px 8px;font-size:11px">🗑 초기화</button><br>' + arr.join('<br>');
     var cb = document.getElementById('_clearFiles');
     if(cb) cb.onclick = function(){ window._picked=[]; try{fi.value='';}catch(_){} renderList(); };
@@ -320,7 +320,7 @@ function accessBadge(a){
           btn.disabled=false; localStorage.removeItem('gauth_uploading'); updateUploadStatus(); return;
         }
         if(!d.ok){
-          out.innerHTML = statusHTML('parse', -1, '<span style="color:#f47070;font-size:15px;font-weight:700">❌ '+(d.error||'서버 처리 실패')+'</span><br><span style="font-size:11px;color:#8a95a5">HTTP '+xhr.status+' · '+elapsed+'초</span>');
+          out.innerHTML = statusHTML('parse', -1, '<span style="color:#f47070;font-size:15px;font-weight:700">❌ '+_esc(d.error||'서버 처리 실패')+'</span><br><span style="font-size:11px;color:#8a95a5">HTTP '+xhr.status+' · '+elapsed+'초</span>');
           btn.disabled=false; localStorage.removeItem('gauth_uploading'); updateUploadStatus(); return;
         }
         var fileRows = (d.files||[]).map(function(f,i){
@@ -814,8 +814,8 @@ async function lookup(){
         nbox.innerHTML = '<div style="color:#8a95a5;font-size:12px;margin-bottom:6px">▼ 다음 순번 ('+(idx+2)+'~'+(idx+1+next.length)+' / '+ALL.length+')</div>'
           + next.map((a,i)=>'<div style="padding:5px 0;border-bottom:1px solid #1a1f26;font-size:12.5px;display:flex;align-items:center;gap:8px">'
             +'<span style="color:#8a95a5;font-family:monospace;min-width:35px">'+(idx+2+i)+'.</span>'
-            +'<span style="color:#7dabff;cursor:pointer;flex:1" onclick="quickLookup(\''+a.email.replace(/'/g,"\\'")+'\')">'+a.email+'</span>'
-            +'<button style="padding:3px 8px;font-size:11px;background:#7c3aed" onclick="programLogin(\''+a.email.replace(/'/g,"\\'")+'\',this)">🔑</button>'
+            +'<span style="color:#7dabff;cursor:pointer;flex:1" onclick="quickLookup(\''+escapeHtml(a.email).replace(/'/g,"\\'")+'\')">'+escapeHtml(a.email)+'</span>'
+            +'<button style="padding:3px 8px;font-size:11px;background:#7c3aed" onclick="programLogin(\''+escapeHtml(a.email).replace(/'/g,"\\'")+'\',this)">🔑</button>'
             +'</div>').join('')
       }
     }

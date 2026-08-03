@@ -35,6 +35,7 @@ module.exports = function(app) {
       const rawBranch = req.body && req.body.branch || 'main';
       /* git-check-ref-format: 금지 문자 제거 — https://git-scm.com/docs/git-check-ref-format */
       const branch = rawBranch.replace(/[\x00-\x1f\x7f ~^:?*\[\\]/g, '').replace(/\.{2,}/g, '.').replace(/\.lock$/i, '').replace(/^\/|\/$/g, '');
+      if (!branch) return res.status(400).json({ ok: false, error: 'invalid branch name' });
       const repoDir = '/tmp/gauth-deploy-repo';
       const gauthDir = '/opt/gauth-full';
       const frontendDir = '/var/www/sites/gauth/public';
@@ -70,7 +71,7 @@ module.exports = function(app) {
 
       if (deployed.includes('package.json')) {
         try {
-          execSync('cd /opt/gauth-full && npm install --production', { timeout: 120000 });
+          execFileSync('npm', ['install', '--production'], { cwd: '/opt/gauth-full', timeout: 120000 });
           deployed.push('npm-install-ok');
         } catch (e) {
           deployed.push('npm-install-failed:' + e.message.slice(0, 100));

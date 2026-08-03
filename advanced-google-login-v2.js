@@ -626,7 +626,8 @@ async function advancedGoogleLogin(account, options = {}) {
             await page.screenshot({ path: path.join(FAILED_LOGS_DIR, `${sanitizeEmail(account.email)}_error.png`) }).catch(() => {});
         }
         
-        saveFailedLogin(account, LoginResult.FAIL_TIMEOUT, error.message, `${sanitizeEmail(account.email)}_error.png`);
+        const errResult = error.message && error.message.includes('timeout') ? LoginResult.FAIL_TIMEOUT : LoginResult.UNKNOWN_ERROR;
+        saveFailedLogin(account, errResult, error.message, `${sanitizeEmail(account.email)}_error.png`);
         
         if (browser) await browser.close();
         

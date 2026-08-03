@@ -592,7 +592,7 @@ function mountRoutes(app) {
 
   let _fileLock = Promise.resolve();
   function withFileLock(fn) {
-    _fileLock = _fileLock.then(fn, fn);
+    _fileLock = _fileLock.then(fn, () => fn());
     return _fileLock;
   }
 
