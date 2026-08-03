@@ -607,8 +607,8 @@ function mountRoutes(app) {
     /* 50파일 제한: multer maxCount — 한 번에 업로드 가능한 최대 파일 수 */
     upload.array('files', 50)(req, res, (err) => {
       if (err) {
-        console.error('[upload-excels] multer error:', err);
-        return res.status(500).json({ ok: false, error: 'upload failed: ' + err.message });
+        console.error('[upload-excels] multer error:', JSON.stringify({ code: err.code, field: err.field, message: err.message, storageErrors: err.storageErrors }));
+        return res.status(500).json({ ok: false, error: 'upload failed: ' + err.message, multer_code: err.code || '', multer_field: err.field || '' });
       }
       next();
     });
