@@ -149,7 +149,11 @@ jobs:
 
             # ===== 5. npm install =====
             echo "=== [5/6] npm install ==="
-            PUPPETEER_SKIP_BROWSER_DOWNLOAD=1 PUPPETEER_SKIP_DOWNLOAD=1 npm install --production 2>&1 | tail -10
+            # --production: devDependencies 제외 (electron, electron-builder)
+            # --ignore-scripts: postinstall 스크립트 차단 (Chromium 다운로드 등)
+            # PUPPETEER_SKIP_*: puppeteer/rebrowser-puppeteer Chromium 다운로드 차단
+            # ref: https://docs.npmjs.com/cli/v10/commands/npm-install
+            PUPPETEER_SKIP_BROWSER_DOWNLOAD=1 PUPPETEER_SKIP_DOWNLOAD=1 npm install --production --ignore-scripts 2>&1 | tail -10
             # Force install rebrowser-puppeteer + archiver if missing
             node -e "require('rebrowser-puppeteer')" 2>/dev/null || npm install rebrowser-puppeteer 2>&1 | tail -5
             node -e "require('archiver')" 2>/dev/null || npm install archiver 2>&1 | tail -5

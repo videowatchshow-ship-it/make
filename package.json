@@ -32,11 +32,11 @@
     "hi-base32": "^0.5.1",
     "puppeteer": "^25.0.0",
     "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "electron-store": "^8.1.0"
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "optionalDependencies": {
-    "puppeteer-extra-plugin-recaptcha": "^3.6.8"
+    "puppeteer-extra-plugin-recaptcha": "^3.6.8",
+    "electron-store": "^8.1.0"
   },
   "devDependencies": {
     "electron": "^29.0.0",
