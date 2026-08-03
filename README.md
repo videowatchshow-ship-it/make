@@ -63,7 +63,7 @@ make/
 | 패키지 | 버전 | 사용 위치 | 용도 | 공식 문서 (GitHub 원본) |
 |--------|------|-----------|------|------------------------|
 | express | ^4.21.2 | rebrowser-login.js | HTTP 서버, 라우팅 | https://github.com/expressjs/express |
-| multer | ^1.4.5-lts.1 | upload_excels.js | multipart 파일 업로드 | https://github.com/expressjs/multer#readme |
+| multer | ^2.2.0 | upload_excels.js | multipart 파일 업로드 | https://github.com/expressjs/multer#readme |
 | xlsx (SheetJS) | ^0.18.5 | upload_excels.js, index.html | 엑셀 파싱 (`.xlsx`, `.xls`, `.csv`) | https://github.com/SheetJS/sheetjs |
 | otplib | ^12.0.1 | login-v2.js, rebrowser-login.js | TOTP 코드 생성 (RFC 6238) | https://github.com/yeojz/otplib |
 | hi-base32 | ^0.5.1 | (otplib 내부) | Base32 인코딩/디코딩 (RFC 4648) | https://github.com/nicosResworWorking/hi-base32 |
@@ -579,7 +579,18 @@ otpauth:// URL 지원:
 | 29 | index.html | XHR timeout 300000 | 주석 없음 | 5분 — 서버측 10분보다 짧게 설정 명시 | — |
 | 30 | index.html | lookup XSS | innerHTML에 서버 데이터 직접 삽입 | `escapeHtml()` 전처리 | https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html |
 | 31 | index.html | YouTube URL XSS | `javascript:` 스킴 허용 | `/^https?:\/\//i` 검증 | — |
-| 32 | index.html | load() 인증 | authHeaders 미적용 | `authQuery()` 적용 | — |
+| 32 | index.html | load() 인증 | authHeaders 미적용 | `authQuery()` + `authHeaders()` 적용 | — |
+| 33 | index.html | 중복 escapeHtml | `_esc` + `escapeHtml` × 2 (3개 중복) | `_esc` 1개 + `var escapeHtml=_esc` alias | — |
+| 34 | index.html | /codes/ fetch 인증 | 7개 fetch에 `authHeaders()` 미적용 | 전체 `authHeaders()` 추가 | — |
+| 35 | login-v2.js | reCAPTCHA 주석 코드 | 유료 API 키 플레이스홀더 포함 10줄 주석 | 삭제 | — |
+| 36 | login-v2.js | TOTP 콘솔 출력 | 실제 코드값 평문 출력 | 자릿수만 출력 (마스킹) | — |
+| 37 | login-v2.js | 테스트 계정 제한 | `slice(0, 3)` 하드코딩 | 전체 계정 사용 | — |
+| 38 | auto_deploy.js | 기본 브랜치 | feature 브랜치 하드코딩 | `'main'` | — |
+| 39 | deploy-gauth.yml | 일회성 정리 블록 | TOTP clearing/dedup/diagnostics 매 배포 실행 | 삭제 (일회성 작업 반복 불필요) | — |
+| 40 | deploy-gauth.yml | 테스트 이메일 | 하드코딩된 이메일로 검색 검증 | 삭제 (credential 누출 위험) | — |
+| 41 | deploy-gauth.yml | 로그 출력량 | journalctl 150줄 + 모듈 체크 | 서비스 상태 10줄로 축소 | — |
+| 42 | package.json | multer 버전 | ^1.4.5-lts.1 | ^2.2.0 (API 호환 확인) | https://github.com/expressjs/multer |
+| 43 | index.html | CSS 이중 세미콜론 | `;;` | `;` | — |
 
 ---
 
