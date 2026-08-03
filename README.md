@@ -66,9 +66,9 @@ make/
 | multer | ^2.2.0 | upload_excels.js | multipart 파일 업로드 | https://github.com/expressjs/multer#readme |
 | xlsx (SheetJS) | ^0.18.5 | upload_excels.js, index.html | 엑셀 파싱 (`.xlsx`, `.xls`, `.csv`) | https://github.com/SheetJS/sheetjs |
 | otplib | ^12.0.1 | login-v2.js, rebrowser-login.js | TOTP 코드 생성 (RFC 6238) | https://github.com/yeojz/otplib |
-| hi-base32 | ^0.5.1 | (otplib 내부) | Base32 인코딩/디코딩 (RFC 4648) | https://github.com/nicosResworWorking/hi-base32 |
-| rebrowser-puppeteer | ^24.8.1 | login-v2.js | 봇 감지 회피 Puppeteer | https://github.com/nicosResworWorking/rebrowser-puppeteer |
-| puppeteer | ^25.0.0 | login-v2.js | 브라우저 자동화 | https://github.com/nicosResworWorking/puppeteer (공식: https://pptr.dev) |
+| hi-base32 | ^0.5.1 | (otplib 내부) | Base32 인코딩/디코딩 (RFC 4648) | https://github.com/emn178/hi-base32 |
+| rebrowser-puppeteer | ^24.8.1 | login-v2.js | 봇 감지 회피 Puppeteer | https://github.com/rebrowser/rebrowser-puppeteer |
+| puppeteer | ^25.0.0 | login-v2.js | 브라우저 자동화 | https://github.com/puppeteer/puppeteer (공식: https://pptr.dev) |
 | puppeteer-extra | ^3.3.6 | login-v2.js | Puppeteer 플러그인 프레임워크 | https://github.com/berstend/puppeteer-extra |
 | puppeteer-extra-plugin-stealth | ^2.11.2 | login-v2.js | Stealth 플러그인 (봇 감지 회피) | https://github.com/berstend/puppeteer-extra/tree/master/packages/puppeteer-extra-plugin-stealth |
 | archiver | ^7.0.1 | rebrowser-login.js | ZIP 파일 생성 (엑셀 내보내기) | https://github.com/archiverjs/node-archiver |
@@ -490,7 +490,7 @@ otpauth:// URL 지원:
 | multer | https://github.com/expressjs/multer |
 | SheetJS (xlsx) | https://github.com/SheetJS/sheetjs |
 | otplib | https://github.com/yeojz/otplib |
-| puppeteer | https://pptr.dev / https://github.com/nicosResworWorking/puppeteer |
+| puppeteer | https://pptr.dev / https://github.com/puppeteer/puppeteer |
 | puppeteer-extra | https://github.com/berstend/puppeteer-extra |
 | puppeteer-extra-plugin-stealth | https://github.com/berstend/puppeteer-extra/tree/master/packages/puppeteer-extra-plugin-stealth |
 | archiver | https://github.com/archiverjs/node-archiver |
