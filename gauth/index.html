@@ -44,9 +44,9 @@ function _esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){retu
 async function refreshAccStats(){
   try {
     const [rp, j, na] = await Promise.all([
-      fetch('/api/parse-report',{cache:'no-store'}).then(r=>r.json()).catch(()=>({})),
-      fetch('/api/accounts',{cache:'no-store'}).then(r=>r.json()).catch(()=>({})),
-      fetch('/api/normalized-accounts',{cache:'no-store'}).then(r=>r.json()).catch(()=>({}))
+      fetch(authQuery('/api/parse-report'),{cache:'no-store',headers:authHeaders()}).then(r=>r.json()).catch(()=>({})),
+      fetch(authQuery('/api/accounts'),{cache:'no-store',headers:authHeaders()}).then(r=>r.json()).catch(()=>({})),
+      fetch(authQuery('/api/normalized-accounts'),{cache:'no-store',headers:authHeaders()}).then(r=>r.json()).catch(()=>({}))
     ]);
     const _files = (na.summary && na.summary.files_scanned) || (rp && rp.last_run ? rp.last_run.files : 0) || 0;
     var el = document.getElementById('accStats');
@@ -94,7 +94,7 @@ refreshAccStats();
   if(bar) bar.innerHTML = '⏳ 서버에서 엑셀 처리 중… 잠시 후 자동 갱신됩니다';
   var prevMaster = 0;
   var poll = setInterval(function(){
-    fetch('/api/parse-report',{cache:'no-store'}).then(function(r){return r.json()}).then(function(rp){
+    fetch(authQuery('/api/parse-report'),{cache:'no-store',headers:authHeaders()}).then(function(r){return r.json()}).then(function(rp){
       var lr = rp.last_run || {};
       var updAt = new Date(lr.updated_at||0).getTime();
       if(updAt > Number(ts)){
@@ -499,7 +499,7 @@ async function load(){
   })).sort((x,y) => (y.source_mtime||0) - (x.source_mtime||0))
   var _fc = n.summary && n.summary.files_scanned;
   if(_fc == null){
-    try { var _rp = await fetch('/api/parse-report',{cache:'no-store'}).then(r=>r.json()); _fc = _rp && _rp.last_run && _rp.last_run.files; } catch(_){}
+    try { var _rp = await fetch(authQuery('/api/parse-report'),{cache:'no-store',headers:authHeaders()}).then(r=>r.json()); _fc = _rp && _rp.last_run && _rp.last_run.files; } catch(_){}
   }
   document.getElementById('s-files').textContent = (_fc != null ? _fc : 0).toLocaleString()
   document.getElementById('s-acc').textContent = ALL.length.toLocaleString()
@@ -609,13 +609,13 @@ async function quickLookup(email){
   window.scrollTo({top:0,behavior:'smooth'})
 }
 async function openIt(email){
-  const r = await fetch('/api/open-profile',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email})})
+  const r = await fetch(authQuery('/api/open-profile'),{method:'POST',headers:authHeaders({'content-type':'application/json'}),body:JSON.stringify({email})})
   const j = await r.json()
   if(j.error) alert('실패: '+j.error)
 }
 async function login(email){
   if(!confirm(`${email} 지금 로그인 시도?`)) return
-  const r = await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email})})
+  const r = await fetch(authQuery('/api/login'),{method:'POST',headers:authHeaders({'content-type':'application/json'}),body:JSON.stringify({email})})
   alert('결과: '+JSON.stringify(await r.json()))
   load()
 }
@@ -667,7 +667,7 @@ async function unlockAccount(email, btn){
   if(!confirm(`${email}\n잠금 상태 해제 (다음 배치에서 다시 시도)?`)) return
   btn.disabled=true
   try{
-    const r = await fetch('/api/failed-accounts/'+encodeURIComponent(email),{method:'DELETE'})
+    const r = await fetch(authQuery('/api/failed-accounts/'+encodeURIComponent(email)),{method:'DELETE',headers:authHeaders()})
     if(r.ok){ btn.textContent='✓ 해제'; setTimeout(()=>load(), 500); return }
   }catch{}
   alert('해제 실패'); btn.disabled=false
@@ -683,7 +683,7 @@ async function programLogin(email, btn){
   _loginEmail = email; render()
   let reason = '', reachedServer = false
   try{
-    const r = await fetch('/api/login-one', {method:'POST',headers:authHeaders({'content-type':'application/json'}),body:JSON.stringify({email})})
+    const r = await fetch(authQuery('/api/login-one'), {method:'POST',headers:authHeaders({'content-type':'application/json'}),body:JSON.stringify({email})})
     const j = await r.json().catch(()=>({}))
     reachedServer = true
     if(r.ok && j.success !== false && !j.error){
@@ -721,7 +721,7 @@ async function lookup(){
   localStorage.setItem('gauth_last_lookup', email)
   box.style.display='block'
   box.innerHTML = '<span style="color:#8a95a5">조회 중…</span>'
-  const r = await fetch('/api/lookup/'+encodeURIComponent(email))
+  const r = await fetch(authQuery('/api/lookup/'+encodeURIComponent(email)), {headers:authHeaders()})
   const j = await r.json()
   if(j.error){
     // API 실패 시 로컬 ALL에서 부분 검색 시도
@@ -732,7 +732,7 @@ async function lookup(){
       document.getElementById('lookup').value = local.email
       localStorage.setItem('gauth_last_lookup', local.email)
       let code2='—'
-      if(local.totp_secret){try{const c=await(await fetch('/codes/'+local.totp_secret)).json();code2=c.code||'—'}catch{}}
+      if(local.totp_secret){try{const c=await(await fetch(authQuery('/codes/'+local.totp_secret))).json();code2=c.code||'—'}catch{}}
       box.innerHTML = `
         <div style="background:#2a1a00;border:1px solid #d29922;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#d29922">⚠ 서버 조회 실패 — 로컬 캐시 데이터로 표시 중</div>
         <div style="display:grid;grid-template-columns:130px 1fr;gap:10px 14px">
@@ -777,7 +777,7 @@ async function lookup(){
     return
   }
   let code='—'
-  if(j.totp_secret){try{const c=await(await fetch('/codes/'+j.totp_secret)).json();code=c.code||'—'}catch{}}
+  if(j.totp_secret){try{const c=await(await fetch(authQuery('/codes/'+j.totp_secret))).json();code=c.code||'—'}catch{}}
   const yt = j.youtube_url || ''
   const _je = escapeHtml(j.email)
   const _jp = escapeHtml(j.password||'—')
@@ -867,7 +867,7 @@ async function tdRender(){
   // 20개 각각의 TOTP 코드 병렬 fetch
   const slice = TD.slice(s, e)
   const codes = await Promise.all(slice.map(a =>
-    a.totp_secret ? fetch('/codes/'+a.totp_secret).then(r=>r.json()).then(j=>j.code||'—').catch(()=>'—') : Promise.resolve('—')
+    a.totp_secret ? fetch(authQuery('/codes/'+a.totp_secret)).then(r=>r.json()).then(j=>j.code||'—').catch(()=>'—') : Promise.resolve('—')
   ))
 
   const cards = slice.map((a, i) => {
@@ -909,7 +909,7 @@ async function lookupRefreshCode(secret, btn){
   if(!el) return
   const old = btn.textContent; btn.textContent = '⏳'
   try{
-    const j = await fetch('/codes/'+secret).then(r=>r.json())
+    const j = await (await fetch(authQuery('/codes/'+secret))).json()
     el.textContent = j.code || '—'
     /* 새 코드 시각 강조 (0.6s 골드 반짝) */
     el.style.transition='background-color .3s'; el.style.backgroundColor='rgba(245,200,66,.35)';
@@ -925,7 +925,7 @@ async function editSecret(email, spanId){
   const ns = prompt('새 TOTP 시크릿 (Base32, 16자 이상):', cur === '—' ? '' : cur)
   if(!ns) return
   try{
-    const r = await fetch('/api/update-secret',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({email,totp_secret:ns})})
+    const r = await fetch(authQuery('/api/update-secret'),{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({email,totp_secret:ns})})
     const j = await r.json()
     if(j.ok){ alert('저장 완료 (길이:'+j.secret_length+')'); location.reload() }
     else alert('오류: '+(j.error||'unknown'))
@@ -937,7 +937,7 @@ async function tdRefreshCode(idx, secret, btn){
   const old = btn.textContent
   btn.textContent = '⏳'
   try{
-    const j = await fetch('/codes/'+secret).then(r=>r.json())
+    const j = await (await fetch(authQuery('/codes/'+secret))).json()
     el.textContent = j.code || '—'
     /* 새 코드 시각 강조 */
     el.style.transition='background-color .3s'; el.style.backgroundColor='rgba(245,200,66,.35)';
@@ -963,16 +963,16 @@ document.getElementById('filter').addEventListener('change', applyFilter)
 document.getElementById('batch-run').addEventListener('click', async () => {
   const total = ALL.length
   if (!confirm(`전체 ${total}개 중 미로그인만 순서대로 로그인 시도. 계속?`)) return
-  const r = await fetch('/api/start',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({start:0,end:total,concurrency:8,skipLoggedIn:true})})
+  const r = await fetch(authQuery('/api/start'),{method:'POST',headers:authHeaders({'content-type':'application/json'}),body:JSON.stringify({start:0,end:total,concurrency:8,skipLoggedIn:true})})
   alert('배치 시작: '+JSON.stringify(await r.json()))
 })
 document.getElementById('batch-stop').addEventListener('click', async () => {
-  await fetch('/api/stop',{method:'POST'});alert('정지 요청 전송')
+  await fetch(authQuery('/api/stop'),{method:'POST',headers:authHeaders()});alert('정지 요청 전송')
 })
 document.getElementById('export').addEventListener('click', async () => {
   const parts = parseInt(document.getElementById('parts').value,10) || 1
   const filter = document.getElementById('filter').value
-  const r = await fetch('/api/export-split',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({parts,filter})})
+  const r = await fetch(authQuery('/api/export-split'),{method:'POST',headers:authHeaders({'content-type':'application/json'}),body:JSON.stringify({parts,filter})})
   if(!r.ok){alert('실패');return}
   const blob = await r.blob()
   const url = URL.createObjectURL(blob)
@@ -1065,7 +1065,7 @@ load()
         if (action === 'stop' && !confirm(body.name + ' 정지할까요?')) return;
         btn.disabled = true;
         log(action + ' → ' + body.name);
-        fetch('/api/vm/' + action, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })
+        fetch(authQuery('/api/vm/' + action), { method:'POST', headers:authHeaders({'Content-Type':'application/json'}), body: JSON.stringify(body) })
           .then(function(r){ return r.json().then(function(j){ return {status:r.status, j:j}; }); })
           .then(function(x){
             if (x.status === 200 && x.j.ok) log('✅ ' + action + ' 요청 접수: ' + body.name);
@@ -1080,7 +1080,7 @@ load()
 
   function loadList(){
     listEl.textContent = '⏳ 로딩…';
-    fetch('/api/vm/list', {cache:'no-store'})
+    fetch(authQuery('/api/vm/list'), {cache:'no-store', headers:authHeaders()})
       .then(function(r){ return r.json(); })
       .then(function(d){ if (d.ok) render(d.vms); else { listEl.textContent = '❌ ' + (d.error||'실패'); } })
       .catch(function(e){ listEl.textContent = '❌ ' + e.message; });
