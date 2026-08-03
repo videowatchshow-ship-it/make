@@ -583,24 +583,33 @@ function parseMultipartManual(req) {
   return new Promise((resolve, reject) => {
     const Busboy = (() => {
       try { return require('busboy'); } catch (_) {}
-      try { const m = require('multer'); return require('busboy'); } catch (_) {}
+      try { require('multer'); return require('busboy'); } catch (_) {}
       return null;
     })();
     if (!Busboy) return reject(new Error('busboy not available'));
     const uploadDir = path.join(__dirname, 'uploads') + '/';
     try { fs.mkdirSync(uploadDir, { recursive: true }); } catch (_) {}
     const files = [];
+    const pending = [];
+    let bbDone = false;
     const bb = Busboy({ headers: req.headers, limits: { fileSize: 200 * 1024 * 1024, files: 200 } });
+    function tryResolve() { if (bbDone && pending.every(p => p.done)) resolve(files); }
     bb.on('file', (fieldname, stream, info) => {
       const filename = typeof info === 'string' ? info : (info && info.filename || 'unknown');
       const tmpPath = path.join(uploadDir, 'up_' + Date.now() + '_' + Math.random().toString(36).slice(2));
+      const tracker = { done: false };
+      pending.push(tracker);
       const ws = fs.createWriteStream(tmpPath);
       stream.pipe(ws);
-      ws.on('close', () => { files.push({ fieldname, originalname: filename, path: tmpPath }); });
-      stream.on('error', () => { try { fs.unlinkSync(tmpPath); } catch (_) {} });
+      ws.on('close', () => {
+        files.push({ fieldname, originalname: filename, path: tmpPath });
+        tracker.done = true;
+        tryResolve();
+      });
+      stream.on('error', () => { tracker.done = true; try { fs.unlinkSync(tmpPath); } catch (_) {} tryResolve(); });
     });
-    bb.on('close', () => resolve(files));
-    bb.on('finish', () => resolve(files));
+    bb.on('close', () => { bbDone = true; tryResolve(); });
+    bb.on('finish', () => { bbDone = true; tryResolve(); });
     bb.on('error', (err) => reject(err));
     req.pipe(bb);
   });
