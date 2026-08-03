@@ -59,12 +59,11 @@ const LoginResult = {
     FAIL_UNKNOWN: 'UNKNOWN_ERROR'
 };
 
-// ============================================
-// ✅ 다중 셀렉터 (2026년 6월 검증 완료)
-// 출처: Stack Overflow 2026 + 실제 페이지 렌더링 + 6년간 안정성 확인
-// 검증일: 2026년 7월 4일
-// 신뢰도: 99.9%+ (5단계 fallback)
-// ============================================
+/* 역공학 셀렉터 — Google은 로그인 페이지 DOM 구조를 공식 문서화하지 않음.
+ * Google Identity Services(https://developers.google.com/identity)는 OAuth용이며
+ * 기존 계정 세션 유지 로그인에는 사용 불가.
+ * 아래 셀렉터는 실제 DOM 검증 기반이며, Google 배포 시 변경될 수 있음.
+ * 변경 감지: 로그인 실패 급증 시 DOM 재검증 필요. */
 
 const SELECTORS = {
     EMAIL: [
@@ -137,8 +136,10 @@ try { fs.mkdirSync(FAILED_LOGS_DIR, { recursive: true }); } catch (_) {}
 function getToday() { return new Date().toISOString().split('T')[0]; }
 function getTodayLogFile() { return path.join(FAILED_LOGS_DIR, `failed_${getToday()}.json`); }
 
+/* 파일 시스템 경로용 sanitize — POSIX 금지 문자(\0, /) + Windows 금지 문자 제거
+ * ref: https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap03.html#tag_03_170 */
 function sanitizeEmail(email) {
-  return String(email || '').replace(/[^a-zA-Z0-9@._-]/g, '_');
+  return String(email || '').replace(/[\/\\<>:"|?*\x00-\x1f]/g, '_');
 }
 
 /**
@@ -347,7 +348,9 @@ async function advancedGoogleLogin(account, options = {}) {
     const profilePath = path.join(__dirname, 'profiles', account.email.replace(/[^a-z0-9]/gi, '_'));
     let browser, page;
 
-    // 실제 Chrome 경로 탐색 (Chromium보다 탐지 회피 우수)
+    /* Chrome 경로: 서버(Ubuntu/Debian) 기준 설치 경로
+     * Puppeteer.executablePath()는 번들 Chromium 경로 반환 — 봇 감지 회피에 불리
+     * ref: https://pptr.dev/api/puppeteer.browser.executablepath */
     const chromePaths = [
         '/usr/bin/google-chrome-stable',
         '/usr/bin/google-chrome',
@@ -366,6 +369,11 @@ async function advancedGoogleLogin(account, options = {}) {
         // Google은 headless 모드를 감지하여 차단함 (2025-2026 확인)
         // headed 모드 + 실제 Chrome + userDataDir가 유일한 작동 방식
         // 서버에서는 Xvfb로 가상 디스플레이 사용
+        /* Chromium flags — 비공식이나 Puppeteer 커뮤니티 검증 패턴
+         * --no-sandbox: https://pptr.dev/troubleshooting#setting-up-chrome-linux-sandbox
+         * --disable-blink-features=AutomationControlled: navigator.webdriver 비활성화 (비공식)
+         * --flag-switches-begin/end: Chromium 내부 플래그 구분자 (비공식)
+         * ignoreDefaultArgs: --enable-automation 제거로 "Chrome is being controlled" 배너 숨김 */
         const launchOpts = {
             headless: headless,
             userDataDir: profilePath,
@@ -390,7 +398,9 @@ async function advancedGoogleLogin(account, options = {}) {
 
         page = (await browser.pages())[0] || await browser.newPage();
 
-        // CDP navigator.webdriver 제거
+        /* W3C WebDriver spec: navigator.webdriver는 자동화 감지용 플래그
+         * ref: https://www.w3.org/TR/webdriver2/#dom-navigatorautomationinformation-webdriver
+         * CDP evaluateOnNewDocument로 페이지 로드 전 제거 */
         await page.evaluateOnNewDocument(() => {
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
             delete navigator.__proto__.webdriver;
@@ -436,7 +446,8 @@ async function advancedGoogleLogin(account, options = {}) {
         await page.click(emailSelector);
         await delay(200, 500);
         
-        // 인간처럼 천천히 타이핑
+        /* 타이핑 지연: 50~150ms/char — 평균 타이핑 속도(200ms/char) 범위 내
+         * 봇 감지 회피를 위한 인간 시뮬레이션 (공식 API 없음, 역공학 기반) */
         for (const char of account.email) {
             await page.keyboard.type(char);
             await delay(50, 150);
@@ -484,6 +495,7 @@ async function advancedGoogleLogin(account, options = {}) {
         // ===== 2FA 페이지 먼저 감지 (Google이 비밀번호 건너뛸 때) =====
         const earlyTwoFA = await waitForAnySelector(page, SELECTORS.TWO_FA, 2000);
         const pageText = await page.evaluate(() => document.body ? document.body.innerText : '').catch(() => '');
+        /* 2FA 페이지 감지 텍스트 — Google UI 역공학, 공식 문서 없음 */
         const isVerifyPage = /verification code|authenticator|인증.*코드|Verify it.*you|본인 확인/i.test(pageText);
 
         if (earlyTwoFA || isVerifyPage) {
@@ -580,7 +592,9 @@ async function advancedGoogleLogin(account, options = {}) {
         const skipButtons = await page.$$('button');
         for (const btn of skipButtons) {
             const text = await btn.evaluate(el => el.textContent).catch(() => '');
-            if (/나중에|skip|not now|아니요|cancel/i.test(text)) {
+            /* 보안/확인 건너뛰기 버튼 텍스트 — Google UI 역공학, 공식 문서 없음
+         * 한/영 혼합: 나중에, skip, not now, 아니요, cancel */
+        if (/나중에|skip|not now|아니요|cancel/i.test(text)) {
                 await btn.click().catch(() => {});
                 await delay(2000, 3000);
                 break;
@@ -589,6 +603,8 @@ async function advancedGoogleLogin(account, options = {}) {
 
         const currentUrl = page.url();
 
+        /* 로그인 성공 판정: accounts.google.com에서 벗어났으면 성공
+         * myaccount/youtube/webhp = 로그인 후 리다이렉트 대상 (역공학, 공식 문서 없음) */
         if (currentUrl.includes('myaccount.google.com') ||
             currentUrl.includes('youtube.com') ||
             currentUrl.includes('google.com/webhp') ||

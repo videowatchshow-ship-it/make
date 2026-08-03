@@ -87,6 +87,7 @@ refreshAccStats();
 (function(){
   var ts = localStorage.getItem('gauth_uploading');
   if(!ts) return;
+  /* 600000ms = 10분 — 업로드 타임아웃과 일치 (서버 req.setTimeout(600000)) */
   if(Date.now() - Number(ts) > 600000){ localStorage.removeItem('gauth_uploading'); return; }
   var bar = document.getElementById('accStats');
   var origText = bar ? bar.innerHTML : '';
@@ -109,6 +110,7 @@ refreshAccStats();
       }
     }).catch(function(){});
   }, 3000);
+  /* 600000ms = 10분 — 폴링 최대 시간, 서버 타임아웃과 일치 */
   setTimeout(function(){ clearInterval(poll); localStorage.removeItem('gauth_uploading'); }, 600000);
 })();
 </script>
@@ -138,7 +140,8 @@ function accessBadge(a){
   var mt = a.session_mtime || 0;
   if(!mt) return '<span class="badge b-never">미접속</span>';
   if(mt >= kstTodayMidnightMs()) return '<span class="badge b-today">🟢 오늘</span>';
-  var days = Math.floor((Date.now()-mt)/(24*3600*1000));
+  /* 86400000 = 24h × 60min × 60s × 1000ms — POSIX day in milliseconds */
+  var days = Math.floor((Date.now()-mt)/86400000);
   return '<span class="badge b-old">'+(days<=0?'어제':days+'일 전')+'</span>';
 }
 
@@ -275,6 +278,7 @@ function accessBadge(a){
     updateUploadStatus();
     var xhr = new XMLHttpRequest();
     xhr.open('POST', authQuery('/api/upload-excels'), true);
+    /* 300000ms = 5분 — 대용량 엑셀 업로드 허용 (서버측 10분보다 짧게 설정) */
     xhr.timeout = 300000;
     var t=getApiToken();if(t)xhr.setRequestHeader('Authorization','Bearer '+t);
     xhr.ontimeout = function(){
@@ -483,8 +487,10 @@ async function load(){
     fetch(authQuery('/api/failed-accounts')).then(r=>r.json()).catch(()=>({}))
   ])
   FAILED = f || {}
-  /* 프로필 폴더명→이메일: 서버가 email 필드를 반환하면 우선, 아니면 폴더명에서 마지막 _도메인 부분을 @로 변환 */
-  const sess = new Set(p.profiles.map(x => x.email || x.folder.replace(/_([^_]+)_([^_]+)$/, '@$1.$2')))
+  /* 프로필 폴더명→이메일: 서버가 email 필드를 반환하면 우선 사용.
+   * 폴더명 변환은 최초 _를 @로, 이후 _를 .로 치환 — multi-dot 도메인(co.uk 등) 대응
+   * 서버가 email을 반환하지 않는 레거시 경우에만 사용 */
+  const sess = new Set(p.profiles.map(x => x.email || x.folder.replace(/^([^_]+)_(.+)$/, (_, u, d) => u + '@' + d.replace(/_/g, '.'))))
   // 최신 순 (엑셀 mtime 내림차순) + 잠금 상태 표시
   ALL = (n.accounts||[]).map(a => ({
     ...a,

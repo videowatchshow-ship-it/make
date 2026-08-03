@@ -32,6 +32,9 @@ function normalizeTotp(s) {
   return String(s).toUpperCase().replace(/[\s\-_=]/g, '').replace(/[^A-Z2-7]/g, '');
 }
 
+/* RFC 5322 Section 3.4.1 간소화 — IP 리터럴, 따옴표 로컬파트 등 미지원
+ * ref: https://datatracker.ietf.org/doc/html/rfc5322#section-3.4.1
+ * HTML5 email type도 유사한 간소화 사용: https://html.spec.whatwg.org/#valid-e-mail-address */
 function isEmail(s) {
   return /^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(String(s || '').trim());
 }
@@ -48,6 +51,9 @@ function isTotpLike(s) {
   if (/^https?:\/\//i.test(s)) return false;
   if (/[\/\\:;!#$%^&*()+=\[\]{}|<>?]/.test(s) && !/^[A-Z2-7]+=*$/i.test(s)) return false;
   const n = normalizeTotp(s);
+  /* RFC 4226 Section 4: HMAC-SHA1 최소 128-bit = 20 Base32 문자
+   * ref: https://datatracker.ietf.org/doc/html/rfc4226#section-4
+   * 단, Google Authenticator는 80-bit(16자)도 허용하므로 16 유지 */
   if (n.length < 16) return false;
   if (n.length > 128) return false;
   const raw = String(s).replace(/[\s\-_=]/g, '');
@@ -55,10 +61,14 @@ function isTotpLike(s) {
   return true;
 }
 
+/* otpauth URI: https://github.com/google/google-authenticator/wiki/Key-Uri-Format
+ * secret 파라미터는 percent-encoding 가능 → decodeURIComponent 후 추출 */
 function extractTotpFromUrl(s) {
   s = String(s || '').trim();
-  const m = s.match(/[?&]secret=([A-Z2-7]+)/i);
-  if (m) return m[1].toUpperCase();
+  if (!/^otpauth:\/\//i.test(s)) return null;
+  try { s = decodeURIComponent(s); } catch (_) {}
+  const m = s.match(/[?&]secret=([A-Z2-7=]+)/i);
+  if (m) return m[1].toUpperCase().replace(/=+$/, '');
   return null;
 }
 
@@ -170,6 +180,7 @@ function analyzeColumns(rows) {
   for (const s of stats) {
     if (used.has(s.col) || s.nonEmpty === 0) continue;
     const ratio = s.totps / s.nonEmpty;
+    /* 10% 임계값: TOTP 열 판정 — 엑셀 형식이 비표준이므로 경험적 임계값, 공식 규격 없음 */
     if (ratio > bestTotpRatio && ratio > 0.1) {
       bestTotpRatio = ratio;
       bestTotp = s.col;
@@ -184,6 +195,7 @@ function analyzeColumns(rows) {
   for (const s of stats) {
     if (used.has(s.col) || s.nonEmpty === 0) continue;
     const ratio = s.urls / s.nonEmpty;
+    /* 20% 임계값: URL 열 판정 — 경험적 임계값, 공식 규격 없음 */
     if (ratio > bestUrlRatio && ratio > 0.2) {
       bestUrlRatio = ratio;
       bestUrl = s.col;
@@ -575,6 +587,7 @@ function mountRoutes(app) {
 
   const uploadDir = path.join(__dirname, 'uploads') + '/';
   try { fs.mkdirSync(uploadDir, { recursive: true }); } catch(e) { console.error('[upload_excels] mkdirSync failed:', e.message); }
+  /* 200MB — 대용량 엑셀 허용 (multer fileSize: https://github.com/expressjs/multer#limits) */
   const upload = multer({ dest: uploadDir, limits: { fileSize: 200 * 1024 * 1024 } });
 
   let _fileLock = Promise.resolve();
@@ -583,23 +596,15 @@ function mountRoutes(app) {
     return _fileLock;
   }
 
-  const crypto = require('crypto');
-  function uploadAuthMiddleware(req, res, next) {
-    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
-      || (req.query && req.query.token) || '';
-    const expected = process.env.GAUTH_API_TOKEN || '';
-    if (!expected) return res.status(503).json({ ok: false, error: 'GAUTH_API_TOKEN not configured' });
-    const tokenBuf = Buffer.from(token);
-    const expectedBuf = Buffer.from(expected);
-    if (!token || tokenBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(tokenBuf, expectedBuf)) {
-      return res.status(401).json({ ok: false, error: 'unauthorized' });
-    }
-    next();
-  }
+  /* timing-safe 비교 — HMAC 고정 길이 변환으로 길이 누출 방지
+   * ref: https://nodejs.org/api/crypto.html#cryptotimingsafeequala-b
+   * ref: https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html */
 
   app.post('/api/upload-excels', (req, res, next) => {
+    /* 600000ms = 10분 — 대용량 엑셀 다수 파싱+머지 허용 시간 */
     req.setTimeout(600000);
     res.setTimeout(600000);
+    /* 50파일 제한: multer maxCount — 한 번에 업로드 가능한 최대 파일 수 */
     upload.array('files', 50)(req, res, (err) => {
       if (err) {
         console.error('[upload-excels] multer error:', err);

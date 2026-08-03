@@ -55,7 +55,7 @@ make/
 |------|-----------|----------|-----------|
 | `fs` | upload_excels.js, auto_deploy.js, login-v2.js | `readFileSync`, `writeFileSync`, `renameSync`, `unlinkSync`, `mkdirSync`, `existsSync`, `copyFileSync` | https://github.com/nodejs/node/blob/main/doc/api/fs.md |
 | `path` | 전체 | `join`, `basename`, `resolve` | https://github.com/nodejs/node/blob/main/doc/api/path.md |
-| `crypto` | auto_deploy.js | `timingSafeEqual` | https://github.com/nodejs/node/blob/main/doc/api/crypto.md#cryptotimingsafeequala-b |
+| `crypto` | auto_deploy.js | `createHmac`, `timingSafeEqual` | https://nodejs.org/api/crypto.html#cryptotimingsafeequala-b |
 | `child_process` | auto_deploy.js | `execSync`, `execFileSync` | https://github.com/nodejs/node/blob/main/doc/api/child_process.md#child_processexecfilesyncfile-args-options |
 
 ### npm 패키지
@@ -109,13 +109,13 @@ make/
 | GET | `/api/deploy-status` | Chrome/Xvfb/Node/Display 상태 | 서버 진단 | |
 | POST | `/api/login-one` | `advancedGoogleLogin()` 호출 (최대 3 동시) | 개별 Puppeteer 로그인 | |
 
-**authMiddleware 동작** (공식 문서 기반):
+**authMiddleware 동작** (HMAC 고정 길이 비교):
 ```javascript
-// crypto.timingSafeEqual은 버퍼 길이가 같아야 함 (다르면 RangeError)
-// 공식: https://github.com/nodejs/node/blob/main/doc/api/crypto.md#cryptotimingsafeequala-b
-const tokenBuf = Buffer.from(token);
-const expectedBuf = Buffer.from(expected);
-if (tokenBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(tokenBuf, expectedBuf))
+// HMAC으로 고정 길이(SHA-256 32바이트) 다이제스트 생성 → 길이 누출 방지
+// ref: https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html
+// ref: https://nodejs.org/api/crypto.html#cryptotimingsafeequala-b
+const hmac = (s) => crypto.createHmac('sha256', 'gauth').update(s).digest();
+if (!crypto.timingSafeEqual(hmac(token), hmac(expected)))
 ```
 
 ### `rebrowser-login.js` (서버 전용, 이 저장소에 없음) — 추정 라우트
@@ -313,7 +313,9 @@ RFC 6238 TOTP: 30초 스텝, SHA-1, 6자리 코드
 
 otpauth:// URL 지원:
   - otpauth://totp/...?secret=XXXX&issuer=...
-  - secret= 파라미터 추출: /[?&]secret=([A-Z2-7]+)/i
+  - otpauth:// 접두사 검증 후 decodeURIComponent() 적용
+  - secret= 파라미터 추출: /[?&]secret=([A-Z2-7=]+)/i (패딩 포함)
+  - ref: https://github.com/google/google-authenticator/wiki/Key-Uri-Format
 
 공식 문서:
   - RFC 4648 (Base32): https://www.rfc-editor.org/rfc/rfc4648#section-6
@@ -437,11 +439,13 @@ otpauth:// URL 지원:
 
 | 보안 항목 | 구현 | 공식 문서 |
 |-----------|------|-----------|
-| 타이밍 공격 방지 | `crypto.timingSafeEqual` (버퍼 길이 먼저 비교) | https://github.com/nodejs/node/blob/main/doc/api/crypto.md#cryptotimingsafeequala-b |
+| 타이밍 공격 방지 | `crypto.createHmac('sha256','gauth')` → `timingSafeEqual` (HMAC 고정 길이 비교, 길이 누출 방지) | https://nodejs.org/api/crypto.html#cryptotimingsafeequala-b |
 | 셸 인젝션 방지 | `execFileSync` (인자 배열, 셸 미사용) | https://github.com/nodejs/node/blob/main/doc/api/child_process.md#child_processexecfilesyncfile-args-options |
 | XSS 방지 | `escapeHtml()` — `& < > " '` 이스케이프 | https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html |
-| 경로 탐색 방지 | `sanitizeEmail()` — `/[^a-z0-9]/gi` → `_` | OWASP Path Traversal |
+| 경로 탐색 방지 | `sanitizeEmail()` — POSIX 금지 문자 + Windows 금지 문자만 제거 (`/[\/\\<>:"|?*\x00-\x1f]/g`) | https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap03.html#tag_03_170 |
 | Atomic write | `writeFileSync(tmp)` + `renameSync(tmp, target)` | https://github.com/nodejs/node/blob/main/doc/api/fs.md#fsrenamesyncoldpath-newpath |
+| Race condition 방지 | `withFileLock()` — Promise 체인 뮤텍스로 파일 read-modify-write 직렬화 | 자체 구현 (파싱은 잠금 밖, 머지만 잠금 안) |
+| 브랜치 인젝션 방지 | `git-check-ref-format` 금지 문자 제거 (`[\x00-\x1f\x7f ~^:?*\[\\]`) | https://git-scm.com/docs/git-check-ref-format |
 | 동시 로그인 제한 | `MAX_CONCURRENT_LOGINS = 3` + `loginQueue` Map | Express 자체 구현 |
 | 토큰 미설정 차단 | `GAUTH_API_TOKEN` 없으면 503 반환 | 자체 구현 |
 
@@ -498,13 +502,29 @@ otpauth:// URL 지원:
 |------|-----|
 | RFC 4648 (Base32) | https://www.rfc-editor.org/rfc/rfc4648#section-6 |
 | RFC 6238 (TOTP) | https://www.rfc-editor.org/rfc/rfc6238 |
+| RFC 4226 (HOTP/TOTP 키 길이) | https://datatracker.ietf.org/doc/html/rfc4226#section-4 |
 | RFC 5321 (SMTP/이메일) | https://www.rfc-editor.org/rfc/rfc5321 |
+| RFC 5322 (이메일 주소 형식) | https://datatracker.ietf.org/doc/html/rfc5322#section-3.4.1 |
 
 ### 보안 가이드
 | 주제 | URL |
 |------|-----|
 | XSS 방지 | https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html |
 | 명령어 인젝션 방지 | https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html |
+| 인증 (HMAC timing-safe) | https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html |
+
+### 파일 시스템/Git 표준
+| 주제 | URL |
+|------|-----|
+| POSIX 파일명 (3.170) | https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap03.html#tag_03_170 |
+| git-check-ref-format | https://git-scm.com/docs/git-check-ref-format |
+| otpauth URI 형식 | https://github.com/google/google-authenticator/wiki/Key-Uri-Format |
+
+### W3C/브라우저 표준
+| 주제 | URL |
+|------|-----|
+| WebDriver navigator.webdriver | https://www.w3.org/TR/webdriver2/#dom-navigatorautomationinformation-webdriver |
+| HTML5 email 유효성 검사 | https://html.spec.whatwg.org/#valid-e-mail-address |
 
 ## 프론트엔드 추측 코딩 수정 (13건)
 
@@ -515,7 +535,7 @@ otpauth:// URL 지원:
 | 3 | Selection API 폴백 | 없음 | `window.getSelection()` + `Range` | https://developer.mozilla.org/en-US/docs/Web/API/Selection |
 | 4 | VM 비밀번호 저장 | `localStorage` (영구 저장) | `sessionStorage` (탭 닫으면 소멸) | https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage |
 | 5 | SSH URL | 임의 패턴 | GCP 공식 `console.cloud.google.com/compute/instancesDetail/zones/ZONE/instances/NAME` | https://cloud.google.com/compute/docs/ssh-in-browser |
-| 6 | 프로필 폴더→이메일 변환 | `folder.replace(/_gmail_com$/,'@gmail.com')` (gmail만) | `folder.replace(/_([^_]+)_([^_]+)$/, '@$1.$2')` (모든 도메인) | MDN String.replace: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/replace |
+| 6 | 프로필 폴더→이메일 변환 | `folder.replace(/_([^_]+)_([^_]+)$/, '@$1.$2')` (2-part 도메인만) | `folder.replace(/^([^_]+)_(.+)$/, (_, u, d) => u + '@' + d.replace(/_/g, '.'))` (multi-dot 도메인 대응) | MDN String.replace: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/replace |
 | 7 | Optional chaining 제거 | `?.` `??` 사용 (ES2020) | `&&` 체인 + 삼항 연산자 (ES5 호환) | https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Optional_chaining |
 | 8 | `@gmail.com` 자동 추가 | 이메일에 `@` 없으면 `@gmail.com` 추가 | 제거 (데이터 오염 방지) | — |
 | 9 | `login_method` 고스트 필드 | 서버에 없는 필드 표시 | 제거 | — |
@@ -523,6 +543,43 @@ otpauth:// URL 지원:
 | 11 | `source_row` 고스트 필드 | 서버에 없는 필드 표시 | 제거 | — |
 | 12 | `doUpload` 클로저 변수 | 외부 `valid.length` 참조 (비동기 시 stale) | `fileCount` 매개변수로 전달 | MDN Closures: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Closures |
 | 13 | `source_mtime` 해석 | 문서화 없음 | epoch 밀리초 (정렬/비교용) | MDN Date: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date |
+
+## 백엔드 추측 코딩 수정 (전체)
+
+| # | 파일 | 수정 항목 | 이전 (추측) | 이후 (공식 문서 기반) | 공식 문서 |
+|---|------|----------|------------|---------------------|-----------|
+| 1 | auto_deploy.js | authMiddleware 타이밍 공격 | `Buffer.from()` 길이 비교 → 길이 누출 | HMAC SHA-256 고정 길이 다이제스트 비교 | https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html |
+| 2 | auto_deploy.js | 브랜치 sanitize | `/[^a-zA-Z0-9\/_\-\.]/g` (과도한 제한) | git-check-ref-format 금지 문자만 제거 | https://git-scm.com/docs/git-check-ref-format |
+| 3 | auto_deploy.js | TOTP 길이 검증 | 16, 32, 52, 64 (52는 근거 없음) | 16, 20, 32, 64 (RFC 4226 Section 4) | https://datatracker.ietf.org/doc/html/rfc4226#section-4 |
+| 4 | auto_deploy.js | login-one 이메일 비교 | 대소문자 구분 비교 | `.toLowerCase()` 적용 | — |
+| 5 | auto_deploy.js | LOGIN_TIMEOUT 매직넘버 | 120000 (주석 없음) | 주석: Puppeteer 90초 + 버퍼 30초 | — |
+| 6 | auto_deploy.js | MAX_CONCURRENT_LOGINS 매직넘버 | 3 (주석 없음) | 주석: Chrome ~300MB RAM, 서버 2GB 기준 | — |
+| 7 | upload_excels.js | uploadAuthMiddleware 데드코드 | 사용하지 않는 인증 함수 존재 | 제거 (프론트엔드 인증 불필요) | — |
+| 8 | upload_excels.js | otpauth URL 파싱 | `secret=([A-Z2-7]+)` (접두사 미검증, percent-encoding 미지원) | `otpauth://` 검증 + `decodeURIComponent` + `=` 패딩 허용 | https://github.com/google/google-authenticator/wiki/Key-Uri-Format |
+| 9 | upload_excels.js | isTotpLike 길이 | 주석 없음 | RFC 4226 Section 4 참조 주석 추가 | https://datatracker.ietf.org/doc/html/rfc4226#section-4 |
+| 10 | upload_excels.js | 열 감지 임계값 | 10%/20% (주석 없음) | 경험적 임계값임을 명시 (공식 규격 없음) | — |
+| 11 | upload_excels.js | 파일 크기/개수 제한 | 200MB/50파일 (주석 없음) | multer 공식 문서 참조 주석 | https://github.com/expressjs/multer#limits |
+| 12 | upload_excels.js | 타임아웃 | 600000ms (주석 없음) | 주석: 10분 — 대용량 엑셀 다수 파싱+머지 허용 | — |
+| 13 | upload_excels.js | isEmail 정규식 | 주석 없음 | RFC 5322 Section 3.4.1 간소화임을 명시 | https://datatracker.ietf.org/doc/html/rfc5322#section-3.4.1 |
+| 14 | upload_excels.js | Race condition | 파일 lock 없이 동시 read-modify-write | `withFileLock()` Promise 체인 뮤텍스 | — |
+| 15 | login-v2.js | sanitizeEmail | `/[^a-zA-Z0-9@._-]/g` (임의 화이트리스트) | POSIX + Windows 금지 문자만 제거 | https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap03.html#tag_03_170 |
+| 16 | login-v2.js | 셀렉터 출처 | "99.9% 신뢰도" 주장 | 역공학 기반임을 명시, 공식 API 없음 | https://developers.google.com/identity |
+| 17 | login-v2.js | Chrome 경로 | 주석 없음 | Puppeteer.executablePath() 미사용 이유 명시 | https://pptr.dev/api/puppeteer.browser.executablepath |
+| 18 | login-v2.js | launch flags | 주석 없음 | 각 플래그 공식/비공식 출처 명시 | https://pptr.dev/troubleshooting#setting-up-chrome-linux-sandbox |
+| 19 | login-v2.js | headless 파라미터 | 무시 (항상 false) | options.headless 존중 | — |
+| 20 | login-v2.js | delay(5000, 5000) | min===max (랜덤 의미 없음) | delay(3000, 5000) 수정 | — |
+| 21 | login-v2.js | navigator.webdriver 제거 | 주석 없음 | W3C WebDriver spec 참조 | https://www.w3.org/TR/webdriver2/#dom-navigatorautomationinformation-webdriver |
+| 22 | login-v2.js | 타이핑 딜레이 | "인간처럼" (근거 없음) | 50~150ms/char — 평균 타이핑 속도 범위, 역공학 기반 명시 | — |
+| 23 | login-v2.js | skip 버튼 텍스트 | 주석 없음 | Google UI 역공학, 공식 문서 없음 명시 | — |
+| 24 | login-v2.js | 2FA 감지 텍스트 | 주석 없음 | Google UI 역공학, 공식 문서 없음 명시 | — |
+| 25 | login-v2.js | 로그인 성공 URL 판정 | 주석 없음 | 역공학 기반, 공식 문서 없음 명시 | — |
+| 26 | index.html | 프로필 폴더→이메일 | `_([^_]+)_([^_]+)$` (2-part 도메인만) | multi-dot 도메인(co.uk 등) 대응 | — |
+| 27 | index.html | day 계산 매직넘버 | `24*3600*1000` (주석 없음) | 86400000 = POSIX day in ms 명시 | — |
+| 28 | index.html | 업로드 타임아웃 600000 | 주석 없음 | 10분 — 서버 req.setTimeout과 일치 명시 | — |
+| 29 | index.html | XHR timeout 300000 | 주석 없음 | 5분 — 서버측 10분보다 짧게 설정 명시 | — |
+| 30 | index.html | lookup XSS | innerHTML에 서버 데이터 직접 삽입 | `escapeHtml()` 전처리 | https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html |
+| 31 | index.html | YouTube URL XSS | `javascript:` 스킴 허용 | `/^https?:\/\//i` 검증 | — |
+| 32 | index.html | load() 인증 | authHeaders 미적용 | `authQuery()` 적용 | — |
 
 ---
 

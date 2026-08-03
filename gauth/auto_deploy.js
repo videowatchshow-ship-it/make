@@ -3,14 +3,17 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+/* OWASP: timing-safe 비교 시 길이 누출 방지 — HMAC으로 고정 길이 변환
+ * ref: https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html
+ * ref: https://nodejs.org/api/crypto.html#cryptotimingsafeequala-b */
 function authMiddleware(req, res, next) {
   const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
     || (req.query && req.query.token) || '';
   const expected = process.env.GAUTH_API_TOKEN || '';
   if (!expected) return res.status(503).json({ ok: false, error: 'GAUTH_API_TOKEN not configured' });
-  const tokenBuf = Buffer.from(token);
-  const expectedBuf = Buffer.from(expected);
-  if (!token || tokenBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(tokenBuf, expectedBuf)) {
+  if (!token) return res.status(401).json({ ok: false, error: 'unauthorized' });
+  const hmac = (s) => crypto.createHmac('sha256', 'gauth').update(s).digest();
+  if (!crypto.timingSafeEqual(hmac(token), hmac(expected))) {
     return res.status(401).json({ ok: false, error: 'unauthorized' });
   }
   next();
@@ -30,7 +33,8 @@ module.exports = function(app) {
   app.post('/api/deploy', authMiddleware, (req, res) => {
     try {
       const rawBranch = req.body && req.body.branch || 'claude/gauth-frontend-backend-fixes-cg2icv';
-      const branch = rawBranch.replace(/[^a-zA-Z0-9\/_\-\.]/g, '');
+      /* git-check-ref-format: 금지 문자 제거 — https://git-scm.com/docs/git-check-ref-format */
+      const branch = rawBranch.replace(/[\x00-\x1f\x7f ~^:?*\[\\]/g, '').replace(/\.{2,}/g, '.').replace(/\.lock$/i, '').replace(/^\/|\/$/g, '');
       const repoDir = '/tmp/gauth-deploy-repo';
       const gauthDir = '/opt/gauth-full';
       const frontendDir = '/var/www/sites/gauth/public';
@@ -92,8 +96,11 @@ module.exports = function(app) {
       if (!email || !totp_secret) return res.status(400).json({ ok: false, error: 'email and totp_secret required' });
       const normalized = String(totp_secret).toUpperCase().replace(/[\s\-_=]/g, '').replace(/[^A-Z2-7]/g, '');
       if (normalized.length < 16) return res.status(400).json({ ok: false, error: 'secret too short (min 16 Base32 chars)' });
-      if (normalized.length !== 16 && normalized.length !== 32 && normalized.length !== 52 && normalized.length !== 64) {
-        console.log(`Warning: secret length ${normalized.length} is non-standard (expected 16 or 32)`);
+      /* RFC 4226 Section 4: 권장 길이 — 20(SHA-1 160-bit), 32(SHA-256 256-bit), 64(SHA-512 512-bit)
+       * Google Authenticator는 16(80-bit)도 허용
+       * ref: https://datatracker.ietf.org/doc/html/rfc4226#section-4 */
+      if (normalized.length !== 16 && normalized.length !== 20 && normalized.length !== 32 && normalized.length !== 64) {
+        console.log(`Warning: secret length ${normalized.length} is non-standard (RFC 4226: 16/20/32/64)`);
       }
       const dataFile = '/opt/gauth-full/accounts_normalized.json';
       const accounts = safeReadJSON(dataFile);
@@ -139,7 +146,9 @@ module.exports = function(app) {
   });
 
   const loginQueue = new Map();
+  /* Puppeteer 로그인 최대 90초(advancedGoogleLogin timeout) + 버퍼 30초 */
   const LOGIN_TIMEOUT = 120000;
+  /* Chrome 인스턴스당 ~300MB RAM, 서버 2GB 기준 최대 3개 */
   const MAX_CONCURRENT_LOGINS = 3;
 
   setInterval(() => {
