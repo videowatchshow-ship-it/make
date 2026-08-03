@@ -579,16 +579,35 @@ function parseMultipleFiles(filePaths) {
   return { accounts: allAccounts, report };
 }
 
+function parseMultipartManual(req) {
+  return new Promise((resolve, reject) => {
+    const Busboy = (() => {
+      try { return require('busboy'); } catch (_) {}
+      try { const m = require('multer'); return require('busboy'); } catch (_) {}
+      return null;
+    })();
+    if (!Busboy) return reject(new Error('busboy not available'));
+    const uploadDir = path.join(__dirname, 'uploads') + '/';
+    try { fs.mkdirSync(uploadDir, { recursive: true }); } catch (_) {}
+    const files = [];
+    const bb = Busboy({ headers: req.headers, limits: { fileSize: 200 * 1024 * 1024, files: 200 } });
+    bb.on('file', (fieldname, stream, info) => {
+      const filename = typeof info === 'string' ? info : (info && info.filename || 'unknown');
+      const tmpPath = path.join(uploadDir, 'up_' + Date.now() + '_' + Math.random().toString(36).slice(2));
+      const ws = fs.createWriteStream(tmpPath);
+      stream.pipe(ws);
+      ws.on('close', () => { files.push({ fieldname, originalname: filename, path: tmpPath }); });
+      stream.on('error', () => { try { fs.unlinkSync(tmpPath); } catch (_) {} });
+    });
+    bb.on('close', () => resolve(files));
+    bb.on('finish', () => resolve(files));
+    bb.on('error', (err) => reject(err));
+    req.pipe(bb);
+  });
+}
+
 function mountRoutes(app) {
   if (!app || typeof app.post !== 'function') return;
-
-  const multer = (() => { try { return require('multer'); } catch(e) { return null; } })();
-  if (!multer) { console.log('upload_excels: multer not installed, upload routes skipped'); return; }
-
-  const uploadDir = path.join(__dirname, 'uploads') + '/';
-  try { fs.mkdirSync(uploadDir, { recursive: true }); } catch(e) { console.error('[upload_excels] mkdirSync failed:', e.message); }
-  /* 200MB — 대용량 엑셀 허용 (multer fileSize: https://github.com/expressjs/multer#limits) */
-  const upload = multer({ dest: uploadDir, limits: { fileSize: 200 * 1024 * 1024 } });
 
   let _fileLock = Promise.resolve();
   function withFileLock(fn) {
@@ -596,26 +615,20 @@ function mountRoutes(app) {
     return _fileLock;
   }
 
-  /* timing-safe 비교 — HMAC 고정 길이 변환으로 길이 누출 방지
-   * ref: https://nodejs.org/api/crypto.html#cryptotimingsafeequala-b
-   * ref: https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html */
-
-  app.post('/api/upload-excels', (req, res, next) => {
-    /* 600000ms = 10분 — 대용량 엑셀 다수 파싱+머지 허용 시간 */
+  app.post('/api/upload-excels', async (req, res) => {
     req.setTimeout(600000);
     res.setTimeout(600000);
-    upload.any()(req, res, (err) => {
-      if (err) {
-        console.error('[upload-excels] multer error:', JSON.stringify({ code: err.code, field: err.field, message: err.message, storageErrors: err.storageErrors }));
-        return res.status(500).json({ ok: false, error: 'upload failed: ' + err.message, multer_code: err.code || '', multer_field: err.field || '' });
-      }
-      next();
-    });
-  }, (req, res) => {
-    if (!req.files || !req.files.length) return res.status(400).json({ ok: false, error: 'no files' });
+    let files;
+    try {
+      files = await parseMultipartManual(req);
+    } catch (err) {
+      console.error('[upload-excels] parse error:', err.message);
+      return res.status(500).json({ ok: false, error: 'upload failed: ' + err.message });
+    }
+    if (!files || !files.length) return res.status(400).json({ ok: false, error: 'no files' });
 
     const parsedFiles = [];
-    for (const f of req.files) {
+    for (const f of files) {
       try {
         const accounts = parseExcelFile(f.path);
         parsedFiles.push({ name: f.originalname, accounts });
@@ -636,10 +649,10 @@ function mountRoutes(app) {
           if (a && a.email) byEmail[normalizeEmail(a.email)] = a;
         }
 
-        const files = [];
+        const fileResults = [];
         let totalParsed = 0, totalAdded = 0, totalUpdated = 0;
         for (const pf of parsedFiles) {
-          if (pf.error) { files.push({ name: pf.name, accounts: 0, error: pf.error }); continue; }
+          if (pf.error) { fileResults.push({ name: pf.name, accounts: 0, error: pf.error }); continue; }
           let added = 0, updated = 0;
           for (const a of pf.accounts) {
             if (!a.email) continue;
@@ -659,14 +672,14 @@ function mountRoutes(app) {
           totalParsed += pf.accounts.length;
           totalAdded += added;
           totalUpdated += updated;
-          files.push({ name: pf.name, accounts: pf.accounts.length, added, updated });
+          fileResults.push({ name: pf.name, accounts: pf.accounts.length, added, updated });
         }
 
         const allAccounts = Object.values(byEmail);
         const tmpFile = dataFile + '.tmp.' + process.pid;
         fs.writeFileSync(tmpFile, JSON.stringify(allAccounts, null, 2));
         fs.renameSync(tmpFile, dataFile);
-        res.json({ ok: true, total_master: allAccounts.length, total_parsed: totalParsed, added: totalAdded, updated: totalUpdated, files, conflicts_count: 0, conflicts: [] });
+        res.json({ ok: true, total_master: allAccounts.length, total_parsed: totalParsed, added: totalAdded, updated: totalUpdated, files: fileResults, conflicts_count: 0, conflicts: [] });
       } catch(e) {
         console.error('[upload-excels] error:', e);
         if (!res.headersSent) res.status(500).json({ ok: false, error: e.message });
