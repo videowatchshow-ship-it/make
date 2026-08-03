@@ -118,6 +118,31 @@ module.exports = function(app) {
     }
   });
 
+  app.get('/api/lookup/:email', authMiddleware, (req, res) => {
+    try {
+      const email = (req.params.email || '').trim().toLowerCase();
+      if (!email) return res.status(400).json({ error: 'email required' });
+      const dataFile = '/opt/gauth-full/accounts_normalized.json';
+      const accounts = safeReadJSON(dataFile);
+      const account = accounts.find(a => (a.email || '').toLowerCase() === email);
+      if (!account) return res.status(404).json({ error: 'not found' });
+      const profileDir = path.join('/opt/gauth-full', 'profiles', account.email);
+      const hasSession = fs.existsSync(profileDir);
+      res.json({
+        email: account.email,
+        password: account.password || '',
+        totp_secret: account.totp_secret || '',
+        recovery_email: account.recovery_email || '',
+        source_file: account.source_file || '',
+        youtube_url: account.youtube_url || '',
+        has_session: hasSession,
+        extra: account.extra || []
+      });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.get('/api/search-account', authMiddleware, (req, res) => {
     try {
       const q = (req.query.q || '').trim().toLowerCase();
@@ -216,5 +241,5 @@ module.exports = function(app) {
     }
   });
 
-  console.log('[auto_deploy] 5 routes registered: /api/deploy, /api/update-secret, /api/search-account, /api/deploy-status, /api/login-one');
+  console.log('[auto_deploy] 6 routes registered: /api/deploy, /api/update-secret, /api/lookup/:email, /api/search-account, /api/deploy-status, /api/login-one');
 };

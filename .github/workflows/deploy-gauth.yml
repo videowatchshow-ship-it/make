@@ -332,6 +332,25 @@ jobs:
 
             # Service status
             sudo systemctl status gauth --no-pager -l 2>/dev/null | tail -10 || true
+
+            # ===== Through-Cloudflare upload test =====
+            echo "=== [POST-DEPLOY] Upload test via public URL ==="
+            node -e "
+              const https = require('https');
+              const boundary = '----CFTest' + Date.now();
+              const body = '--' + boundary + '\r\nContent-Disposition: form-data; name=\"files\"; filename=\"cftest.xlsx\"\r\nContent-Type: application/octet-stream\r\n\r\nfakedata\r\n--' + boundary + '--\r\n';
+              const req = https.request({hostname:'gauth.cent-solution.online',port:443,path:'/api/upload-excels',method:'POST',headers:{'Content-Type':'multipart/form-data; boundary='+boundary,'Content-Length':Buffer.byteLength(body)}}, res => {
+                let d=''; res.on('data',c=>d+=c); res.on('end',()=>console.log('CF upload test:', res.statusCode, d.slice(0,300)));
+              });
+              req.on('error', e => console.log('CF upload ERROR:', e.message));
+              req.write(body); req.end();
+            " 2>&1 || echo "CF upload test failed"
+            sleep 2
+
+            # ===== Lookup endpoint test =====
+            echo "=== [POST-DEPLOY] Lookup test ==="
+            curl -s http://localhost:4000/api/lookup/test@test.com 2>&1 | head -1 || echo "lookup test failed"
+
             echo "=== Deploy complete ==="
 
       - name: Cloudflare security level
