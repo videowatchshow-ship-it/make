@@ -63,7 +63,7 @@ make/
 | 패키지 | 버전 | 사용 위치 | 용도 | 공식 문서 (GitHub 원본) |
 |--------|------|-----------|------|------------------------|
 | express | ^4.21.2 | rebrowser-login.js | HTTP 서버, 라우팅 | https://github.com/expressjs/express |
-| multer | ^2.2.0 | upload_excels.js | multipart 파일 업로드 | https://github.com/expressjs/multer#readme |
+| multer | ^1.4.5-lts.1 | upload_excels.js | multipart 파일 업로드 | https://github.com/expressjs/multer#readme |
 | xlsx (SheetJS) | ^0.18.5 | upload_excels.js, index.html | 엑셀 파싱 (`.xlsx`, `.xls`, `.csv`) | https://github.com/SheetJS/sheetjs |
 | otplib | ^12.0.1 | login-v2.js, rebrowser-login.js | TOTP 코드 생성 (RFC 6238) | https://github.com/yeojz/otplib |
 | hi-base32 | ^0.5.1 | (otplib 내부) | Base32 인코딩/디코딩 (RFC 4648) | https://github.com/emn178/hi-base32 |
@@ -589,7 +589,7 @@ otpauth:// URL 지원:
 | 39 | deploy-gauth.yml | 일회성 정리 블록 | TOTP clearing/dedup/diagnostics 매 배포 실행 | 삭제 (일회성 작업 반복 불필요) | — |
 | 40 | deploy-gauth.yml | 테스트 이메일 | 하드코딩된 이메일로 검색 검증 | 삭제 (credential 누출 위험) | — |
 | 41 | deploy-gauth.yml | 로그 출력량 | journalctl 150줄 + 모듈 체크 | 서비스 상태 10줄로 축소 | — |
-| 42 | package.json | multer 버전 | ^1.4.5-lts.1 | ^2.2.0 (API 호환 확인) | https://github.com/expressjs/multer |
+| 42 | package.json | multer 버전 | ^1.4.5-lts.1 유지 | v2.x API 비호환 → 롤백 | https://github.com/expressjs/multer |
 | 43 | index.html | CSS 이중 세미콜론 | `;;` | `;` | — |
 
 ---
