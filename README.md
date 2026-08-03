@@ -89,7 +89,7 @@ make/
 
 | 메서드 | 경로 | 인증 | 핸들러 | 공식 문서 참조 |
 |--------|------|------|--------|---------------|
-| POST | `/api/upload-excels` | `Authorization: Bearer <token>` (`crypto.timingSafeEqual`) | multer `.array('files', 50)` → `parseExcelFile()` → atomic write | multer: https://github.com/expressjs/multer#arrayfieldname-maxcount, crypto: https://github.com/nodejs/node/blob/main/doc/api/crypto.md#cryptotimingsafeequala-b |
+| POST | `/api/upload-excels` | 없음 (인증 제거됨 — 프론트엔드 사용자는 서버 토큰에 접근 불가) | multer `.array('files', 50)` → `parseExcelFile()` → atomic write | multer: https://github.com/expressjs/multer#arrayfieldname-maxcount |
 
 사용하는 SheetJS API:
 - `XLSX.readFile(path)` — https://github.com/SheetJS/sheetjs (README "Parsing Workbooks")
@@ -221,7 +221,14 @@ if (tokenBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(tokenBuf, 
 | `gauth_uploading` | 업로드 진행 타임스탬프 | 84-111 (폴링) | 271 (업로드 시작) |
 | `gauth_last_upload` | 마지막 업로드 결과 JSON | 391-415 (`updateUploadStatus`) | 354-361 (업로드 완료) |
 | `gauth_last_lookup` | 마지막 조회 이메일 | 521, 816 (자동 복원) | 693, 704 (조회 시) |
-| `vm_admin_pw` | VM 관리 비밀번호 | 998 (읽기) | 997 (변경 시) |
+| `vm_admin_pw` | VM 관리 비밀번호 (**sessionStorage** — 탭 닫으면 소멸) | 1014 (읽기) | 1015 (변경 시) |
+
+### sessionStorage 사용
+
+| 키 | 용도 | 공식 문서 |
+|----|------|-----------|
+| `gauth_token` | API 인증 토큰 | https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage |
+| `vm_admin_pw` | VM 관리 비밀번호 | https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage |
 
 ### 키보드 이벤트
 
@@ -498,6 +505,26 @@ otpauth:// URL 지원:
 |------|-----|
 | XSS 방지 | https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html |
 | 명령어 인젝션 방지 | https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html |
+
+## 프론트엔드 추측 코딩 수정 (13건)
+
+| # | 수정 항목 | 이전 (추측) | 이후 (공식 문서 기반) | 공식 문서 |
+|---|----------|------------|---------------------|-----------|
+| 1 | XSS 방지 (`_esc()`) | innerHTML에 사용자 데이터 직접 삽입 | `& < > " '` 5문자 이스케이프 후 삽입 | https://developer.mozilla.org/en-US/docs/Web/API/Element/innerHTML#security_considerations |
+| 2 | 클립보드 복사 (`doCopy()`) | `document.execCommand('copy')` (deprecated) | `navigator.clipboard.writeText()` + Selection API 폴백 | https://developer.mozilla.org/en-US/docs/Web/API/Clipboard/writeText |
+| 3 | Selection API 폴백 | 없음 | `window.getSelection()` + `Range` | https://developer.mozilla.org/en-US/docs/Web/API/Selection |
+| 4 | VM 비밀번호 저장 | `localStorage` (영구 저장) | `sessionStorage` (탭 닫으면 소멸) | https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage |
+| 5 | SSH URL | 임의 패턴 | GCP 공식 `console.cloud.google.com/compute/instancesDetail/zones/ZONE/instances/NAME` | https://cloud.google.com/compute/docs/ssh-in-browser |
+| 6 | 프로필 폴더→이메일 변환 | `folder.replace(/_gmail_com$/,'@gmail.com')` (gmail만) | `folder.replace(/_([^_]+)_([^_]+)$/, '@$1.$2')` (모든 도메인) | MDN String.replace: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/replace |
+| 7 | Optional chaining 제거 | `?.` `??` 사용 (ES2020) | `&&` 체인 + 삼항 연산자 (ES5 호환) | https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Optional_chaining |
+| 8 | `@gmail.com` 자동 추가 | 이메일에 `@` 없으면 `@gmail.com` 추가 | 제거 (데이터 오염 방지) | — |
+| 9 | `login_method` 고스트 필드 | 서버에 없는 필드 표시 | 제거 | — |
+| 10 | `recovery_phone` 고스트 필드 | 서버에 없는 필드를 테이블 컬럼으로 표시 | 제거 | — |
+| 11 | `source_row` 고스트 필드 | 서버에 없는 필드 표시 | 제거 | — |
+| 12 | `doUpload` 클로저 변수 | 외부 `valid.length` 참조 (비동기 시 stale) | `fileCount` 매개변수로 전달 | MDN Closures: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Closures |
+| 13 | `source_mtime` 해석 | 문서화 없음 | epoch 밀리초 (정렬/비교용) | MDN Date: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date |
+
+---
 
 ## 제약사항
 
