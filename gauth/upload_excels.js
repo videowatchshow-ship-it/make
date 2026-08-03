@@ -581,37 +581,80 @@ function parseMultipleFiles(filePaths) {
 
 function parseMultipartManual(req) {
   return new Promise((resolve, reject) => {
+    const ct = req.headers['content-type'] || '';
+    console.log('[upload-excels] content-type:', ct.slice(0, 120));
+    console.log('[upload-excels] content-length:', req.headers['content-length'] || 'not set');
+    if (!ct.includes('multipart')) {
+      return reject(new Error('not multipart: ' + ct.slice(0, 80)));
+    }
     const Busboy = (() => {
       try { return require('busboy'); } catch (_) {}
       try { require('multer'); return require('busboy'); } catch (_) {}
       return null;
     })();
     if (!Busboy) return reject(new Error('busboy not available'));
+    console.log('[upload-excels] busboy loaded OK');
     const uploadDir = path.join(__dirname, 'uploads') + '/';
     try { fs.mkdirSync(uploadDir, { recursive: true }); } catch (_) {}
     const files = [];
     const pending = [];
     let bbDone = false;
+    let settled = false;
     const bb = Busboy({ headers: req.headers, limits: { fileSize: 200 * 1024 * 1024, files: 200 } });
-    function tryResolve() { if (bbDone && pending.every(p => p.done)) resolve(files); }
+    function tryResolve() {
+      if (settled) return;
+      if (bbDone && pending.every(p => p.done)) {
+        settled = true;
+        console.log('[upload-excels] busboy done, files:', files.length);
+        resolve(files);
+      }
+    }
     bb.on('file', (fieldname, stream, info) => {
       const filename = typeof info === 'string' ? info : (info && info.filename || 'unknown');
+      console.log('[upload-excels] file event:', fieldname, filename);
       const tmpPath = path.join(uploadDir, 'up_' + Date.now() + '_' + Math.random().toString(36).slice(2));
       const tracker = { done: false };
       pending.push(tracker);
       const ws = fs.createWriteStream(tmpPath);
       stream.pipe(ws);
       ws.on('close', () => {
-        files.push({ fieldname, originalname: filename, path: tmpPath });
+        const sz = (() => { try { return fs.statSync(tmpPath).size; } catch (_) { return -1; } })();
+        console.log('[upload-excels] file saved:', filename, sz, 'bytes');
+        files.push({ fieldname, originalname: filename, path: tmpPath, size: sz });
         tracker.done = true;
         tryResolve();
       });
-      stream.on('error', () => { tracker.done = true; try { fs.unlinkSync(tmpPath); } catch (_) {} tryResolve(); });
+      stream.on('error', (e) => {
+        console.error('[upload-excels] stream error:', filename, e.message);
+        tracker.done = true;
+        try { fs.unlinkSync(tmpPath); } catch (_) {}
+        tryResolve();
+      });
     });
-    bb.on('close', () => { bbDone = true; tryResolve(); });
-    bb.on('finish', () => { bbDone = true; tryResolve(); });
-    bb.on('error', (err) => reject(err));
+    bb.on('close', () => { console.log('[upload-excels] bb close'); bbDone = true; tryResolve(); });
+    bb.on('finish', () => { console.log('[upload-excels] bb finish'); bbDone = true; tryResolve(); });
+    bb.on('error', (err) => {
+      console.error('[upload-excels] busboy error:', err.message);
+      if (!settled) { settled = true; reject(err); }
+    });
+    const timeout = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        console.error('[upload-excels] busboy timeout 5min, files so far:', files.length, 'pending:', pending.filter(p => !p.done).length);
+        resolve(files);
+      }
+    }, 300000);
+    req.on('error', (e) => {
+      console.error('[upload-excels] req error:', e.message);
+      if (!settled) { settled = true; clearTimeout(timeout); reject(e); }
+    });
+    req.on('aborted', () => {
+      console.error('[upload-excels] req aborted');
+      if (!settled) { settled = true; clearTimeout(timeout); reject(new Error('request aborted')); }
+    });
     req.pipe(bb);
+    bb.on('close', () => clearTimeout(timeout));
+    bb.on('finish', () => clearTimeout(timeout));
   });
 }
 
@@ -648,11 +691,14 @@ function mountRoutes(app) {
       if (global.gc) global.gc();
     }
 
-    withFileLock(() => {
+    console.log('[upload-excels] parsed files:', parsedFiles.map(pf => ({ name: pf.name, accounts: pf.accounts.length, error: pf.error || null })));
+
+    await withFileLock(() => {
       try {
         const dataFile = '/opt/gauth-full/accounts_normalized.json';
         let existing = [];
         try { const d = JSON.parse(fs.readFileSync(dataFile, 'utf8')); existing = Array.isArray(d) ? d : (d.accounts || []); } catch(e) {}
+        console.log('[upload-excels] existing accounts:', existing.length);
         const byEmail = {};
         for (const a of existing) {
           if (a && a.email) byEmail[normalizeEmail(a.email)] = a;
@@ -688,6 +734,7 @@ function mountRoutes(app) {
         const tmpFile = dataFile + '.tmp.' + process.pid;
         fs.writeFileSync(tmpFile, JSON.stringify(allAccounts, null, 2));
         fs.renameSync(tmpFile, dataFile);
+        console.log('[upload-excels] merge done: total_master=' + allAccounts.length + ' parsed=' + totalParsed + ' added=' + totalAdded + ' updated=' + totalUpdated);
         res.json({ ok: true, total_master: allAccounts.length, total_parsed: totalParsed, added: totalAdded, updated: totalUpdated, files: fileResults, conflicts_count: 0, conflicts: [] });
       } catch(e) {
         console.error('[upload-excels] error:', e);
