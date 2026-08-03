@@ -337,31 +337,6 @@ jobs:
               fi
             fi
 
-            # ===== 5.7 업로드 라우트 진단 =====
-            echo "=== [5.7] Upload route diagnostic ==="
-            grep -n "upload\|multer\|Unexpected\|\.array\|\.single\|multipart" /opt/gauth-full/rebrowser-login.js 2>/dev/null | head -20 || echo "no matches"
-            echo "--- middleware lines 85-110 in rebrowser-login.js ---"
-            sed -n '85,110p' /opt/gauth-full/rebrowser-login.js 2>/dev/null || echo "sed failed"
-            echo "--- all app.use and app.post upload lines ---"
-            grep -n "app\.use\|app\.post.*upload\|express\.json\|bodyParser\|busboy\|formidable" /opt/gauth-full/rebrowser-login.js 2>/dev/null | head -30 || echo "no matches"
-            echo "--- upload_excels.js upload method check ---"
-            grep -n "multer\|busboy\|parseMultipart\|upload\.any\|upload\.array" /opt/gauth-full/upload_excels.js 2>/dev/null | head -10 || echo "no matches"
-            echo "--- upload_excels.js loaded check ---"
-            node -e "const m=require('/opt/gauth-full/upload_excels'); console.log('upload_excels type:', typeof m)" 2>&1 || echo "upload_excels load FAILED"
-            echo "--- multer version check ---"
-            node -e "console.log('multer version:', require('/opt/gauth-full/node_modules/multer/package.json').version)" 2>&1 || echo "multer check failed"
-            echo "--- upload test ---"
-            node -e "
-              const http = require('http');
-              const boundary = '----TestBoundary';
-              const body = '--' + boundary + '\r\nContent-Disposition: form-data; name=\"files\"; filename=\"test.xlsx\"\r\nContent-Type: application/octet-stream\r\n\r\nfake\r\n--' + boundary + '--\r\n';
-              const req = http.request({hostname:'127.0.0.1',port:4000,path:'/api/upload-excels',method:'POST',headers:{'Content-Type':'multipart/form-data; boundary='+boundary,'Content-Length':Buffer.byteLength(body)}}, res => {
-                let d=''; res.on('data',c=>d+=c); res.on('end',()=>console.log('upload test:', res.statusCode, d.slice(0,300)));
-              });
-              req.write(body); req.end();
-            " 2>&1 || echo "upload test failed"
-            sleep 2
-
             # ===== 6. 서비스 재시작 =====
             echo "=== [6/6] Restart gauth ==="
             export DISPLAY=:99
@@ -468,7 +443,7 @@ jobs:
 
             # 3) /api/profiles
             PROF=$(curl -s http://127.0.0.1:4000/api/profiles 2>/dev/null)
-            PROF_CT=$(echo "$PROF" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('profiles',[]))" 2>/dev/null)
+            PROF_CT=$(echo "$PROF" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('profiles',[])))" 2>/dev/null)
             echo "/api/profiles → count=$PROF_CT"
 
             # 4) /api/failed-accounts

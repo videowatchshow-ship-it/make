@@ -1,11 +1,21 @@
-const { execSync, execFileSync } = require('child_process');
+/* gauth API routes — Express 모듈
+ * ref: https://github.com/expressjs/express/blob/master/lib/router/index.js
+ * ref: https://github.com/nodejs/node/blob/main/doc/api/child_process.md#child_processexecfilesyncfile-args-options
+ * ref: https://github.com/nodejs/node/blob/main/doc/api/fs.md
+ * ref: https://github.com/nodejs/node/blob/main/doc/api/crypto.md */
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-/* OWASP: timing-safe 비교 시 길이 누출 방지 — HMAC으로 고정 길이 변환
+const DATA_DIR = '/opt/gauth-full';
+const DATA_FILE = path.join(DATA_DIR, 'accounts_normalized.json');
+const PROFILES_DIR = path.join(DATA_DIR, 'profiles');
+const FRONTEND_DIR = '/var/www/sites/gauth/public';
+
+/* OWASP: timing-safe 비교 — HMAC으로 고정 길이 변환하여 길이 누출 방지
  * ref: https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html
- * ref: https://nodejs.org/api/crypto.html#cryptotimingsafeequala-b */
+ * ref: https://github.com/nodejs/node/blob/main/doc/api/crypto.md#cryptotimingsafeequala-b */
 function authMiddleware(req, res, next) {
   const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
     || (req.query && req.query.token) || '';
@@ -32,8 +42,8 @@ function safeReadJSON(filePath) {
 module.exports = function(app) {
   app.get('/api/accounts', (req, res) => {
     try {
-      const accounts = safeReadJSON('/opt/gauth-full/accounts_normalized.json');
-      const profilesDir = path.join('/opt/gauth-full', 'profiles');
+      const accounts = safeReadJSON(DATA_FILE);
+      const profilesDir = PROFILES_DIR;
       let sessCount = 0;
       const mapped = accounts.map(a => {
         const has2FA = !!(a.totp_secret && a.totp_secret.trim());
@@ -56,8 +66,6 @@ module.exports = function(app) {
       const branch = rawBranch.replace(/[\x00-\x1f\x7f ~^:?*\[\\]/g, '').replace(/\.{2,}/g, '.').replace(/\.lock$/i, '').replace(/^\/|\/$/g, '');
       if (!branch) return res.status(400).json({ ok: false, error: 'invalid branch name' });
       const repoDir = '/tmp/gauth-deploy-repo';
-      const gauthDir = '/opt/gauth-full';
-      const frontendDir = '/var/www/sites/gauth/public';
 
       if (fs.existsSync(repoDir)) {
         execFileSync('rm', ['-rf', repoDir]);
@@ -69,12 +77,12 @@ module.exports = function(app) {
       );
 
       const fileMappings = [
-        { src: 'gauth/upload_excels.js', dst: path.join(gauthDir, 'upload_excels.js') },
-        { src: 'gauth/auto_deploy.js', dst: path.join(gauthDir, 'auto_deploy.js') },
-        { src: 'gauth/index.html', dst: path.join(frontendDir, 'index.html') },
-        { src: 'gauth/xlsx.core.min.js', dst: path.join(frontendDir, 'xlsx.core.min.js') },
-        { src: 'advanced-google-login-v2.js', dst: path.join(gauthDir, 'advanced-google-login-v2.js') },
-        { src: 'package.json', dst: path.join(gauthDir, 'package.json') },
+        { src: 'gauth/upload_excels.js', dst: path.join(DATA_DIR, 'upload_excels.js') },
+        { src: 'gauth/auto_deploy.js', dst: path.join(DATA_DIR, 'auto_deploy.js') },
+        { src: 'gauth/index.html', dst: path.join(FRONTEND_DIR, 'index.html') },
+        { src: 'gauth/xlsx.core.min.js', dst: path.join(FRONTEND_DIR, 'xlsx.core.min.js') },
+        { src: 'advanced-google-login-v2.js', dst: path.join(DATA_DIR, 'advanced-google-login-v2.js') },
+        { src: 'package.json', dst: path.join(DATA_DIR, 'package.json') },
       ];
 
       const deployed = [];
@@ -90,8 +98,8 @@ module.exports = function(app) {
 
       if (deployed.includes('package.json')) {
         try {
-          execFileSync('rm', ['-rf', path.join('/opt/gauth-full', 'node_modules', 'multer')]);
-          execFileSync('npm', ['install', '--production'], { cwd: '/opt/gauth-full', timeout: 120000 });
+          execFileSync('rm', ['-rf', path.join(DATA_DIR, 'node_modules', 'multer')]);
+          execFileSync('npm', ['install', '--production'], { cwd: DATA_DIR, timeout: 120000 });
           deployed.push('npm-install-ok');
         } catch (e) {
           deployed.push('npm-install-failed:' + e.message.slice(0, 100));
@@ -115,15 +123,16 @@ module.exports = function(app) {
     try {
       const { email, totp_secret } = req.body || {};
       if (!email || !totp_secret) return res.status(400).json({ ok: false, error: 'email and totp_secret required' });
+      /* Base32: RFC 4648 Section 6 — https://datatracker.ietf.org/doc/html/rfc4648#section-6 */
       const normalized = String(totp_secret).toUpperCase().replace(/[\s\-_=]/g, '').replace(/[^A-Z2-7]/g, '');
       if (normalized.length < 16) return res.status(400).json({ ok: false, error: 'secret too short (min 16 Base32 chars)' });
-      /* RFC 4226 Section 4: 권장 길이 — 20(SHA-1 160-bit), 32(SHA-256 256-bit), 64(SHA-512 512-bit)
-       * Google Authenticator는 16(80-bit)도 허용
-       * ref: https://datatracker.ietf.org/doc/html/rfc4226#section-4 */
-      if (normalized.length !== 16 && normalized.length !== 20 && normalized.length !== 32 && normalized.length !== 64) {
+      /* RFC 4226 Section 4 — https://datatracker.ietf.org/doc/html/rfc4226#section-4
+       * 권장 길이: 20(SHA-1), 32(SHA-256), 64(SHA-512). Google Authenticator는 16도 허용 */
+      const VALID_LENGTHS = [16, 20, 32, 64];
+      if (!VALID_LENGTHS.includes(normalized.length)) {
         console.log(`Warning: secret length ${normalized.length} is non-standard (RFC 4226: 16/20/32/64)`);
       }
-      const dataFile = '/opt/gauth-full/accounts_normalized.json';
+      const dataFile = DATA_FILE;
       const accounts = safeReadJSON(dataFile);
       const account = accounts.find(a => (a.email || '').toLowerCase() === email.toLowerCase());
       if (!account) return res.status(404).json({ ok: false, error: 'account not found' });
@@ -139,9 +148,7 @@ module.exports = function(app) {
 
   app.get('/api/normalized-accounts', (req, res) => {
     try {
-      const dataFile = '/opt/gauth-full/accounts_normalized.json';
-      const accounts = safeReadJSON(dataFile);
-      const profilesDir = path.join('/opt/gauth-full', 'profiles');
+      const accounts = safeReadJSON(DATA_FILE);
       let filesScanned = 0;
       const fileCounts = {};
       for (const a of accounts) {
@@ -167,15 +174,17 @@ module.exports = function(app) {
     }
   });
 
+  /* ref: https://github.com/nodejs/node/blob/main/doc/api/fs.md#fsreaddirsyncpath-options */
   app.get('/api/profiles', (req, res) => {
     try {
-      const profilesDir = path.join('/opt/gauth-full', 'profiles');
+      const profilesDir = PROFILES_DIR;
       const profiles = [];
       if (fs.existsSync(profilesDir)) {
         for (const folder of fs.readdirSync(profilesDir)) {
           const fullPath = path.join(profilesDir, folder);
           if (fs.statSync(fullPath).isDirectory()) {
-            const email = folder.replace(/^([^_]+)_(.+)$/, (_, u, d) => u + '@' + d.replace(/_/g, '.'));
+            /* 폴더명→이메일: 첫 _ → @, 이후 _ → . (multi-dot 도메인 대응) */
+        const email = folder.replace(/^([^_]+)_(.+)$/, (_, u, d) => u + '@' + d.replace(/_/g, '.'));
             profiles.push({ folder, email });
           }
         }
@@ -188,7 +197,7 @@ module.exports = function(app) {
 
   app.get('/api/failed-accounts', (req, res) => {
     try {
-      const failFile = '/opt/gauth-full/failed_accounts.json';
+      const failFile = path.join(DATA_DIR, 'failed_accounts.json');
       if (fs.existsSync(failFile)) {
         res.json(JSON.parse(fs.readFileSync(failFile, 'utf8')));
       } else {
@@ -202,7 +211,7 @@ module.exports = function(app) {
   app.delete('/api/failed-accounts/:email', (req, res) => {
     try {
       const email = (req.params.email || '').trim().toLowerCase();
-      const failFile = '/opt/gauth-full/failed_accounts.json';
+      const failFile = path.join(DATA_DIR, 'failed_accounts.json');
       if (!fs.existsSync(failFile)) return res.json({ ok: true });
       const data = JSON.parse(fs.readFileSync(failFile, 'utf8'));
       const key = Object.keys(data).find(k => k.toLowerCase() === email);
@@ -220,11 +229,11 @@ module.exports = function(app) {
     try {
       const email = (req.params.email || '').trim().toLowerCase();
       if (!email) return res.status(400).json({ error: 'email required' });
-      const dataFile = '/opt/gauth-full/accounts_normalized.json';
+      const dataFile = DATA_FILE;
       const accounts = safeReadJSON(dataFile);
       const account = accounts.find(a => (a.email || '').toLowerCase() === email);
       if (!account) return res.status(404).json({ error: 'not found' });
-      const profileDir = path.join('/opt/gauth-full', 'profiles', account.email);
+      const profileDir = path.join(PROFILES_DIR, account.email);
       const hasSession = fs.existsSync(profileDir);
       res.json({
         email: account.email,
@@ -245,7 +254,7 @@ module.exports = function(app) {
     try {
       const q = (req.query.q || '').trim().toLowerCase();
       if (!q || q.length < 3) return res.status(400).json({ ok: false, error: 'query too short (min 3 chars)' });
-      const dataFile = '/opt/gauth-full/accounts_normalized.json';
+      const dataFile = DATA_FILE;
       const accounts = safeReadJSON(dataFile);
       const results = [];
       for (const a of accounts) {
@@ -261,12 +270,13 @@ module.exports = function(app) {
     }
   });
 
+  /* ref: https://github.com/nodejs/node/blob/main/doc/api/child_process.md#child_processexecfilesyncfile-args-options */
   app.get('/api/deploy-status', authMiddleware, (req, res) => {
     const checks = {};
-    try { checks.chrome = execSync('which google-chrome-stable 2>/dev/null || which chromium 2>/dev/null', { encoding: 'utf8' }).trim(); } catch (e) { checks.chrome = 'not-found'; }
-    try { checks.xvfb = execSync('pgrep -f "Xvfb :99" >/dev/null 2>&1 && echo running || echo stopped', { encoding: 'utf8' }).trim(); } catch (e) { checks.xvfb = 'unknown'; }
-    try { checks.node = execSync('node -v', { encoding: 'utf8' }).trim(); } catch (e) { checks.node = 'not-found'; }
-    try { checks.display = process.env.DISPLAY || 'not-set'; } catch (e) { checks.display = 'error'; }
+    try { checks.chrome = execFileSync('which', ['google-chrome-stable'], { encoding: 'utf8' }).trim(); } catch { try { checks.chrome = execFileSync('which', ['chromium'], { encoding: 'utf8' }).trim(); } catch { checks.chrome = 'not-found'; } }
+    try { execFileSync('pgrep', ['-f', 'Xvfb :99']); checks.xvfb = 'running'; } catch { checks.xvfb = 'stopped'; }
+    try { checks.node = execFileSync('node', ['-v'], { encoding: 'utf8' }).trim(); } catch { checks.node = 'not-found'; }
+    checks.display = process.env.DISPLAY || 'not-set';
     res.json(checks);
   });
 
@@ -301,7 +311,7 @@ module.exports = function(app) {
       return res.status(429).json({ success: false, reason: 'TOO_MANY_CONCURRENT', max: MAX_CONCURRENT_LOGINS });
     }
 
-    const dataFile = '/opt/gauth-full/accounts_normalized.json';
+    const dataFile = DATA_FILE;
     let account;
     try {
       const accounts = safeReadJSON(dataFile);
