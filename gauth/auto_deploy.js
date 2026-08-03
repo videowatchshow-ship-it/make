@@ -43,7 +43,7 @@ module.exports = function(app) {
       });
       const usable = accounts.filter(a => a.email && a.password).length;
       const invalid = accounts.length - usable;
-      res.json({ accounts: mapped, total: accounts.length, file_total: accounts.length, usable, invalid, sessions: sessCount });
+      res.json({ accounts: mapped, total: accounts.length, file_total: accounts.length, usable, invalid, sessions: sessCount, source: 'auto_deploy' });
     } catch (e) {
       res.json({ accounts: [], total: 0, file_total: 0, usable: 0, invalid: 0, sessions: 0 });
     }

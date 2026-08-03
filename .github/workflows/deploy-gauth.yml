@@ -177,31 +177,34 @@ jobs:
                 return l;
               });
 
-              // rebrowser-login.js 내장 /api/lookup 라우트 제거 (auto_deploy.js와 충돌)
-              let inLookupRoute = false;
-              let lookupBraceDepth = 0;
-              let lookupRemovedCount = 0;
-              const lookupCleaned = [];
-              for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
-                if (!inLookupRoute && /api\/lookup/.test(line) && /app\.(get|post)/.test(line) && !/auto_deploy/.test(line)) {
-                  inLookupRoute = true;
-                  lookupBraceDepth = 0;
-                  for (const ch of line) { if (ch === '{' || ch === '(') lookupBraceDepth++; if (ch === '}' || ch === ')') lookupBraceDepth--; }
-                  lookupRemovedCount++;
-                  if (lookupBraceDepth <= 0) { inLookupRoute = false; }
-                  continue;
+              // rebrowser-login.js 내장 /api/lookup, /api/accounts, /api/normalized-accounts 라우트 제거
+              const conflictPatterns = [/api\/lookup/, /api\/accounts/, /api\/normalized-accounts/];
+              for (const pat of conflictPatterns) {
+                let inRoute = false;
+                let depth = 0;
+                let removed = 0;
+                const cleaned2 = [];
+                for (let i = 0; i < lines.length; i++) {
+                  const line = lines[i];
+                  if (!inRoute && pat.test(line) && /app\.(get|post|put|delete)/.test(line) && !/auto_deploy/.test(line) && !/require/.test(line)) {
+                    inRoute = true;
+                    depth = 0;
+                    for (const ch of line) { if (ch === '{' || ch === '(') depth++; if (ch === '}' || ch === ')') depth--; }
+                    removed++;
+                    if (depth <= 0) { inRoute = false; }
+                    continue;
+                  }
+                  if (inRoute) {
+                    for (const ch of line) { if (ch === '{' || ch === '(') depth++; if (ch === '}' || ch === ')') depth--; }
+                    removed++;
+                    if (depth <= 0) { inRoute = false; }
+                    continue;
+                  }
+                  cleaned2.push(line);
                 }
-                if (inLookupRoute) {
-                  for (const ch of line) { if (ch === '{' || ch === '(') lookupBraceDepth++; if (ch === '}' || ch === ')') lookupBraceDepth--; }
-                  lookupRemovedCount++;
-                  if (lookupBraceDepth <= 0) { inLookupRoute = false; }
-                  continue;
-                }
-                lookupCleaned.push(line);
+                if (removed > 0) console.log('  removed ' + removed + ' lines of built-in ' + pat.source + ' route');
+                lines = cleaned2;
               }
-              if (lookupRemovedCount > 0) console.log('  removed ' + lookupRemovedCount + ' lines of built-in lookup route');
-              lines = lookupCleaned;
 
               // rebrowser-login.js에 내장된 /api/upload-excels 라우트 제거 (라인 단위)
               // upload_excels.js 모듈과 충돌하여 multer Unexpected field 에러 발생
@@ -368,7 +371,7 @@ jobs:
             for i in 1 2 3 4 5; do
               HTTP=$(curl -s -o /tmp/hc.txt -w "%{http_code}" http://localhost:4000/api/accounts 2>/dev/null || echo "000")
               if [ "$HTTP" = "200" ]; then
-                python3 -c "import json; d=json.load(open('/tmp/hc.txt')); print('API OK — accounts:', len(d) if isinstance(d,list) else d.get('total','?'))" 2>/dev/null
+                python3 -c "import json; d=json.load(open('/tmp/hc.txt')); src=d.get('source','unknown') if isinstance(d,dict) else 'array'; total=d.get('total','?') if isinstance(d,dict) else len(d); print(f'API OK — accounts: {total}, source: {src}')" 2>/dev/null
                 break
               fi
               echo "  Health check attempt $i: HTTP $HTTP"
@@ -380,7 +383,11 @@ jobs:
 
             # ===== Real Excel upload + lookup E2E test =====
             echo "=== [POST-DEPLOY] Real Excel upload + lookup test ==="
+            # systemd 서비스에서 GAUTH_API_TOKEN 읽기
+            GAUTH_TOKEN=$(grep -oP 'GAUTH_API_TOKEN=\K.*' /etc/systemd/system/gauth.service 2>/dev/null | head -1)
+            echo "Token found: ${GAUTH_TOKEN:+yes (${#GAUTH_TOKEN} chars)}"
             cd /opt/gauth-full
+            export GAUTH_TOKEN
             node -e "
               const XLSX = require('/var/www/sites/gauth/public/xlsx.core.min.js') || require('xlsx');
               const http = require('http');
@@ -417,8 +424,10 @@ jobs:
                   if(!j.ok) { console.log('UPLOAD NOT OK:', j.error); process.exit(1); }
                   console.log('Parsed:', j.total_parsed, 'Added:', j.added, 'Updated:', j.updated);
 
-                  // 3) lookup test
-                  http.get('http://127.0.0.1:4000/api/lookup/tak.e2e.test.001@gmail.com', lr => {
+                  // 3) lookup test (with auth token)
+                  const token = process.env.GAUTH_TOKEN || '';
+                  const lookupUrl = 'http://127.0.0.1:4000/api/lookup/tak.e2e.test.001@gmail.com' + (token ? '?token=' + token : '');
+                  http.get(lookupUrl, lr => {
                     let ld=''; lr.on('data',c=>ld+=c); lr.on('end',()=>{
                       console.log('Lookup:', lr.statusCode, ld.slice(0,300));
                       if(lr.statusCode !== 200) { console.log('LOOKUP FAILED'); process.exit(1); }
