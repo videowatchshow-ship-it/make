@@ -591,7 +591,7 @@ function mountRoutes(app) {
     next();
   }
 
-  app.post('/api/upload-excels', uploadAuthMiddleware, (req, res, next) => {
+  app.post('/api/upload-excels', (req, res, next) => {
     req.setTimeout(600000);
     res.setTimeout(600000);
     upload.array('files', 50)(req, res, (err) => {
