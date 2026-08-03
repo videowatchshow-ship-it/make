@@ -71,6 +71,7 @@ module.exports = function(app) {
 
       if (deployed.includes('package.json')) {
         try {
+          execFileSync('rm', ['-rf', path.join('/opt/gauth-full', 'node_modules', 'multer')]);
           execFileSync('npm', ['install', '--production'], { cwd: '/opt/gauth-full', timeout: 120000 });
           deployed.push('npm-install-ok');
         } catch (e) {
