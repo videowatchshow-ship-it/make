@@ -41,6 +41,7 @@ button:disabled{background:#333;cursor:not-allowed}
 <script>
 /* MDN: Element.innerHTML XSS 방지 — https://developer.mozilla.org/en-US/docs/Web/API/Element/innerHTML#security_considerations */
 function _esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];})}
+var escapeHtml=_esc;
 async function refreshAccStats(){
   try {
     const [rp, j, na] = await Promise.all([
@@ -472,8 +473,6 @@ let ALL=[], FILTERED=[], PAGE=1
 let _lookupEmail = null, _loginEmail = null
 const vp = document.getElementById('viewport'), sp = document.getElementById('spacer')
 
-function escapeHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];})}
-
 function getApiToken(){return sessionStorage.getItem('gauth_token')||''}
 (function(){var el=document.getElementById('apiToken');if(el){var t=getApiToken();if(t)el.value=t;}})()
 function authHeaders(extra){var h=extra||{};var t=getApiToken();if(t)h['Authorization']='Bearer '+t;return h}
@@ -482,9 +481,9 @@ function authQuery(url){var t=getApiToken();if(!t)return url;return url+(url.ind
 let FAILED = {}
 async function load(){
   const [n, p, f] = await Promise.all([
-    fetch(authQuery('/api/normalized-accounts')).then(r=>r.json()),
-    fetch(authQuery('/api/profiles')).then(r=>r.json()),
-    fetch(authQuery('/api/failed-accounts')).then(r=>r.json()).catch(()=>({}))
+    fetch(authQuery('/api/normalized-accounts'),{headers:authHeaders()}).then(r=>r.json()),
+    fetch(authQuery('/api/profiles'),{headers:authHeaders()}).then(r=>r.json()),
+    fetch(authQuery('/api/failed-accounts'),{headers:authHeaders()}).then(r=>r.json()).catch(()=>({}))
   ])
   FAILED = f || {}
   /* 프로필 폴더명→이메일: 서버가 email 필드를 반환하면 우선 사용.
@@ -732,7 +731,7 @@ async function lookup(){
       document.getElementById('lookup').value = local.email
       localStorage.setItem('gauth_last_lookup', local.email)
       let code2='—'
-      if(local.totp_secret){try{const c=await(await fetch(authQuery('/codes/'+local.totp_secret))).json();code2=c.code||'—'}catch{}}
+      if(local.totp_secret){try{const c=await(await fetch(authQuery('/codes/'+local.totp_secret),{headers:authHeaders()})).json();code2=c.code||'—'}catch{}}
       box.innerHTML = `
         <div style="background:#2a1a00;border:1px solid #d29922;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#d29922">⚠ 서버 조회 실패 — 로컬 캐시 데이터로 표시 중</div>
         <div style="display:grid;grid-template-columns:130px 1fr;gap:10px 14px">
@@ -757,7 +756,7 @@ async function lookup(){
     // search-account API로 부분 검색 시도
     if(email.length>=3){
       try{
-        const sr=await fetch(authQuery('/api/search-account?q='+encodeURIComponent(email)))
+        const sr=await fetch(authQuery('/api/search-account?q='+encodeURIComponent(email)),{headers:authHeaders()})
         const sd=await sr.json()
         if(sd.ok && sd.results && sd.results.length>0){
           const m=sd.results[0]
@@ -777,7 +776,7 @@ async function lookup(){
     return
   }
   let code='—'
-  if(j.totp_secret){try{const c=await(await fetch(authQuery('/codes/'+j.totp_secret))).json();code=c.code||'—'}catch{}}
+  if(j.totp_secret){try{const c=await(await fetch(authQuery('/codes/'+j.totp_secret),{headers:authHeaders()})).json();code=c.code||'—'}catch{}}
   const yt = j.youtube_url || ''
   const _je = escapeHtml(j.email)
   const _jp = escapeHtml(j.password||'—')
@@ -867,7 +866,7 @@ async function tdRender(){
   // 20개 각각의 TOTP 코드 병렬 fetch
   const slice = TD.slice(s, e)
   const codes = await Promise.all(slice.map(a =>
-    a.totp_secret ? fetch(authQuery('/codes/'+a.totp_secret)).then(r=>r.json()).then(j=>j.code||'—').catch(()=>'—') : Promise.resolve('—')
+    a.totp_secret ? fetch(authQuery('/codes/'+a.totp_secret),{headers:authHeaders()}).then(r=>r.json()).then(j=>j.code||'—').catch(()=>'—') : Promise.resolve('—')
   ))
 
   const cards = slice.map((a, i) => {
@@ -909,7 +908,7 @@ async function lookupRefreshCode(secret, btn){
   if(!el) return
   const old = btn.textContent; btn.textContent = '⏳'
   try{
-    const j = await (await fetch(authQuery('/codes/'+secret))).json()
+    const j = await (await fetch(authQuery('/codes/'+secret),{headers:authHeaders()})).json()
     el.textContent = j.code || '—'
     /* 새 코드 시각 강조 (0.6s 골드 반짝) */
     el.style.transition='background-color .3s'; el.style.backgroundColor='rgba(245,200,66,.35)';
@@ -937,7 +936,7 @@ async function tdRefreshCode(idx, secret, btn){
   const old = btn.textContent
   btn.textContent = '⏳'
   try{
-    const j = await (await fetch(authQuery('/codes/'+secret))).json()
+    const j = await (await fetch(authQuery('/codes/'+secret),{headers:authHeaders()})).json()
     el.textContent = j.code || '—'
     /* 새 코드 시각 강조 */
     el.style.transition='background-color .3s'; el.style.backgroundColor='rgba(245,200,66,.35)';
@@ -1076,8 +1075,6 @@ load()
       });
     });
   }
-  function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
-
   function loadList(){
     listEl.textContent = '⏳ 로딩…';
     fetch(authQuery('/api/vm/list'), {cache:'no-store', headers:authHeaders()})
@@ -1095,7 +1092,7 @@ load()
 
 
 <button id="site-map-open" title="활성 사이트" onclick="var f=document.getElementById('site-map-footer'); if(f){f.style.display='block';this.style.display='none';}" style="position:fixed;right:8px;bottom:8px;z-index:9998;width:44px;height:44px;border-radius:50%;background:rgba(15,22,32,.97);border:1.5px solid #22282f;color:#f5c842;font-size:20px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.5);">🌐</button>
-<div id="site-map-footer" style="position:fixed;right:8px;bottom:8px;max-width:380px;max-height:78vh;overflow-y:auto;background:rgba(15,22,32,0.97);border:1.5px solid #22282f;border-radius:8px;padding:10px 12px;z-index:9999;font-size:11px;color:#8a95a5;font-family:-apple-system,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.5);;display:none">
+<div id="site-map-footer" style="position:fixed;right:8px;bottom:8px;max-width:380px;max-height:78vh;overflow-y:auto;background:rgba(15,22,32,0.97);border:1.5px solid #22282f;border-radius:8px;padding:10px 12px;z-index:9999;font-size:11px;color:#8a95a5;font-family:-apple-system,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.5);display:none">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
   <b style="color:#e8ecef">🌐 활성 사이트 (Cloudflare DNS 실측)</b>
   <span id="site-map-close" style="cursor:pointer;color:#666;font-size:13px" onclick="this.parentNode.parentNode.style.display='none';document.getElementById('site-map-open').style.display='block';">✕</span>

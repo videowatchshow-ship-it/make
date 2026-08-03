@@ -237,106 +237,6 @@ jobs:
             PATCHEOF
             node /tmp/patch_totp.js 2>&1 || echo "  patch failed"
 
-            # 비표준 길이 TOTP 시크릿 정리 (26자 등 비밀번호 오인)
-            echo "--- Clearing bad-length TOTP secrets ---"
-            node -e "
-              const fs = require('fs');
-              const dataFile = '/opt/gauth-full/accounts_normalized.json';
-              const d = JSON.parse(fs.readFileSync(dataFile,'utf8'));
-              const accs = Array.isArray(d) ? d : (d.accounts || []);
-              let fixed = 0;
-              for (const a of accs) {
-                if (!a.totp_secret) continue;
-                const n = String(a.totp_secret).toUpperCase().replace(/[\s\-_=]/g,'').replace(/[^A-Z2-7]/g,'');
-                if (n.length > 0 && n.length < 16) {
-                  console.log('  clear (too short):', a.email, 'len=' + n.length);
-                  if (!a.extra) a.extra = [];
-                  a.extra.push('old_totp:' + a.totp_secret);
-                  a.totp_secret = '';
-                  fixed++;
-                } else if (n !== a.totp_secret) {
-                  a.totp_secret = n;
-                  fixed++;
-                }
-              }
-              if (fixed) {
-                fs.writeFileSync(dataFile, JSON.stringify(Array.isArray(d) ? accs : {...d, accounts: accs}, null, 2));
-              }
-              console.log('Cleared', fixed, 'bad-length secrets');
-            " 2>&1 || echo "  cleanup failed"
-
-            # 중복 이메일 제거 (같은 이메일이 여러 번 → 최신 것만 유지)
-            echo "--- Dedup accounts by email ---"
-            node -e "
-              const fs = require('fs');
-              const dataFile = '/opt/gauth-full/accounts_normalized.json';
-              const d = JSON.parse(fs.readFileSync(dataFile,'utf8'));
-              const accs = Array.isArray(d) ? d : (d.accounts || []);
-              const seen = new Map();
-              let dupes = 0;
-              for (let i = 0; i < accs.length; i++) {
-                const email = (accs[i].email || '').trim().toLowerCase();
-                if (!email) continue;
-                if (seen.has(email)) {
-                  const prev = seen.get(email);
-                  const prevHas = !!(accs[prev].totp_secret || '').trim();
-                  const curHas = !!(accs[i].totp_secret || '').trim();
-                  const prevPw = !!(accs[prev].password || '').trim();
-                  const curPw = !!(accs[i].password || '').trim();
-                  // 더 완전한 데이터를 가진 쪽 유지
-                  const prevScore = (prevHas?2:0) + (prevPw?1:0);
-                  const curScore = (curHas?2:0) + (curPw?1:0);
-                  if (curScore > prevScore) {
-                    // 현재가 더 좋으면 이전 것 제거
-                    accs[prev] = null;
-                    seen.set(email, i);
-                  } else {
-                    accs[i] = null;
-                  }
-                  dupes++;
-                } else {
-                  seen.set(email, i);
-                }
-              }
-              if (dupes) {
-                const cleaned = accs.filter(a => a !== null);
-                fs.writeFileSync(dataFile, JSON.stringify(Array.isArray(d) ? cleaned : {...d, accounts: cleaned}, null, 2));
-                console.log('Removed', dupes, 'duplicate accounts. Before:', accs.length, '→ After:', cleaned.length);
-              } else {
-                console.log('No duplicates found. Total:', accs.length);
-              }
-            " 2>&1 || echo "  dedup failed"
-
-            # TOTP 상태 전체 진단
-            echo "--- TOTP status report ---"
-            node -e "
-              const fs = require('fs');
-              const d = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
-              const accs = Array.isArray(d) ? d : (d.accounts || []);
-              let total=0, has2fa=0, valid16=0, valid32=0, empty2fa=0, badLen=0, hasOldTotp=0;
-              const badExamples = [];
-              for (const a of accs) {
-                total++;
-                const s = (a.totp_secret||'').trim();
-                if (!s) { if (a.extra && JSON.stringify(a.extra).includes('old_totp')) { hasOldTotp++; } continue; }
-                has2fa++;
-                const n = s.toUpperCase().replace(/[\s\-_=]/g,'').replace(/[^A-Z2-7]/g,'');
-                if (n.length===16) valid16++;
-                else if (n.length===32) valid32++;
-                else { badLen++; if (badExamples.length<10) badExamples.push({email:a.email,len:n.length,secret:s.slice(0,25)}); }
-              }
-              empty2fa = total - has2fa;
-              console.log('=== TOTP STATUS ===');
-              console.log('Total accounts:', total);
-              console.log('With TOTP secret:', has2fa);
-              console.log('  Valid 16-char:', valid16);
-              console.log('  Valid 32-char:', valid32);
-              console.log('  Bad length:', badLen);
-              console.log('Without TOTP:', empty2fa);
-              console.log('Had old_totp cleared:', hasOldTotp);
-              if (badExamples.length) { console.log('Bad examples:', JSON.stringify(badExamples)); }
-            " 2>&1 || echo "  diagnostics failed"
-
             # ===== 5.6 Node.js 메모리 제한 증가 (38+ 엑셀 파일 OOM 방지) =====
             echo "=== [5.6/6] Node memory config ==="
             if [ -f /etc/systemd/system/gauth.service ]; then
@@ -371,21 +271,6 @@ jobs:
             export DISPLAY=:99
             sudo systemctl restart gauth
             sleep 3
-            # List ALL require() calls in rebrowser-login.js and check which are missing
-            echo "=== Module dependency check ==="
-            grep -oP "require\(\s*['\"]([^'\"]+)" /opt/gauth-full/rebrowser-login.js | sed "s/require(['\"]//g" | sort -u | while read mod; do
-              # skip relative paths and node builtins
-              case "$mod" in
-                ./*|../*|path|fs|http|https|crypto|os|child_process|url|stream|util|events|net|tls|zlib|querystring|readline|assert|buffer|dns|cluster|dgram|domain|module|punycode|string_decoder|timers|tty|v8|vm|worker_threads)
-                  echo "  [builtin/local] $mod"
-                  ;;
-                *)
-                  node -e "require('$mod')" 2>/dev/null && echo "  [OK] $mod" || echo "  [MISSING] $mod"
-                  ;;
-              esac
-            done
-            echo "=== End module check ==="
-
             # Health check with retries
             for i in 1 2 3 4 5; do
               HTTP=$(curl -s -o /tmp/hc.txt -w "%{http_code}" http://localhost:4000/api/accounts 2>/dev/null || echo "000")
@@ -397,50 +282,8 @@ jobs:
               sleep 3
             done
 
-            # search-account 엔드포인트 검증
-            echo "=== Search-account verification ==="
-            curl -s "http://localhost:4000/api/search-account?q=duncan" 2>/dev/null | python3 -c "
-            import json,sys
-            try:
-              d=json.load(sys.stdin)
-              print('search duncan:', json.dumps(d, indent=2, ensure_ascii=False))
-            except: print('search-account parse fail')
-            " || echo "  search-account endpoint unreachable"
-            curl -s "http://localhost:4000/api/search-account?q=bb01055" 2>/dev/null | python3 -c "
-            import json,sys
-            try:
-              d=json.load(sys.stdin)
-              print('search bb01055:', json.dumps(d, indent=2, ensure_ascii=False))
-            except: print('search-account parse fail')
-            " || echo "  search-account endpoint unreachable"
-            curl -s "http://localhost:4000/api/search-account?q=09073774615a" 2>/dev/null | python3 -c "
-            import json,sys
-            try:
-              d=json.load(sys.stdin)
-              print('search 09073774615a:', json.dumps(d, indent=2, ensure_ascii=False))
-            except: print('search-account parse fail')
-            " || echo "  search-account endpoint unreachable"
-            # 비밀번호 데이터 무결성 확인
-            node -e "
-            const d=JSON.parse(require('fs').readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
-            const accs=Array.isArray(d)?d:(d.accounts||[]);
-            const a=accs.find(x=>x.email==='09073774615a@gmail.com');
-            if(!a){console.log('09073774615a: NOT FOUND');process.exit();}
-            const p=a.password||'';
-            console.log('09073774615a pw length:',p.length);
-            console.log('09073774615a pw first3:',p.slice(0,3));
-            console.log('09073774615a pw last3:',p.slice(-3));
-            console.log('09073774615a totp:',a.totp_secret||'EMPTY');
-            console.log('09073774615a source:',a.source_file||'?');
-            console.log('09073774615a extra:',JSON.stringify(a.extra||[]));
-            " 2>&1 || echo "  pw check failed"
-
-            # Show service status and recent logs for debugging
-            sudo systemctl status gauth --no-pager -l 2>/dev/null | tail -20 || true
-            echo "=== Upload error logs ==="
-            sudo journalctl -u gauth --no-pager -n 100 2>/dev/null | grep -i -A3 "upload-excels\|error\|Error\|ENOSPC\|ENOMEM\|Cannot\|fatal" || echo "  no errors found"
-            echo "=== Recent gauth logs ==="
-            sudo journalctl -u gauth --no-pager -n 50 2>/dev/null || true
+            # Service status
+            sudo systemctl status gauth --no-pager -l 2>/dev/null | tail -10 || true
             echo "=== Deploy complete ==="
 
       - name: Cloudflare security level

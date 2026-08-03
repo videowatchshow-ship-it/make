@@ -24,17 +24,6 @@ const path = require('path');
 // ✅ 공식 Stealth 플러그인 사용
 puppeteer.use(StealthPlugin());
 
-// ⚠️ reCAPTCHA 플러그인 (선택사항 - 유료 서비스 필요)
-// const RecaptchaPlugin = require('puppeteer-extra-plugin-recaptcha');
-// puppeteer.use(
-//     RecaptchaPlugin({
-//         provider: {
-//             id: '2captcha',
-//             token: 'YOUR_API_KEY_HERE' // https://2captcha.com
-//         }
-//     })
-// );
-
 // 색상
 const c = {
     reset: '\x1b[0m',
@@ -555,7 +544,7 @@ async function advancedGoogleLogin(account, options = {}) {
                 return { success: false, result: LoginResult.FAIL_WRONG_2FA };
             }
 
-            console.log(`${c.green}✓${c.reset} TOTP 코드: ${c.magenta}${totpCode}${c.reset}`);
+            console.log(`${c.green}✓${c.reset} TOTP 코드 생성 완료 (${totpCode.length}자리)`);
             
             await page.click(twoFASelector);
             await delay(200, 400);
@@ -727,7 +716,7 @@ if (require.main === module) {
     let allCredentials;
     try { allCredentials = JSON.parse(fs.readFileSync(credFile, 'utf-8')); }
     catch (e) { console.error(`${c.red}❌ JSON 파싱 실패: ${e.message}${c.reset}`); process.exit(1); }
-    const testAccounts = allCredentials.slice(0, 3);
+    const testAccounts = allCredentials;
 
     loginMultipleWithTracking(testAccounts, {
         headless: false,

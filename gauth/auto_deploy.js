@@ -32,7 +32,7 @@ function safeReadJSON(filePath) {
 module.exports = function(app) {
   app.post('/api/deploy', authMiddleware, (req, res) => {
     try {
-      const rawBranch = req.body && req.body.branch || 'claude/gauth-frontend-backend-fixes-cg2icv';
+      const rawBranch = req.body && req.body.branch || 'main';
       /* git-check-ref-format: 금지 문자 제거 — https://git-scm.com/docs/git-check-ref-format */
       const branch = rawBranch.replace(/[\x00-\x1f\x7f ~^:?*\[\\]/g, '').replace(/\.{2,}/g, '.').replace(/\.lock$/i, '').replace(/^\/|\/$/g, '');
       const repoDir = '/tmp/gauth-deploy-repo';
