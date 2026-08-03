@@ -772,7 +772,7 @@ async function lookup(){
         }
       }catch{}
     }
-    box.innerHTML=`<span style="color:#f47070">❌ ${email} 을 마스터에서 찾지 못함</span><div style="color:#8a95a5;font-size:12px;margin-top:6px">이 이메일이 업로드된 엑셀에 없거나, 파서가 인식 못했을 수 있습니다.<br>엑셀 파일에 이 이메일이 있는지 확인해주세요.</div>`
+    box.innerHTML=`<span style="color:#f47070">❌ ${escapeHtml(email)} 을 마스터에서 찾지 못함</span><div style="color:#8a95a5;font-size:12px;margin-top:6px">이 이메일이 업로드된 엑셀에 없거나, 파서가 인식 못했을 수 있습니다.<br>엑셀 파일에 이 이메일이 있는지 확인해주세요.</div>`
     return
   }
   let code='—'
