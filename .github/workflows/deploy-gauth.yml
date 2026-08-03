@@ -424,9 +424,8 @@ jobs:
                   if(!j.ok) { console.log('UPLOAD NOT OK:', j.error); process.exit(1); }
                   console.log('Parsed:', j.total_parsed, 'Added:', j.added, 'Updated:', j.updated);
 
-                  // 3) lookup test (with auth token)
-                  const token = process.env.GAUTH_TOKEN || '';
-                  const lookupUrl = 'http://127.0.0.1:4000/api/lookup/tak.e2e.test.001@gmail.com' + (token ? '?token=' + token : '');
+                  // 3) lookup test (no auth — matches frontend usage)
+                  const lookupUrl = 'http://127.0.0.1:4000/api/lookup/tak.e2e.test.001@gmail.com';
                   http.get(lookupUrl, lr => {
                     let ld=''; lr.on('data',c=>ld+=c); lr.on('end',()=>{
                       console.log('Lookup:', lr.statusCode, ld.slice(0,300));
@@ -469,7 +468,7 @@ jobs:
 
             # 3) /api/profiles
             PROF=$(curl -s http://127.0.0.1:4000/api/profiles 2>/dev/null)
-            PROF_CT=$(echo "$PROF" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('profiles',[])))" 2>/dev/null)
+            PROF_CT=$(echo "$PROF" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('profiles',[]))" 2>/dev/null)
             echo "/api/profiles → count=$PROF_CT"
 
             # 4) /api/failed-accounts

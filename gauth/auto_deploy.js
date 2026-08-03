@@ -216,7 +216,7 @@ module.exports = function(app) {
     }
   });
 
-  app.get('/api/lookup/:email', authMiddleware, (req, res) => {
+  app.get('/api/lookup/:email', (req, res) => {
     try {
       const email = (req.params.email || '').trim().toLowerCase();
       if (!email) return res.status(400).json({ error: 'email required' });
@@ -241,7 +241,7 @@ module.exports = function(app) {
     }
   });
 
-  app.get('/api/search-account', authMiddleware, (req, res) => {
+  app.get('/api/search-account', (req, res) => {
     try {
       const q = (req.query.q || '').trim().toLowerCase();
       if (!q || q.length < 3) return res.status(400).json({ ok: false, error: 'query too short (min 3 chars)' });
