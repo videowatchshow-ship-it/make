@@ -577,6 +577,12 @@ function mountRoutes(app) {
   try { fs.mkdirSync(uploadDir, { recursive: true }); } catch(e) { console.error('[upload_excels] mkdirSync failed:', e.message); }
   const upload = multer({ dest: uploadDir, limits: { fileSize: 200 * 1024 * 1024 } });
 
+  let _fileLock = Promise.resolve();
+  function withFileLock(fn) {
+    _fileLock = _fileLock.then(fn, fn);
+    return _fileLock;
+  }
+
   const crypto = require('crypto');
   function uploadAuthMiddleware(req, res, next) {
     const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
@@ -602,23 +608,36 @@ function mountRoutes(app) {
       next();
     });
   }, (req, res) => {
-    try {
-      if (!req.files || !req.files.length) return res.status(400).json({ ok: false, error: 'no files' });
-      const dataFile = '/opt/gauth-full/accounts_normalized.json';
-      let existing = [];
-      try { const d = JSON.parse(fs.readFileSync(dataFile, 'utf8')); existing = Array.isArray(d) ? d : (d.accounts || []); } catch(e) {}
-      const byEmail = {};
-      for (const a of existing) {
-        if (a && a.email) byEmail[normalizeEmail(a.email)] = a;
-      }
+    if (!req.files || !req.files.length) return res.status(400).json({ ok: false, error: 'no files' });
 
-      const files = [];
-      let totalParsed = 0, totalAdded = 0, totalUpdated = 0;
-      for (const f of req.files) {
-        try {
-          const accounts = parseExcelFile(f.path);
+    const parsedFiles = [];
+    for (const f of req.files) {
+      try {
+        const accounts = parseExcelFile(f.path);
+        parsedFiles.push({ name: f.originalname, accounts });
+      } catch(e) {
+        parsedFiles.push({ name: f.originalname, accounts: [], error: e.message });
+      }
+      try { fs.unlinkSync(f.path); } catch(e) { console.warn('[upload_excels] temp file cleanup failed:', f.path, e.message); }
+      if (global.gc) global.gc();
+    }
+
+    withFileLock(() => {
+      try {
+        const dataFile = '/opt/gauth-full/accounts_normalized.json';
+        let existing = [];
+        try { const d = JSON.parse(fs.readFileSync(dataFile, 'utf8')); existing = Array.isArray(d) ? d : (d.accounts || []); } catch(e) {}
+        const byEmail = {};
+        for (const a of existing) {
+          if (a && a.email) byEmail[normalizeEmail(a.email)] = a;
+        }
+
+        const files = [];
+        let totalParsed = 0, totalAdded = 0, totalUpdated = 0;
+        for (const pf of parsedFiles) {
+          if (pf.error) { files.push({ name: pf.name, accounts: 0, error: pf.error }); continue; }
           let added = 0, updated = 0;
-          for (const a of accounts) {
+          for (const a of pf.accounts) {
             if (!a.email) continue;
             const key = normalizeEmail(a.email);
             if (byEmail[key]) {
@@ -633,26 +652,22 @@ function mountRoutes(app) {
               added++;
             }
           }
-          totalParsed += accounts.length;
+          totalParsed += pf.accounts.length;
           totalAdded += added;
           totalUpdated += updated;
-          files.push({ name: f.originalname, accounts: accounts.length, added, updated });
-        } catch(e) {
-          files.push({ name: f.originalname, accounts: 0, error: e.message });
+          files.push({ name: pf.name, accounts: pf.accounts.length, added, updated });
         }
-        try { fs.unlinkSync(f.path); } catch(e) { console.warn('[upload_excels] temp file cleanup failed:', f.path, e.message); }
-        if (global.gc) global.gc();
-      }
 
-      const allAccounts = Object.values(byEmail);
-      const tmpFile = dataFile + '.tmp.' + process.pid;
-      fs.writeFileSync(tmpFile, JSON.stringify(allAccounts, null, 2));
-      fs.renameSync(tmpFile, dataFile);
-      res.json({ ok: true, total_master: allAccounts.length, total_parsed: totalParsed, added: totalAdded, updated: totalUpdated, files, conflicts_count: 0, conflicts: [] });
-    } catch(e) {
-      console.error('[upload-excels] error:', e);
-      if (!res.headersSent) res.status(500).json({ ok: false, error: e.message });
-    }
+        const allAccounts = Object.values(byEmail);
+        const tmpFile = dataFile + '.tmp.' + process.pid;
+        fs.writeFileSync(tmpFile, JSON.stringify(allAccounts, null, 2));
+        fs.renameSync(tmpFile, dataFile);
+        res.json({ ok: true, total_master: allAccounts.length, total_parsed: totalParsed, added: totalAdded, updated: totalUpdated, files, conflicts_count: 0, conflicts: [] });
+      } catch(e) {
+        console.error('[upload-excels] error:', e);
+        if (!res.headersSent) res.status(500).json({ ok: false, error: e.message });
+      }
+    });
   });
 }
 

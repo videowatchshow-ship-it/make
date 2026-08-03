@@ -171,7 +171,7 @@ module.exports = function(app) {
     let account;
     try {
       const accounts = safeReadJSON(dataFile);
-      account = accounts.find(a => a.email === email);
+      account = accounts.find(a => (a.email || '').toLowerCase() === email.toLowerCase());
     } catch (e) {
       return res.status(500).json({ success: false, reason: 'DATA_READ_ERROR', error: e.message });
     }

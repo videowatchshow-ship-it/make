@@ -367,7 +367,7 @@ async function advancedGoogleLogin(account, options = {}) {
         // headed 모드 + 실제 Chrome + userDataDir가 유일한 작동 방식
         // 서버에서는 Xvfb로 가상 디스플레이 사용
         const launchOpts = {
-            headless: false,
+            headless: headless,
             userDataDir: profilePath,
             args: [
                 '--no-sandbox',
@@ -659,7 +659,7 @@ async function loginMultipleWithTracking(accounts, options = {}) {
         // 다음 계정 전 대기
         if (i < accounts.length - 1) {
             console.log(`${c.yellow}⏳ 5초 대기...${c.reset}\n`);
-            await delay(5000);
+            await delay(5000, 5000);
         }
     }
 
