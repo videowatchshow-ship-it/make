@@ -325,7 +325,8 @@ function accessBadge(a){
         }
         var fileRows = (d.files||[]).map(function(f,i){
           var ok = !f.error && (f.accounts||0)>0;
-          return '<tr style="border-bottom:1px solid #22282f"><td style="padding:4px 8px;color:#8a95a5;font-size:11px">'+(i+1)+'</td><td style="padding:4px 8px;font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escapeHtml(f.name)+'</td><td style="padding:4px 8px;text-align:right;font-weight:700;color:'+(ok?'#3ddc84':'#f47070')+'">'+escapeHtml(f.accounts||0)+'개'+(f.error?' ❌':'')+'</td></tr>';
+          var fname = (f.name||'').normalize ? (f.name||'').normalize('NFC') : (f.name||'');
+          return '<tr style="border-bottom:1px solid #22282f"><td style="padding:4px 8px;color:#8a95a5;font-size:11px">'+(i+1)+'</td><td style="padding:4px 8px;font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escapeHtml(fname)+'</td><td style="padding:4px 8px;text-align:right;font-weight:700;color:'+(ok?'#3ddc84':'#f47070')+'">'+escapeHtml(f.accounts||0)+'개'+(f.error?' ❌':'')+'</td></tr>';
         }).join('');
         var resultHTML = '<div style="margin-top:14px;padding:16px;background:#0d2818;border:2px solid #3ddc84;border-radius:8px">'
           +'<div style="font-size:18px;font-weight:800;color:#3ddc84;margin-bottom:10px">✅ 업로드 완료</div>'
@@ -720,8 +721,13 @@ async function lookup(){
   localStorage.setItem('gauth_last_lookup', email)
   box.style.display='block'
   box.innerHTML = '<span style="color:#8a95a5">조회 중…</span>'
-  const r = await fetch(authQuery('/api/lookup/'+encodeURIComponent(email)), {headers:authHeaders()})
-  const j = await r.json()
+  let r, j
+  try {
+    r = await fetch(authQuery('/api/lookup/'+encodeURIComponent(email)), {headers:authHeaders()})
+    j = await r.json()
+  } catch(e) {
+    j = {error: '서버 연결 실패: ' + (e.message||'네트워크 오류')}
+  }
   if(j.error){
     // API 실패 시 로컬 ALL에서 부분 검색 시도
     const local = (window.ALL||[]).find(a=>a.email.toLowerCase()===email

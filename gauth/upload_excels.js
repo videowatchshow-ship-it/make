@@ -610,7 +610,7 @@ function parseMultipartManual(req) {
       }
     }
     bb.on('file', (fieldname, stream, info) => {
-      const filename = typeof info === 'string' ? info : (info && info.filename || 'unknown');
+      const filename = (typeof info === 'string' ? info : (info && info.filename || 'unknown')).normalize('NFC');
       console.log('[upload-excels] file event:', fieldname, filename);
       const tmpPath = path.join(uploadDir, 'up_' + Date.now() + '_' + Math.random().toString(36).slice(2));
       const tracker = { done: false };
