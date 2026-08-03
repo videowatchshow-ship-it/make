@@ -158,9 +158,20 @@ jobs:
             # auto_deploy + upload_excels 모듈 등록 (app.listen 앞에 삽입)
             node -e "
               const fs = require('fs');
-              let lines = fs.readFileSync('rebrowser-login.js','utf8').split('\n');
-              // 기존 라인 제거
+              let code = fs.readFileSync('rebrowser-login.js','utf8');
+              let lines = code.split('\n');
+              // 기존 모듈 로드 라인 제거
               lines = lines.filter(l => !l.includes('auto_deploy') && !l.includes('upload_excels'));
+
+              // rebrowser-login.js에 내장된 /api/upload-excels 라우트가 있으면 제거
+              // (upload_excels.js 모듈과 충돌하여 multer Unexpected field 에러 발생)
+              code = lines.join('\n');
+              code = code.replace(/app\.(post|get|put|delete)\s*\(\s*['\"]\/api\/upload-excels['\"][\s\S]*?\n\}\);?\s*\n/g, function(match) {
+                console.log('  removed built-in upload-excels route (' + match.length + ' chars)');
+                return '// [removed: built-in upload-excels — replaced by upload_excels.js module]\n';
+              });
+              lines = code.split('\n');
+
               const insertLines = [
                 \"require('./auto_deploy.js')(app);\",
                 \"try { require('./upload_excels')(app); } catch(e) { console.log('upload load fail', e.message); }\"
