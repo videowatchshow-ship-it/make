@@ -238,6 +238,7 @@ module.exports = function(app) {
       res.json({
         email: account.email,
         password: account.password || '',
+        password_alts: account.password_alts || [],
         totp_secret: account.totp_secret || '',
         recovery_email: account.recovery_email || '',
         source_file: account.source_file || '',
