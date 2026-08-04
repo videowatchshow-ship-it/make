@@ -356,6 +356,36 @@ jobs:
             # Service status
             sudo systemctl status gauth --no-pager -l 2>/dev/null | tail -10 || true
 
+            # ===== 6.5 기존 데이터 password_alts 재구축 =====
+            echo "=== [6.5] Rebuild password_alts from extra fields ==="
+            node -e "
+              const fs = require('fs');
+              const dataFile = '/opt/gauth-full/accounts_normalized.json';
+              let accounts;
+              try { accounts = JSON.parse(fs.readFileSync(dataFile, 'utf8')); } catch(e) { console.log('No data file'); process.exit(0); }
+              if (!Array.isArray(accounts)) accounts = accounts.accounts || [];
+              let rebuilt = 0;
+              for (const a of accounts) {
+                if (!a.extra || !a.extra.length) continue;
+                const pwCandidates = a.extra.filter(v => typeof v === 'string' && v.length >= 4 && v.length <= 100 && !/^https?:\/\//i.test(v) && !/@/.test(v) && !/^[A-Z2-7]{16,}$/i.test(v));
+                if (!pwCandidates.length) continue;
+                if (!a.password_alts) a.password_alts = [];
+                if (a.password && !a.password_alts.includes(a.password)) a.password_alts.push(a.password);
+                for (const c of pwCandidates) {
+                  if (!a.password_alts.includes(c)) a.password_alts.push(c);
+                }
+                rebuilt++;
+              }
+              if (rebuilt > 0) {
+                const tmp = dataFile + '.tmp.' + process.pid;
+                fs.writeFileSync(tmp, JSON.stringify(accounts, null, 2));
+                fs.renameSync(tmp, dataFile);
+                console.log('Rebuilt password_alts for ' + rebuilt + ' accounts');
+              } else {
+                console.log('No accounts needed password_alts rebuild');
+              }
+            " || echo "password_alts rebuild failed (non-fatal)"
+
             # ===== Real Excel upload + lookup E2E test =====
             echo "=== [POST-DEPLOY] Real Excel upload + lookup test ==="
             # systemd 서비스에서 GAUTH_API_TOKEN 읽기
