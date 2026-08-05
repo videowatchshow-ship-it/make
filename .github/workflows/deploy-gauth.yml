@@ -456,7 +456,7 @@ jobs:
                 if (m) {
                   a.source_mtime = parseInt(m[1], 10);
                   fixedFromName++;
-                } else if (!a.source_mtime) {
+                } else {
                   a.source_mtime = 0;
                   fixedFallback++;
                 }
@@ -544,10 +544,11 @@ jobs:
                       if(lj.password !== 'E2EPass123') { console.log('PASSWORD MISMATCH'); process.exit(1); }
                       console.log('E2E TEST PASSED: upload + lookup OK');
 
-                      // 4) cleanup: remove test accounts (via sudo)
+                      // 4) cleanup: remove test accounts (via temp script)
                       const { execSync: ex } = require('child_process');
                       try {
-                        ex('sudo node -e \"const fs=require(\\\"fs\\\");const d=JSON.parse(fs.readFileSync(\\\"/opt/gauth-full/accounts_normalized.json\\\",\\\"utf8\\\"));const c=d.filter(a=>!(a.email||\\\"\\\").startsWith(\\\"tak.e2e.\\\"));fs.writeFileSync(\\\"/opt/gauth-full/accounts_normalized.json\\\",JSON.stringify(c,null,2));console.log(\\\"Cleanup OK, remaining:\\\",c.length)\"');
+                        fs.writeFileSync('/tmp/e2e_cleanup.js', 'const fs=require("fs");const f="/opt/gauth-full/accounts_normalized.json";const d=JSON.parse(fs.readFileSync(f,"utf8"));const c=d.filter(a=>!(a.email||"").startsWith("tak.e2e."));fs.writeFileSync(f,JSON.stringify(c,null,2));console.log("Cleanup OK, remaining:",c.length);');
+                        ex('sudo node /tmp/e2e_cleanup.js', {stdio:'inherit'});
                         console.log('Cleanup done');
                       } catch(e) { console.log('Cleanup failed:', e.message); }
                     });
