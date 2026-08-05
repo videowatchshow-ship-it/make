@@ -1162,7 +1162,7 @@ load()
 .btnRefresh{background:#2b6cff;color:#fff;padding:8px 12px}
 #vmLog{margin-top:10px;padding:6px 10px;background:#0a0d13;border:1px solid #1a1f26;border-radius:4px;font-size:11px;color:#8a95a5;max-height:80px;overflow-y:auto;white-space:pre-wrap}
 </style>
-<div id="vmCtrlBox">
+<div id="vmCtrlBox" style="display:none">
   <h3>🖥 GCP 서버 제어 (관리자)</h3>
   <div class="vmPw">
     <input type="password" id="vmPw" placeholder="관리자 비밀번호" autocomplete="off">
@@ -1247,7 +1247,7 @@ load()
 
 
 
-<button id="site-map-open" title="활성 사이트" onclick="var f=document.getElementById('site-map-footer'); if(f){f.style.display='block';this.style.display='none';}" style="position:fixed;right:8px;bottom:8px;z-index:9998;width:44px;height:44px;border-radius:50%;background:rgba(15,22,32,.97);border:1.5px solid #22282f;color:#f5c842;font-size:20px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.5);">🌐</button>
+<button id="site-map-open" title="활성 사이트" style="display:none" onclick="var f=document.getElementById('site-map-footer'); if(f){f.style.display='block';this.style.display='none';}" style="position:fixed;right:8px;bottom:8px;z-index:9998;width:44px;height:44px;border-radius:50%;background:rgba(15,22,32,.97);border:1.5px solid #22282f;color:#f5c842;font-size:20px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.5);">🌐</button>
 <div id="site-map-footer" style="position:fixed;right:8px;bottom:8px;max-width:380px;max-height:78vh;overflow-y:auto;background:rgba(15,22,32,0.97);border:1.5px solid #22282f;border-radius:8px;padding:10px 12px;z-index:9999;font-size:11px;color:#8a95a5;font-family:-apple-system,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.5);display:none">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
   <b style="color:#e8ecef">🌐 활성 사이트 (Cloudflare DNS 실측)</b>
