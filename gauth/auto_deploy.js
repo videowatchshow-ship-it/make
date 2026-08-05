@@ -8,6 +8,20 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+function normalizeEmail(s) {
+  s = String(s || '').trim().toLowerCase();
+  const parts = s.split('@');
+  if (parts.length === 2) {
+    let local = parts[0];
+    const domain = parts[1];
+    if (domain === 'gmail.com' || domain === 'googlemail.com') {
+      local = local.replace(/\./g, '').split('+')[0];
+      return local + '@gmail.com';
+    }
+  }
+  return s;
+}
+
 const DATA_DIR = '/opt/gauth-full';
 const DATA_FILE = path.join(DATA_DIR, 'accounts_normalized.json');
 const PROFILES_DIR = path.join(DATA_DIR, 'profiles');
@@ -134,7 +148,7 @@ module.exports = function(app) {
       }
       const dataFile = DATA_FILE;
       const accounts = safeReadJSON(dataFile);
-      const account = accounts.find(a => (a.email || '').toLowerCase() === email.toLowerCase());
+      const account = accounts.find(a => normalizeEmail(a.email) === normalizeEmail(email));
       if (!account) return res.status(404).json({ ok: false, error: 'account not found' });
       account.totp_secret = normalized;
       const tmpFile = dataFile + '.tmp.' + process.pid;
@@ -227,11 +241,11 @@ module.exports = function(app) {
 
   app.get('/api/lookup/:email', (req, res) => {
     try {
-      const email = (req.params.email || '').trim().toLowerCase();
+      const email = normalizeEmail(req.params.email);
       if (!email) return res.status(400).json({ error: 'email required' });
       const dataFile = DATA_FILE;
       const accounts = safeReadJSON(dataFile);
-      const account = accounts.find(a => (a.email || '').toLowerCase() === email);
+      const account = accounts.find(a => normalizeEmail(a.email) === email);
       if (!account) return res.status(404).json({ error: 'not found' });
       const profileDir = path.join(PROFILES_DIR, account.email);
       const hasSession = fs.existsSync(profileDir);
@@ -319,7 +333,7 @@ module.exports = function(app) {
     let account;
     try {
       const accounts = safeReadJSON(dataFile);
-      account = accounts.find(a => (a.email || '').toLowerCase() === email.toLowerCase());
+      account = accounts.find(a => normalizeEmail(a.email) === normalizeEmail(email));
     } catch (e) {
       return res.status(500).json({ success: false, reason: 'DATA_READ_ERROR', error: e.message });
     }

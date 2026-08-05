@@ -395,10 +395,57 @@ jobs:
               try { accounts = JSON.parse(fs.readFileSync(dataFile, 'utf8')); } catch(e) { console.log('No data file'); process.exit(0); }
               if (!Array.isArray(accounts)) accounts = accounts.accounts || [];
 
+              // 0) Gmail-aware normalizeEmail
+              function normalizeEmail(s) {
+                s = String(s || '').trim().toLowerCase();
+                const parts = s.split('@');
+                if (parts.length === 2) {
+                  let local = parts[0];
+                  const domain = parts[1];
+                  if (domain === 'gmail.com' || domain === 'googlemail.com') {
+                    local = local.replace(/\./g, '').split('+')[0];
+                    return local + '@gmail.com';
+                  }
+                }
+                return s;
+              }
+
               // 1) Remove E2E test accounts
               const before = accounts.length;
               accounts = accounts.filter(a => !(a.email || '').includes('tak.e2e.test.'));
               console.log('Removed E2E test accounts:', before - accounts.length);
+
+              // 1.5) Deduplicate by normalized email
+              const byEmail = {};
+              let dupeCount = 0;
+              for (const a of accounts) {
+                if (!a.email) continue;
+                const key = normalizeEmail(a.email);
+                if (byEmail[key]) {
+                  const e = byEmail[key];
+                  if (a.password && a.password !== e.password) {
+                    if (!e.password_alts) e.password_alts = [];
+                    if (e.password && !e.password_alts.includes(e.password)) e.password_alts.push(e.password);
+                    if (!e.password_alts.includes(a.password)) e.password_alts.push(a.password);
+                    e.password = a.password;
+                  }
+                  if (a.totp_secret && !e.totp_secret) e.totp_secret = a.totp_secret;
+                  if (a.recovery_email && !e.recovery_email) e.recovery_email = a.recovery_email;
+                  if (a.source_mtime && (!e.source_mtime || a.source_mtime > e.source_mtime)) {
+                    e.source_mtime = a.source_mtime;
+                    e.source_file = a.source_file || e.source_file;
+                  }
+                  if (a.extra && a.extra.length) {
+                    if (!e.extra) e.extra = [];
+                    for (const x of a.extra) { if (!e.extra.includes(x)) e.extra.push(x); }
+                  }
+                  dupeCount++;
+                } else {
+                  byEmail[key] = a;
+                }
+              }
+              accounts = Object.values(byEmail);
+              console.log('Dedup: merged', dupeCount, 'duplicates. Unique accounts:', accounts.length);
 
               // 2) Try to get real file mtimes from upload dir
               const uploadDirs = ['/opt/gauth-full/uploads', '/opt/gauth-full', '/var/www/sites/gauth/public'];

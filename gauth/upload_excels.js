@@ -40,7 +40,17 @@ function isEmail(s) {
 }
 
 function normalizeEmail(s) {
-  return String(s || '').trim().toLowerCase();
+  s = String(s || '').trim().toLowerCase();
+  const parts = s.split('@');
+  if (parts.length === 2) {
+    let local = parts[0];
+    const domain = parts[1];
+    if (domain === 'gmail.com' || domain === 'googlemail.com') {
+      local = local.replace(/\./g, '').split('+')[0];
+      return local + '@gmail.com';
+    }
+  }
+  return s;
 }
 
 function isTotpLike(s) {
