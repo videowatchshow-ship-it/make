@@ -386,27 +386,86 @@ jobs:
               }
             " || echo "password_alts rebuild failed (non-fatal)"
 
-            echo "=== [6.6] Backfill source_mtime for existing accounts ==="
+            echo "=== [6.6] Fix source_mtime + cleanup E2E + verify emails ==="
             node -e "
               const fs = require('fs');
+              const path = require('path');
               const dataFile = '/opt/gauth-full/accounts_normalized.json';
               let accounts;
               try { accounts = JSON.parse(fs.readFileSync(dataFile, 'utf8')); } catch(e) { console.log('No data file'); process.exit(0); }
               if (!Array.isArray(accounts)) accounts = accounts.accounts || [];
-              let fixed = 0;
-              const now = Date.now();
+
+              // 1) Remove E2E test accounts
+              const before = accounts.length;
+              accounts = accounts.filter(a => !(a.email || '').includes('tak.e2e.test.'));
+              console.log('Removed E2E test accounts:', before - accounts.length);
+
+              // 2) Try to get real file mtimes from upload dir
+              const uploadDirs = ['/opt/gauth-full/uploads', '/opt/gauth-full', '/var/www/sites/gauth/public'];
+              const fileMtimes = {};
+              for (const dir of uploadDirs) {
+                try {
+                  const files = fs.readdirSync(dir);
+                  for (const f of files) {
+                    if (!f.endsWith('.xlsx') && !f.endsWith('.xls') && !f.endsWith('.csv')) continue;
+                    try {
+                      const st = fs.statSync(path.join(dir, f));
+                      fileMtimes[f] = st.mtimeMs;
+                    } catch(e) {}
+                  }
+                } catch(e) {}
+              }
+              console.log('Found', Object.keys(fileMtimes).length, 'Excel files on disk');
+              for (const [f, t] of Object.entries(fileMtimes).slice(0, 10)) {
+                console.log('  ' + f + ': ' + new Date(t).toISOString());
+              }
+
+              // 3) For accounts whose source_file matches a real file, use that mtime
+              // For others, keep existing or set to data file mtime
+              let dataFileMtime = Date.now();
+              try { dataFileMtime = fs.statSync(dataFile).mtimeMs; } catch(e) {}
+              let fixedReal = 0, fixedFallback = 0;
+              const allSameTime = accounts.length > 0 && accounts.every(a => a.source_mtime === accounts[0].source_mtime);
+              if (allSameTime) console.log('All accounts have same source_mtime — redistributing');
+
               for (const a of accounts) {
-                if (!a.source_mtime) { a.source_mtime = now; fixed++; }
+                const src = a.source_file || '';
+                if (fileMtimes[src]) {
+                  a.source_mtime = fileMtimes[src];
+                  fixedReal++;
+                } else if (!a.source_mtime || allSameTime) {
+                  a.source_mtime = dataFileMtime;
+                  fixedFallback++;
+                }
               }
-              if (fixed > 0) {
-                const tmp = dataFile + '.tmp.' + process.pid;
-                fs.writeFileSync(tmp, JSON.stringify(accounts, null, 2));
-                fs.renameSync(tmp, dataFile);
-                console.log('Backfilled source_mtime for ' + fixed + ' accounts');
-              } else {
-                console.log('All accounts already have source_mtime');
+              console.log('Fixed with real file mtime:', fixedReal);
+              console.log('Fixed with fallback mtime:', fixedFallback);
+
+              // 4) Verify specific emails from user screenshot
+              const targets = ['vegaw0142@gmail.com','vickylast353@gmail.com','ali773305120@gmail.com','ali777047150@gmail.com','sss0626874813@gmail.com','nok0623964876@gmail.com','dajex0414@gmail.com','primeofficialshop.pl@gmail.com','n09047689769@gmail.com','chan02097288609@gmail.com'];
+              console.log('\n=== Verify screenshot emails ===');
+              for (const t of targets) {
+                const found = accounts.find(a => (a.email||'').toLowerCase() === t.toLowerCase());
+                if (found) {
+                  console.log('FOUND: ' + t + ' | mtime:' + new Date(found.source_mtime).toISOString() + ' | src:' + (found.source_file||''));
+                } else {
+                  console.log('NOT FOUND: ' + t);
+                }
               }
-            " || echo "source_mtime backfill failed (non-fatal)"
+
+              // 5) Save
+              const tmp = dataFile + '.tmp.' + process.pid;
+              fs.writeFileSync(tmp, JSON.stringify(accounts, null, 2));
+              fs.renameSync(tmp, dataFile);
+              console.log('\nSaved. Total accounts:', accounts.length);
+
+              // 6) Print top 10 newest
+              const sorted = [...accounts].sort((a,b) => (b.source_mtime||0) - (a.source_mtime||0));
+              console.log('\n=== Top 10 newest ===');
+              for (const a of sorted.slice(0, 10)) {
+                console.log('  ' + new Date(a.source_mtime).toISOString() + '  ' + a.email);
+              }
+            " || echo "step 6.6 failed (non-fatal)"
 
             # ===== Real Excel upload + lookup E2E test =====
             echo "=== [POST-DEPLOY] Real Excel upload + lookup test ==="
@@ -541,19 +600,6 @@ jobs:
             echo "=== DNS check ==="
             host gauth.cent-solution.online 2>/dev/null || dig gauth.cent-solution.online +short 2>/dev/null || echo "DNS tools not available"
 
-            echo "=== [DIAG] Top 10 accounts by source_mtime (newest first) ==="
-            node -e "
-              const d = JSON.parse(require('fs').readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
-              const accounts = Array.isArray(d) ? d : (d.accounts || []);
-              const sorted = accounts.filter(a => a.source_mtime).sort((a,b) => (b.source_mtime||0) - (a.source_mtime||0));
-              console.log('Accounts with source_mtime:', sorted.length, '/ total:', accounts.length);
-              for (const a of sorted.slice(0, 10)) {
-                const dt = new Date(a.source_mtime).toISOString();
-                console.log('  ' + dt + '  ' + a.email + '  src:' + (a.source_file||''));
-              }
-              const noMtime = accounts.filter(a => !a.source_mtime).length;
-              if (noMtime) console.log('Accounts WITHOUT source_mtime:', noMtime);
-            " || echo "diag failed (non-fatal)"
             echo "=== Done ==="
 
       - name: Summary
