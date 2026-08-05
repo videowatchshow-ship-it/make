@@ -34,6 +34,34 @@ button:disabled{background:#333;cursor:not-allowed}
 .no-sess{background:#555}
 .cp{background:#2a323c;padding:3px 8px;font-size:11px;margin-left:6px;color:#c9d2dc}
 .cp:hover{background:#39434f}
+
+/* --- Mobile responsive --- */
+@media(max-width:768px){
+  header{padding:10px 12px}
+  h1{font-size:15px}
+  .stats{font-size:11px;gap:8px}
+  .controls{padding:8px 12px;gap:6px}
+  .controls input{min-width:120px;font-size:13px;padding:8px}
+  #viewport{height:auto;max-height:none;overflow:visible}
+  .row{position:relative!important;top:auto!important;grid-template-columns:1fr!important;gap:4px!important;padding:10px 12px!important;font-size:13px}
+  #spacer{height:auto!important}
+  #td-result .td-card{padding:14px!important}
+  #td-result .td-card .td-grid{grid-template-columns:1fr!important;gap:8px 0!important;font-size:15px!important}
+  #td-result .td-card .td-label{color:#8a95a5;font-size:12px;font-weight:600;margin-bottom:2px}
+  #td-result .td-card .td-val{font-size:15px;line-height:1.5;word-break:break-all}
+  #td-result .td-card .td-email{font-size:17px!important}
+  #td-result .td-card .td-pw{font-size:17px!important}
+  #td-result .td-card .td-2fa-code{font-size:24px!important;letter-spacing:3px!important}
+  #td-result .td-card .td-secret{font-size:13px!important}
+  #td-result .td-card .cp{padding:6px 14px!important;font-size:13px!important;margin-left:8px!important;border-radius:4px}
+  #td-result .td-card button{padding:8px 14px!important;font-size:13px!important}
+  #excelUpBox{margin:10px 8px;padding:10px}
+  #vmCtrlBox{margin:10px 8px;padding:10px}
+  #site-map-footer{max-width:calc(100vw - 16px)}
+}
+@media(min-width:769px){
+  #td-result .td-card .td-grid{grid-template-columns:100px 1fr;gap:6px 12px;font-size:13px}
+}
 </style></head>
 <body>
 <div id="accStats" style="padding:8px 20px;background:#0d1520;border-bottom:1px solid #22282f;font-size:13px;color:#9aa5b5;text-align:center">📊 로딩 중...</div>
@@ -437,10 +465,11 @@ updateUploadStatus();
 <div style="padding:14px 20px;background:#1a1210;border-bottom:1px solid #22282f;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
   <span style="font-size:14px;color:#ffb469;font-weight:700">⏰ 시간 순서 계정 정보 확인</span>
   <select id="td-order" style="flex:0 0 auto">
+    <option value="desc" selected>최신 순 (엑셀 날짜 최신 → 오래됨)</option>
     <option value="asc">오래된 순 (엑셀 날짜 오래됨 → 최신)</option>
-    <option value="desc">최신 순 (엑셀 날짜 최신 → 오래됨)</option>
   </select>
   <button id="td-load" style="background:#ff9040">계정 조회</button>
+  <button id="td-refresh" style="background:#2a323c;color:#c9d2dc;font-size:12px;padding:7px 10px" onclick="tdLoad()">🔄 새로고침</button>
 <div id="td-result" style="width:100%;display:none;background:#161a20;border:1px solid #2a323c;border-radius:8px;padding:16px;font-size:14px;margin-top:6px"></div>
 </div>
 
@@ -509,6 +538,7 @@ async function load(){
   document.getElementById('s-2fa').textContent = (n.summary?.PASSWORD_2FA || _2faCount).toLocaleString()
   document.getElementById('s-pw').textContent = (n.summary?.PASSWORD_ONLY || _pwOnly).toLocaleString()
   applyFilter()
+  if(window._gauthAutoLoad){ window._gauthAutoLoad=false; setTimeout(tdLoad, 300) }
 }
 function applyFilter(){
   const q = document.getElementById('q').value.trim().toLowerCase()
@@ -880,16 +910,16 @@ async function tdRender(){
     const idx = s+i+1
     const yt = a.youtube_url || ''
     const _em = escapeHtml(a.email), _pw = escapeHtml(a.password||'—'), _ts = escapeHtml(a.totp_secret||'—'), _yt = escapeHtml(yt), _rc = escapeHtml(a.recovery_email||a.recovery_phone||'—'), _sf = escapeHtml(a.source_file||'—')
-    return `<div style="background:#161a20;border:1px solid #2a323c;border-radius:8px;padding:12px;margin-bottom:8px">
-      <div style="display:grid;grid-template-columns:100px 1fr;gap:6px 12px;font-size:13px">
-        <div style="color:#8a95a5">#${idx}</div><div><b style="color:#ffb469;font-size:14px">${_em}</b>${cp(a.email)} ${accessBadge(a)}</div>
-        <div style="color:#8a95a5">비밀번호</div><div class="mono" style="color:#3ddc84">${_pw}${cp(a.password)}</div>
-        <div style="color:#8a95a5">2FA 시크릿</div><div class="mono" style="font-size:11px"><span id="sec-${idx}">${_ts}</span>${cp(a.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${_em}','sec-${idx}')">✏️</button></div>
-        <div style="color:#8a95a5">2FA 코드</div><div class="mono" style="color:#7dabff;font-size:18px;font-weight:700;letter-spacing:2px"><span id="tdcode-${idx}">${codes[i]}</span>${a.totp_secret?cp('_', 'tdcode-'+idx):cp(codes[i]!=='—'?codes[i]:'')}${a.totp_secret?`<button style="background:#2a323c;padding:3px 8px;font-size:11px;margin-left:6px;color:#c9d2dc" onclick="tdRefreshCode(${idx},'${escapeHtml(a.totp_secret)}',this)">🔄 새로고침</button>`:''}</div>
-        <div style="color:#8a95a5">동작</div><div><button style="background:#7c3aed" onclick="programLogin('${_em}',this)">🔑 프로그램 로그인</button></div>
-        <div style="color:#8a95a5">YouTube</div><div class="mono" style="color:#ff8a8a;font-size:11px">${yt&&/^https?:\/\//i.test(yt)?`<a href="${_yt}" target="_blank" style="color:#ff8a8a">${_yt}</a>${cp(yt)}`:'—'}</div>
-        <div style="color:#8a95a5">복구</div><div class="mono" style="font-size:11px">${_rc}</div>
-        <div style="color:#8a95a5">엑셀</div><div class="mono" style="font-size:11px;color:#8a95a5">${_sf} · ${dt}</div>
+    return `<div class="td-card" style="background:#161a20;border:1px solid #2a323c;border-radius:8px;padding:12px;margin-bottom:8px">
+      <div class="td-grid" style="display:grid;grid-template-columns:100px 1fr;gap:6px 12px;font-size:13px">
+        <div class="td-label" style="color:#8a95a5">#${idx}</div><div><b class="td-email" style="color:#ffb469;font-size:14px">${_em}</b>${cp(a.email)} ${accessBadge(a)}</div>
+        <div class="td-label" style="color:#8a95a5">비밀번호</div><div class="mono td-val td-pw" style="color:#3ddc84">${_pw}${cp(a.password)}</div>
+        <div class="td-label" style="color:#8a95a5">2FA 시크릿</div><div class="mono td-val td-secret"><span id="sec-${idx}">${_ts}</span>${cp(a.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${_em}','sec-${idx}')">✏️</button></div>
+        <div class="td-label" style="color:#8a95a5">2FA 코드</div><div class="mono td-val td-2fa-code" style="color:#7dabff;font-size:18px;font-weight:700;letter-spacing:2px"><span id="tdcode-${idx}">${codes[i]}</span>${a.totp_secret?cp('_', 'tdcode-'+idx):cp(codes[i]!=='—'?codes[i]:'')}${a.totp_secret?`<button style="background:#2a323c;padding:3px 8px;font-size:11px;margin-left:6px;color:#c9d2dc" onclick="tdRefreshCode(${idx},'${escapeHtml(a.totp_secret)}',this)">🔄 새로고침</button>`:''}</div>
+        <div class="td-label" style="color:#8a95a5">동작</div><div><button style="background:#7c3aed" onclick="programLogin('${_em}',this)">🔑 로그인</button></div>
+        <div class="td-label" style="color:#8a95a5">YouTube</div><div class="mono td-val" style="color:#ff8a8a;font-size:11px">${yt&&/^https?:\/\//i.test(yt)?`<a href="${_yt}" target="_blank" style="color:#ff8a8a">${_yt}</a>${cp(yt)}`:'—'}</div>
+        <div class="td-label" style="color:#8a95a5">복구</div><div class="mono td-val" style="font-size:11px">${_rc}</div>
+        <div class="td-label" style="color:#8a95a5">엑셀</div><div class="mono td-val" style="font-size:11px;color:#8a95a5">${_sf} · ${dt}</div>
       </div>
     </div>`
   }).join('')
@@ -962,6 +992,8 @@ function tdGoto(n){
 }
 document.getElementById('td-load').addEventListener('click', tdLoad)
 document.getElementById('td-order').addEventListener('change', ()=>{if(TD.length){tdLoad()}})
+// Auto-load: 페이지 로드 후 자동으로 최신순 계정 목록 표시
+window._gauthAutoLoad = true
 // 페이지네이션으로 전환: 스크롤 렌더 제거
 document.getElementById('q').addEventListener('input', applyFilter)
 document.getElementById('filter').addEventListener('change', applyFilter)
