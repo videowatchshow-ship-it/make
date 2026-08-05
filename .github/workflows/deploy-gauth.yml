@@ -596,6 +596,39 @@ jobs:
             echo "/api/failed-accounts → $(echo "$FAIL" | python3 -c "import json,sys; d=json.load(sys.stdin); print(type(d).__name__, len(d) if isinstance(d,dict) else '?')" 2>/dev/null)"
 
             echo "=== All API checks done ==="
+
+            # ===== Cloudflare cache purge (서버에서 직접) =====
+            echo "=== Cloudflare cache purge ==="
+            # 토큰 위치 탐색: .env → /etc/environment → systemd gauth.service
+            CF_TOKEN=""
+            CF_ZONE=""
+            for f in /opt/gauth-full/.env /etc/environment /etc/default/gauth; do
+              [ -f "$f" ] || continue
+              [ -z "$CF_TOKEN" ] && CF_TOKEN=$(grep -oP '(?:CLOUDFLARE_TOKEN|CF_TOKEN)=\K\S+' "$f" 2>/dev/null | head -1)
+              [ -z "$CF_ZONE" ] && CF_ZONE=$(grep -oP '(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID)=\K\S+' "$f" 2>/dev/null | head -1)
+            done
+            # systemd service file
+            if [ -z "$CF_TOKEN" ]; then
+              CF_TOKEN=$(grep -oP 'CLOUDFLARE_TOKEN=\K\S+' /etc/systemd/system/gauth.service 2>/dev/null | head -1)
+            fi
+            if [ -z "$CF_ZONE" ]; then
+              CF_ZONE=$(grep -oP 'CLOUDFLARE_ZONE_ID=\K\S+' /etc/systemd/system/gauth.service 2>/dev/null | head -1)
+            fi
+
+            if [ -n "$CF_TOKEN" ] && [ -n "$CF_ZONE" ]; then
+              echo "CF tokens found, purging..."
+              curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/purge_cache" \
+                -H "Authorization: Bearer ${CF_TOKEN}" \
+                -H "Content-Type: application/json" \
+                --data '{"purge_everything":true}' | python3 -c "import json,sys; d=json.load(sys.stdin); print('Cache purge:', 'success' if d.get('success') else 'FAILED:', d.get('errors'))" || true
+            else
+              echo "CF tokens not found — listing searched files:"
+              ls -la /opt/gauth-full/.env /etc/environment /etc/default/gauth /etc/systemd/system/gauth.service 2>&1 || true
+              echo "Attempting file-level purge via URL..."
+              # 특정 URL만 퍼지 시도 (토큰 없이는 불가 — 로그만 남김)
+              echo "SKIP: no CF token available"
+            fi
+
             echo "=== Deploy complete ==="
 
       - name: Cloudflare cache purge + security level

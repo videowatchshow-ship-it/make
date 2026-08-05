@@ -73,7 +73,7 @@ module.exports = function(app) {
     }
   });
 
-  app.post('/api/deploy', authMiddleware, (req, res) => {
+  app.post('/api/deploy', authMiddleware, async (req, res) => {
     try {
       const rawBranch = req.body && req.body.branch || 'main';
       /* git-check-ref-format: 금지 문자 제거 — https://git-scm.com/docs/git-check-ref-format */
@@ -126,6 +126,46 @@ module.exports = function(app) {
       } catch (e) {
         deployed.push('restart-failed:' + e.message.slice(0, 100));
       }
+
+      let cfResult = 'skipped';
+      try {
+        let cfToken = '', cfZone = '';
+        const envFiles = ['/opt/gauth-full/.env', '/etc/environment', '/etc/default/gauth'];
+        for (const ef of envFiles) {
+          try {
+            const content = fs.readFileSync(ef, 'utf8');
+            if (!cfToken) { const m = content.match(/(?:CLOUDFLARE_TOKEN|CF_TOKEN)=(\S+)/); if (m) cfToken = m[1]; }
+            if (!cfZone) { const m = content.match(/(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID)=(\S+)/); if (m) cfZone = m[1]; }
+          } catch (_) {}
+        }
+        try {
+          const svc = fs.readFileSync('/etc/systemd/system/gauth.service', 'utf8');
+          if (!cfToken) { const m = svc.match(/CLOUDFLARE_TOKEN=(\S+)/); if (m) cfToken = m[1]; }
+          if (!cfZone) { const m = svc.match(/CLOUDFLARE_ZONE_ID=(\S+)/); if (m) cfZone = m[1]; }
+        } catch (_) {}
+        if (!cfToken) cfToken = process.env.CLOUDFLARE_TOKEN || process.env.CF_TOKEN || '';
+        if (!cfZone) cfZone = process.env.CLOUDFLARE_ZONE_ID || process.env.CF_ZONE_ID || '';
+        if (cfToken && cfZone) {
+          const https = require('https');
+          const purgeData = JSON.stringify({ purge_everything: true });
+          const purgeResult = await new Promise((resolve) => {
+            const req = https.request({
+              hostname: 'api.cloudflare.com',
+              path: `/client/v4/zones/${cfZone}/purge_cache`,
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${cfToken}`, 'Content-Type': 'application/json', 'Content-Length': purgeData.length }
+            }, (res) => {
+              let d = ''; res.on('data', c => d += c); res.on('end', () => resolve(d));
+            });
+            req.on('error', (e) => resolve('error:' + e.message));
+            req.write(purgeData); req.end();
+          });
+          try { cfResult = JSON.parse(purgeResult).success ? 'purged' : 'failed'; } catch (_) { cfResult = 'parse-error'; }
+        } else {
+          cfResult = 'no-tokens';
+        }
+      } catch (e) { cfResult = 'error:' + e.message.slice(0, 50); }
+      deployed.push('cf-cache:' + cfResult);
 
       res.json({ ok: true, deployed });
     } catch (e) {
