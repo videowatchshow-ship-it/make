@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>유튜브 계정 목록</title>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>참교육 스트리밍 계정 정보</title>
 <link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0a0d12"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%230a0d12' width='100' height='100' rx='20'/><text x='50' y='70' text-anchor='middle' font-size='60'>📺</text></svg>">
 <style>
 *{box-sizing:border-box}
@@ -74,9 +74,50 @@ button:disabled{background:#333;cursor:not-allowed}
 #pwa-install-btn:hover{transform:scale(1.05)}
 </style></head>
 <body>
-<div style="padding:14px 20px;background:#0a0d12;border-bottom:2px solid #ff9040;text-align:center">
-  <h1 style="margin:0;font-size:22px;color:#ff9040;font-weight:800;letter-spacing:1px">유튜브 계정 목록</h1>
+<div id="hero-banner">
+  <div class="hero-glow"></div>
+  <div class="hero-particles" id="heroParticles"></div>
+  <h1 class="hero-title">
+    <span class="hero-icon">🎬</span>
+    <span class="hero-text">참교육 스트리밍</span>
+    <span class="hero-sub">계정 정보</span>
+  </h1>
+  <div class="hero-line"></div>
 </div>
+<style>
+#hero-banner{position:relative;overflow:hidden;padding:24px 20px 18px;background:linear-gradient(135deg,#0a0d12 0%,#111828 40%,#1a1030 70%,#0a0d12 100%);text-align:center;border-bottom:none}
+.hero-glow{position:absolute;top:-60%;left:50%;transform:translateX(-50%);width:600px;height:300px;background:radial-gradient(ellipse,rgba(255,144,64,.15) 0%,rgba(124,58,237,.08) 40%,transparent 70%);pointer-events:none;animation:glowPulse 4s ease-in-out infinite}
+@keyframes glowPulse{0%,100%{opacity:.6;transform:translateX(-50%) scale(1)}50%{opacity:1;transform:translateX(-50%) scale(1.15)}}
+.hero-particles{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;overflow:hidden}
+.hero-particle{position:absolute;width:3px;height:3px;border-radius:50%;animation:particleFloat linear infinite;opacity:0}
+@keyframes particleFloat{0%{transform:translateY(100px) scale(0);opacity:0}20%{opacity:1}80%{opacity:.6}100%{transform:translateY(-80px) scale(1.5);opacity:0}}
+.hero-title{position:relative;margin:0;display:flex;flex-direction:column;align-items:center;gap:2px}
+.hero-icon{font-size:36px;filter:drop-shadow(0 0 12px rgba(255,144,64,.6));animation:iconBounce 3s ease-in-out infinite}
+@keyframes iconBounce{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-4px) scale(1.08)}}
+.hero-text{font-size:28px;font-weight:900;letter-spacing:3px;background:linear-gradient(90deg,#ff9040 0%,#ffcc40 25%,#ff6090 50%,#a060ff 75%,#ff9040 100%);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:shimmer 3s linear infinite}
+@keyframes shimmer{0%{background-position:0% center}100%{background-position:200% center}}
+.hero-sub{font-size:14px;font-weight:700;color:#c9d2dc;letter-spacing:6px;text-transform:uppercase;margin-top:2px;text-shadow:0 0 20px rgba(125,171,255,.3)}
+.hero-line{position:relative;height:3px;margin-top:14px;background:linear-gradient(90deg,transparent,#ff9040,#ffcc40,#a060ff,#ff6090,#ff9040,transparent);border-radius:2px;animation:lineGlow 2s ease-in-out infinite alternate}
+@keyframes lineGlow{0%{opacity:.6;filter:blur(0px)}100%{opacity:1;filter:blur(1px)}}
+@media(max-width:768px){
+  #hero-banner{padding:18px 12px 14px}
+  .hero-icon{font-size:28px}
+  .hero-text{font-size:22px;letter-spacing:2px}
+  .hero-sub{font-size:11px;letter-spacing:4px}
+  .hero-glow{width:350px;height:200px}
+}
+</style>
+<script>
+(function(){
+  var c=document.getElementById('heroParticles');if(!c)return;
+  var colors=['#ff9040','#ffcc40','#a060ff','#ff6090','#7dabff','#3ddc84'];
+  for(var i=0;i<20;i++){
+    var p=document.createElement('div');p.className='hero-particle';
+    p.style.cssText='left:'+Math.round(Math.random()*100)+'%;bottom:0;width:'+(2+Math.random()*3)+'px;height:'+(2+Math.random()*3)+'px;background:'+colors[i%colors.length]+';animation-duration:'+(2+Math.random()*3)+'s;animation-delay:'+(Math.random()*4)+'s';
+    c.appendChild(p);
+  }
+})();
+</script>
 <div id="accStats" style="padding:8px 20px;background:#0d1520;border-bottom:1px solid #22282f;font-size:13px;color:#9aa5b5;text-align:center"></div>
 <div id="monthlyGroups" style="padding:6px 20px;background:#0d1520;border-bottom:1px solid #22282f;font-size:12px;color:#c9d2dc;text-align:center"></div>
 <script>

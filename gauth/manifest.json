@@ -1,7 +1,7 @@
 {
-  "name": "유튜브 계정 목록",
-  "short_name": "계정목록",
-  "description": "유튜브 계정 관리",
+  "name": "참교육 스트리밍 계정 정보",
+  "short_name": "참교육계정",
+  "description": "참교육 스트리밍 계정 정보",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0d12",
