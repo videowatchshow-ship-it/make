@@ -597,9 +597,34 @@ jobs:
 
             echo "=== All API checks done ==="
 
-            # ===== Cloudflare cache purge (서버에서 직접) =====
-            echo "=== Cloudflare cache purge ==="
-            # 토큰 위치 탐색: .env → /etc/environment → systemd gauth.service
+            # ===== Cloudflare 캐시 방지: CDN-Cache-Control 헤더 추가 =====
+            echo "=== Cloudflare cache bypass ==="
+            # Apache에 CDN-Cache-Control 헤더 추가 (Cloudflare 공식 지원)
+            # 이 헤더는 브라우저 캐시는 건드리지 않고 CDN 엣지만 no-store
+            for CONF in /etc/apache2/sites-enabled/gauth-le-ssl.conf /etc/apache2/sites-enabled/gauth.conf; do
+              if [ -f "$CONF" ]; then
+                if ! grep -q "CDN-Cache-Control" "$CONF" 2>/dev/null; then
+                  # <Files index.html> 블록 안에 CDN-Cache-Control 추가
+                  if grep -q "CDN-Cache-Control" "$CONF" 2>/dev/null; then
+                    echo "  CDN-Cache-Control already in $CONF"
+                  else
+                    sudo sed -i '/<Files index.html>/,/<\/Files>/s|Header set Cache-Control|Header set CDN-Cache-Control "no-store, no-cache, must-revalidate, max-age=0"\n        Header set Cache-Control|' "$CONF" 2>/dev/null && echo "  Added CDN-Cache-Control to $CONF" || echo "  sed failed on $CONF"
+                  fi
+                else
+                  echo "  CDN-Cache-Control already in $CONF"
+                fi
+              fi
+            done
+            # 모든 SSL vhost에도 루트 URL에 대해 no-cache 강제
+            for CONF in /etc/apache2/sites-enabled/gauth-le-ssl.conf; do
+              if [ -f "$CONF" ] && ! grep -q "Header always set CDN-Cache-Control" "$CONF" 2>/dev/null; then
+                # DocumentRoot 전체에 CDN-Cache-Control 적용
+                sudo sed -i '/<Directory \/var\/www\/sites\/gauth\/public>/,/<\/Directory>/s|Require all granted|Require all granted\n        Header always set CDN-Cache-Control "no-store"|' "$CONF" 2>/dev/null && echo "  Added global CDN-Cache-Control to $CONF" || true
+              fi
+            done
+            sudo apache2ctl configtest 2>&1 && sudo systemctl reload apache2 && echo "Apache reloaded with CDN-Cache-Control headers" || echo "Apache reload failed"
+
+            # Cloudflare cache purge (토큰이 있으면)
             CF_TOKEN=""
             CF_ZONE=""
             for f in /opt/gauth-full/.env /etc/environment /etc/default/gauth; do
@@ -607,26 +632,14 @@ jobs:
               [ -z "$CF_TOKEN" ] && CF_TOKEN=$(grep -oP '(?:CLOUDFLARE_TOKEN|CF_TOKEN)=\K\S+' "$f" 2>/dev/null | head -1)
               [ -z "$CF_ZONE" ] && CF_ZONE=$(grep -oP '(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID)=\K\S+' "$f" 2>/dev/null | head -1)
             done
-            # systemd service file
-            if [ -z "$CF_TOKEN" ]; then
-              CF_TOKEN=$(grep -oP 'CLOUDFLARE_TOKEN=\K\S+' /etc/systemd/system/gauth.service 2>/dev/null | head -1)
-            fi
-            if [ -z "$CF_ZONE" ]; then
-              CF_ZONE=$(grep -oP 'CLOUDFLARE_ZONE_ID=\K\S+' /etc/systemd/system/gauth.service 2>/dev/null | head -1)
-            fi
-
+            if [ -z "$CF_TOKEN" ]; then CF_TOKEN=$(grep -oP 'CLOUDFLARE_TOKEN=\K\S+' /etc/systemd/system/gauth.service 2>/dev/null | head -1); fi
+            if [ -z "$CF_ZONE" ]; then CF_ZONE=$(grep -oP 'CLOUDFLARE_ZONE_ID=\K\S+' /etc/systemd/system/gauth.service 2>/dev/null | head -1); fi
             if [ -n "$CF_TOKEN" ] && [ -n "$CF_ZONE" ]; then
-              echo "CF tokens found, purging..."
               curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/purge_cache" \
-                -H "Authorization: Bearer ${CF_TOKEN}" \
-                -H "Content-Type: application/json" \
-                --data '{"purge_everything":true}' | python3 -c "import json,sys; d=json.load(sys.stdin); print('Cache purge:', 'success' if d.get('success') else 'FAILED:', d.get('errors'))" || true
+                -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+                --data '{"purge_everything":true}' | python3 -c "import json,sys; d=json.load(sys.stdin); print('Cache purge:', 'success' if d.get('success') else 'FAILED')" || true
             else
-              echo "CF tokens not found — listing searched files:"
-              ls -la /opt/gauth-full/.env /etc/environment /etc/default/gauth /etc/systemd/system/gauth.service 2>&1 || true
-              echo "Attempting file-level purge via URL..."
-              # 특정 URL만 퍼지 시도 (토큰 없이는 불가 — 로그만 남김)
-              echo "SKIP: no CF token available"
+              echo "CF tokens not found — relying on CDN-Cache-Control header"
             fi
 
             echo "=== Deploy complete ==="
