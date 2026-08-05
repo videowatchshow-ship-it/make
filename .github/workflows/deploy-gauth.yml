@@ -497,6 +497,17 @@ jobs:
             echo "Token found: ${GAUTH_TOKEN:+yes (${#GAUTH_TOKEN} chars)}"
             cd /opt/gauth-full
             export GAUTH_TOKEN
+
+            # E2E cleanup script (written separately to avoid quote escaping issues)
+            cat > /tmp/e2e_cleanup.js << 'CLEANUPEOF'
+            const fs = require("fs");
+            const f = "/opt/gauth-full/accounts_normalized.json";
+            const d = JSON.parse(fs.readFileSync(f, "utf8"));
+            const c = d.filter(a => !(a.email || "").startsWith("tak.e2e."));
+            fs.writeFileSync(f, JSON.stringify(c, null, 2));
+            console.log("Cleanup OK, remaining:", c.length);
+            CLEANUPEOF
+
             node -e "
               const XLSX = require('/var/www/sites/gauth/public/xlsx.core.min.js') || require('xlsx');
               const http = require('http');
@@ -544,10 +555,9 @@ jobs:
                       if(lj.password !== 'E2EPass123') { console.log('PASSWORD MISMATCH'); process.exit(1); }
                       console.log('E2E TEST PASSED: upload + lookup OK');
 
-                      // 4) cleanup: remove test accounts (via temp script)
+                      // 4) cleanup: remove test accounts (script pre-written by bash heredoc)
                       const { execSync: ex } = require('child_process');
                       try {
-                        fs.writeFileSync('/tmp/e2e_cleanup.js', 'const fs=require("fs");const f="/opt/gauth-full/accounts_normalized.json";const d=JSON.parse(fs.readFileSync(f,"utf8"));const c=d.filter(a=>!(a.email||"").startsWith("tak.e2e."));fs.writeFileSync(f,JSON.stringify(c,null,2));console.log("Cleanup OK, remaining:",c.length);');
                         ex('sudo node /tmp/e2e_cleanup.js', {stdio:'inherit'});
                         console.log('Cleanup done');
                       } catch(e) { console.log('Cleanup failed:', e.message); }
