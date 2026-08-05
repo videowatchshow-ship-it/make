@@ -242,6 +242,7 @@ module.exports = function(app) {
         totp_secret: account.totp_secret || '',
         recovery_email: account.recovery_email || '',
         source_file: account.source_file || '',
+        source_mtime: account.source_mtime || 0,
         youtube_url: account.youtube_url || '',
         has_session: hasSession,
         extra: account.extra || []
@@ -264,7 +265,7 @@ module.exports = function(app) {
         const recovery = (a.recovery_email || '').toLowerCase();
         const alts = JSON.stringify(a.password_alts || []).toLowerCase();
         if (email.includes(q) || extra.includes(q) || recovery.includes(q) || alts.includes(q)) {
-          results.push({ email: a.email, password: a.password ? '***' : '', totp_secret: a.totp_secret || '', recovery_email: a.recovery_email || '', source_file: a.source_file || '', extra: a.extra || [], password_alts: a.password_alts || [] });
+          results.push({ email: a.email, password: a.password ? '***' : '', totp_secret: a.totp_secret || '', recovery_email: a.recovery_email || '', source_file: a.source_file || '', source_mtime: a.source_mtime || 0, extra: a.extra || [], password_alts: a.password_alts || [] });
         }
       }
       res.json({ ok: true, query: q, total_accounts: accounts.length, found: results.length, results: results.slice(0, 50) });

@@ -253,7 +253,7 @@ function classifyValue(s) {
 
 // ── vertical/stacked layout detection ──
 
-function tryVerticalExtract(rows, sourceFile) {
+function tryVerticalExtract(rows, sourceFile, sourceMtime) {
   const maxCols = rows.reduce((mx, r) => Math.max(mx, (r && r.length) || 0), 0);
 
   const lvAccounts = tryLabelValueExtract(rows, maxCols, sourceFile);
@@ -307,6 +307,7 @@ function tryLabelValueExtract(rows, maxCols, sourceFile) {
         youtube_url: cur.youtube || '',
         extra: [],
         source_file: sourceFile || 'unknown',
+        source_mtime: sourceMtime || Date.now(),
       });
     }
     cur = {};
@@ -381,7 +382,7 @@ function tryStackedExtract(rows, maxCols, sourceFile) {
         continue;
       }
       if (cur && cur.email) accounts.push(cur);
-      cur = { email: v, password: '', totp: '', recovery: '', youtube: '', extra: [], _hasBlankBefore: afterBlank, source_file: sourceFile || 'unknown' };
+      cur = { email: v, password: '', totp: '', recovery: '', youtube: '', extra: [], _hasBlankBefore: afterBlank, source_file: sourceFile || 'unknown', source_mtime: sourceMtime || Date.now() };
       afterBlank = false;
       continue;
     }
@@ -413,7 +414,7 @@ function tryStackedExtract(rows, maxCols, sourceFile) {
 
 // ── brute-force fallback: scan every cell for emails ──
 
-function bruteForceExtract(rows, sourceFile) {
+function bruteForceExtract(rows, sourceFile, sourceMtime) {
   const seen = new Set();
   const accounts = [];
   for (let i = 0; i < rows.length; i++) {
@@ -444,7 +445,7 @@ function bruteForceExtract(rows, sourceFile) {
         const real = passwordCandidates.find(p => !/^\d{1,4}$/.test(p));
         password = real || passwordCandidates[passwordCandidates.length - 1];
       }
-      accounts.push({ email: v, password, totp_secret, recovery_email: recovery, youtube_url: youtube, extra: [], source_file: sourceFile || 'unknown' });
+      accounts.push({ email: v, password, totp_secret, recovery_email: recovery, youtube_url: youtube, extra: [], source_file: sourceFile || 'unknown', source_mtime: sourceMtime || Date.now() });
     }
   }
   return accounts;
@@ -452,7 +453,7 @@ function bruteForceExtract(rows, sourceFile) {
 
 // ── main extraction ──
 
-function extractAccountsFromSheet(sheet, sourceFile) {
+function extractAccountsFromSheet(sheet, sourceFile, sourceMtime) {
   expandMergedCells(sheet);
 
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
@@ -471,7 +472,7 @@ function extractAccountsFromSheet(sheet, sourceFile) {
   }
 
   if (!mapping) {
-    const vertAccounts = tryVerticalExtract(rows, sourceFile);
+    const vertAccounts = tryVerticalExtract(rows, sourceFile, sourceMtime);
     if (vertAccounts && vertAccounts.length) return vertAccounts;
   }
 
@@ -493,7 +494,7 @@ function extractAccountsFromSheet(sheet, sourceFile) {
     startRow = sampleStart;
 
     if (!mapping || mapping.email === undefined) {
-      return bruteForceExtract(rows, sourceFile);
+      return bruteForceExtract(rows, sourceFile, sourceMtime);
     }
   }
 
@@ -531,6 +532,7 @@ function extractAccountsFromSheet(sheet, sourceFile) {
       youtube_url: youtube,
       extra,
       source_file: sourceFile || 'unknown',
+      source_mtime: sourceMtime || Date.now(),
     });
   }
   return accounts;
@@ -540,6 +542,8 @@ function parseExcelFile(filePath) {
   const wb = XLSX.readFile(filePath);
   const allAccounts = [];
   const baseName = path.basename(filePath);
+  let fileMtime = Date.now();
+  try { fileMtime = fs.statSync(filePath).mtimeMs; } catch(e) {}
 
   for (const sheetName of wb.SheetNames) {
     const sheet = wb.Sheets[sheetName];
@@ -553,7 +557,7 @@ function parseExcelFile(filePath) {
         }
       }
     }
-    const accounts = extractAccountsFromSheet(sheet, baseName);
+    const accounts = extractAccountsFromSheet(sheet, baseName, fileMtime);
     allAccounts.push(...accounts);
   }
 
@@ -722,6 +726,10 @@ function mountRoutes(app) {
               if (a.totp_secret && isTotpLike(a.totp_secret)) e.totp_secret = normalizeTotp(a.totp_secret);
               if (a.recovery_email) e.recovery_email = a.recovery_email;
               if (a.youtube_url) e.youtube_url = a.youtube_url;
+              if (a.source_mtime && (!e.source_mtime || a.source_mtime > e.source_mtime)) {
+                e.source_mtime = a.source_mtime;
+                e.source_file = a.source_file || e.source_file;
+              }
               updated++;
             } else {
               byEmail[key] = a;
