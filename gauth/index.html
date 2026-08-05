@@ -70,8 +70,8 @@ button:disabled{background:#333;cursor:not-allowed}
   #td-result .td-card .cp{padding:4px 10px;font-size:12px}
   #td-result .td-card button{padding:6px 12px;font-size:12px}
 }
-#pwa-install-btn{display:none;position:fixed;bottom:20px;right:20px;z-index:999;background:linear-gradient(135deg,#ff9040,#ff6020);color:#fff;border:none;padding:12px 20px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(255,144,64,.4)}
-#pwa-install-btn:hover{transform:scale(1.05)}
+#pwa-install-btn{display:none;width:calc(100% - 32px);margin:0 auto;padding:16px 24px;background:linear-gradient(135deg,#ff9040,#ff6020);color:#fff;border:none;border-radius:12px;font-size:20px;font-weight:800;cursor:pointer;box-shadow:0 4px 16px rgba(255,144,64,.4);text-align:center}
+#pwa-install-btn:hover{transform:scale(1.02);box-shadow:0 6px 24px rgba(255,144,64,.5)}
 </style></head>
 <body>
 <div id="hero-banner">
@@ -119,6 +119,7 @@ button:disabled{background:#333;cursor:not-allowed}
 })();
 </script>
 
+<div style="padding:12px 16px;background:#0d1117"><button id="pwa-install-btn">📲 앱으로 설치</button></div>
 <div id="stream-info-box">
   <div class="si-section">
     <div class="si-header"><span class="si-label">🎙️ 스트리밍 제목</span><button class="si-btn si-refresh" onclick="cycleStreamTitle()">🔄 새로고침</button><button class="si-btn si-copy" onclick="copyStreamTitle()">📋 복사</button></div>
@@ -1303,7 +1304,6 @@ load()
 
 
 <script src="xlsx.core.min.js"></script>
-<button id="pwa-install-btn">📲 앱으로 설치</button>
 <script>
 let _deferredPrompt;
 window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();_deferredPrompt=e;document.getElementById('pwa-install-btn').style.display='block'});
