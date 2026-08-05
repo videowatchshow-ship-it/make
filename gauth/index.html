@@ -586,7 +586,7 @@ updateUploadStatus();
     <option value="asc">오래된 순 (엑셀 날짜 오래됨 → 최신)</option>
   </select>
   <button id="td-load" style="background:#ff9040">계정 조회</button>
-  <button id="td-refresh" style="background:#2a323c;color:#c9d2dc;font-size:12px;padding:7px 10px" onclick="tdLoad()">🔄 새로고침</button>
+  <button id="td-refresh" style="background:#2a323c;color:#c9d2dc;font-size:16px;padding:12px 20px;font-weight:700;border-radius:8px" onclick="tdLoad()">🔄 새로고침</button>
 <div id="td-result" style="width:100%;display:none;background:#161a20;border:1px solid #2a323c;border-radius:8px;padding:16px;font-size:14px;margin-top:6px"></div>
 </div>
 
@@ -896,7 +896,7 @@ async function lookup(){
           <div style="color:#8a95a5">2FA 시크릿</div>
           <div class="mono"><span id="lookup-sec-local">${escapeHtml(local.totp_secret||'—')}</span>${cp(local.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${escapeHtml(local.email)}','lookup-sec-local')">✏️</button></div>
           <div style="color:#8a95a5">2FA 코드 (지금)</div>
-          <div class="mono" style="color:#7dabff;font-size:22px;font-weight:700;letter-spacing:3px"><span id="lookup-code">${escapeHtml(code2)}</span>${local.totp_secret?cp('_','lookup-code'):''} ${local.totp_secret?`<button style="background:#2a323c;padding:4px 10px;font-size:12px;margin-left:8px;color:#c9d2dc" onclick="lookupRefreshCode('${escapeHtml(local.totp_secret)}',this)">🔄 새로고침</button>`:''}</div>
+          <div class="mono" style="color:#7dabff;font-size:22px;font-weight:700;letter-spacing:3px"><span id="lookup-code">${escapeHtml(code2)}</span>${local.totp_secret?cp('_','lookup-code'):''} ${local.totp_secret?`<button style="background:#1c2740;padding:10px 18px;font-size:16px;font-weight:700;margin-left:10px;color:#7dabff;border-radius:8px;border:none;cursor:pointer" onclick="lookupRefreshCode('${escapeHtml(local.totp_secret)}',this)">🔄 새로고침</button>`:''}</div>
           <div style="color:#8a95a5">출처</div><div class="mono" style="font-size:11px;color:#8a95a5">${escapeHtml(local.source_file||'—')}</div>
         </div>`
       if(window.FILTERED && FILTERED.length){
@@ -950,7 +950,7 @@ async function lookup(){
       <div style="color:#8a95a5">2FA 시크릿</div>
       <div class="mono"><span id="lookup-sec-api">${_jt}</span>${cp(j.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${_je}','lookup-sec-api')">✏️</button></div>
       <div style="color:#8a95a5">2FA 코드 (지금)</div>
-      <div class="mono" style="color:#7dabff;font-size:22px;font-weight:700;letter-spacing:3px"><span id="lookup-code">${escapeHtml(code)}</span>${j.totp_secret?cp('_','lookup-code'):cp(code!=='—'?code:'')}${j.totp_secret?`<button style="background:#2a323c;padding:4px 10px;font-size:12px;margin-left:8px;color:#c9d2dc" onclick="lookupRefreshCode('${escapeHtml(j.totp_secret)}',this)">🔄 새로고침</button>`:''}<button style="background:#7c3aed;margin-left:8px" onclick="programLogin('${_je}',this)">🔑 프로그램 로그인</button></div>
+      <div class="mono" style="color:#7dabff;font-size:22px;font-weight:700;letter-spacing:3px"><span id="lookup-code">${escapeHtml(code)}</span>${j.totp_secret?cp('_','lookup-code'):cp(code!=='—'?code:'')}${j.totp_secret?`<button style="background:#1c2740;padding:10px 18px;font-size:16px;font-weight:700;margin-left:10px;color:#7dabff;border-radius:8px;border:none;cursor:pointer" onclick="lookupRefreshCode('${escapeHtml(j.totp_secret)}',this)">🔄 새로고침</button>`:''}<button style="background:#7c3aed;margin-left:8px" onclick="programLogin('${_je}',this)">🔑 프로그램 로그인</button></div>
       <div style="color:#8a95a5">YouTube URL</div>
       <div class="mono" style="color:#ff8a8a">${safeYt ? `<a href="${safeYt}" target="_blank" style="color:#ff8a8a">${safeYt}</a>${cp(yt)}` : '—'}</div>
       <div style="color:#8a95a5">복구 이메일</div>
