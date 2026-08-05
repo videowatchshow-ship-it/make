@@ -540,6 +540,20 @@ jobs:
             cat /etc/nginx/sites-enabled/*gauth* 2>/dev/null || true
             echo "=== DNS check ==="
             host gauth.cent-solution.online 2>/dev/null || dig gauth.cent-solution.online +short 2>/dev/null || echo "DNS tools not available"
+
+            echo "=== [DIAG] Top 10 accounts by source_mtime (newest first) ==="
+            node -e "
+              const d = JSON.parse(require('fs').readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+              const accounts = Array.isArray(d) ? d : (d.accounts || []);
+              const sorted = accounts.filter(a => a.source_mtime).sort((a,b) => (b.source_mtime||0) - (a.source_mtime||0));
+              console.log('Accounts with source_mtime:', sorted.length, '/ total:', accounts.length);
+              for (const a of sorted.slice(0, 10)) {
+                const dt = new Date(a.source_mtime).toISOString();
+                console.log('  ' + dt + '  ' + a.email + '  src:' + (a.source_file||''));
+              }
+              const noMtime = accounts.filter(a => !a.source_mtime).length;
+              if (noMtime) console.log('Accounts WITHOUT source_mtime:', noMtime);
+            " || echo "diag failed (non-fatal)"
             echo "=== Done ==="
 
       - name: Summary
