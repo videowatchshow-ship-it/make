@@ -447,46 +447,22 @@ jobs:
               accounts = Object.values(byEmail);
               console.log('Dedup: merged', dupeCount, 'duplicates. Unique accounts:', accounts.length);
 
-              // 2) Try to get real file mtimes from upload dir
-              const uploadDirs = ['/opt/gauth-full/uploads', '/opt/gauth-full', '/var/www/sites/gauth/public'];
-              const fileMtimes = {};
-              for (const dir of uploadDirs) {
-                try {
-                  const files = fs.readdirSync(dir);
-                  for (const f of files) {
-                    if (!f.endsWith('.xlsx') && !f.endsWith('.xls') && !f.endsWith('.csv')) continue;
-                    try {
-                      const st = fs.statSync(path.join(dir, f));
-                      fileMtimes[f] = st.mtimeMs;
-                    } catch(e) {}
-                  }
-                } catch(e) {}
-              }
-              console.log('Found', Object.keys(fileMtimes).length, 'Excel files on disk');
-              for (const [f, t] of Object.entries(fileMtimes).slice(0, 10)) {
-                console.log('  ' + f + ': ' + new Date(t).toISOString());
-              }
-
-              // 3) For accounts whose source_file matches a real file, use that mtime
-              // For others, keep existing or set to data file mtime
-              let dataFileMtime = Date.now();
-              try { dataFileMtime = fs.statSync(dataFile).mtimeMs; } catch(e) {}
-              let fixedReal = 0, fixedFallback = 0;
-              const allSameTime = accounts.length > 0 && accounts.every(a => a.source_mtime === accounts[0].source_mtime);
-              if (allSameTime) console.log('All accounts have same source_mtime — redistributing');
-
+              // 2) Extract upload timestamp from source_file name
+              // Format: up_<timestamp>_<random> or hash-like names
+              let fixedFromName = 0, fixedFallback = 0;
               for (const a of accounts) {
                 const src = a.source_file || '';
-                if (fileMtimes[src]) {
-                  a.source_mtime = fileMtimes[src];
-                  fixedReal++;
-                } else if (!a.source_mtime || allSameTime) {
-                  a.source_mtime = dataFileMtime;
+                const m = src.match(/^up_(\d{13,})_/);
+                if (m) {
+                  a.source_mtime = parseInt(m[1], 10);
+                  fixedFromName++;
+                } else if (!a.source_mtime) {
+                  a.source_mtime = 0;
                   fixedFallback++;
                 }
               }
-              console.log('Fixed with real file mtime:', fixedReal);
-              console.log('Fixed with fallback mtime:', fixedFallback);
+              console.log('Fixed from source_file timestamp:', fixedFromName);
+              console.log('No timestamp available (set to 0):', fixedFallback);
 
               // 4) Verify specific emails from user screenshot
               const targets = ['vegaw0142@gmail.com','vickylast353@gmail.com','ali773305120@gmail.com','ali777047150@gmail.com','sss0626874813@gmail.com','nok0623964876@gmail.com','dajex0414@gmail.com','primeofficialshop.pl@gmail.com','n09047689769@gmail.com','chan02097288609@gmail.com'];
