@@ -409,5 +409,130 @@ module.exports = function(app) {
     }
   });
 
-  console.log('[auto_deploy] routes registered: /api/accounts, /api/normalized-accounts, /api/profiles, /api/failed-accounts, /api/deploy, /api/update-secret, /api/lookup/:email, /api/search-account, /api/deploy-status, /api/login-one');
+  const YT_TOKENS_FILE = path.join(DATA_DIR, 'youtube_tokens.json');
+
+  function readYtTokens() {
+    try { return JSON.parse(fs.readFileSync(YT_TOKENS_FILE, 'utf8')); } catch { return {}; }
+  }
+  function writeYtTokens(data) {
+    const tmp = YT_TOKENS_FILE + '.tmp.' + process.pid;
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+    fs.renameSync(tmp, YT_TOKENS_FILE);
+  }
+
+  app.get('/api/youtube/client-id', (req, res) => {
+    const clientId = process.env.YOUTUBE_OAUTH_CLIENT_ID || '';
+    res.json({ client_id: clientId });
+  });
+
+  app.post('/api/youtube/save-token', (req, res) => {
+    try {
+      const { email, access_token, expires_at } = req.body || {};
+      if (!email || !access_token) return res.status(400).json({ ok: false, error: 'email and access_token required' });
+      const tokens = readYtTokens();
+      tokens[normalizeEmail(email)] = { access_token, expires_at: expires_at || (Date.now() + 3600000), saved_at: Date.now() };
+      writeYtTokens(tokens);
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  app.get('/api/youtube/token-status/:email', (req, res) => {
+    const tokens = readYtTokens();
+    const t = tokens[normalizeEmail(req.params.email)];
+    if (!t) return res.json({ connected: false });
+    res.json({ connected: true, expires_at: t.expires_at, expired: Date.now() > t.expires_at });
+  });
+
+  app.post('/api/youtube/chat-message', (req, res) => {
+    const { email, liveChatId, message } = req.body || {};
+    if (!email || !liveChatId || !message) return res.status(400).json({ ok: false, error: 'email, liveChatId, message required' });
+    const tokens = readYtTokens();
+    const t = tokens[normalizeEmail(email)];
+    if (!t || !t.access_token) return res.status(401).json({ ok: false, error: 'not connected' });
+    const https = require('https');
+    const body = JSON.stringify({ snippet: { liveChatId, type: 'textMessageEvent', textMessageDetails: { messageText: message } } });
+    const r = https.request({
+      hostname: 'www.googleapis.com', path: '/youtube/v3/liveChat/messages?part=snippet',
+      method: 'POST', headers: { 'Authorization': 'Bearer ' + t.access_token, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+    }, (resp) => {
+      let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
+        try { const j = JSON.parse(d); res.json({ ok: !j.error, data: j }); } catch { res.json({ ok: false, raw: d }); }
+      });
+    });
+    r.on('error', e => res.status(500).json({ ok: false, error: e.message }));
+    r.write(body); r.end();
+  });
+
+  app.get('/api/youtube/live-chat-id/:email', (req, res) => {
+    const tokens = readYtTokens();
+    const t = tokens[normalizeEmail(req.params.email)];
+    if (!t || !t.access_token) return res.status(401).json({ ok: false, error: 'not connected' });
+    const https = require('https');
+    const r = https.request({
+      hostname: 'www.googleapis.com', path: '/youtube/v3/liveBroadcasts?part=snippet,contentDetails&broadcastStatus=active&broadcastType=all',
+      method: 'GET', headers: { 'Authorization': 'Bearer ' + t.access_token }
+    }, (resp) => {
+      let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
+        try {
+          const j = JSON.parse(d);
+          const items = (j.items || []).map(it => ({ title: it.snippet.title, liveChatId: it.snippet.liveChatId, videoId: it.contentDetails ? it.contentDetails.boundStreamId : '' }));
+          res.json({ ok: true, broadcasts: items });
+        } catch { res.json({ ok: false, raw: d }); }
+      });
+    });
+    r.on('error', e => res.status(500).json({ ok: false, error: e.message }));
+    r.end();
+  });
+
+  app.get('/api/youtube/chat-list/:email', (req, res) => {
+    const tokens = readYtTokens();
+    const t = tokens[normalizeEmail(req.params.email)];
+    if (!t || !t.access_token) return res.status(401).json({ ok: false, error: 'not connected' });
+    const liveChatId = req.query.liveChatId;
+    if (!liveChatId) return res.status(400).json({ ok: false, error: 'liveChatId required' });
+    const https = require('https');
+    const r = https.request({
+      hostname: 'www.googleapis.com', path: `/youtube/v3/liveChat/messages?liveChatId=${encodeURIComponent(liveChatId)}&part=snippet,authorDetails&maxResults=200`,
+      method: 'GET', headers: { 'Authorization': 'Bearer ' + t.access_token }
+    }, (resp) => {
+      let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
+        try {
+          const j = JSON.parse(d);
+          const msgs = (j.items || []).map(it => ({
+            displayName: it.authorDetails.displayName,
+            channelId: it.authorDetails.channelId,
+            message: it.snippet.textMessageDetails ? it.snippet.textMessageDetails.messageText : '',
+            publishedAt: it.snippet.publishedAt
+          }));
+          res.json({ ok: true, messages: msgs, pollingIntervalMillis: j.pollingIntervalMillis || 5000 });
+        } catch { res.json({ ok: false, raw: d }); }
+      });
+    });
+    r.on('error', e => res.status(500).json({ ok: false, error: e.message }));
+    r.end();
+  });
+
+  app.post('/api/youtube/add-moderator', (req, res) => {
+    const { email, liveChatId, channelId } = req.body || {};
+    if (!email || !liveChatId || !channelId) return res.status(400).json({ ok: false, error: 'email, liveChatId, channelId required' });
+    const tokens = readYtTokens();
+    const t = tokens[normalizeEmail(email)];
+    if (!t || !t.access_token) return res.status(401).json({ ok: false, error: 'not connected' });
+    const https = require('https');
+    const body = JSON.stringify({ snippet: { liveChatId, moderatorDetails: { channelId } } });
+    const r = https.request({
+      hostname: 'www.googleapis.com', path: '/youtube/v3/liveChat/moderators?part=snippet',
+      method: 'POST', headers: { 'Authorization': 'Bearer ' + t.access_token, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+    }, (resp) => {
+      let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
+        try { const j = JSON.parse(d); res.json({ ok: !j.error, data: j }); } catch { res.json({ ok: false, raw: d }); }
+      });
+    });
+    r.on('error', e => res.status(500).json({ ok: false, error: e.message }));
+    r.write(body); r.end();
+  });
+
+  console.log('[auto_deploy] routes registered: /api/accounts, /api/normalized-accounts, /api/profiles, /api/failed-accounts, /api/deploy, /api/update-secret, /api/lookup/:email, /api/search-account, /api/deploy-status, /api/login-one, /api/youtube/*');
 };

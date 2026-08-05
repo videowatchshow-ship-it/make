@@ -957,6 +957,7 @@ async function lookup(){
       <div style="color:#8a95a5">복구 이메일</div>
       <div class="mono">${_jre}${cp(j.recovery_email)}</div>
       <div style="color:#8a95a5">출처</div><div class="mono" style="font-size:11px;color:#8a95a5">${_jsf}</div>
+      <div style="color:#8a95a5">API</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button style="background:#1c5a2a;color:#3ddc84;font-weight:700;padding:8px 14px;font-size:13px;border:none;border-radius:6px;cursor:pointer" onclick="ytApiConnect('${_je}',this)">📡 API 연결</button><button style="background:#1c2740;color:#7dabff;font-weight:700;padding:8px 14px;font-size:13px;border:none;border-radius:6px;cursor:pointer" onclick="ytChatShot('${_je}','sky82892 텔레 문의',this)">💬 채팅 샷</button><button style="background:#3a1c00;color:#ff9040;font-weight:700;padding:8px 14px;font-size:13px;border:none;border-radius:6px;cursor:pointer" onclick="ytSpanner('${_je}',this)">🔧 스패너</button></div>
       <div></div><div>${btn}</div>
     </div>
     <div id="lookup-next" style="margin-top:14px;border-top:1px solid #22282f;padding-top:10px"></div>`
@@ -1035,7 +1036,7 @@ async function tdRender(){
         <div class="td-label" style="color:#8a95a5">비밀번호</div><div class="mono td-val td-pw" style="color:#3ddc84">${_pw}${cp(a.password)}</div>
         <div class="td-label" style="color:#8a95a5">2FA 시크릿</div><div class="mono td-val td-secret"><span id="sec-${idx}">${_ts}</span>${cp(a.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${_em}','sec-${idx}')">✏️</button></div>
         <div class="td-label" style="color:#8a95a5">2FA 코드</div><div class="mono td-val td-2fa-code" style="color:#7dabff;font-size:18px;font-weight:700;letter-spacing:2px"><span id="tdcode-${idx}">${codes[i]}</span>${a.totp_secret?cp('_', 'tdcode-'+idx):cp(codes[i]!=='—'?codes[i]:'')}${a.totp_secret?`<button style="background:#2a323c;padding:3px 8px;font-size:11px;margin-left:6px;color:#c9d2dc" onclick="tdRefreshCode(${idx},'${escapeHtml(a.totp_secret)}',this)">🔄 새로고침</button>`:''}</div>
-        <div class="td-label" style="color:#8a95a5">동작</div><div><button style="background:#7c3aed" onclick="programLogin('${_em}',this)">🔑 로그인</button></div>
+        <div class="td-label" style="color:#8a95a5">동작</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button style="background:#7c3aed" onclick="programLogin('${_em}',this)">🔑 로그인</button><button style="background:#1c5a2a;color:#3ddc84;font-weight:700" onclick="ytApiConnect('${_em}',this)">📡 API 연결</button><button style="background:#1c2740;color:#7dabff;font-weight:700" onclick="ytChatShot('${_em}','sky82892 텔레 문의',this)">💬 채팅 샷</button><button style="background:#3a1c00;color:#ff9040;font-weight:700" onclick="ytSpanner('${_em}',this)">🔧 스패너</button></div>
         <div class="td-label" style="color:#8a95a5">YouTube</div><div class="mono td-val" style="color:#ff8a8a;font-size:11px">${yt&&/^https?:\/\//i.test(yt)?`<a href="${_yt}" target="_blank" style="color:#ff8a8a">${_yt}</a>${cp(yt)}`:'—'}</div>
         <div class="td-label" style="color:#8a95a5">복구</div><div class="mono td-val" style="font-size:11px">${_rc}</div>
         <div class="td-label" style="color:#8a95a5">엑셀</div><div class="mono td-val" style="font-size:11px;color:#8a95a5">${_sf} · ${dt}</div>
@@ -1103,6 +1104,99 @@ async function tdRefreshCode(idx, secret, btn){
     setTimeout(()=>btn.textContent = old, 900)
   }catch{btn.textContent='❌';setTimeout(()=>btn.textContent=old, 1200)}
 }
+/* YouTube API OAuth 연동 */
+var _ytClientId = '';
+(async function(){ try { const r = await fetch('/api/youtube/client-id'); const j = await r.json(); _ytClientId = j.client_id || ''; } catch{} })();
+
+async function ytApiConnect(email, btn) {
+  if (!_ytClientId) { alert('YouTube OAuth Client ID가 서버에 설정되지 않았습니다.\nYOUTUBE_OAUTH_CLIENT_ID 환경변수를 설정하세요.'); return; }
+  const orig = btn.textContent; btn.disabled = true; btn.textContent = '⏳ 연결 중…';
+  const redirectUri = location.origin + '/';
+  const scope = 'https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube.force-ssl';
+  const state = encodeURIComponent(JSON.stringify({ email }));
+  const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=' + encodeURIComponent(_ytClientId)
+    + '&redirect_uri=' + encodeURIComponent(redirectUri)
+    + '&response_type=token&scope=' + encodeURIComponent(scope)
+    + '&state=' + state
+    + '&login_hint=' + encodeURIComponent(email)
+    + '&prompt=consent';
+  const popup = window.open(authUrl, 'ytAuth', 'width=500,height=700');
+  const checkInterval = setInterval(async () => {
+    try {
+      if (!popup || popup.closed) { clearInterval(checkInterval); btn.textContent = orig; btn.disabled = false; return; }
+      const url = popup.location.href;
+      if (url && url.startsWith(redirectUri)) {
+        const hash = popup.location.hash.substring(1);
+        popup.close(); clearInterval(checkInterval);
+        const params = new URLSearchParams(hash);
+        const token = params.get('access_token');
+        const expiresIn = parseInt(params.get('expires_in') || '3600');
+        if (token) {
+          await fetch('/api/youtube/save-token', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, access_token: token, expires_at: Date.now() + expiresIn * 1000 }) });
+          btn.textContent = '✅ 연결됨'; btn.style.background = '#0d3222'; btn.style.color = '#3ddc84';
+          setTimeout(() => { btn.textContent = orig; btn.disabled = false; btn.style.background = ''; btn.style.color = ''; }, 2000);
+        } else { btn.textContent = '❌ 실패'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000); }
+      }
+    } catch { /* cross-origin — 아직 리다이렉트 전 */ }
+  }, 500);
+}
+
+async function ytChatShot(email, message, btn) {
+  const orig = btn.textContent; btn.disabled = true; btn.textContent = '⏳ 전송 중…';
+  try {
+    const br = await fetch('/api/youtube/live-chat-id/' + encodeURIComponent(email)); const bj = await br.json();
+    if (!bj.ok || !bj.broadcasts || !bj.broadcasts.length) { alert('현재 활성 방송이 없습니다.'); btn.textContent = orig; btn.disabled = false; return; }
+    const liveChatId = bj.broadcasts[0].liveChatId;
+    const r = await fetch('/api/youtube/chat-message', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, liveChatId, message }) });
+    const j = await r.json();
+    if (j.ok) { btn.textContent = '✅ 전송됨'; btn.style.background = '#0d3222'; }
+    else { btn.textContent = '❌ 실패'; alert('채팅 전송 실패: ' + JSON.stringify(j.data && j.data.error ? j.data.error.message : j)); }
+  } catch (e) { btn.textContent = '❌ 오류'; alert('오류: ' + e.message); }
+  setTimeout(() => { btn.textContent = orig; btn.disabled = false; btn.style.background = ''; }, 2000);
+}
+
+var _spannerInterval = null;
+async function ytSpanner(email, btn) {
+  if (_spannerInterval) { clearInterval(_spannerInterval); _spannerInterval = null; }
+  const orig = btn.textContent; btn.disabled = true; btn.textContent = '⏳ 로딩…';
+  try {
+    const br = await fetch('/api/youtube/live-chat-id/' + encodeURIComponent(email)); const bj = await br.json();
+    if (!bj.ok || !bj.broadcasts || !bj.broadcasts.length) { alert('현재 활성 방송이 없습니다.'); btn.textContent = orig; btn.disabled = false; return; }
+    const liveChatId = bj.broadcasts[0].liveChatId;
+    let box = document.getElementById('spanner-box');
+    if (!box) { box = document.createElement('div'); box.id = 'spanner-box'; box.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#0f1318;border:2px solid #ff9040;border-radius:12px;padding:20px;z-index:10000;max-width:400px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.7)'; document.body.appendChild(box); }
+    box.style.display = 'block';
+    async function loadViewers() {
+      const r = await fetch('/api/youtube/chat-list/' + encodeURIComponent(email) + '?liveChatId=' + encodeURIComponent(liveChatId));
+      const j = await r.json();
+      if (!j.ok) return;
+      const seen = new Map();
+      for (let i = j.messages.length - 1; i >= 0; i--) {
+        const m = j.messages[i];
+        if (!seen.has(m.channelId)) seen.set(m.channelId, m.displayName);
+      }
+      const viewers = Array.from(seen.entries()).slice(0, 10);
+      box.innerHTML = '<div style="font-size:16px;font-weight:700;color:#ff9040;margin-bottom:12px">🔧 스패너 (최근 채팅 10명) <button onclick="document.getElementById(\'spanner-box\').style.display=\'none\';if(_spannerInterval)clearInterval(_spannerInterval);_spannerInterval=null" style="float:right;background:#2a323c;font-size:14px;padding:6px 12px">✕ 닫기</button></div>'
+        + viewers.map(([chId, name]) => '<div style="display:flex;align-items:center;gap:10px;padding:8px;border-bottom:1px solid #1e242c"><span style="flex:1;font-size:15px;color:#e8ecef">' + _esc(name) + '</span><button style="background:#1c5a2a;color:#3ddc84;padding:8px 16px;font-size:14px;font-weight:700;border:none;border-radius:6px;cursor:pointer" onclick="ytAddMod(\'' + _esc(email) + '\',\'' + _esc(liveChatId) + '\',\'' + _esc(chId) + '\',this)">✅ 스패너</button></div>').join('')
+        + '<div style="color:#8a95a5;font-size:11px;margin-top:8px;text-align:center">3초마다 자동 갱신</div>';
+    }
+    await loadViewers();
+    _spannerInterval = setInterval(loadViewers, 3000);
+    btn.textContent = orig; btn.disabled = false;
+  } catch (e) { alert('오류: ' + e.message); btn.textContent = orig; btn.disabled = false; }
+}
+
+async function ytAddMod(email, liveChatId, channelId, btn) {
+  const orig = btn.textContent; btn.disabled = true; btn.textContent = '⏳';
+  try {
+    const r = await fetch('/api/youtube/add-moderator', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, liveChatId, channelId }) });
+    const j = await r.json();
+    if (j.ok) { btn.textContent = '✅ 완료'; btn.style.background = '#0d3222'; }
+    else { btn.textContent = '❌'; alert('스패너 실패: ' + JSON.stringify(j.data && j.data.error ? j.data.error.message : j)); }
+  } catch (e) { btn.textContent = '❌'; alert('오류: ' + e.message); }
+  setTimeout(() => { btn.textContent = orig; btn.disabled = false; btn.style.background = ''; }, 2000);
+}
+
 function tdGoto(n){
   const pages = Math.max(1, Math.ceil(TD.length/TD_PAGE_SIZE))
   TDP = Math.max(1, Math.min(pages, n))
