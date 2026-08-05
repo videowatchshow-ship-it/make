@@ -508,6 +508,7 @@ function getApiToken(){return sessionStorage.getItem('gauth_token')||''}
 (function(){var el=document.getElementById('apiToken');if(el){var t=getApiToken();if(t)el.value=t;}})()
 function authHeaders(extra){var h=extra||{};var t=getApiToken();if(t)h['Authorization']='Bearer '+t;return h}
 function authQuery(url){var t=getApiToken();if(!t)return url;return url+(url.indexOf('?')>=0?'&':'?')+'token='+encodeURIComponent(t)}
+function noCacheQuery(url){var u=authQuery(url);return u+(u.includes('?')?'&':'?')+'_t='+Date.now()}
 
 let FAILED = {}
 async function load(){
@@ -945,7 +946,7 @@ async function lookupRefreshCode(secret, btn){
   if(!el) return
   const old = btn.textContent; btn.textContent = '⏳'
   try{
-    const j = await (await fetch(authQuery('/codes/'+secret),{headers:authHeaders()})).json()
+    const j = await (await fetch(noCacheQuery('/codes/'+secret),{cache:'no-store',headers:authHeaders()})).json()
     el.textContent = j.code || '—'
     /* 새 코드 시각 강조 (0.6s 골드 반짝) */
     el.style.transition='background-color .3s'; el.style.backgroundColor='rgba(245,200,66,.35)';
@@ -973,7 +974,7 @@ async function tdRefreshCode(idx, secret, btn){
   const old = btn.textContent
   btn.textContent = '⏳'
   try{
-    const j = await (await fetch(authQuery('/codes/'+secret),{headers:authHeaders()})).json()
+    const j = await (await fetch(noCacheQuery('/codes/'+secret),{cache:'no-store',headers:authHeaders()})).json()
     el.textContent = j.code || '—'
     /* 새 코드 시각 강조 */
     el.style.transition='background-color .3s'; el.style.backgroundColor='rgba(245,200,66,.35)';
