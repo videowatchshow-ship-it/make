@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>gauth 대시보드</title>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>유튜브 계정 목록</title>
 <style>
 *{box-sizing:border-box}
 body{font-family:-apple-system,'SF Pro Text',sans-serif;background:#0b0d10;color:#e8ecef;margin:0}
@@ -65,7 +65,10 @@ button:disabled{background:#333;cursor:not-allowed}
 }
 </style></head>
 <body>
-<div id="accStats" style="padding:8px 20px;background:#0d1520;border-bottom:1px solid #22282f;font-size:13px;color:#9aa5b5;text-align:center">📊 로딩 중...</div>
+<div style="padding:14px 20px;background:#0a0d12;border-bottom:2px solid #ff9040;text-align:center">
+  <h1 style="margin:0;font-size:22px;color:#ff9040;font-weight:800;letter-spacing:1px">유튜브 계정 목록</h1>
+</div>
+<div id="accStats" style="padding:8px 20px;background:#0d1520;border-bottom:1px solid #22282f;font-size:13px;color:#9aa5b5;text-align:center"></div>
 <div id="monthlyGroups" style="padding:6px 20px;background:#0d1520;border-bottom:1px solid #22282f;font-size:12px;color:#c9d2dc;text-align:center"></div>
 <script>
 /* MDN: Element.innerHTML XSS 방지 — https://developer.mozilla.org/en-US/docs/Web/API/Element/innerHTML#security_considerations */
@@ -110,7 +113,10 @@ async function refreshAccStats(){
       }
     }
     if(mg) mg.innerHTML = mgHtml;
-  } catch(e){}
+  } catch(e){
+    var el = document.getElementById('accStats');
+    if(el && !el.innerHTML) el.style.display='none';
+  }
 }
 refreshAccStats();
 /* 새로고침 후 업로드 진행 상태 폴링 */
@@ -416,7 +422,7 @@ function accessBadge(a){
 
 
 <header>
-  <h1>gauth 대시보드</h1>
+  <h1 style="display:none">gauth</h1>
   <div class="stats">
     <span>엑셀 <b id="s-files">–</b></span>
     <span>계정 <b id="s-acc">–</b></span>
