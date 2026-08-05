@@ -8,6 +8,8 @@ on:
       - 'gauth/upload_excels.js'
       - 'gauth/auto_deploy.js'
       - 'gauth/xlsx.core.min.js'
+      - 'gauth/manifest.json'
+      - 'gauth/sw.js'
       - 'advanced-google-login-v2.js'
       - 'package.json'
       - '.github/workflows/deploy-gauth.yml'
@@ -143,6 +145,8 @@ jobs:
             curl -sfL "${RAW}/gauth/auto_deploy.js" -o auto_deploy.js && echo "  auto_deploy.js OK" || echo "  auto_deploy.js FAIL"
             curl -sfL "${RAW}/gauth/index.html" -o /var/www/sites/gauth/public/index.html && echo "  index.html OK" || echo "  index.html FAIL"
             curl -sfL "${RAW}/gauth/xlsx.core.min.js" -o /var/www/sites/gauth/public/xlsx.core.min.js && echo "  xlsx.core.min.js OK" || echo "  xlsx.core.min.js FAIL"
+            curl -sfL "${RAW}/gauth/manifest.json" -o /var/www/sites/gauth/public/manifest.json && echo "  manifest.json OK" || echo "  manifest.json FAIL"
+            curl -sfL "${RAW}/gauth/sw.js" -o /var/www/sites/gauth/public/sw.js && echo "  sw.js OK" || echo "  sw.js FAIL"
             curl -sfL "${RAW}/advanced-google-login-v2.js" -o advanced-google-login-v2.js && echo "  advanced-google-login-v2.js OK" || echo "  advanced-google-login-v2.js FAIL"
             curl -sfL "${RAW}/package.json" -o package.json && echo "  package.json OK" || echo "  package.json FAIL"
             echo "Files downloaded"

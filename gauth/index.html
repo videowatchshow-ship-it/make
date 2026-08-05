@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>유튜브 계정 목록</title>
+<link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0a0d12"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%230a0d12' width='100' height='100' rx='20'/><text x='50' y='70' text-anchor='middle' font-size='60'>📺</text></svg>">
 <style>
 *{box-sizing:border-box}
 body{font-family:-apple-system,'SF Pro Text',sans-serif;background:#0b0d10;color:#e8ecef;margin:0}
@@ -61,8 +62,16 @@ button:disabled{background:#333;cursor:not-allowed}
   #site-map-footer{max-width:calc(100vw - 16px)}
 }
 @media(min-width:769px){
-  #td-result .td-card .td-grid{grid-template-columns:100px 1fr;gap:6px 12px;font-size:13px}
+  #td-result .td-card .td-grid{grid-template-columns:100px 1fr;gap:6px 12px;font-size:14px}
+  #td-result .td-card{padding:16px;margin-bottom:10px}
+  #td-result .td-card .td-email{font-size:16px}
+  #td-result .td-card .td-pw{font-size:15px}
+  #td-result .td-card .td-2fa-code{font-size:20px;letter-spacing:2px}
+  #td-result .td-card .cp{padding:4px 10px;font-size:12px}
+  #td-result .td-card button{padding:6px 12px;font-size:12px}
 }
+#pwa-install-btn{display:none;position:fixed;bottom:20px;right:20px;z-index:999;background:linear-gradient(135deg,#ff9040,#ff6020);color:#fff;border:none;padding:12px 20px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(255,144,64,.4)}
+#pwa-install-btn:hover{transform:scale(1.05)}
 </style></head>
 <body>
 <div style="padding:14px 20px;background:#0a0d12;border-bottom:2px solid #ff9040;text-align:center">
@@ -1193,4 +1202,12 @@ load()
 
 
 <script src="xlsx.core.min.js"></script>
+<button id="pwa-install-btn">📲 앱으로 설치</button>
+<script>
+let _deferredPrompt;
+window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();_deferredPrompt=e;document.getElementById('pwa-install-btn').style.display='block'});
+document.getElementById('pwa-install-btn').addEventListener('click',function(){if(!_deferredPrompt)return;_deferredPrompt.prompt();_deferredPrompt.userChoice.then(function(){_deferredPrompt=null;document.getElementById('pwa-install-btn').style.display='none'})});
+window.addEventListener('appinstalled',function(){document.getElementById('pwa-install-btn').style.display='none'});
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){})}
+</script>
 </body></html>

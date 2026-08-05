@@ -1,0 +1,18 @@
+{
+  "name": "유튜브 계정 목록",
+  "short_name": "계정목록",
+  "description": "유튜브 계정 관리",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0d12",
+  "theme_color": "#0a0d12",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect fill='%230a0d12' width='512' height='512' rx='80'/><text x='256' y='350' text-anchor='middle' font-size='280'>📺</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

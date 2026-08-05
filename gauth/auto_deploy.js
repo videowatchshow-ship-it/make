@@ -95,6 +95,8 @@ module.exports = function(app) {
         { src: 'gauth/auto_deploy.js', dst: path.join(DATA_DIR, 'auto_deploy.js') },
         { src: 'gauth/index.html', dst: path.join(FRONTEND_DIR, 'index.html') },
         { src: 'gauth/xlsx.core.min.js', dst: path.join(FRONTEND_DIR, 'xlsx.core.min.js') },
+        { src: 'gauth/manifest.json', dst: path.join(FRONTEND_DIR, 'manifest.json') },
+        { src: 'gauth/sw.js', dst: path.join(FRONTEND_DIR, 'sw.js') },
         { src: 'advanced-google-login-v2.js', dst: path.join(DATA_DIR, 'advanced-google-login-v2.js') },
         { src: 'package.json', dst: path.join(DATA_DIR, 'package.json') },
       ];
