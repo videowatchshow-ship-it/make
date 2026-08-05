@@ -261,8 +261,10 @@ module.exports = function(app) {
       for (const a of accounts) {
         const email = (a.email || '').toLowerCase();
         const extra = JSON.stringify(a.extra || []).toLowerCase();
-        if (email.includes(q) || extra.includes(q)) {
-          results.push({ email: a.email, password: a.password ? '***' : '', totp_secret: a.totp_secret || '', source_file: a.source_file || '', extra: a.extra || [] });
+        const recovery = (a.recovery_email || '').toLowerCase();
+        const alts = JSON.stringify(a.password_alts || []).toLowerCase();
+        if (email.includes(q) || extra.includes(q) || recovery.includes(q) || alts.includes(q)) {
+          results.push({ email: a.email, password: a.password ? '***' : '', totp_secret: a.totp_secret || '', recovery_email: a.recovery_email || '', source_file: a.source_file || '', extra: a.extra || [], password_alts: a.password_alts || [] });
         }
       }
       res.json({ ok: true, query: q, total_accounts: accounts.length, found: results.length, results: results.slice(0, 50) });
