@@ -36,21 +36,23 @@ function normalizeTotp(s) {
  * ref: https://datatracker.ietf.org/doc/html/rfc5322#section-3.4.1
  * HTML5 email type도 유사한 간소화 사용: https://html.spec.whatwg.org/#valid-e-mail-address */
 function isEmail(s) {
-  return /^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(String(s || '').trim());
+  s = String(s || '').trim();
+  if (s.length > 254) return false;
+  return /^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(s);
 }
 
 function normalizeEmail(s) {
   s = String(s || '').trim().toLowerCase();
-  const parts = s.split('@');
-  if (parts.length === 2) {
-    let local = parts[0];
-    const domain = parts[1];
-    if (domain === 'gmail.com' || domain === 'googlemail.com') {
-      local = local.replace(/\./g, '').split('+')[0];
-      return local + '@gmail.com';
-    }
+  if (!s || !s.includes('@')) return s;
+  const atIdx = s.lastIndexOf('@');
+  let local = s.slice(0, atIdx);
+  const domain = s.slice(atIdx + 1);
+  if (!local || !domain) return s;
+  if (domain === 'gmail.com' || domain === 'googlemail.com') {
+    local = local.replace(/\./g, '').split('+')[0];
+    return local + '@gmail.com';
   }
-  return s;
+  return local + '@' + domain;
 }
 
 function isPhoneNumber(s) {
@@ -89,7 +91,7 @@ function isTotpLike(s) {
 function extractTotpFromUrl(s) {
   s = String(s || '').trim();
   if (!/^otpauth:\/\//i.test(s)) return null;
-  try { s = decodeURIComponent(s); } catch (_) {}
+  try { s = decodeURIComponent(s); } catch (_) { return null; }
   const m = s.match(/[?&]secret=([A-Z2-7=]+)/i);
   if (m) return m[1].toUpperCase().replace(/=+$/, '');
   return null;
@@ -167,7 +169,7 @@ function analyzeColumns(rows) {
   const stats = [];
   for (let c = 0; c < maxCols; c++) {
     const values = [];
-    let emails = 0, totps = 0, urls = 0, nonEmpty = 0;
+    let emails = 0, totps = 0, urls = 0, phones = 0, codes = 0, nonEmpty = 0;
     for (let r = 0; r < rows.length; r++) {
       const v = String((rows[r] && rows[r][c]) || '').trim();
       if (!v) continue;
@@ -176,8 +178,10 @@ function analyzeColumns(rows) {
       if (isEmail(v)) emails++;
       if (isTotpLike(v) || isOtpauthUrl(v)) totps++;
       if (isUrlLike(v) && !isOtpauthUrl(v)) urls++;
+      if (isPhoneNumber(v)) phones++;
+      if (isSixDigitCode(v)) codes++;
     }
-    stats.push({ col: c, nonEmpty, emails, totps, urls, values });
+    stats.push({ col: c, nonEmpty, emails, totps, urls, phones, codes, values });
   }
 
   const mapping = {};
@@ -243,10 +247,8 @@ function analyzeColumns(rows) {
       const isSequential = allNumbers && s.values.length > 2 &&
         s.values.every((v, i) => i === 0 || parseInt(v) === parseInt(s.values[i-1]) + 1);
       if (isSequential) continue;
-      const allPhones = s.values.every(v => isPhoneNumber(v));
-      if (allPhones) continue;
-      const allCodes = allNumbers && s.values.every(v => /^\d{5,8}$/.test(v));
-      if (allCodes) continue;
+      if (s.phones > 0 && s.phones / s.nonEmpty > 0.5) continue;
+      if (s.codes > 0 && s.codes / s.nonEmpty > 0.5) continue;
       mapping.password = s.col;
       used.add(s.col);
       break;
@@ -332,14 +334,21 @@ function tryLabelValueExtract(rows, maxCols, sourceFile, sourceMtime) {
   function flushCur() {
     if (cur.email && isEmail(cur.email)) {
       let totpVal = cur.totp || '';
+      let pw = cur.password || '';
+      let rec = cur.recovery || '';
       if (isOtpauthUrl(totpVal)) {
         totpVal = extractTotpFromUrl(totpVal) || totpVal;
       }
+      if (pw && !totpVal && isTotpLike(pw)) { totpVal = pw; pw = ''; }
+      if (pw && isEmail(pw)) { if (!rec) rec = pw; pw = ''; }
+      if (pw && (isPhoneNumber(pw) || isSixDigitCode(pw))) { pw = ''; }
+      if (rec && !isEmail(rec)) rec = '';
+      if (rec && normalizeEmail(rec) === normalizeEmail(cur.email)) rec = '';
       accounts.push({
         email: cur.email,
-        password: cur.password || '',
+        password: pw,
         totp_secret: isTotpLike(totpVal) ? normalizeTotp(totpVal) : totpVal,
-        recovery_email: cur.recovery || '',
+        recovery_email: rec,
         youtube_url: cur.youtube || '',
         extra: [],
         source_file: sourceFile || 'unknown',
@@ -440,16 +449,26 @@ function tryStackedExtract(rows, maxCols, sourceFile, sourceMtime) {
 
   if (accounts.length < 1) return null;
 
-  return accounts.map(a => ({
-    email: a.email,
-    password: a.password || '',
-    totp_secret: a.totp && isTotpLike(a.totp) ? normalizeTotp(a.totp) : (a.totp || ''),
-    recovery_email: a.recovery || '',
-    youtube_url: a.youtube || '',
-    extra: a.extra || [],
-    source_file: a.source_file,
-    source_mtime: a.source_mtime || sourceMtime || Date.now(),
-  }));
+  return accounts.map(a => {
+    let pw = a.password || '';
+    let totp = a.totp || '';
+    let rec = a.recovery || '';
+    if (pw && !totp && isTotpLike(pw)) { totp = pw; pw = ''; }
+    if (pw && isEmail(pw)) { if (!rec) rec = pw; pw = ''; }
+    if (pw && (isPhoneNumber(pw) || isSixDigitCode(pw))) { pw = ''; }
+    if (rec && !isEmail(rec)) rec = '';
+    if (rec && normalizeEmail(rec) === normalizeEmail(a.email)) rec = '';
+    return {
+      email: a.email,
+      password: pw,
+      totp_secret: totp && isTotpLike(totp) ? normalizeTotp(totp) : totp,
+      recovery_email: rec,
+      youtube_url: a.youtube || '',
+      extra: a.extra || [],
+      source_file: a.source_file,
+      source_mtime: a.source_mtime || sourceMtime || Date.now(),
+    };
+  });
 }
 
 // ── brute-force fallback: scan every cell for emails ──
@@ -479,7 +498,7 @@ function bruteForceExtract(rows, sourceFile, sourceMtime) {
         if (!totp_secret && isOtpauthUrl(rv)) { totp_secret = extractTotpFromUrl(rv) || normalizeTotp(rv); }
         else if (!totp_secret && isTotpLike(rv)) { totp_secret = normalizeTotp(rv); }
         else if (!youtube && isUrlLike(rv)) { youtube = rv; }
-        else if (!recovery && isEmail(rv)) { recovery = rv; }
+        else if (!recovery && isEmail(rv) && normalizeEmail(rv) !== key) { recovery = rv; }
         else if (isPhoneNumber(rv)) { extraValues.push(rv); }
         else if (isSixDigitCode(rv)) { extraValues.push(rv); }
         else { passwordCandidates.push(rv); }
@@ -562,7 +581,9 @@ function extractAccountsFromSheet(sheet, sourceFile, sourceMtime) {
       password = '';
     }
     if (password && (isPhoneNumber(password) || isSixDigitCode(password))) { password = ''; }
+    if (password && isUrlLike(password)) { password = ''; }
     if (recovery && !isEmail(recovery)) recovery = '';
+    if (recovery && normalizeEmail(recovery) === normalizeEmail(email)) recovery = '';
 
     if (isOtpauthUrl(totpRaw)) {
       totpRaw = extractTotpFromUrl(totpRaw) || totpRaw;
@@ -705,8 +726,13 @@ function parseMultipartManual(req) {
     const timeout = setTimeout(() => {
       if (!settled) {
         settled = true;
-        console.error('[upload-excels] busboy timeout 5min, files so far:', files.length, 'pending:', pending.filter(p => !p.done).length);
-        resolve(files);
+        const pendingCount = pending.filter(p => !p.done).length;
+        console.error('[upload-excels] busboy timeout 5min, files so far:', files.length, 'pending:', pendingCount);
+        if (pendingCount > 0) {
+          reject(new Error('upload timeout with ' + pendingCount + ' pending files'));
+        } else {
+          resolve(files);
+        }
       }
     }, 300000);
     req.on('error', (e) => {
@@ -728,7 +754,7 @@ function mountRoutes(app) {
 
   let _fileLock = Promise.resolve();
   function withFileLock(fn) {
-    _fileLock = _fileLock.then(fn, () => fn());
+    _fileLock = _fileLock.then(fn, (err) => { console.error('[upload-excels] previous lock holder error:', err && err.message); return fn(); });
     return _fileLock;
   }
 
@@ -740,7 +766,7 @@ function mountRoutes(app) {
       files = await parseMultipartManual(req);
     } catch (err) {
       console.error('[upload-excels] parse error:', err.message);
-      return res.status(500).json({ ok: false, error: 'upload failed: ' + err.message });
+      return res.status(500).json({ ok: false, error: 'upload failed' });
     }
     if (!files || !files.length) return res.status(400).json({ ok: false, error: 'no files' });
 
@@ -825,7 +851,7 @@ function mountRoutes(app) {
         res.json({ ok: true, total_master: allAccounts.length, total_parsed: totalParsed, added: totalAdded, updated: totalUpdated, files: fileResults, conflicts_count: 0, conflicts: [] });
       } catch(e) {
         console.error('[upload-excels] error:', e);
-        if (!res.headersSent) res.status(500).json({ ok: false, error: e.message });
+        if (!res.headersSent) res.status(500).json({ ok: false, error: 'internal error' });
       }
     });
   });

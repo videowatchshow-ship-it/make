@@ -68,8 +68,8 @@ function fixSourceMtimes() {
           fixed++;
         } else if (sf && uploadsDir) {
           try {
-            const fp = path.join(uploadsDir, sf);
-            if (fs.existsSync(fp)) { a.source_mtime = fs.statSync(fp).mtimeMs; fixed++; }
+            const fp = path.resolve(uploadsDir, path.basename(sf));
+            if (fp.startsWith(path.resolve(uploadsDir) + path.sep) && fs.existsSync(fp)) { a.source_mtime = fs.statSync(fp).mtimeMs; fixed++; }
           } catch {}
         }
         if (!a.source_mtime || a.source_mtime < 1000000000000) {
@@ -245,12 +245,12 @@ module.exports = function(app) {
       const account = accounts.find(a => normalizeEmail(a.email) === normalizeEmail(email));
       if (!account) return res.status(404).json({ ok: false, error: 'account not found' });
       account.totp_secret = normalized;
-      const tmpFile = dataFile + '.tmp.' + process.pid;
+      const tmpFile = dataFile + '.tmp.' + process.pid + '.' + Date.now();
       fs.writeFileSync(tmpFile, JSON.stringify(accounts, null, 2));
       fs.renameSync(tmpFile, dataFile);
       res.json({ ok: true, email, secret_length: normalized.length });
     } catch (e) {
-      res.status(500).json({ ok: false, error: e.message });
+      console.error('[gauth-api] error:', e.message); res.status(500).json({ ok: false, error: 'internal error' });
     }
   });
 
@@ -332,7 +332,7 @@ module.exports = function(app) {
       }
       res.json({ ok: true });
     } catch (e) {
-      res.status(500).json({ ok: false, error: e.message });
+      console.error('[gauth-api] error:', e.message); res.status(500).json({ ok: false, error: 'internal error' });
     }
   });
 
@@ -359,7 +359,7 @@ module.exports = function(app) {
         extra: account.extra || []
       });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      console.error('[gauth-api] error:', e.message); res.status(500).json({ error: 'internal error' });
     }
   });
 
@@ -381,7 +381,7 @@ module.exports = function(app) {
       }
       res.json({ ok: true, query: q, total_accounts: accounts.length, found: results.length, results: results.slice(0, 50) });
     } catch (e) {
-      res.status(500).json({ ok: false, error: e.message });
+      console.error('[gauth-api] error:', e.message); res.status(500).json({ ok: false, error: 'internal error' });
     }
   });
 
@@ -490,7 +490,7 @@ module.exports = function(app) {
       writeYtTokens(tokens);
       res.json({ ok: true });
     } catch (e) {
-      res.status(500).json({ ok: false, error: e.message });
+      console.error('[gauth-api] error:', e.message); res.status(500).json({ ok: false, error: 'internal error' });
     }
   });
 
@@ -614,7 +614,7 @@ module.exports = function(app) {
       }
       res.json({ ok: true, fixed, total: accounts.length });
     } catch (e) {
-      res.status(500).json({ ok: false, error: e.message });
+      console.error('[gauth-api] error:', e.message); res.status(500).json({ ok: false, error: 'internal error' });
     }
   });
 
