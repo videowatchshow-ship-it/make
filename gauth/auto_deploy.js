@@ -53,6 +53,43 @@ function safeReadJSON(filePath) {
   }
 }
 
+function fixSourceMtimes() {
+  try {
+    const accounts = safeReadJSON(DATA_FILE);
+    if (!accounts.length) return;
+    let fixed = 0;
+    const uploadsDir = path.join(DATA_DIR, 'uploads');
+    for (const a of accounts) {
+      if (!a.source_mtime || a.source_mtime < 1000000000000) {
+        const sf = a.source_file || '';
+        const tsMatch = sf.match(/up_(\d{13})_/);
+        if (tsMatch) {
+          a.source_mtime = parseInt(tsMatch[1]);
+          fixed++;
+        } else if (sf && uploadsDir) {
+          try {
+            const fp = path.join(uploadsDir, sf);
+            if (fs.existsSync(fp)) { a.source_mtime = fs.statSync(fp).mtimeMs; fixed++; }
+          } catch {}
+        }
+        if (!a.source_mtime || a.source_mtime < 1000000000000) {
+          a.source_mtime = Date.now();
+          fixed++;
+        }
+      }
+    }
+    if (fixed > 0) {
+      const tmp = DATA_FILE + '.tmp.' + process.pid;
+      fs.writeFileSync(tmp, JSON.stringify(accounts, null, 2));
+      fs.renameSync(tmp, DATA_FILE);
+      console.log('[auto_deploy] fixSourceMtimes: patched ' + fixed + ' accounts');
+    }
+  } catch (e) {
+    console.error('[auto_deploy] fixSourceMtimes error:', e.message);
+  }
+}
+fixSourceMtimes();
+
 module.exports = function(app) {
   app.get('/api/accounts', (req, res) => {
     try {
