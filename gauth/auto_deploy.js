@@ -557,12 +557,26 @@ module.exports = function(app) {
     res.json({ ...batchQueue });
   });
 
-  app.post('/api/batch-connect/stop', authMiddleware, (req, res) => {
+  function batchAuth(req, res, next) {
+    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+      || (req.query && req.query.token) || '';
+    const mlPw = process.env.ML_PASSWORD || '1147';
+    const apiToken = process.env.GAUTH_API_TOKEN || '';
+    if (!token) return res.status(401).json({ ok: false, error: 'unauthorized' });
+    if (token === mlPw) return next();
+    if (apiToken) {
+      const hmac = (s) => crypto.createHmac('sha256', 'gauth').update(s).digest();
+      try { if (crypto.timingSafeEqual(hmac(token), hmac(apiToken))) return next(); } catch {}
+    }
+    return res.status(401).json({ ok: false, error: 'unauthorized' });
+  }
+
+  app.post('/api/batch-connect/stop', batchAuth, (req, res) => {
     batchQueue.running = false;
     res.json({ ok: true, msg: 'stopped' });
   });
 
-  app.post('/api/batch-connect/start', authMiddleware, async (req, res) => {
+  app.post('/api/batch-connect/start', batchAuth, async (req, res) => {
     if (batchQueue.running) {
       return res.status(409).json({ ok: false, error: 'ALREADY_RUNNING' });
     }

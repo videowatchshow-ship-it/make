@@ -1,72 +1,43 @@
 {
-  "name": "youtube-account-manager",
-  "version": "2.0.0",
-  "description": "YouTube 계정 관리 및 자동 로그인 도구",
-  "main": "main.js",
+  "name": "google-login-bot",
+  "version": "1.0.0",
+  "description": "YouTube 계정 자동 로그인 및 뷰봇 관리 시스템",
+  "main": "real-browser-login.js",
+  "type": "commonjs",
   "scripts": {
-    "start": "electron .",
-    "build": "electron-builder",
-    "pack": "electron-builder --dir",
-    "dist": "electron-builder",
-    "auto-login": "node puppeteer-login.js"
+    "start": "node real-browser-login.js",
+    "dev": "node real-browser-login.js",
+    "server": "node server.js",
+    "test": "node test-browser-simple.js",
+    "check-env": "node env-validator.js",
+    "check-paths": "node path-validator.js",
+    "security-check": "node security-check.js",
+    "validate": "npm run check-env && npm run check-paths && npm run security-check",
+    "diagnose": "node diagnostics.js",
+    "logs": "tail -f logs/*.log"
   },
   "keywords": [
+    "puppeteer",
+    "google-login",
     "youtube",
-    "account",
-    "manager",
-    "totp",
-    "2fa",
     "automation"
   ],
-  "author": "Your Company",
-  "license": "Commercial",
+  "author": "Team",
+  "license": "ISC",
   "dependencies": {
-    "xlsx": "^0.18.5",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
     "otplib": "^12.0.1",
-    "hi-base32": "^0.5.1",
-    "puppeteer": "^22.0.0",
+    "puppeteer-real-browser": "^1.0.2",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "electron-store": "^8.1.0"
-  },
-  "optionalDependencies": {
-    "puppeteer-extra-plugin-recaptcha": "^3.6.8"
+    "ws": "^8.13.0"
   },
   "devDependencies": {
-    "electron": "^29.0.0",
-    "electron-builder": "^24.13.3"
+    "puppeteer": "^19.0.0"
   },
-  "build": {
-    "appId": "com.yourcompany.youtube-account-manager",
-    "productName": "YouTube Account Manager Pro",
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "**/*",
-      "!**/{.git,node_modules,dist,profiles}/*"
-    ],
-    "mac": {
-      "category": "public.app-category.productivity",
-      "target": [
-        "dmg",
-        "zip"
-      ],
-      "icon": "icon.icns"
-    },
-    "win": {
-      "target": [
-        "nsis",
-        "portable"
-      ],
-      "icon": "icon.ico"
-    },
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
-      "category": "Utility"
-    }
+  "engines": {
+    "node": ">=14.0.0",
+    "npm": ">=6.0.0"
   }
 }
