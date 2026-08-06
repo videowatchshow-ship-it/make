@@ -988,9 +988,9 @@ async function lookup(){
     PAGE = 1
     render()
     setTimeout(()=>{
-      const vp = document.getElementById('viewport')
-      if(vp) vp.scrollTo({top:0})
-      document.getElementById('viewport').scrollIntoView({behavior:'smooth',block:'start'})
+      var vp2 = document.getElementById('viewport')
+      if(vp2) vp2.scrollTo({top:0})
+      if(vp2) vp2.scrollIntoView({behavior:'smooth',block:'start'})
     }, 100)
   }
 }
@@ -1106,7 +1106,7 @@ async function tdRefreshCode(idx, secret, btn){
 }
 /* YouTube API OAuth 연동 */
 var _ytClientId = '';
-(async function(){ try { const r = await fetch('/api/youtube/client-id'); const j = await r.json(); _ytClientId = j.client_id || ''; } catch{} })();
+(async function(){ try { const r = await fetch(authQuery('/api/youtube/client-id'),{headers:authHeaders()}); const j = await r.json(); _ytClientId = j.client_id || ''; } catch{} })();
 
 async function ytApiConnect(email, btn) {
   if (!_ytClientId) { alert('YouTube OAuth Client ID가 서버에 설정되지 않았습니다.\nYOUTUBE_OAUTH_CLIENT_ID 환경변수를 설정하세요.'); return; }
@@ -1132,7 +1132,7 @@ async function ytApiConnect(email, btn) {
         const token = params.get('access_token');
         const expiresIn = parseInt(params.get('expires_in') || '3600');
         if (token) {
-          await fetch('/api/youtube/save-token', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, access_token: token, expires_at: Date.now() + expiresIn * 1000 }) });
+          await fetch(authQuery('/api/youtube/save-token'), { method: 'POST', headers: authHeaders({'content-type': 'application/json'}), body: JSON.stringify({ email, access_token: token, expires_at: Date.now() + expiresIn * 1000 }) });
           btn.textContent = '✅ 연결됨'; btn.style.background = '#0d3222'; btn.style.color = '#3ddc84';
           setTimeout(() => { btn.textContent = orig; btn.disabled = false; btn.style.background = ''; btn.style.color = ''; }, 2000);
         } else { btn.textContent = '❌ 실패'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000); }
@@ -1144,10 +1144,10 @@ async function ytApiConnect(email, btn) {
 async function ytChatShot(email, message, btn) {
   const orig = btn.textContent; btn.disabled = true; btn.textContent = '⏳ 전송 중…';
   try {
-    const br = await fetch('/api/youtube/live-chat-id/' + encodeURIComponent(email)); const bj = await br.json();
+    const br = await fetch(authQuery('/api/youtube/live-chat-id/' + encodeURIComponent(email)),{headers:authHeaders()}); const bj = await br.json();
     if (!bj.ok || !bj.broadcasts || !bj.broadcasts.length) { alert('현재 활성 방송이 없습니다.'); btn.textContent = orig; btn.disabled = false; return; }
     const liveChatId = bj.broadcasts[0].liveChatId;
-    const r = await fetch('/api/youtube/chat-message', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, liveChatId, message }) });
+    const r = await fetch(authQuery('/api/youtube/chat-message'), { method: 'POST', headers: authHeaders({'content-type': 'application/json'}), body: JSON.stringify({ email, liveChatId, message }) });
     const j = await r.json();
     if (j.ok) { btn.textContent = '✅ 전송됨'; btn.style.background = '#0d3222'; }
     else { btn.textContent = '❌ 실패'; alert('채팅 전송 실패: ' + JSON.stringify(j.data && j.data.error ? j.data.error.message : j)); }
@@ -1160,14 +1160,14 @@ async function ytSpanner(email, btn) {
   if (_spannerInterval) { clearInterval(_spannerInterval); _spannerInterval = null; }
   const orig = btn.textContent; btn.disabled = true; btn.textContent = '⏳ 로딩…';
   try {
-    const br = await fetch('/api/youtube/live-chat-id/' + encodeURIComponent(email)); const bj = await br.json();
+    const br = await fetch(authQuery('/api/youtube/live-chat-id/' + encodeURIComponent(email)),{headers:authHeaders()}); const bj = await br.json();
     if (!bj.ok || !bj.broadcasts || !bj.broadcasts.length) { alert('현재 활성 방송이 없습니다.'); btn.textContent = orig; btn.disabled = false; return; }
     const liveChatId = bj.broadcasts[0].liveChatId;
     let box = document.getElementById('spanner-box');
     if (!box) { box = document.createElement('div'); box.id = 'spanner-box'; box.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#0f1318;border:2px solid #ff9040;border-radius:12px;padding:20px;z-index:10000;max-width:400px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.7)'; document.body.appendChild(box); }
     box.style.display = 'block';
     async function loadViewers() {
-      const r = await fetch('/api/youtube/chat-list/' + encodeURIComponent(email) + '?liveChatId=' + encodeURIComponent(liveChatId));
+      const r = await fetch(authQuery('/api/youtube/chat-list/' + encodeURIComponent(email) + '?liveChatId=' + encodeURIComponent(liveChatId)),{headers:authHeaders()});
       const j = await r.json();
       if (!j.ok) return;
       const seen = new Map();
@@ -1189,7 +1189,7 @@ async function ytSpanner(email, btn) {
 async function ytAddMod(email, liveChatId, channelId, btn) {
   const orig = btn.textContent; btn.disabled = true; btn.textContent = '⏳';
   try {
-    const r = await fetch('/api/youtube/add-moderator', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, liveChatId, channelId }) });
+    const r = await fetch(authQuery('/api/youtube/add-moderator'), { method: 'POST', headers: authHeaders({'content-type': 'application/json'}), body: JSON.stringify({ email, liveChatId, channelId }) });
     const j = await r.json();
     if (j.ok) { btn.textContent = '✅ 완료'; btn.style.background = '#0d3222'; }
     else { btn.textContent = '❌'; alert('스패너 실패: ' + JSON.stringify(j.data && j.data.error ? j.data.error.message : j)); }

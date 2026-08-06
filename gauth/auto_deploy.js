@@ -91,14 +91,21 @@ function fixSourceMtimes() {
 fixSourceMtimes();
 
 module.exports = function(app) {
-  app.get('/api/accounts', (req, res) => {
+  function safePath(base, name) {
+    const resolved = path.resolve(base, name);
+    if (!resolved.startsWith(path.resolve(base) + path.sep)) return null;
+    return resolved;
+  }
+
+  app.get('/api/accounts', authMiddleware, (req, res) => {
     try {
       const accounts = safeReadJSON(DATA_FILE);
       const profilesDir = PROFILES_DIR;
       let sessCount = 0;
       const mapped = accounts.map(a => {
         const has2FA = !!(a.totp_secret && a.totp_secret.trim());
-        const hasSess = fs.existsSync(path.join(profilesDir, a.email || ''));
+        const sessPath = safePath(profilesDir, a.email || '');
+        const hasSess = sessPath ? fs.existsSync(sessPath) : false;
         if (hasSess) sessCount++;
         return { email: a.email, has2FA, has_session: hasSess };
       });
@@ -239,7 +246,7 @@ module.exports = function(app) {
     }
   });
 
-  app.get('/api/normalized-accounts', (req, res) => {
+  app.get('/api/normalized-accounts', authMiddleware, (req, res) => {
     try {
       const accounts = safeReadJSON(DATA_FILE);
       let filesScanned = 0;
@@ -268,13 +275,14 @@ module.exports = function(app) {
   });
 
   /* ref: https://github.com/nodejs/node/blob/main/doc/api/fs.md#fsreaddirsyncpath-options */
-  app.get('/api/profiles', (req, res) => {
+  app.get('/api/profiles', authMiddleware, (req, res) => {
     try {
       const profilesDir = PROFILES_DIR;
       const profiles = [];
       if (fs.existsSync(profilesDir)) {
         for (const folder of fs.readdirSync(profilesDir)) {
-          const fullPath = path.join(profilesDir, folder);
+          const fullPath = safePath(profilesDir, folder);
+          if (!fullPath) continue;
           if (fs.statSync(fullPath).isDirectory()) {
             /* 폴더명→이메일: 첫 _ → @, 이후 _ → . (multi-dot 도메인 대응) */
         const email = folder.replace(/^([^_]+)_(.+)$/, (_, u, d) => u + '@' + d.replace(/_/g, '.'));
@@ -288,7 +296,7 @@ module.exports = function(app) {
     }
   });
 
-  app.get('/api/failed-accounts', (req, res) => {
+  app.get('/api/failed-accounts', authMiddleware, (req, res) => {
     try {
       const failFile = path.join(DATA_DIR, 'failed_accounts.json');
       if (fs.existsSync(failFile)) {
@@ -301,7 +309,7 @@ module.exports = function(app) {
     }
   });
 
-  app.delete('/api/failed-accounts/:email', (req, res) => {
+  app.delete('/api/failed-accounts/:email', authMiddleware, (req, res) => {
     try {
       const email = (req.params.email || '').trim().toLowerCase();
       const failFile = path.join(DATA_DIR, 'failed_accounts.json');
@@ -318,7 +326,7 @@ module.exports = function(app) {
     }
   });
 
-  app.get('/api/lookup/:email', (req, res) => {
+  app.get('/api/lookup/:email', authMiddleware, (req, res) => {
     try {
       const email = normalizeEmail(req.params.email);
       if (!email) return res.status(400).json({ error: 'email required' });
@@ -326,8 +334,8 @@ module.exports = function(app) {
       const accounts = safeReadJSON(dataFile);
       const account = accounts.find(a => normalizeEmail(a.email) === email);
       if (!account) return res.status(404).json({ error: 'not found' });
-      const profileDir = path.join(PROFILES_DIR, account.email);
-      const hasSession = fs.existsSync(profileDir);
+      const profileDir = safePath(PROFILES_DIR, account.email);
+      const hasSession = profileDir ? fs.existsSync(profileDir) : false;
       res.json({
         email: account.email,
         password: account.password || '',
@@ -345,7 +353,7 @@ module.exports = function(app) {
     }
   });
 
-  app.get('/api/search-account', (req, res) => {
+  app.get('/api/search-account', authMiddleware, (req, res) => {
     try {
       const q = (req.query.q || '').trim().toLowerCase();
       if (!q || q.length < 3) return res.status(400).json({ ok: false, error: 'query too short (min 3 chars)' });
@@ -420,12 +428,12 @@ module.exports = function(app) {
     if (!account) return res.status(404).json({ success: false, reason: 'ACCOUNT_NOT_FOUND' });
     if (!account.password) return res.status(400).json({ success: false, reason: 'UNKNOWN_PASSWORD' });
 
-    loginQueue.set(email, Date.now());
+    loginQueue.set(emailKey, Date.now());
     let loginModule;
     try {
       loginModule = require(path.join(__dirname, 'advanced-google-login-v2.js'));
     } catch (e) {
-      loginQueue.delete(email);
+      loginQueue.delete(emailKey);
       return res.status(500).json({ success: false, reason: 'LOGIN_MODULE_ERROR', error: e.message });
     }
 
@@ -434,7 +442,7 @@ module.exports = function(app) {
         { email: account.email, password: account.password, twoFA: account.totp_secret || '' },
         { headless: false, timeout: 90000 }
       );
-      loginQueue.delete(email);
+      loginQueue.delete(emailKey);
       if (result && result.success) {
         if (result.browser) try { await result.browser.close(); } catch (_) {}
         return res.json({ success: true, result: result.result });
@@ -442,7 +450,7 @@ module.exports = function(app) {
       if (result && result.browser) try { await result.browser.close(); } catch (_) {}
       return res.json({ success: false, reason: result ? result.result : 'UNKNOWN_ERROR' });
     } catch (e) {
-      loginQueue.delete(email);
+      loginQueue.delete(emailKey);
       return res.status(500).json({ success: false, reason: 'LOGIN_EXCEPTION', error: e.message });
     }
   });
@@ -476,7 +484,7 @@ module.exports = function(app) {
     }
   });
 
-  app.get('/api/youtube/token-status/:email', (req, res) => {
+  app.get('/api/youtube/token-status/:email', authMiddleware, (req, res) => {
     const tokens = readYtTokens();
     const t = tokens[normalizeEmail(req.params.email)];
     if (!t) return res.json({ connected: false });
@@ -503,13 +511,13 @@ module.exports = function(app) {
     r.write(body); r.end();
   });
 
-  app.get('/api/youtube/live-chat-id/:email', (req, res) => {
+  app.get('/api/youtube/live-chat-id/:email', authMiddleware, (req, res) => {
     const tokens = readYtTokens();
     const t = tokens[normalizeEmail(req.params.email)];
     if (!t || !t.access_token) return res.status(401).json({ ok: false, error: 'not connected' });
     const https = require('https');
     const r = https.request({
-      hostname: 'www.googleapis.com', path: '/youtube/v3/liveBroadcasts?part=snippet,contentDetails&broadcastStatus=active&broadcastType=all',
+      hostname: 'www.googleapis.com', path: '/youtube/v3/liveBroadcasts?part=snippet,contentDetails,status&broadcastStatus=active&broadcastType=all',
       method: 'GET', headers: { 'Authorization': 'Bearer ' + t.access_token }
     }, (resp) => {
       let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
@@ -524,7 +532,7 @@ module.exports = function(app) {
     r.end();
   });
 
-  app.get('/api/youtube/chat-list/:email', (req, res) => {
+  app.get('/api/youtube/chat-list/:email', authMiddleware, (req, res) => {
     const tokens = readYtTokens();
     const t = tokens[normalizeEmail(req.params.email)];
     if (!t || !t.access_token) return res.status(401).json({ ok: false, error: 'not connected' });

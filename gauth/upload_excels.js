@@ -270,7 +270,7 @@ function tryVerticalExtract(rows, sourceFile, sourceMtime) {
   if (lvAccounts && lvAccounts.length) return lvAccounts;
 
   if (maxCols <= 4) {
-    const stackedAccounts = tryStackedExtract(rows, maxCols, sourceFile);
+    const stackedAccounts = tryStackedExtract(rows, maxCols, sourceFile, sourceMtime);
     if (stackedAccounts && stackedAccounts.length) return stackedAccounts;
   }
 
@@ -361,7 +361,7 @@ function tryLabelValueExtract(rows, maxCols, sourceFile) {
   return accounts.length ? accounts : null;
 }
 
-function tryStackedExtract(rows, maxCols, sourceFile) {
+function tryStackedExtract(rows, maxCols, sourceFile, sourceMtime) {
   if (maxCols > 4) return null;
 
   const values = [];
@@ -419,6 +419,7 @@ function tryStackedExtract(rows, maxCols, sourceFile) {
     youtube_url: a.youtube || '',
     extra: a.extra || [],
     source_file: a.source_file,
+    source_mtime: a.source_mtime || sourceMtime || Date.now(),
   }));
 }
 
