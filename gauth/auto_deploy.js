@@ -571,5 +571,29 @@ module.exports = function(app) {
     r.write(body); r.end();
   });
 
-  console.log('[auto_deploy] routes registered: /api/accounts, /api/normalized-accounts, /api/profiles, /api/failed-accounts, /api/deploy, /api/update-secret, /api/lookup/:email, /api/search-account, /api/deploy-status, /api/login-one, /api/youtube/*');
+  app.post('/api/fix-mtime', (req, res) => {
+    try {
+      const accounts = safeReadJSON(DATA_FILE);
+      let fixed = 0;
+      for (const a of accounts) {
+        if (!a.source_mtime || a.source_mtime < 1000000000000) {
+          const sf = a.source_file || '';
+          const tsMatch = sf.match(/up_(\d{13})_/);
+          if (tsMatch) { a.source_mtime = parseInt(tsMatch[1]); }
+          else { a.source_mtime = Date.now(); }
+          fixed++;
+        }
+      }
+      if (fixed > 0) {
+        const tmp = DATA_FILE + '.tmp.' + process.pid;
+        fs.writeFileSync(tmp, JSON.stringify(accounts, null, 2));
+        fs.renameSync(tmp, DATA_FILE);
+      }
+      res.json({ ok: true, fixed, total: accounts.length });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  console.log('[auto_deploy] routes registered: /api/accounts, /api/normalized-accounts, /api/profiles, /api/failed-accounts, /api/deploy, /api/update-secret, /api/lookup/:email, /api/search-account, /api/deploy-status, /api/login-one, /api/youtube/*, /api/fix-mtime');
 };
