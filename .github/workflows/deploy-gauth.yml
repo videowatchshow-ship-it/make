@@ -55,7 +55,7 @@ jobs:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          script_stop: false
+          script_stop: true
           command_timeout: 5m
           script: |
             set -eo pipefail
@@ -143,16 +143,18 @@ jobs:
             # ===== 4. 코드 배포 =====
             echo "=== [4/6] Deploy code ==="
             sudo mkdir -p /opt/gauth-full /var/www/sites/gauth/public
-            sudo chown -R $(whoami) /opt/gauth-full /var/www/sites/gauth/public
+            sudo chown -R "$(whoami)" /opt/gauth-full /var/www/sites/gauth/public
             cd /opt/gauth-full
-            curl -sfL "${RAW}/gauth/upload_excels.js" -o upload_excels.js && echo "  upload_excels.js OK" || echo "  upload_excels.js FAIL"
-            curl -sfL "${RAW}/gauth/auto_deploy.js" -o auto_deploy.js && echo "  auto_deploy.js OK" || echo "  auto_deploy.js FAIL"
-            curl -sfL "${RAW}/gauth/index.html" -o /var/www/sites/gauth/public/index.html && echo "  index.html OK" || echo "  index.html FAIL"
-            curl -sfL "${RAW}/gauth/xlsx.core.min.js" -o /var/www/sites/gauth/public/xlsx.core.min.js && echo "  xlsx.core.min.js OK" || echo "  xlsx.core.min.js FAIL"
-            curl -sfL "${RAW}/gauth/manifest.json" -o /var/www/sites/gauth/public/manifest.json && echo "  manifest.json OK" || echo "  manifest.json FAIL"
-            curl -sfL "${RAW}/gauth/sw.js" -o /var/www/sites/gauth/public/sw.js && echo "  sw.js OK" || echo "  sw.js FAIL"
-            curl -sfL "${RAW}/advanced-google-login-v2.js" -o advanced-google-login-v2.js && echo "  advanced-google-login-v2.js OK" || echo "  advanced-google-login-v2.js FAIL"
-            curl -sfL "${RAW}/package.json" -o package.json && echo "  package.json OK" || echo "  package.json FAIL"
+            FAIL=0
+            curl -sfL "${RAW}/gauth/upload_excels.js" -o upload_excels.js && echo "  upload_excels.js OK" || { echo "  upload_excels.js FAIL"; FAIL=1; }
+            curl -sfL "${RAW}/gauth/auto_deploy.js" -o auto_deploy.js && echo "  auto_deploy.js OK" || { echo "  auto_deploy.js FAIL"; FAIL=1; }
+            curl -sfL "${RAW}/gauth/index.html" -o /var/www/sites/gauth/public/index.html && echo "  index.html OK" || { echo "  index.html FAIL"; FAIL=1; }
+            curl -sfL "${RAW}/gauth/xlsx.core.min.js" -o /var/www/sites/gauth/public/xlsx.core.min.js && echo "  xlsx.core.min.js OK" || echo "  xlsx.core.min.js FAIL (optional)"
+            curl -sfL "${RAW}/gauth/manifest.json" -o /var/www/sites/gauth/public/manifest.json && echo "  manifest.json OK" || echo "  manifest.json FAIL (optional)"
+            curl -sfL "${RAW}/gauth/sw.js" -o /var/www/sites/gauth/public/sw.js && echo "  sw.js OK" || echo "  sw.js FAIL (optional)"
+            curl -sfL "${RAW}/advanced-google-login-v2.js" -o advanced-google-login-v2.js && echo "  advanced-google-login-v2.js OK" || echo "  advanced-google-login-v2.js FAIL (optional)"
+            curl -sfL "${RAW}/package.json" -o package.json && echo "  package.json OK" || echo "  package.json FAIL (optional)"
+            if [ "$FAIL" = "1" ]; then echo "CRITICAL files failed to download"; exit 1; fi
             echo "Files downloaded"
 
             # ===== 5. npm install =====
@@ -503,7 +505,7 @@ jobs:
             echo "=== [POST-DEPLOY] Real Excel upload + lookup test ==="
             # systemd 서비스에서 GAUTH_API_TOKEN 읽기
             GAUTH_TOKEN=$(grep -oP 'GAUTH_API_TOKEN=\K.*' /etc/systemd/system/gauth.service 2>/dev/null | head -1)
-            echo "Token found: ${GAUTH_TOKEN:+yes (${#GAUTH_TOKEN} chars)}"
+            echo "Token found: ${GAUTH_TOKEN:+yes}"
             cd /opt/gauth-full
             export GAUTH_TOKEN
 
@@ -697,10 +699,13 @@ jobs:
 
       - name: Summary
         if: always()
+        env:
+          DEPLOY_OK: ${{ steps.api_deploy.outputs.deploy_ok }}
+          SSH_OUTCOME: ${{ steps.ssh_deploy.outcome }}
         run: |
-          if [ "${{ steps.api_deploy.outputs.deploy_ok }}" = "true" ]; then
+          if [ "$DEPLOY_OK" = "true" ]; then
             echo "## Deploy SUCCESS via API" >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ steps.ssh_deploy.outcome }}" = "success" ]; then
+          elif [ "$SSH_OUTCOME" = "success" ]; then
             echo "## Deploy SUCCESS via SSH" >> $GITHUB_STEP_SUMMARY
           else
             echo "## Deploy FAILED" >> $GITHUB_STEP_SUMMARY
