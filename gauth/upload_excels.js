@@ -29,7 +29,8 @@ const path = require('path');
 
 function normalizeTotp(s) {
   if (!s) return '';
-  return String(s).toUpperCase().replace(/[\s\-_=]/g, '').replace(/[^A-Z2-7]/g, '');
+  const n = String(s).toUpperCase().replace(/[\s\-_=]/g, '').replace(/[^A-Z2-7]/g, '');
+  return n || '';
 }
 
 /* RFC 5322 Section 3.4.1 간소화 — IP 리터럴, 따옴표 로컬파트 등 미지원
@@ -57,11 +58,15 @@ function normalizeEmail(s) {
 
 function isPhoneNumber(s) {
   s = String(s || '').trim();
-  return /^[\+]?[\d\s\-()]{7,20}$/.test(s) && (s.replace(/[^\d]/g, '').length >= 7);
+  if (!/^[\+]?[\d\s\-()]{7,20}$/.test(s)) return false;
+  const digits = s.replace(/[^\d]/g, '');
+  if (digits.length < 7 || digits.length > 15) return false;
+  if (/^(\d)\1+$/.test(digits)) return false;
+  return /[\s\-()]+/.test(s) || /^\+/.test(s) || (digits.length >= 10 && digits.length <= 15);
 }
 
 function isSixDigitCode(s) {
-  return /^\d{5,8}$/.test(String(s || '').trim());
+  return /^\d{6,8}$/.test(String(s || '').trim());
 }
 
 function isTotpLike(s) {
@@ -72,7 +77,8 @@ function isTotpLike(s) {
   if (/^https?:\/\//i.test(s)) return false;
   if (isPhoneNumber(s)) return false;
   if (/[\/\\:;!#$%^&*()+=\[\]{}|<>?]/.test(s) && !/^[A-Z2-7]+=*$/i.test(s)) return false;
-  if (/^[a-z0-9]{16,}$/i.test(s) && /[089]/.test(s)) return false;
+  if (/^[a-z0-9]{16,}$/.test(s) && /[089]/.test(s)) return false;
+  if (/^[A-Za-z0-9]{16,}$/.test(s) && /[a-z]/.test(s) && /[089]/.test(s)) return false;
   if (/\s/.test(s) && !/^[A-Z2-7\s]+$/i.test(s)) return false;
   const n = normalizeTotp(s);
   /* RFC 4226 Section 4: HMAC-SHA1 최소 128-bit = 20 Base32 문자
@@ -93,13 +99,16 @@ function extractTotpFromUrl(s) {
   if (!/^otpauth:\/\//i.test(s)) return null;
   try { s = decodeURIComponent(s); } catch (_) { return null; }
   const m = s.match(/[?&]secret=([A-Z2-7=]+)/i);
-  if (m) return m[1].toUpperCase().replace(/=+$/, '');
+  if (m) {
+    const secret = m[1].toUpperCase().replace(/=+$/, '');
+    return secret.length >= 16 ? secret : null;
+  }
   return null;
 }
 
 function isUrlLike(s) {
   s = String(s || '').trim();
-  return /^https?:\/\//i.test(s) || /youtube\.com|youtu\.be/i.test(s);
+  return /^https?:\/\//i.test(s) || /^(www\.)?youtube\.com/i.test(s) || /^(www\.)?youtu\.be/i.test(s);
 }
 
 function isOtpauthUrl(s) {
@@ -133,7 +142,11 @@ function detectHeaderMapping(row) {
       }
     }
   }
-  if (matched >= 2 && mapping.email !== undefined) return mapping;
+  if (matched >= 2 && mapping.email !== undefined) {
+    const hasDataValues = row.some(c => { const v = String(c || '').trim(); return v && isEmail(v); });
+    if (hasDataValues) return null;
+    return mapping;
+  }
   return null;
 }
 
@@ -190,6 +203,9 @@ function analyzeColumns(rows) {
   const emailCols = stats
     .filter(s => s.nonEmpty > 0 && s.emails / s.nonEmpty > 0.1)
     .sort((a, b) => {
+      const aGmail = a.values.filter(v => isEmail(v) && /@g(oogle)?mail\.com$/i.test(v)).length;
+      const bGmail = b.values.filter(v => isEmail(v) && /@g(oogle)?mail\.com$/i.test(v)).length;
+      if (aGmail !== bGmail) return bGmail - aGmail;
       const rd = (b.emails / b.nonEmpty) - (a.emails / a.nonEmpty);
       return rd !== 0 ? rd : a.col - b.col;
     });
@@ -439,7 +455,6 @@ function tryStackedExtract(rows, maxCols, sourceFile, sourceMtime) {
     }
     else if (isTotpLike(v) && !cur.totp) { cur.totp = v; }
     else if (isUrlLike(v) && !cur.youtube) { cur.youtube = v; }
-    else if (isEmail(v) && !cur.recovery) { cur.recovery = v; }
     else if (isPhoneNumber(v)) { cur.extra.push(v); }
     else if (isSixDigitCode(v)) { cur.extra.push(v); }
     else if (!cur.password) { cur.password = v; }
@@ -490,6 +505,12 @@ function bruteForceExtract(rows, sourceFile, sourceMtime) {
         if (c2 === c) continue;
         const rv = String(row[c2] || '').trim();
         if (rv) rest.push(rv);
+      }
+      if (rest.length === 0 && i + 1 < rows.length && rows[i + 1]) {
+        for (let c2 = 0; c2 < rows[i + 1].length; c2++) {
+          const rv = String(rows[i + 1][c2] || '').trim();
+          if (rv && !isEmail(rv)) rest.push(rv);
+        }
       }
       let password = '', totp_secret = '', recovery = '', youtube = '';
       const passwordCandidates = [];
@@ -542,8 +563,13 @@ function extractAccountsFromSheet(sheet, sourceFile, sourceMtime) {
     let sampleStart = 0;
     if (rows.length > 1) {
       for (let i = 0; i < Math.min(3, rows.length); i++) {
-        const firstCell = String((rows[i] && rows[i][0]) || '').trim();
-        if (firstCell && !isEmail(firstCell) && !Object.values(HEADER_PATTERNS).some(p => p.test(firstCell))) {
+        const row = rows[i];
+        if (!row) break;
+        const firstCell = String((row[0]) || '').trim();
+        if (!firstCell) break;
+        const hasEmail = row.some(c => isEmail(String(c || '').trim()));
+        if (hasEmail) break;
+        if (!Object.values(HEADER_PATTERNS).some(p => p.test(firstCell))) {
           sampleStart = i + 1;
         } else {
           break;
@@ -624,7 +650,7 @@ function parseExcelFile(filePath) {
       const c = sheet[k];
       if (c && c.l && c.l.Target && /^mailto:/i.test(String(c.l.Target))) {
         const t = String(c.l.Target).replace(/^mailto:/i, '').replace(/\?.*$/, '');
-        if (t.includes('@')) {
+        if (isEmail(t)) {
           c.v = t; c.w = t;
         }
       }

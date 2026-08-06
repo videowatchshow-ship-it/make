@@ -36,7 +36,8 @@ function authMiddleware(req, res, next) {
   const expected = process.env.GAUTH_API_TOKEN || '';
   if (!expected) return res.status(503).json({ ok: false, error: 'service unavailable' });
   if (!token) return res.status(401).json({ ok: false, error: 'unauthorized' });
-  const hmac = (s) => crypto.createHmac('sha256', process.env.GAUTH_HMAC_KEY || 'gauth').update(s).digest();
+  const hmacKey = process.env.GAUTH_HMAC_KEY || process.env.GAUTH_API_TOKEN || '';
+  const hmac = (s) => crypto.createHmac('sha256', hmacKey).update(s).digest();
   if (!crypto.timingSafeEqual(hmac(token), hmac(expected))) {
     return res.status(401).json({ ok: false, error: 'unauthorized' });
   }
