@@ -34,7 +34,7 @@ function authMiddleware(req, res, next) {
   const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
     || (req.query && req.query.token) || '';
   const expected = process.env.GAUTH_API_TOKEN || '';
-  if (!expected) return res.status(503).json({ ok: false, error: 'GAUTH_API_TOKEN not configured' });
+  if (!expected) return res.status(503).json({ ok: false, error: 'service unavailable' });
   if (!token) return res.status(401).json({ ok: false, error: 'unauthorized' });
   const hmac = (s) => crypto.createHmac('sha256', process.env.GAUTH_HMAC_KEY || 'gauth').update(s).digest();
   if (!crypto.timingSafeEqual(hmac(token), hmac(expected))) {
@@ -79,7 +79,7 @@ function fixSourceMtimes() {
       }
     }
     if (fixed > 0) {
-      const tmp = DATA_FILE + '.tmp.' + process.pid;
+      const tmp = DATA_FILE + '.tmp.' + process.pid + '.' + Date.now();
       fs.writeFileSync(tmp, JSON.stringify(accounts, null, 2));
       fs.renameSync(tmp, DATA_FILE);
       console.log('[auto_deploy] fixSourceMtimes: patched ' + fixed + ' accounts');
@@ -120,12 +120,12 @@ module.exports = function(app) {
   let _deployInProgress = false;
   app.post('/api/deploy', authMiddleware, async (req, res) => {
     if (_deployInProgress) return res.status(409).json({ ok: false, error: 'deploy already in progress' });
-    _deployInProgress = true;
     try {
       const rawBranch = req.body && req.body.branch || 'main';
       /* git-check-ref-format: 금지 문자 제거 — https://git-scm.com/docs/git-check-ref-format */
-      const branch = rawBranch.replace(/[\x00-\x1f\x7f ~^:?*\[\\]/g, '').replace(/\.{2,}/g, '.').replace(/\.lock$/i, '').replace(/^\/|\/$/g, '');
+      const branch = rawBranch.replace(/[\x00-\x1f\x7f ~^:?*\[\\]/g, '').replace(/\.{2,}/g, '.').replace(/\.lock$/i, '').replace(/^\/|\/$/g, '').replace(/^-/, '');
       if (!branch) return res.status(400).json({ ok: false, error: 'invalid branch name' });
+      _deployInProgress = true;
       const repoDir = '/tmp/gauth-deploy-repo';
 
       if (fs.existsSync(repoDir)) {
@@ -203,7 +203,7 @@ module.exports = function(app) {
               path: `/client/v4/zones/${cfZone}/purge_cache`,
               method: 'POST',
               timeout: 15000,
-              headers: { 'Authorization': `Bearer ${cfToken}`, 'Content-Type': 'application/json', 'Content-Length': purgeData.length }
+              headers: { 'Authorization': `Bearer ${cfToken}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(purgeData) }
             }, (res) => {
               let d = ''; res.on('data', c => d += c); res.on('end', () => resolve(d));
             });
@@ -326,7 +326,9 @@ module.exports = function(app) {
       const key = Object.keys(data).find(k => k.toLowerCase() === email);
       if (key) {
         delete data[key];
-        fs.writeFileSync(failFile, JSON.stringify(data, null, 2));
+        const tmpFail = failFile + '.tmp.' + process.pid + '.' + Date.now();
+        fs.writeFileSync(tmpFail, JSON.stringify(data, null, 2));
+        fs.renameSync(tmpFail, failFile);
       }
       res.json({ ok: true });
     } catch (e) {
@@ -374,7 +376,7 @@ module.exports = function(app) {
         const recovery = (a.recovery_email || '').toLowerCase();
         const alts = JSON.stringify(a.password_alts || []).toLowerCase();
         if (email.includes(q) || extra.includes(q) || recovery.includes(q) || alts.includes(q)) {
-          results.push({ email: a.email, password: a.password ? '***' : '', totp_secret: a.totp_secret || '', recovery_email: a.recovery_email || '', source_file: a.source_file || '', source_mtime: a.source_mtime || 0, extra: a.extra || [], password_alts: a.password_alts || [] });
+          results.push({ email: a.email, password: a.password ? '***' : '', totp_secret: a.totp_secret ? '***' : '', recovery_email: a.recovery_email || '', source_file: a.source_file || '', source_mtime: a.source_mtime || 0, extra: a.extra || [], password_alts: (a.password_alts || []).length ? ['***'] : [] });
         }
       }
       res.json({ ok: true, query: q, total_accounts: accounts.length, found: results.length, results: results.slice(0, 50) });
@@ -469,7 +471,7 @@ module.exports = function(app) {
     try { return JSON.parse(fs.readFileSync(YT_TOKENS_FILE, 'utf8')); } catch { return {}; }
   }
   function writeYtTokens(data) {
-    const tmp = YT_TOKENS_FILE + '.tmp.' + process.pid;
+    const tmp = YT_TOKENS_FILE + '.tmp.' + process.pid + '.' + Date.now();
     fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
     fs.renameSync(tmp, YT_TOKENS_FILE);
   }
@@ -515,7 +517,7 @@ module.exports = function(app) {
         try { const j = JSON.parse(d); res.json({ ok: !j.error, data: j }); } catch { res.json({ ok: false, raw: d }); }
       });
     });
-    r.on('timeout', () => { r.destroy(); res.status(504).json({ ok: false, error: 'upstream timeout' }); });
+    r.on('timeout', () => { r.destroy(); if (!res.headersSent) res.status(504).json({ ok: false, error: 'upstream timeout' }); });
     r.on('error', e => { if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
     r.write(body); r.end();
   });
@@ -537,7 +539,7 @@ module.exports = function(app) {
         } catch { res.json({ ok: false, raw: d }); }
       });
     });
-    r.on('timeout', () => { r.destroy(); res.status(504).json({ ok: false, error: 'upstream timeout' }); });
+    r.on('timeout', () => { r.destroy(); if (!res.headersSent) res.status(504).json({ ok: false, error: 'upstream timeout' }); });
     r.on('error', e => { if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
     r.end();
   });
@@ -566,7 +568,7 @@ module.exports = function(app) {
         } catch { res.json({ ok: false, raw: d }); }
       });
     });
-    r.on('timeout', () => { r.destroy(); res.status(504).json({ ok: false, error: 'upstream timeout' }); });
+    r.on('timeout', () => { r.destroy(); if (!res.headersSent) res.status(504).json({ ok: false, error: 'upstream timeout' }); });
     r.on('error', e => { if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
     r.end();
   });
@@ -587,7 +589,7 @@ module.exports = function(app) {
         try { const j = JSON.parse(d); res.json({ ok: !j.error, data: j }); } catch { res.json({ ok: false, raw: d }); }
       });
     });
-    r.on('timeout', () => { r.destroy(); res.status(504).json({ ok: false, error: 'upstream timeout' }); });
+    r.on('timeout', () => { r.destroy(); if (!res.headersSent) res.status(504).json({ ok: false, error: 'upstream timeout' }); });
     r.on('error', e => { if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
     r.write(body); r.end();
   });
@@ -606,7 +608,7 @@ module.exports = function(app) {
         }
       }
       if (fixed > 0) {
-        const tmp = DATA_FILE + '.tmp.' + process.pid;
+        const tmp = DATA_FILE + '.tmp.' + process.pid + '.' + Date.now();
         fs.writeFileSync(tmp, JSON.stringify(accounts, null, 2));
         fs.renameSync(tmp, DATA_FILE);
       }

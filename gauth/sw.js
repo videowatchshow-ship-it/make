@@ -4,9 +4,8 @@ self.addEventListener('install', function(e) {
   e.waitUntil(
     caches.open(CACHE).then(function(c) {
       return Promise.allSettled(ASSETS.map(function(url) { return c.add(url) }))
-    })
+    }).then(function() { return self.skipWaiting() })
   )
-  self.skipWaiting()
 })
 self.addEventListener('activate', function(e) {
   e.waitUntil(caches.keys().then(function(ks) {

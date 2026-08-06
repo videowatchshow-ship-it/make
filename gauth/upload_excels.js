@@ -53,13 +53,25 @@ function normalizeEmail(s) {
   return s;
 }
 
+function isPhoneNumber(s) {
+  s = String(s || '').trim();
+  return /^[\+]?[\d\s\-()]{7,20}$/.test(s) && (s.replace(/[^\d]/g, '').length >= 7);
+}
+
+function isSixDigitCode(s) {
+  return /^\d{5,8}$/.test(String(s || '').trim());
+}
+
 function isTotpLike(s) {
   if (!s) return false;
   s = String(s).trim();
   if (s.includes('@')) return false;
   if (/^[0-9]+$/.test(s)) return false;
   if (/^https?:\/\//i.test(s)) return false;
+  if (isPhoneNumber(s)) return false;
   if (/[\/\\:;!#$%^&*()+=\[\]{}|<>?]/.test(s) && !/^[A-Z2-7]+=*$/i.test(s)) return false;
+  if (/^[a-z0-9]{16,}$/i.test(s) && /[089]/.test(s)) return false;
+  if (/\s/.test(s) && !/^[A-Z2-7\s]+$/i.test(s)) return false;
   const n = normalizeTotp(s);
   /* RFC 4226 Section 4: HMAC-SHA1 최소 128-bit = 20 Base32 문자
    * ref: https://datatracker.ietf.org/doc/html/rfc4226#section-4
@@ -68,6 +80,7 @@ function isTotpLike(s) {
   if (n.length > 128) return false;
   const raw = String(s).replace(/[\s\-_=]/g, '');
   if (raw.length > 0 && n.length / raw.length < 0.8) return false;
+  if (raw.length > 0 && /[a-z]/.test(raw) && /[A-Z]/.test(raw) && n.length / raw.length < 0.95) return false;
   return true;
 }
 
@@ -94,9 +107,9 @@ function isOtpauthUrl(s) {
 // ── header detection ──
 
 const HEADER_PATTERNS = {
-  email:    /^(e[-_]?mail|login|account|user|gmail|아이디|계정|이메일|메일)/i,
+  email:    /^(e[-_]?mail|login|account|gmail|아이디|계정|이메일|메일)/i,
   password: /^(pass(word)?|pw|pwd|비밀번호|비번|암호)/i,
-  totp:     /^(totp|2fa|secret|otp|mfa|인증|코드|시크릿)/i,
+  totp:     /^(totp|2fa|secret|otp|mfa|인증코드|시크릿|인증\s*키)/i,
   recovery: /^(recover|backup|alt.*mail|second.*mail|복구|보조)/i,
   youtube:  /^(youtube|yt|url|link|channel|채널|주소)/i,
 };
@@ -108,9 +121,10 @@ function detectHeaderMapping(row) {
   for (let i = 0; i < row.length; i++) {
     const cell = String(row[i] || '').trim();
     if (!cell) continue;
+    if (/^\d+$/.test(cell)) continue;
     for (const [field, pattern] of Object.entries(HEADER_PATTERNS)) {
       if (!mapping[field] && pattern.test(cell)) {
-        if (field === 'email' && /^id$/i.test(cell)) continue;
+        if (field === 'email' && /^(id|user)$/i.test(cell)) continue;
         mapping[field] = i;
         matched++;
         break;
@@ -182,8 +196,14 @@ function analyzeColumns(rows) {
   used.add(emailCols[0].col);
 
   if (emailCols.length > 1) {
-    mapping.recovery = emailCols[1].col;
-    used.add(emailCols[1].col);
+    const mainRatio = emailCols[0].emails / emailCols[0].nonEmpty;
+    const secRatio = emailCols[1].emails / emailCols[1].nonEmpty;
+    if (secRatio > 0.05 && secRatio < mainRatio * 0.8) {
+      mapping.recovery = emailCols[1].col;
+      used.add(emailCols[1].col);
+    } else if (secRatio >= mainRatio * 0.8) {
+      used.add(emailCols[1].col);
+    }
   }
 
   let bestTotp = null, bestTotpRatio = 0;
@@ -216,7 +236,6 @@ function analyzeColumns(rows) {
     used.add(bestUrl);
   }
 
-  // password: first unassigned column with data, but skip if it looks like a row-number/index column
   for (const s of stats) {
     if (used.has(s.col)) continue;
     if (s.nonEmpty > 0) {
@@ -224,6 +243,10 @@ function analyzeColumns(rows) {
       const isSequential = allNumbers && s.values.length > 2 &&
         s.values.every((v, i) => i === 0 || parseInt(v) === parseInt(s.values[i-1]) + 1);
       if (isSequential) continue;
+      const allPhones = s.values.every(v => isPhoneNumber(v));
+      if (allPhones) continue;
+      const allCodes = allNumbers && s.values.every(v => /^\d{5,8}$/.test(v));
+      if (allCodes) continue;
       mapping.password = s.col;
       used.add(s.col);
       break;
@@ -236,9 +259,9 @@ function analyzeColumns(rows) {
 // ── label-value pair detection ──
 
 const LABEL_PATTERNS = {
-  email:    /^(e[-_]?mail|login|account|user|gmail|아이디|계정|이메일|메일)\s*[:：=]/i,
+  email:    /^(e[-_]?mail|login|account|gmail|아이디|계정|이메일|메일)\s*[:：=]/i,
   password: /^(pass(word)?|pw|pwd|비밀번호|비번|암호)\s*[:：=]/i,
-  totp:     /^(totp|2fa|secret|otp|mfa|인증|코드|시크릿)\s*[:：=]/i,
+  totp:     /^(totp|2fa|secret|otp|mfa|인증코드|시크릿|인증\s*키)\s*[:：=]/i,
   recovery: /^(recover|backup|alt.*mail|second.*mail|복구|보조)\s*[:：=]/i,
   youtube:  /^(youtube|yt|url|link|channel|채널|주소)\s*[:：=]/i,
 };
@@ -256,8 +279,11 @@ function classifyValue(s) {
   s = String(s || '').trim();
   if (!s) return null;
   if (isEmail(s)) return 'email';
+  if (isOtpauthUrl(s)) return 'totp';
   if (isTotpLike(s)) return 'totp';
   if (isUrlLike(s)) return 'url';
+  if (isPhoneNumber(s)) return 'phone';
+  if (isSixDigitCode(s)) return 'code';
   return 'unknown';
 }
 
@@ -266,7 +292,7 @@ function classifyValue(s) {
 function tryVerticalExtract(rows, sourceFile, sourceMtime) {
   const maxCols = rows.reduce((mx, r) => Math.max(mx, (r && r.length) || 0), 0);
 
-  const lvAccounts = tryLabelValueExtract(rows, maxCols, sourceFile);
+  const lvAccounts = tryLabelValueExtract(rows, maxCols, sourceFile, sourceMtime);
   if (lvAccounts && lvAccounts.length) return lvAccounts;
 
   if (maxCols <= 4) {
@@ -277,7 +303,7 @@ function tryVerticalExtract(rows, sourceFile, sourceMtime) {
   return null;
 }
 
-function tryLabelValueExtract(rows, maxCols, sourceFile) {
+function tryLabelValueExtract(rows, maxCols, sourceFile, sourceMtime) {
   let labelCount = 0;
   for (let i = 0; i < Math.min(20, rows.length); i++) {
     const row = rows[i];
@@ -387,23 +413,26 @@ function tryStackedExtract(rows, maxCols, sourceFile, sourceMtime) {
       continue;
     }
     if (isEmail(v)) {
-      if (cur && cur.email && !cur.recovery && (cur.password || cur.totp) && cur._hasBlankBefore) {
+      if (cur && cur.email && !cur.recovery && (cur.password || cur.totp) && normalizeEmail(v) !== normalizeEmail(cur.email)) {
         cur.recovery = v;
         continue;
       }
       if (cur && cur.email) accounts.push(cur);
-      cur = { email: v, password: '', totp: '', recovery: '', youtube: '', extra: [], _hasBlankBefore: afterBlank, source_file: sourceFile || 'unknown', source_mtime: sourceMtime || Date.now() };
+      cur = { email: v, password: '', totp: '', recovery: '', youtube: '', extra: [], source_file: sourceFile || 'unknown', source_mtime: sourceMtime || Date.now() };
       afterBlank = false;
       continue;
     }
 
     if (!cur) continue;
 
-    if ((isTotpLike(v) || isOtpauthUrl(v)) && !cur.totp) {
-      cur.totp = isOtpauthUrl(v) ? (extractTotpFromUrl(v) || v) : v;
+    if (isOtpauthUrl(v) && !cur.totp) {
+      cur.totp = extractTotpFromUrl(v) || v;
     }
+    else if (isTotpLike(v) && !cur.totp) { cur.totp = v; }
     else if (isUrlLike(v) && !cur.youtube) { cur.youtube = v; }
     else if (isEmail(v) && !cur.recovery) { cur.recovery = v; }
+    else if (isPhoneNumber(v)) { cur.extra.push(v); }
+    else if (isSixDigitCode(v)) { cur.extra.push(v); }
     else if (!cur.password) { cur.password = v; }
     else { cur.extra.push(v); }
   }
@@ -445,18 +474,21 @@ function bruteForceExtract(rows, sourceFile, sourceMtime) {
       }
       let password = '', totp_secret = '', recovery = '', youtube = '';
       const passwordCandidates = [];
+      const extraValues = [];
       for (const rv of rest) {
         if (!totp_secret && isOtpauthUrl(rv)) { totp_secret = extractTotpFromUrl(rv) || normalizeTotp(rv); }
         else if (!totp_secret && isTotpLike(rv)) { totp_secret = normalizeTotp(rv); }
         else if (!youtube && isUrlLike(rv)) { youtube = rv; }
         else if (!recovery && isEmail(rv)) { recovery = rv; }
+        else if (isPhoneNumber(rv)) { extraValues.push(rv); }
+        else if (isSixDigitCode(rv)) { extraValues.push(rv); }
         else { passwordCandidates.push(rv); }
       }
       if (passwordCandidates.length > 0) {
         const real = passwordCandidates.find(p => !/^\d{1,4}$/.test(p));
         password = real || passwordCandidates[passwordCandidates.length - 1];
       }
-      accounts.push({ email: v, password, totp_secret, recovery_email: recovery, youtube_url: youtube, extra: [], source_file: sourceFile || 'unknown', source_mtime: sourceMtime || Date.now() });
+      accounts.push({ email: v, password, totp_secret, recovery_email: recovery, youtube_url: youtube, extra: extraValues, source_file: sourceFile || 'unknown', source_mtime: sourceMtime || Date.now() });
     }
   }
   return accounts;
@@ -519,10 +551,18 @@ function extractAccountsFromSheet(sheet, sourceFile, sourceMtime) {
     const email = String(row[mapping.email] || '').trim();
     if (!isEmail(email)) continue;
 
-    const password = mapping.password !== undefined ? String(row[mapping.password] || '').trim() : '';
+    let password = mapping.password !== undefined ? String(row[mapping.password] || '').trim() : '';
     let totpRaw = mapping.totp !== undefined ? String(row[mapping.totp] || '').trim() : '';
-    const recovery = mapping.recovery !== undefined ? String(row[mapping.recovery] || '').trim() : '';
+    let recovery = mapping.recovery !== undefined ? String(row[mapping.recovery] || '').trim() : '';
     const youtube = mapping.youtube !== undefined ? String(row[mapping.youtube] || '').trim() : '';
+
+    if (password && !totpRaw && isTotpLike(password)) { totpRaw = password; password = ''; }
+    if (password && isEmail(password)) {
+      if (!recovery) { recovery = password; }
+      password = '';
+    }
+    if (password && (isPhoneNumber(password) || isSixDigitCode(password))) { password = ''; }
+    if (recovery && !isEmail(recovery)) recovery = '';
 
     if (isOtpauthUrl(totpRaw)) {
       totpRaw = extractTotpFromUrl(totpRaw) || totpRaw;
@@ -554,6 +594,7 @@ function parseExcelFile(filePath) {
   const allAccounts = [];
   const baseName = path.basename(filePath);
   let fileMtime = Date.now();
+  try { fileMtime = fs.statSync(filePath).mtimeMs; } catch (_) {}
 
   for (const sheetName of wb.SheetNames) {
     const sheet = wb.Sheets[sheetName];
@@ -637,8 +678,11 @@ function parseMultipartManual(req) {
         try { fs.unlinkSync(tmpPath); } catch (_) {}
         tryResolve();
       });
+      let truncated = false;
+      stream.on('limit', () => { truncated = true; console.warn('[upload-excels] file truncated (exceeded fileSize limit):', filename); });
       stream.pipe(ws);
       ws.on('close', () => {
+        if (truncated) { tracker.done = true; try { fs.unlinkSync(tmpPath); } catch (_) {} tryResolve(); return; }
         const sz = (() => { try { return fs.statSync(tmpPath).size; } catch (_) { return -1; } })();
         console.log('[upload-excels] file saved:', filename, sz, 'bytes');
         files.push({ fieldname, originalname: filename, path: tmpPath, size: sz });
@@ -746,15 +790,19 @@ function mountRoutes(app) {
             const key = normalizeEmail(a.email);
             if (byEmail[key]) {
               const e = byEmail[key];
-              if (a.password && a.password !== e.password) {
+              if (a.password && a.password !== e.password && !isTotpLike(a.password) && !isEmail(a.password) && !isUrlLike(a.password) && !isSixDigitCode(a.password) && !isPhoneNumber(a.password)) {
                 if (!e.password_alts) e.password_alts = [];
                 if (e.password && !e.password_alts.includes(e.password)) e.password_alts.push(e.password);
                 if (!e.password_alts.includes(a.password)) e.password_alts.push(a.password);
                 e.password = a.password;
               }
               if (a.totp_secret && isTotpLike(a.totp_secret)) e.totp_secret = normalizeTotp(a.totp_secret);
-              if (a.recovery_email) e.recovery_email = a.recovery_email;
-              if (a.youtube_url) e.youtube_url = a.youtube_url;
+              if (a.recovery_email && isEmail(a.recovery_email) && normalizeEmail(a.recovery_email) !== key) e.recovery_email = a.recovery_email;
+              if (a.youtube_url && isUrlLike(a.youtube_url)) e.youtube_url = a.youtube_url;
+              if (a.extra && a.extra.length) {
+                if (!e.extra) e.extra = [];
+                for (const x of a.extra) { if (!e.extra.includes(x)) e.extra.push(x); }
+              }
               e.source_mtime = a.source_mtime || Date.now();
               e.source_file = a.source_file || e.source_file;
               updated++;
@@ -770,7 +818,7 @@ function mountRoutes(app) {
         }
 
         const allAccounts = Object.values(byEmail);
-        const tmpFile = dataFile + '.tmp.' + process.pid;
+        const tmpFile = dataFile + '.tmp.' + process.pid + '.' + Date.now();
         fs.writeFileSync(tmpFile, JSON.stringify(allAccounts, null, 2));
         fs.renameSync(tmpFile, dataFile);
         console.log('[upload-excels] merge done: total_master=' + allAccounts.length + ' parsed=' + totalParsed + ' added=' + totalAdded + ' updated=' + totalUpdated);
@@ -800,4 +848,6 @@ _exports.tryLabelValueExtract = tryLabelValueExtract;
 _exports.bruteForceExtract = bruteForceExtract;
 _exports.expandMergedCells = expandMergedCells;
 _exports.extractTotpFromUrl = extractTotpFromUrl;
+_exports.isPhoneNumber = isPhoneNumber;
+_exports.isSixDigitCode = isSixDigitCode;
 module.exports = _exports;

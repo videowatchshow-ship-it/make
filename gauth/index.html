@@ -183,7 +183,7 @@ function copyStreamDesc(e){
 <div id="monthlyGroups" style="padding:6px 20px;background:#0d1520;border-bottom:1px solid #22282f;font-size:12px;color:#c9d2dc;text-align:center"></div>
 <script>
 /* MDN: Element.innerHTML XSS 방지 — https://developer.mozilla.org/en-US/docs/Web/API/Element/innerHTML#security_considerations */
-function _esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];})}
+function _esc(s){return String(s==null?'':s).replace(/[&<>"'`\\]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;','\\':'&#92;'}[c];})}
 var escapeHtml=_esc;
 async function refreshAccStats(){
   try {
@@ -1118,7 +1118,7 @@ async function ytApiConnect(email, btn) {
   const orig = btn.textContent; btn.disabled = true; btn.textContent = '⏳ 연결 중…';
   const redirectUri = location.origin + '/';
   const scope = 'https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube.force-ssl';
-  var _oauthNonce = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  var _oauthNonce = Array.from(crypto.getRandomValues(new Uint8Array(16)),function(b){return b.toString(16).padStart(2,'0')}).join('');
   sessionStorage.setItem('yt_oauth_nonce', _oauthNonce);
   const state = encodeURIComponent(JSON.stringify({ email, nonce: _oauthNonce }));
   const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=' + encodeURIComponent(_ytClientId)
@@ -1250,7 +1250,7 @@ if(_exportBtn) _exportBtn.addEventListener('click', async () => {
   const blob = await r.blob()
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href=url; a.download=`gauth-split-${parts}.zip`; a.click()
-  setTimeout(()=>URL.revokeObjectURL(url),1000)
+  setTimeout(()=>URL.revokeObjectURL(url),60000)
 })
 load()
 </script><!-- GCP VM 제어 패널 (하단, 모바일 반응형)
