@@ -553,7 +553,6 @@ function parseExcelFile(filePath) {
   const allAccounts = [];
   const baseName = path.basename(filePath);
   let fileMtime = Date.now();
-  try { fileMtime = fs.statSync(filePath).mtimeMs; } catch(e) {}
 
   for (const sheetName of wb.SheetNames) {
     const sheet = wb.Sheets[sheetName];
@@ -736,10 +735,8 @@ function mountRoutes(app) {
               if (a.totp_secret && isTotpLike(a.totp_secret)) e.totp_secret = normalizeTotp(a.totp_secret);
               if (a.recovery_email) e.recovery_email = a.recovery_email;
               if (a.youtube_url) e.youtube_url = a.youtube_url;
-              if (a.source_mtime && (!e.source_mtime || a.source_mtime > e.source_mtime)) {
-                e.source_mtime = a.source_mtime;
-                e.source_file = a.source_file || e.source_file;
-              }
+              e.source_mtime = a.source_mtime || Date.now();
+              e.source_file = a.source_file || e.source_file;
               updated++;
             } else {
               byEmail[key] = a;
