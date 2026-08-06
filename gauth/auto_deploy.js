@@ -395,13 +395,14 @@ module.exports = function(app) {
   app.post('/api/login-one', authMiddleware, async (req, res) => {
     const { email } = req.body || {};
     if (!email) return res.status(400).json({ success: false, reason: 'email required' });
+    const emailKey = normalizeEmail(email);
 
-    if (loginQueue.has(email)) {
-      const elapsed = Date.now() - loginQueue.get(email);
+    if (loginQueue.has(emailKey)) {
+      const elapsed = Date.now() - loginQueue.get(emailKey);
       if (elapsed < LOGIN_TIMEOUT) {
         return res.status(409).json({ success: false, reason: 'LOGIN_IN_PROGRESS' });
       }
-      loginQueue.delete(email);
+      loginQueue.delete(emailKey);
     }
 
     if (loginQueue.size >= MAX_CONCURRENT_LOGINS) {
@@ -462,7 +463,7 @@ module.exports = function(app) {
     res.json({ client_id: clientId });
   });
 
-  app.post('/api/youtube/save-token', (req, res) => {
+  app.post('/api/youtube/save-token', authMiddleware, (req, res) => {
     try {
       const { email, access_token, expires_at } = req.body || {};
       if (!email || !access_token) return res.status(400).json({ ok: false, error: 'email and access_token required' });
@@ -482,7 +483,7 @@ module.exports = function(app) {
     res.json({ connected: true, expires_at: t.expires_at, expired: Date.now() > t.expires_at });
   });
 
-  app.post('/api/youtube/chat-message', (req, res) => {
+  app.post('/api/youtube/chat-message', authMiddleware, (req, res) => {
     const { email, liveChatId, message } = req.body || {};
     if (!email || !liveChatId || !message) return res.status(400).json({ ok: false, error: 'email, liveChatId, message required' });
     const tokens = readYtTokens();
@@ -514,7 +515,7 @@ module.exports = function(app) {
       let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
         try {
           const j = JSON.parse(d);
-          const items = (j.items || []).map(it => ({ title: it.snippet.title, liveChatId: it.snippet.liveChatId, videoId: it.contentDetails ? it.contentDetails.boundStreamId : '' }));
+          const items = (j.items || []).map(it => ({ title: it.snippet.title, liveChatId: it.snippet.liveChatId, videoId: it.id || '' }));
           res.json({ ok: true, broadcasts: items });
         } catch { res.json({ ok: false, raw: d }); }
       });
@@ -551,7 +552,7 @@ module.exports = function(app) {
     r.end();
   });
 
-  app.post('/api/youtube/add-moderator', (req, res) => {
+  app.post('/api/youtube/add-moderator', authMiddleware, (req, res) => {
     const { email, liveChatId, channelId } = req.body || {};
     if (!email || !liveChatId || !channelId) return res.status(400).json({ ok: false, error: 'email, liveChatId, channelId required' });
     const tokens = readYtTokens();
@@ -571,7 +572,7 @@ module.exports = function(app) {
     r.write(body); r.end();
   });
 
-  app.post('/api/fix-mtime', (req, res) => {
+  app.post('/api/fix-mtime', authMiddleware, (req, res) => {
     try {
       const accounts = safeReadJSON(DATA_FILE);
       let fixed = 0;

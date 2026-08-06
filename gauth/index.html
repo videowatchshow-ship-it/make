@@ -27,7 +27,7 @@ select{background:#161a20;border:1px solid #2a323c;color:#e8ecef;padding:9px 10p
 .b-off{background:#2a1e1e;color:#f47070}
 .b-2fa{background:#1c2740;color:#7dabff}
 .b-lock{background:#3a1c1c;color:#ff8080}
-.mono{font-family:'SF Mono',Menaco,monospace;color:#c9d2dc;font-size:12px;word-break:break-all}
+.mono{font-family:'SF Mono',Monaco,monospace;color:#c9d2dc;font-size:12px;word-break:break-all}
 .pw{color:#e8ecef}
 button{background:#2b6cff;color:#fff;border:0;padding:7px 12px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600}
 button:hover{background:#1e5ae0}
@@ -122,11 +122,11 @@ button:disabled{background:#333;cursor:not-allowed}
 <div style="padding:12px 16px;background:#0d1117"><button id="pwa-install-btn">📲 앱으로 설치</button></div>
 <div id="stream-info-box">
   <div class="si-section">
-    <div class="si-header"><span class="si-label">🎙️ 스트리밍 제목</span><button class="si-btn si-refresh" onclick="cycleStreamTitle()">🔄 새로고침</button><button class="si-btn si-copy" onclick="copyStreamTitle()">📋 복사</button></div>
+    <div class="si-header"><span class="si-label">🎙️ 스트리밍 제목</span><button class="si-btn si-refresh" onclick="cycleStreamTitle()">🔄 새로고침</button><button class="si-btn si-copy" onclick="copyStreamTitle(event)">📋 복사</button></div>
     <div class="si-content" id="streamTitle">참교육 당해야 하는 것인가?</div>
   </div>
   <div class="si-section">
-    <div class="si-header"><span class="si-label">📝 설명</span><button class="si-btn si-copy" onclick="copyStreamDesc()">📋 복사</button></div>
+    <div class="si-header"><span class="si-label">📝 설명</span><button class="si-btn si-copy" onclick="copyStreamDesc(event)">📋 복사</button></div>
     <div class="si-content" id="streamDesc">#실시간게임 #라이브캄보디아 #대리운전 #아바타란 ?<br>참교육 채널입니다.<br>24시간 365일 1등급 생방송 진행!<br>탁&amp;제이 여러분 환영합니다.<br>스튜디오 아닌 현장에서 진행합니다.</div>
   </div>
 </div>
@@ -169,13 +169,13 @@ function _siCopy(text,btn){
     setTimeout(function(){btn.innerHTML=orig;btn.style.background='';},1200);
   });
 }
-function copyStreamTitle(){
-  _siCopy(document.getElementById('streamTitle').textContent,event.currentTarget);
+function copyStreamTitle(e){
+  _siCopy(document.getElementById('streamTitle').textContent,e.currentTarget||e);
 }
-function copyStreamDesc(){
+function copyStreamDesc(e){
   var el=document.getElementById('streamDesc');
   var text=el.innerHTML.replace(/<br\s*\/?>/gi,'\n').replace(/<[^>]*>/g,'').replace(/&amp;/g,'&');
-  _siCopy(text,event.currentTarget);
+  _siCopy(text,e.currentTarget||e);
 }
 </script>
 
@@ -289,7 +289,7 @@ function accessBadge(a){
   if(mt >= kstTodayMidnightMs()) return '<span class="badge b-today">🟢 오늘</span>';
   /* 86400000 = 24h × 60min × 60s × 1000ms — POSIX day in milliseconds */
   var days = Math.floor((Date.now()-mt)/86400000);
-  return '<span class="badge b-old">'+(days<=0?'어제':days+'일 전')+'</span>';
+  return '<span class="badge b-old">'+(days<=1?'어제':days+'일 전')+'</span>';
 }
 
 (function(){
@@ -1342,7 +1342,7 @@ load()
 
 
 
-<button id="site-map-open" title="활성 사이트" style="display:none" onclick="var f=document.getElementById('site-map-footer'); if(f){f.style.display='block';this.style.display='none';}" style="position:fixed;right:8px;bottom:8px;z-index:9998;width:44px;height:44px;border-radius:50%;background:rgba(15,22,32,.97);border:1.5px solid #22282f;color:#f5c842;font-size:20px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.5);">🌐</button>
+<button id="site-map-open" title="활성 사이트" style="display:none;position:fixed;right:8px;bottom:8px;z-index:9998;width:44px;height:44px;border-radius:50%;background:rgba(15,22,32,.97);border:1.5px solid #22282f;color:#f5c842;font-size:20px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.5);" onclick="var f=document.getElementById('site-map-footer'); if(f){f.style.display='block';this.style.display='none';}">🌐</button>
 <div id="site-map-footer" style="position:fixed;right:8px;bottom:8px;max-width:380px;max-height:78vh;overflow-y:auto;background:rgba(15,22,32,0.97);border:1.5px solid #22282f;border-radius:8px;padding:10px 12px;z-index:9999;font-size:11px;color:#8a95a5;font-family:-apple-system,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.5);display:none">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
   <b style="color:#e8ecef">🌐 활성 사이트 (Cloudflare DNS 실측)</b>
