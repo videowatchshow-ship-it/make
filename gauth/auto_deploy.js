@@ -626,21 +626,18 @@ module.exports = function(app) {
 
     /* 비동기 처리 (응답 후 백그라운드 실행) */
     (async () => {
-      let loginGoogle, oauthModule, getSharedBrowser, sessionStore;
+      let loginGoogle, oauthModule, sessionStore, browser;
       try {
         loginGoogle = require(path.join(__dirname, 'lib/login/google')).loginGoogle;
         oauthModule = require(path.join(__dirname, 'youtube-oauth-auto.js'));
-        const main = require.cache[require.resolve(path.join(__dirname, 'rebrowser-login.js'))];
-        if (main && main.exports) {
-          getSharedBrowser = main.exports.getSharedBrowser;
-          sessionStore = main.exports.sessionStore;
-        }
-        if (!getSharedBrowser) {
-          getSharedBrowser = require(path.join(__dirname, 'rebrowser-login.js')).getSharedBrowser;
-        }
-        if (!sessionStore) {
-          sessionStore = require(path.join(__dirname, 'session_store'));
-        }
+        sessionStore = require(path.join(__dirname, 'session_store'));
+        const puppeteer = require('puppeteer-core');
+        browser = await puppeteer.connect({
+          browserURL: 'http://localhost:9222',
+          defaultViewport: null,
+          protocolTimeout: 180000,
+        });
+        console.log('[batch-connect] 공유 Chrome 연결 완료');
       } catch (e) {
         console.error('[batch-connect] module load error:', e.message);
         batchQueue.running = false;
@@ -661,7 +658,6 @@ module.exports = function(app) {
 
         try {
           /* 1단계: Google 로그인 (lib/login/google.js — 공유 브라우저) */
-          const browser = await getSharedBrowser();
           const broadcast = (data) => {
             if (data.type === 'log') console.log(`  [batch] ${data.message}`);
           };
