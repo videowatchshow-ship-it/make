@@ -626,10 +626,21 @@ module.exports = function(app) {
 
     /* 비동기 처리 (응답 후 백그라운드 실행) */
     (async () => {
-      let loginModule, oauthModule;
+      let loginGoogle, oauthModule, getSharedBrowser, sessionStore;
       try {
-        loginModule = require(path.join(__dirname, 'advanced-google-login-v2.js'));
+        loginGoogle = require(path.join(__dirname, 'lib/login/google')).loginGoogle;
         oauthModule = require(path.join(__dirname, 'youtube-oauth-auto.js'));
+        const main = require.cache[require.resolve(path.join(__dirname, 'rebrowser-login.js'))];
+        if (main && main.exports) {
+          getSharedBrowser = main.exports.getSharedBrowser;
+          sessionStore = main.exports.sessionStore;
+        }
+        if (!getSharedBrowser) {
+          getSharedBrowser = require(path.join(__dirname, 'rebrowser-login.js')).getSharedBrowser;
+        }
+        if (!sessionStore) {
+          sessionStore = require(path.join(__dirname, 'session_store'));
+        }
       } catch (e) {
         console.error('[batch-connect] module load error:', e.message);
         batchQueue.running = false;
@@ -649,20 +660,24 @@ module.exports = function(app) {
         let result = { email: account.email, success: false, error: '' };
 
         try {
-          /* 1단계: Google 로그인 (Puppeteer) */
-          const loginResult = await loginModule.advancedGoogleLogin(
+          /* 1단계: Google 로그인 (lib/login/google.js — 공유 브라우저) */
+          const browser = await getSharedBrowser();
+          const broadcast = (data) => {
+            if (data.type === 'log') console.log(`  [batch] ${data.message}`);
+          };
+          const loginResult = await loginGoogle(
             { email: account.email, password: account.password, twoFA: account.totp_secret || '' },
-            { headless: false, timeout: 90000 }
+            { browser, sessionStore, broadcast }
           );
 
           if (!loginResult || !loginResult.success) {
-            result.error = 'LOGIN_FAILED: ' + (loginResult ? loginResult.result : 'null');
+            result.error = 'LOGIN_FAILED: ' + (loginResult ? loginResult.reason : 'null');
             console.log(`  [batch] 로그인 실패: ${result.error}`);
           } else {
             console.log(`  [batch] 로그인 성공, OAuth consent 시작...`);
 
-            /* 2단계: OAuth consent 자동화 (같은 브라우저 세션) */
-            const oauthResult = await oauthModule.autoOAuthConsent(loginResult.browser, oauthConfig);
+            /* 2단계: OAuth consent 자동화 */
+            const oauthResult = await oauthModule.autoOAuthConsent(browser, oauthConfig);
 
             if (oauthResult.success && oauthResult.refresh_token) {
               result.success = true;
@@ -685,10 +700,7 @@ module.exports = function(app) {
               console.log(`  [batch] OAuth 실패: ${result.error}`);
             }
 
-            /* 브라우저 닫기 */
-            if (loginResult.browser) {
-              try { await loginResult.browser.close(); } catch (_) {}
-            }
+            /* 공유 브라우저 사용 — 닫지 않음 (loginGoogle이 context를 자체 정리) */
           }
         } catch (e) {
           result.error = 'EXCEPTION: ' + e.message;
