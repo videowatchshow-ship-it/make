@@ -460,8 +460,8 @@ jobs:
                 if (m) {
                   a.source_mtime = parseInt(m[1], 10);
                   fixedFromName++;
-                } else {
-                  a.source_mtime = 0;
+                } else if (!a.source_mtime || a.source_mtime < 1000000000000) {
+                  a.source_mtime = Date.now();
                   fixedFallback++;
                 }
               }
