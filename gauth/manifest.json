@@ -3,16 +3,26 @@
   "short_name": "참교육계정",
   "description": "참교육 스트리밍 계정 정보",
   "start_url": "/",
+  "id": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0a0d12",
   "theme_color": "#0a0d12",
   "orientation": "any",
+  "lang": "ko",
+  "dir": "ltr",
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect fill='%230a0d12' width='512' height='512' rx='80'/><text x='256' y='350' text-anchor='middle' font-size='280'>📺</text></svg>",
-      "sizes": "512x512",
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect fill='%230a0d12' width='512' height='512' rx='80'/%3E%3Ctext x='256' y='350' text-anchor='middle' font-size='280'%3E📺%3C/text%3E%3C/svg%3E",
+      "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect fill='%230a0d12' width='192' height='192' rx='30'/%3E%3Ctext x='96' y='132' text-anchor='middle' font-size='108'%3E📺%3C/text%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
     }
   ]
 }

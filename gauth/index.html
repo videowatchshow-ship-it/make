@@ -629,11 +629,14 @@ function noCacheQuery(url){var u=authQuery(url);return u+(u.includes('?')?'&':'?
 
 let FAILED = {}
 async function load(){
-  const [n, p, f] = await Promise.all([
-    fetch(authQuery('/api/normalized-accounts'),{headers:authHeaders()}).then(r=>r.json()),
-    fetch(authQuery('/api/profiles'),{headers:authHeaders()}).then(r=>r.json()),
-    fetch(authQuery('/api/failed-accounts'),{headers:authHeaders()}).then(r=>r.json()).catch(()=>({}))
-  ])
+  let n, p, f
+  try {
+    [n, p, f] = await Promise.all([
+      fetch(authQuery('/api/normalized-accounts'),{headers:authHeaders()}).then(r=>r.json()).catch(()=>({accounts:[],summary:{}})),
+      fetch(authQuery('/api/profiles'),{headers:authHeaders()}).then(r=>r.json()).catch(()=>({profiles:[]})),
+      fetch(authQuery('/api/failed-accounts'),{headers:authHeaders()}).then(r=>r.json()).catch(()=>({}))
+    ])
+  } catch(e) { n={accounts:[],summary:{}}; p={profiles:[]}; f={}; }
   FAILED = f || {}
   /* 프로필 폴더명→이메일: 서버가 email 필드를 반환하면 우선 사용.
    * 폴더명 변환은 최초 _를 @로, 이후 _를 .로 치환 — multi-dot 도메인(co.uk 등) 대응
@@ -994,8 +997,10 @@ async function lookup(){
     }, 100)
   }
 }
-document.getElementById('lookup-btn').addEventListener('click', lookup)
-document.getElementById('lookup').addEventListener('keydown', e=>{if(e.key==='Enter')lookup()})
+var _lookupBtn = document.getElementById('lookup-btn')
+var _lookupInput = document.getElementById('lookup')
+if(_lookupBtn) _lookupBtn.addEventListener('click', lookup)
+if(_lookupInput) _lookupInput.addEventListener('keydown', e=>{if(e.key==='Enter')lookup()})
 ;(function(){var ll=localStorage.getItem('gauth_last_lookup');if(ll){document.getElementById('lookup').value=ll;lookup()}})()
 
 // --- 시간 순서 계정 정보 확인 (20개씩 페이지) ---
@@ -1113,7 +1118,9 @@ async function ytApiConnect(email, btn) {
   const orig = btn.textContent; btn.disabled = true; btn.textContent = '⏳ 연결 중…';
   const redirectUri = location.origin + '/';
   const scope = 'https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube.force-ssl';
-  const state = encodeURIComponent(JSON.stringify({ email }));
+  var _oauthNonce = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  sessionStorage.setItem('yt_oauth_nonce', _oauthNonce);
+  const state = encodeURIComponent(JSON.stringify({ email, nonce: _oauthNonce }));
   const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=' + encodeURIComponent(_ytClientId)
     + '&redirect_uri=' + encodeURIComponent(redirectUri)
     + '&response_type=token&scope=' + encodeURIComponent(scope)
@@ -1129,6 +1136,15 @@ async function ytApiConnect(email, btn) {
         const hash = popup.location.hash.substring(1);
         popup.close(); clearInterval(checkInterval);
         const params = new URLSearchParams(hash);
+        var returnedState = params.get('state');
+        try {
+          var stateObj = JSON.parse(decodeURIComponent(returnedState || '{}'));
+          var savedNonce = sessionStorage.getItem('yt_oauth_nonce');
+          if (!stateObj.nonce || stateObj.nonce !== savedNonce) {
+            btn.textContent = '❌ state 불일치'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000); return;
+          }
+          sessionStorage.removeItem('yt_oauth_nonce');
+        } catch(_) { btn.textContent = '❌ state 파싱 실패'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000); return; }
         const token = params.get('access_token');
         const expiresIn = parseInt(params.get('expires_in') || '3600');
         if (token) {
@@ -1203,23 +1219,30 @@ function tdGoto(n){
   tdRender()
   document.getElementById('td-result').scrollIntoView({behavior:'smooth', block:'start'})
 }
-document.getElementById('td-load').addEventListener('click', tdLoad)
-document.getElementById('td-order').addEventListener('change', ()=>{if(TD.length){tdLoad()}})
+var _tdLoadBtn = document.getElementById('td-load')
+var _tdOrder = document.getElementById('td-order')
+if(_tdLoadBtn) _tdLoadBtn.addEventListener('click', tdLoad)
+if(_tdOrder) _tdOrder.addEventListener('change', ()=>{if(TD.length){tdLoad()}})
 // Auto-load: 페이지 로드 후 자동으로 최신순 계정 목록 표시
 window._gauthAutoLoad = true
 // 페이지네이션으로 전환: 스크롤 렌더 제거
-document.getElementById('q').addEventListener('input', applyFilter)
-document.getElementById('filter').addEventListener('change', applyFilter)
-document.getElementById('batch-run').addEventListener('click', async () => {
+var _qInput = document.getElementById('q')
+var _filterSelect = document.getElementById('filter')
+if(_qInput) _qInput.addEventListener('input', applyFilter)
+if(_filterSelect) _filterSelect.addEventListener('change', applyFilter)
+var _batchRunBtn = document.getElementById('batch-run')
+if(_batchRunBtn) _batchRunBtn.addEventListener('click', async () => {
   const total = ALL.length
   if (!confirm(`전체 ${total}개 중 미로그인만 순서대로 로그인 시도. 계속?`)) return
   const r = await fetch(authQuery('/api/start'),{method:'POST',headers:authHeaders({'content-type':'application/json'}),body:JSON.stringify({start:0,end:total,concurrency:8,skipLoggedIn:true})})
   alert('배치 시작: '+JSON.stringify(await r.json()))
 })
-document.getElementById('batch-stop').addEventListener('click', async () => {
+var _batchStopBtn = document.getElementById('batch-stop')
+if(_batchStopBtn) _batchStopBtn.addEventListener('click', async () => {
   await fetch(authQuery('/api/stop'),{method:'POST',headers:authHeaders()});alert('정지 요청 전송')
 })
-document.getElementById('export').addEventListener('click', async () => {
+var _exportBtn = document.getElementById('export')
+if(_exportBtn) _exportBtn.addEventListener('click', async () => {
   const parts = parseInt(document.getElementById('parts').value,10) || 1
   const filter = document.getElementById('filter').value
   const r = await fetch(authQuery('/api/export-split'),{method:'POST',headers:authHeaders({'content-type':'application/json'}),body:JSON.stringify({parts,filter})})

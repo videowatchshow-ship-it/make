@@ -614,6 +614,8 @@ function parseMultipartManual(req) {
     let bbDone = false;
     let settled = false;
     const bb = Busboy({ headers: req.headers, limits: { fileSize: 200 * 1024 * 1024, files: 200 } });
+    bb.on('filesLimit', () => { console.warn('[upload-excels] file count limit reached (200)'); });
+    bb.on('partsLimit', () => { console.warn('[upload-excels] parts limit reached'); });
     function tryResolve() {
       if (settled) return;
       if (bbDone && pending.every(p => p.done)) {
@@ -629,6 +631,12 @@ function parseMultipartManual(req) {
       const tracker = { done: false };
       pending.push(tracker);
       const ws = fs.createWriteStream(tmpPath);
+      ws.on('error', (e) => {
+        console.error('[upload-excels] write error:', filename, e.message);
+        tracker.done = true;
+        try { fs.unlinkSync(tmpPath); } catch (_) {}
+        tryResolve();
+      });
       stream.pipe(ws);
       ws.on('close', () => {
         const sz = (() => { try { return fs.statSync(tmpPath).size; } catch (_) { return -1; } })();
@@ -710,7 +718,18 @@ function mountRoutes(app) {
       try {
         const dataFile = '/opt/gauth-full/accounts_normalized.json';
         let existing = [];
-        try { const d = JSON.parse(fs.readFileSync(dataFile, 'utf8')); existing = Array.isArray(d) ? d : (d.accounts || []); } catch(e) {}
+        try {
+          const raw = fs.readFileSync(dataFile, 'utf8');
+          if (!raw.trim()) throw new Error('empty file');
+          const d = JSON.parse(raw);
+          existing = Array.isArray(d) ? d : (d.accounts || []);
+        } catch(e) {
+          if (e.message !== 'empty file' && e.code !== 'ENOENT') {
+            const backupPath = dataFile + '.corrupt.' + Date.now();
+            try { fs.copyFileSync(dataFile, backupPath); } catch (_) {}
+            console.error('[upload-excels] corrupted JSON backed up to', backupPath, e.message);
+          }
+        }
         console.log('[upload-excels] existing accounts:', existing.length);
         const byEmail = {};
         for (const a of existing) {

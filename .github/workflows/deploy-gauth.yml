@@ -17,18 +17,21 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
       - name: Try API deploy
         id: api_deploy
         continue-on-error: true
+        env:
+          GAUTH_API_TOKEN: ${{ secrets.GAUTH_API_TOKEN }}
         run: |
           BRANCH="${GITHUB_REF_NAME}"
           HTTP_CODE=$(curl -s -o /tmp/resp.txt -w "%{http_code}" \
             -X POST https://gauth.cent-solution.online/api/deploy \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${{ secrets.GAUTH_API_TOKEN }}" \
+            -H "Authorization: Bearer ${GAUTH_API_TOKEN}" \
             -d "{\"branch\":\"${BRANCH}\"}" \
             --connect-timeout 15 --max-time 180)
           echo "HTTP $HTTP_CODE"
@@ -274,10 +277,11 @@ jobs:
 
             # 업로드 디렉토리 + 데이터 파일 권한 (서비스 유저와 배포 유저가 다름)
             mkdir -p /opt/gauth-full/uploads
-            chmod 1777 /opt/gauth-full/uploads
+            mkdir -p /opt/gauth-full/uploads
+            chmod 1770 /opt/gauth-full/uploads
             touch /opt/gauth-full/accounts_normalized.json
-            chmod 666 /opt/gauth-full/accounts_normalized.json
-            chmod 777 /opt/gauth-full
+            chmod 660 /opt/gauth-full/accounts_normalized.json
+            chmod 750 /opt/gauth-full
 
             # ===== 5.5 TOTP 패치 + 진단 =====
             echo "=== [5.5/6] TOTP patch & diagnostics ==="
@@ -648,23 +652,21 @@ jobs:
 
             echo "=== Deploy complete ==="
 
-      - name: Cloudflare cache purge + security level
+      - name: Cloudflare cache purge
         if: always()
         continue-on-error: true
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
         run: |
-          if [ -z "${{ secrets.CLOUDFLARE_TOKEN }}" ] || [ -z "${{ secrets.CLOUDFLARE_ZONE_ID }}" ]; then
+          if [ -z "${CF_TOKEN}" ] || [ -z "${CF_ZONE}" ]; then
             echo "CLOUDFLARE_TOKEN or CLOUDFLARE_ZONE_ID not set — skipping"
           else
             echo "=== Purging Cloudflare cache ==="
-            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
-              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" \
+            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/purge_cache" \
+              -H "Authorization: Bearer ${CF_TOKEN}" \
               -H "Content-Type: application/json" \
               --data '{"purge_everything":true}' | python3 -c "import json,sys; d=json.load(sys.stdin); print('Cache purge:', 'success' if d.get('success') else 'FAILED:', d.get('errors'))" || true
-            echo "=== Setting security level ==="
-            curl -s -X PATCH "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/settings/security_level" \
-              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" \
-              -H "Content-Type: application/json" \
-              --data '{"value":"essentially_off"}' | python3 -c "import json,sys; d=json.load(sys.stdin); print('Security level:', d.get('result',{}).get('value','?'), '— success' if d.get('success') else '— FAILED:', d.get('errors'))" || true
           fi
           HTTP=$(curl -s -o /dev/null -w "%{http_code}" https://gauth.cent-solution.online/ --max-time 10)
           echo "Site HTTP: $HTTP"

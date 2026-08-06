@@ -1,7 +1,11 @@
-var CACHE = 'gauth-v1'
+var CACHE = 'gauth-v2'
 var ASSETS = ['/', 'index.html', 'manifest.json', 'xlsx.core.min.js']
 self.addEventListener('install', function(e) {
-  e.waitUntil(caches.open(CACHE).then(function(c) { return c.addAll(ASSETS) }))
+  e.waitUntil(
+    caches.open(CACHE).then(function(c) {
+      return Promise.allSettled(ASSETS.map(function(url) { return c.add(url) }))
+    })
+  )
   self.skipWaiting()
 })
 self.addEventListener('activate', function(e) {
@@ -11,14 +15,21 @@ self.addEventListener('activate', function(e) {
 })
 self.addEventListener('fetch', function(e) {
   if (e.request.method !== 'GET') return
-  if (e.request.url.includes('/api/')) return
+  var url = new URL(e.request.url)
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/codes/')) return
   e.respondWith(
     fetch(e.request, { cache: 'no-store' }).then(function(r) {
       if (r && r.status === 200) {
         var rc = r.clone()
-        caches.open(CACHE).then(function(c) { c.put(e.request, rc) })
+        e.waitUntil(caches.open(CACHE).then(function(c) { c.put(e.request, rc) }))
       }
       return r
-    }).catch(function() { return caches.match(e.request) })
+    }).catch(function() {
+      return caches.match(e.request).then(function(cached) {
+        return cached || new Response('오프라인 — 네트워크 연결을 확인하세요', {
+          status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+        })
+      })
+    })
   )
 })

@@ -36,7 +36,7 @@ function authMiddleware(req, res, next) {
   const expected = process.env.GAUTH_API_TOKEN || '';
   if (!expected) return res.status(503).json({ ok: false, error: 'GAUTH_API_TOKEN not configured' });
   if (!token) return res.status(401).json({ ok: false, error: 'unauthorized' });
-  const hmac = (s) => crypto.createHmac('sha256', 'gauth').update(s).digest();
+  const hmac = (s) => crypto.createHmac('sha256', process.env.GAUTH_HMAC_KEY || 'gauth').update(s).digest();
   if (!crypto.timingSafeEqual(hmac(token), hmac(expected))) {
     return res.status(401).json({ ok: false, error: 'unauthorized' });
   }
@@ -117,7 +117,10 @@ module.exports = function(app) {
     }
   });
 
+  let _deployInProgress = false;
   app.post('/api/deploy', authMiddleware, async (req, res) => {
+    if (_deployInProgress) return res.status(409).json({ ok: false, error: 'deploy already in progress' });
+    _deployInProgress = true;
     try {
       const rawBranch = req.body && req.body.branch || 'main';
       /* git-check-ref-format: 금지 문자 제거 — https://git-scm.com/docs/git-check-ref-format */
@@ -126,7 +129,7 @@ module.exports = function(app) {
       const repoDir = '/tmp/gauth-deploy-repo';
 
       if (fs.existsSync(repoDir)) {
-        execFileSync('rm', ['-rf', repoDir]);
+        fs.rmSync(repoDir, { recursive: true, force: true });
       }
 
       execFileSync('git', ['clone', '--depth', '1', '--branch', branch,
@@ -154,11 +157,11 @@ module.exports = function(app) {
         }
       }
 
-      execFileSync('rm', ['-rf', repoDir]);
+      fs.rmSync(repoDir, { recursive: true, force: true });
 
       if (deployed.includes('package.json')) {
         try {
-          execFileSync('rm', ['-rf', path.join(DATA_DIR, 'node_modules', 'multer')]);
+          fs.rmSync(path.join(DATA_DIR, 'node_modules', 'multer'), { recursive: true, force: true });
           execFileSync('npm', ['install', '--production'], { cwd: DATA_DIR, timeout: 120000 });
           deployed.push('npm-install-ok');
         } catch (e) {
@@ -199,10 +202,12 @@ module.exports = function(app) {
               hostname: 'api.cloudflare.com',
               path: `/client/v4/zones/${cfZone}/purge_cache`,
               method: 'POST',
+              timeout: 15000,
               headers: { 'Authorization': `Bearer ${cfToken}`, 'Content-Type': 'application/json', 'Content-Length': purgeData.length }
             }, (res) => {
               let d = ''; res.on('data', c => d += c); res.on('end', () => resolve(d));
             });
+            req.on('timeout', () => { req.destroy(); resolve('error:timeout'); });
             req.on('error', (e) => resolve('error:' + e.message));
             req.write(purgeData); req.end();
           });
@@ -213,9 +218,12 @@ module.exports = function(app) {
       } catch (e) { cfResult = 'error:' + e.message.slice(0, 50); }
       deployed.push('cf-cache:' + cfResult);
 
+      _deployInProgress = false;
       res.json({ ok: true, deployed });
     } catch (e) {
-      res.status(500).json({ ok: false, error: e.message });
+      _deployInProgress = false;
+      console.error('[deploy] error:', e.message);
+      res.status(500).json({ ok: false, error: 'deploy failed' });
     }
   });
 
@@ -501,13 +509,14 @@ module.exports = function(app) {
     const body = JSON.stringify({ snippet: { liveChatId, type: 'textMessageEvent', textMessageDetails: { messageText: message } } });
     const r = https.request({
       hostname: 'www.googleapis.com', path: '/youtube/v3/liveChat/messages?part=snippet',
-      method: 'POST', headers: { 'Authorization': 'Bearer ' + t.access_token, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+      method: 'POST', timeout: 30000, headers: { 'Authorization': 'Bearer ' + t.access_token, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
     }, (resp) => {
       let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
         try { const j = JSON.parse(d); res.json({ ok: !j.error, data: j }); } catch { res.json({ ok: false, raw: d }); }
       });
     });
-    r.on('error', e => res.status(500).json({ ok: false, error: e.message }));
+    r.on('timeout', () => { r.destroy(); res.status(504).json({ ok: false, error: 'upstream timeout' }); });
+    r.on('error', e => { if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
     r.write(body); r.end();
   });
 
@@ -518,17 +527,18 @@ module.exports = function(app) {
     const https = require('https');
     const r = https.request({
       hostname: 'www.googleapis.com', path: '/youtube/v3/liveBroadcasts?part=snippet,contentDetails,status&broadcastStatus=active&broadcastType=all',
-      method: 'GET', headers: { 'Authorization': 'Bearer ' + t.access_token }
+      method: 'GET', timeout: 30000, headers: { 'Authorization': 'Bearer ' + t.access_token }
     }, (resp) => {
       let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
         try {
           const j = JSON.parse(d);
-          const items = (j.items || []).map(it => ({ title: it.snippet.title, liveChatId: it.snippet.liveChatId, videoId: it.id || '' }));
+          const items = (j.items || []).map(it => ({ title: (it.snippet || {}).title, liveChatId: (it.snippet || {}).liveChatId, videoId: it.id || '' }));
           res.json({ ok: true, broadcasts: items });
         } catch { res.json({ ok: false, raw: d }); }
       });
     });
-    r.on('error', e => res.status(500).json({ ok: false, error: e.message }));
+    r.on('timeout', () => { r.destroy(); res.status(504).json({ ok: false, error: 'upstream timeout' }); });
+    r.on('error', e => { if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
     r.end();
   });
 
@@ -541,22 +551,23 @@ module.exports = function(app) {
     const https = require('https');
     const r = https.request({
       hostname: 'www.googleapis.com', path: `/youtube/v3/liveChat/messages?liveChatId=${encodeURIComponent(liveChatId)}&part=snippet,authorDetails&maxResults=200`,
-      method: 'GET', headers: { 'Authorization': 'Bearer ' + t.access_token }
+      method: 'GET', timeout: 30000, headers: { 'Authorization': 'Bearer ' + t.access_token }
     }, (resp) => {
       let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
         try {
           const j = JSON.parse(d);
           const msgs = (j.items || []).map(it => ({
-            displayName: it.authorDetails.displayName,
-            channelId: it.authorDetails.channelId,
-            message: it.snippet.textMessageDetails ? it.snippet.textMessageDetails.messageText : '',
-            publishedAt: it.snippet.publishedAt
+            displayName: (it.authorDetails || {}).displayName,
+            channelId: (it.authorDetails || {}).channelId,
+            message: (it.snippet && it.snippet.textMessageDetails) ? it.snippet.textMessageDetails.messageText : '',
+            publishedAt: (it.snippet || {}).publishedAt
           }));
           res.json({ ok: true, messages: msgs, pollingIntervalMillis: j.pollingIntervalMillis || 5000 });
         } catch { res.json({ ok: false, raw: d }); }
       });
     });
-    r.on('error', e => res.status(500).json({ ok: false, error: e.message }));
+    r.on('timeout', () => { r.destroy(); res.status(504).json({ ok: false, error: 'upstream timeout' }); });
+    r.on('error', e => { if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
     r.end();
   });
 
@@ -570,13 +581,14 @@ module.exports = function(app) {
     const body = JSON.stringify({ snippet: { liveChatId, moderatorDetails: { channelId } } });
     const r = https.request({
       hostname: 'www.googleapis.com', path: '/youtube/v3/liveChat/moderators?part=snippet',
-      method: 'POST', headers: { 'Authorization': 'Bearer ' + t.access_token, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+      method: 'POST', timeout: 30000, headers: { 'Authorization': 'Bearer ' + t.access_token, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
     }, (resp) => {
       let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
         try { const j = JSON.parse(d); res.json({ ok: !j.error, data: j }); } catch { res.json({ ok: false, raw: d }); }
       });
     });
-    r.on('error', e => res.status(500).json({ ok: false, error: e.message }));
+    r.on('timeout', () => { r.destroy(); res.status(504).json({ ok: false, error: 'upstream timeout' }); });
+    r.on('error', e => { if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
     r.write(body); r.end();
   });
 
