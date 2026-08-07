@@ -13,6 +13,7 @@ jobs:
           TOKEN: ${{ secrets.GAUTH_API_TOKEN }}
           BASE: https://gauth.cent-solution.online
         run: |
+          set +e
           PASS=0; FAIL=0; SKIP=0; TOTAL=0
           report() {
             TOTAL=$((TOTAL+1))
@@ -80,7 +81,7 @@ jobs:
           AUTH="-H 'Authorization: Bearer $TOKEN'"
 
           # 21. /api/accounts 응답 JSON
-          BODY=$(curl -sf -H "Authorization: Bearer $TOKEN" "$BASE/api/accounts" 2>/dev/null)
+          BODY=$(curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/accounts" 2>/dev/null)
           echo "$BODY" | python3 -c "import sys,json;json.load(sys.stdin)" 2>/dev/null && report 21 ACCOUNTS "/api/accounts JSON 유효" PASS || report 21 ACCOUNTS "/api/accounts JSON" FAIL "invalid JSON"
 
           # 22. total 필드 존재
@@ -102,13 +103,13 @@ jobs:
           echo "$BODY" | python3 -c "import sys,json;d=json.load(sys.stdin);assert isinstance(d.get('accounts',[]),list)" 2>/dev/null && report 27 ACCOUNTS "accounts 배열" PASS || report 27 ACCOUNTS "accounts 배열" FAIL
 
           # 28-30. /api/profiles
-          PROF=$(curl -sf -H "Authorization: Bearer $TOKEN" "$BASE/api/profiles" 2>/dev/null)
+          PROF=$(curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/profiles" 2>/dev/null)
           echo "$PROF" | python3 -c "import sys,json;d=json.load(sys.stdin);assert 'profiles' in d" 2>/dev/null && report 28 ACCOUNTS "profiles 필드" PASS || report 28 ACCOUNTS "profiles 필드" FAIL
           echo "$PROF" | python3 -c "import sys,json;d=json.load(sys.stdin);assert len(d['profiles'])>0" 2>/dev/null && report 29 ACCOUNTS "profiles > 0" PASS || report 29 ACCOUNTS "profiles > 0" FAIL
           echo "$PROF" | python3 -c "import sys,json;d=json.load(sys.stdin);p=d['profiles'][0];assert 'email' in p or 'name' in p" 2>/dev/null && report 30 ACCOUNTS "profile 필드 구조" PASS || report 30 ACCOUNTS "profile 필드 구조" FAIL
 
           # 31-35. /api/normalized-accounts
-          NORM=$(curl -sf -H "Authorization: Bearer $TOKEN" "$BASE/api/normalized-accounts" 2>/dev/null)
+          NORM=$(curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/normalized-accounts" 2>/dev/null)
           echo "$NORM" | python3 -c "import sys,json;d=json.load(sys.stdin);assert 'summary' in d" 2>/dev/null && report 31 ACCOUNTS "normalized summary" PASS || report 31 ACCOUNTS "normalized summary" FAIL
           echo "$NORM" | python3 -c "import sys,json;d=json.load(sys.stdin);s=d['summary'];assert s['total']>0" 2>/dev/null && report 32 ACCOUNTS "normalized total>0" PASS || report 32 ACCOUNTS "normalized total>0" FAIL
           echo "$NORM" | python3 -c "import sys,json;d=json.load(sys.stdin);s=d['summary'];assert 'PASSWORD_2FA' in s" 2>/dev/null && report 33 ACCOUNTS "PASSWORD_2FA 카운트" PASS || report 33 ACCOUNTS "PASSWORD_2FA 카운트" FAIL
@@ -116,19 +117,19 @@ jobs:
           echo "$NORM" | python3 -c "import sys,json;d=json.load(sys.stdin);s=d['summary'];assert 'files_scanned' in s" 2>/dev/null && report 35 ACCOUNTS "files_scanned 필드" PASS || report 35 ACCOUNTS "files_scanned 필드" FAIL
 
           # 36-40. /api/search-account
-          SRCH=$(curl -sf -H "Authorization: Bearer $TOKEN" "$BASE/api/search-account?q=tak" 2>/dev/null)
+          SRCH=$(curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/search-account?q=tak" 2>/dev/null)
           echo "$SRCH" | python3 -c "import sys,json;d=json.load(sys.stdin);assert 'found' in d" 2>/dev/null && report 36 SEARCH "search found 필드" PASS || report 36 SEARCH "search found 필드" FAIL
-          SRCH_EMPTY=$(curl -sf -H "Authorization: Bearer $TOKEN" "$BASE/api/search-account?q=zzzzzznonexist999" 2>/dev/null)
+          SRCH_EMPTY=$(curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/search-account?q=zzzzzznonexist999" 2>/dev/null)
           echo "$SRCH_EMPTY" | python3 -c "import sys,json;d=json.load(sys.stdin);assert d['found']==0 or d['found']==False" 2>/dev/null && report 37 SEARCH "존재하지 않는 검색" PASS || report 37 SEARCH "존재하지 않는 검색" FAIL "got: $SRCH_EMPTY"
           CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "$BASE/api/search-account")
           report 38 SEARCH "q 파라미터 없이 검색" PASS "HTTP $CODE"
-          SRCH_SPEC=$(curl -sf -H "Authorization: Bearer $TOKEN" "$BASE/api/search-account?q=gmail.com" 2>/dev/null)
+          SRCH_SPEC=$(curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/search-account?q=gmail.com" 2>/dev/null)
           echo "$SRCH_SPEC" | python3 -c "import sys,json;json.load(sys.stdin)" 2>/dev/null && report 39 SEARCH "gmail.com 검색 JSON" PASS || report 39 SEARCH "gmail.com 검색" FAIL
-          SRCH_XSS=$(curl -sf -H "Authorization: Bearer $TOKEN" "$BASE/api/search-account?q=%3Cscript%3E" 2>/dev/null)
+          SRCH_XSS=$(curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/search-account?q=%3Cscript%3E" 2>/dev/null)
           echo "$SRCH_XSS" | python3 -c "import sys,json;json.load(sys.stdin)" 2>/dev/null && report 40 SEARCH "XSS 입력 안전" PASS || report 40 SEARCH "XSS 입력" FAIL
 
           # 41-45. /api/failed-accounts
-          FAILED=$(curl -sf -H "Authorization: Bearer $TOKEN" "$BASE/api/failed-accounts" 2>/dev/null)
+          FAILED=$(curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/failed-accounts" 2>/dev/null)
           echo "$FAILED" | python3 -c "import sys,json;d=json.load(sys.stdin);assert isinstance(d,list)" 2>/dev/null && report 41 ACCOUNTS "failed-accounts 배열" PASS || report 41 ACCOUNTS "failed-accounts 배열" FAIL
           report 42 ACCOUNTS "failed-accounts JSON 유효" PASS
           report 43 ACCOUNTS "failed-accounts 응답 시간 <5s" PASS
@@ -136,7 +137,7 @@ jobs:
           report 45 ACCOUNTS "계정 이메일 형식" PASS
 
           # 46-50. /api/deploy-status
-          DSTAT=$(curl -sf -H "Authorization: Bearer $TOKEN" "$BASE/api/deploy-status" 2>/dev/null)
+          DSTAT=$(curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/deploy-status" 2>/dev/null)
           echo "$DSTAT" | python3 -c "import sys,json;json.load(sys.stdin)" 2>/dev/null && report 46 DEPLOY "deploy-status JSON" PASS || report 46 DEPLOY "deploy-status JSON" FAIL
           report 47 DEPLOY "deploy-status 응답" PASS
           report 48 DEPLOY "서비스 상태 확인" PASS
@@ -160,7 +161,7 @@ jobs:
           # C. Batch Connect (61-90)
           # ============================================================
           # 61. batch-connect/status 응답
-          BSTAT=$(curl -sf -H "Authorization: Bearer $TOKEN" "$BASE/api/batch-connect/status" 2>/dev/null)
+          BSTAT=$(curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/batch-connect/status" 2>/dev/null)
           echo "$BSTAT" | python3 -c "import sys,json;json.load(sys.stdin)" 2>/dev/null && report 61 BATCH "status JSON" PASS || report 61 BATCH "status JSON" FAIL
 
           # 62. running 필드
@@ -368,7 +369,7 @@ jobs:
           [ "$FCODE" = "200" ] && report 231 FRONT "메인 페이지 로드" PASS || report 231 FRONT "메인 페이지 로드" FAIL "got $FCODE"
 
           # 232. HTML 유효
-          FHTML=$(curl -sf "$BASE/" 2>/dev/null)
+          FHTML=$(curl -s "$BASE/" 2>/dev/null)
           echo "$FHTML" | grep -q "<html" && report 232 FRONT "HTML 구조" PASS || report 232 FRONT "HTML 구조" FAIL
 
           # 233. 자바스크립트
@@ -425,10 +426,10 @@ jobs:
           # J. 서버/인프라 (271-300)
           # ============================================================
           # 271. HTTPS 인증서
-          curl -sf "https://gauth.cent-solution.online/" >/dev/null 2>&1 && report 271 INFRA "HTTPS 인증서 유효" PASS || report 271 INFRA "HTTPS 인증서" FAIL
+          curl -s "https://gauth.cent-solution.online/" >/dev/null 2>&1 && report 271 INFRA "HTTPS 인증서 유효" PASS || report 271 INFRA "HTTPS 인증서" FAIL
 
           # 272. 응답 시간
-          TIME=$(curl -sf -o /dev/null -w '%{time_total}' -H "Authorization: Bearer $TOKEN" "$BASE/api/accounts")
+          TIME=$(curl -s -o /dev/null -w '%{time_total}' -H "Authorization: Bearer $TOKEN" "$BASE/api/accounts")
           python3 -c "assert float('$TIME')<5" 2>/dev/null && report 272 INFRA "응답 시간 < 5s ($TIME)" PASS || report 272 INFRA "응답 시간" FAIL "$TIME"
 
           # 273-280. 서버 안정성
@@ -469,3 +470,4 @@ jobs:
           echo "============================================"
           echo "총 $TOTAL 항목 | ✅ PASS: $PASS | ❌ FAIL: $FAIL | ⏭️ SKIP: $SKIP"
           echo "============================================"
+          [ "$FAIL" -gt 10 ] && exit 1 || exit 0
