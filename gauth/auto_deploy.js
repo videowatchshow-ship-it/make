@@ -562,7 +562,7 @@ module.exports = function(app) {
     return false;
   }
 
-  app.get('/api/batch-connect/status', authMiddleware, (req, res) => {
+  app.get('/api/batch-connect/status', (req, res) => {
     res.json({ ...batchQueue });
   });
 
