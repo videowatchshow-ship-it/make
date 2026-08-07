@@ -62,7 +62,7 @@ jobs:
           [ "$CODE" = "401" ] && report 12 AUTH "batch-connect/status 인증 필요" PASS || report 12 AUTH "batch-connect/status 인증 필요" FAIL "got $CODE"
 
           # 13-15. POST 메서드 인증
-          for ep in /api/deploy /api/batch-connect/stop /api/upload; do
+          for ep in /api/deploy /api/batch-connect/stop /api/upload-excels; do
             NUM=$((TOTAL+1))
             CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE$ep")
             [ "$CODE" = "401" ] && report $NUM AUTH "POST $ep 인증" PASS || report $NUM AUTH "POST $ep 인증" SKIP "got $CODE"

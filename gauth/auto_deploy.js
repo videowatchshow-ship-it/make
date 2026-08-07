@@ -7,6 +7,7 @@ const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const https = require('https');
 
 function normalizeEmail(s) {
   s = String(s || '').trim().toLowerCase();
@@ -54,7 +55,7 @@ function safeReadJSON(filePath) {
 }
 
 module.exports = function(app) {
-  app.get('/api/accounts', (req, res) => {
+  app.get('/api/accounts', authMiddleware, (req, res) => {
     try {
       const accounts = safeReadJSON(DATA_FILE);
       const profilesDir = PROFILES_DIR;
@@ -171,7 +172,7 @@ module.exports = function(app) {
 
       res.json({ ok: true, deployed });
     } catch (e) {
-      res.status(500).json({ ok: false, error: e.message });
+      res.status(500).json({ ok: false, error: 'deploy failed' });
     }
   });
 
@@ -198,11 +199,11 @@ module.exports = function(app) {
       fs.renameSync(tmpFile, dataFile);
       res.json({ ok: true, email, secret_length: normalized.length });
     } catch (e) {
-      res.status(500).json({ ok: false, error: e.message });
+      res.status(500).json({ ok: false, error: 'update failed' });
     }
   });
 
-  app.get('/api/normalized-accounts', (req, res) => {
+  app.get('/api/normalized-accounts', authMiddleware, (req, res) => {
     try {
       const accounts = safeReadJSON(DATA_FILE);
       let filesScanned = 0;
@@ -226,12 +227,12 @@ module.exports = function(app) {
         }
       });
     } catch (e) {
-      res.status(500).json({ accounts: [], summary: {}, error: e.message });
+      res.status(500).json({ accounts: [], summary: {}, error: 'read failed' });
     }
   });
 
   /* ref: https://github.com/nodejs/node/blob/main/doc/api/fs.md#fsreaddirsyncpath-options */
-  app.get('/api/profiles', (req, res) => {
+  app.get('/api/profiles', authMiddleware, (req, res) => {
     try {
       const profilesDir = PROFILES_DIR;
       const profiles = [];
@@ -251,20 +252,21 @@ module.exports = function(app) {
     }
   });
 
-  app.get('/api/failed-accounts', (req, res) => {
+  app.get('/api/failed-accounts', authMiddleware, (req, res) => {
     try {
       const failFile = path.join(DATA_DIR, 'failed_accounts.json');
       if (fs.existsSync(failFile)) {
-        res.json(JSON.parse(fs.readFileSync(failFile, 'utf8')));
+        const data = JSON.parse(fs.readFileSync(failFile, 'utf8'));
+        res.json(Array.isArray(data) ? data : Object.entries(data).map(([email, info]) => ({ email, ...info })));
       } else {
-        res.json({});
+        res.json([]);
       }
     } catch (e) {
-      res.json({});
+      res.json([]);
     }
   });
 
-  app.delete('/api/failed-accounts/:email', (req, res) => {
+  app.delete('/api/failed-accounts/:email', authMiddleware, (req, res) => {
     try {
       const email = (req.params.email || '').trim().toLowerCase();
       const failFile = path.join(DATA_DIR, 'failed_accounts.json');
@@ -277,11 +279,11 @@ module.exports = function(app) {
       }
       res.json({ ok: true });
     } catch (e) {
-      res.status(500).json({ ok: false, error: e.message });
+      res.status(500).json({ ok: false, error: 'delete failed' });
     }
   });
 
-  app.get('/api/lookup/:email', (req, res) => {
+  app.get('/api/lookup/:email', authMiddleware, (req, res) => {
     try {
       const email = normalizeEmail(req.params.email);
       if (!email) return res.status(400).json({ error: 'email required' });
@@ -304,11 +306,11 @@ module.exports = function(app) {
         extra: account.extra || []
       });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      res.status(500).json({ error: 'lookup failed' });
     }
   });
 
-  app.get('/api/search-account', (req, res) => {
+  app.get('/api/search-account', authMiddleware, (req, res) => {
     try {
       const q = (req.query.q || '').trim().toLowerCase();
       if (!q || q.length < 3) return res.status(400).json({ ok: false, error: 'query too short (min 3 chars)' });
@@ -326,7 +328,7 @@ module.exports = function(app) {
       }
       res.json({ ok: true, query: q, total_accounts: accounts.length, found: results.length, results: results.slice(0, 50) });
     } catch (e) {
-      res.status(500).json({ ok: false, error: e.message });
+      res.status(500).json({ ok: false, error: 'search failed' });
     }
   });
 
@@ -377,35 +379,42 @@ module.exports = function(app) {
       const accounts = safeReadJSON(dataFile);
       account = accounts.find(a => normalizeEmail(a.email) === normalizeEmail(email));
     } catch (e) {
-      return res.status(500).json({ success: false, reason: 'DATA_READ_ERROR', error: e.message });
+      return res.status(500).json({ success: false, reason: 'DATA_READ_ERROR' });
     }
     if (!account) return res.status(404).json({ success: false, reason: 'ACCOUNT_NOT_FOUND' });
     if (!account.password) return res.status(400).json({ success: false, reason: 'UNKNOWN_PASSWORD' });
 
     loginQueue.set(email, Date.now());
-    let loginModule;
+    let loginGoogle;
     try {
-      loginModule = require(path.join(__dirname, 'advanced-google-login-v2.js'));
+      loginGoogle = require(path.join(__dirname, 'lib/login/google')).loginGoogle;
     } catch (e) {
       loginQueue.delete(email);
-      return res.status(500).json({ success: false, reason: 'LOGIN_MODULE_ERROR', error: e.message });
+      return res.status(500).json({ success: false, reason: 'LOGIN_MODULE_ERROR' });
+    }
+
+    let browser;
+    try {
+      const puppeteer = (() => { try { return require('rebrowser-puppeteer-core'); } catch { return require('puppeteer-core'); } })();
+      browser = await puppeteer.connect({ browserURL: 'http://localhost:9222', defaultViewport: null, protocolTimeout: 180000 });
+    } catch (e) {
+      loginQueue.delete(email);
+      return res.status(500).json({ success: false, reason: 'BROWSER_CONNECT_ERROR' });
     }
 
     try {
-      const result = await loginModule.advancedGoogleLogin(
+      const result = await loginGoogle(
         { email: account.email, password: account.password, twoFA: account.totp_secret || '' },
-        { headless: false, timeout: 90000 }
+        { browser, broadcast: () => {} }
       );
       loginQueue.delete(email);
       if (result && result.success) {
-        if (result.browser) try { await result.browser.close(); } catch (_) {}
-        return res.json({ success: true, result: result.result });
+        return res.json({ success: true, result: 'LOGIN_OK' });
       }
-      if (result && result.browser) try { await result.browser.close(); } catch (_) {}
-      return res.json({ success: false, reason: result ? result.result : 'UNKNOWN_ERROR' });
+      return res.json({ success: false, reason: result ? result.reason : 'UNKNOWN_ERROR' });
     } catch (e) {
       loginQueue.delete(email);
-      return res.status(500).json({ success: false, reason: 'LOGIN_EXCEPTION', error: e.message });
+      return res.status(500).json({ success: false, reason: 'LOGIN_EXCEPTION' });
     }
   });
 
@@ -420,12 +429,12 @@ module.exports = function(app) {
     fs.renameSync(tmp, YT_TOKENS_FILE);
   }
 
-  app.get('/api/youtube/client-id', (req, res) => {
+  app.get('/api/youtube/client-id', authMiddleware, (req, res) => {
     const clientId = process.env.YOUTUBE_OAUTH_CLIENT_ID || '';
     res.json({ client_id: clientId });
   });
 
-  app.post('/api/youtube/save-token', (req, res) => {
+  app.post('/api/youtube/save-token', authMiddleware, (req, res) => {
     try {
       const { email, access_token, expires_at } = req.body || {};
       if (!email || !access_token) return res.status(400).json({ ok: false, error: 'email and access_token required' });
@@ -434,18 +443,18 @@ module.exports = function(app) {
       writeYtTokens(tokens);
       res.json({ ok: true });
     } catch (e) {
-      res.status(500).json({ ok: false, error: e.message });
+      res.status(500).json({ ok: false, error: 'save failed' });
     }
   });
 
-  app.get('/api/youtube/token-status/:email', (req, res) => {
+  app.get('/api/youtube/token-status/:email', authMiddleware, (req, res) => {
     const tokens = readYtTokens();
     const t = tokens[normalizeEmail(req.params.email)];
     if (!t) return res.json({ connected: false });
     res.json({ connected: true, expires_at: t.expires_at, expired: Date.now() > t.expires_at });
   });
 
-  app.post('/api/youtube/chat-message', (req, res) => {
+  app.post('/api/youtube/chat-message', authMiddleware, (req, res) => {
     const { email, liveChatId, message } = req.body || {};
     if (!email || !liveChatId || !message) return res.status(400).json({ ok: false, error: 'email, liveChatId, message required' });
     const tokens = readYtTokens();
@@ -461,11 +470,11 @@ module.exports = function(app) {
         try { const j = JSON.parse(d); res.json({ ok: !j.error, data: j }); } catch { res.json({ ok: false, raw: d }); }
       });
     });
-    r.on('error', e => res.status(500).json({ ok: false, error: e.message }));
+    r.on('error', () => res.status(500).json({ ok: false, error: 'request failed' }));
     r.write(body); r.end();
   });
 
-  app.get('/api/youtube/live-chat-id/:email', (req, res) => {
+  app.get('/api/youtube/live-chat-id/:email', authMiddleware, (req, res) => {
     const tokens = readYtTokens();
     const t = tokens[normalizeEmail(req.params.email)];
     if (!t || !t.access_token) return res.status(401).json({ ok: false, error: 'not connected' });
@@ -482,11 +491,11 @@ module.exports = function(app) {
         } catch { res.json({ ok: false, raw: d }); }
       });
     });
-    r.on('error', e => res.status(500).json({ ok: false, error: e.message }));
+    r.on('error', () => res.status(500).json({ ok: false, error: 'request failed' }));
     r.end();
   });
 
-  app.get('/api/youtube/chat-list/:email', (req, res) => {
+  app.get('/api/youtube/chat-list/:email', authMiddleware, (req, res) => {
     const tokens = readYtTokens();
     const t = tokens[normalizeEmail(req.params.email)];
     if (!t || !t.access_token) return res.status(401).json({ ok: false, error: 'not connected' });
@@ -510,11 +519,11 @@ module.exports = function(app) {
         } catch { res.json({ ok: false, raw: d }); }
       });
     });
-    r.on('error', e => res.status(500).json({ ok: false, error: e.message }));
+    r.on('error', () => res.status(500).json({ ok: false, error: 'request failed' }));
     r.end();
   });
 
-  app.post('/api/youtube/add-moderator', (req, res) => {
+  app.post('/api/youtube/add-moderator', authMiddleware, (req, res) => {
     const { email, liveChatId, channelId } = req.body || {};
     if (!email || !liveChatId || !channelId) return res.status(400).json({ ok: false, error: 'email, liveChatId, channelId required' });
     const tokens = readYtTokens();
@@ -530,7 +539,7 @@ module.exports = function(app) {
         try { const j = JSON.parse(d); res.json({ ok: !j.error, data: j }); } catch { res.json({ ok: false, raw: d }); }
       });
     });
-    r.on('error', e => res.status(500).json({ ok: false, error: e.message }));
+    r.on('error', () => res.status(500).json({ ok: false, error: 'request failed' }));
     r.write(body); r.end();
   });
 
@@ -553,7 +562,7 @@ module.exports = function(app) {
     return false;
   }
 
-  app.get('/api/batch-connect/status', (req, res) => {
+  app.get('/api/batch-connect/status', authMiddleware, (req, res) => {
     res.json({ ...batchQueue });
   });
 
@@ -563,9 +572,9 @@ module.exports = function(app) {
     const mlPw = process.env.ML_PASSWORD || '1147';
     const apiToken = process.env.GAUTH_API_TOKEN || '';
     if (!token) return res.status(401).json({ ok: false, error: 'unauthorized' });
-    if (token === mlPw) return next();
+    const hmac = (s) => crypto.createHmac('sha256', 'gauth').update(s).digest();
+    try { if (crypto.timingSafeEqual(hmac(token), hmac(mlPw))) return next(); } catch {}
     if (apiToken) {
-      const hmac = (s) => crypto.createHmac('sha256', 'gauth').update(s).digest();
       try { if (crypto.timingSafeEqual(hmac(token), hmac(apiToken))) return next(); } catch {}
     }
     return res.status(401).json({ ok: false, error: 'unauthorized' });
@@ -631,7 +640,7 @@ module.exports = function(app) {
         loginGoogle = require(path.join(__dirname, 'lib/login/google')).loginGoogle;
         oauthModule = require(path.join(__dirname, 'youtube-oauth-auto.js'));
         sessionStore = require(path.join(__dirname, 'session_store'));
-        const puppeteer = require('puppeteer-core');
+        const puppeteer = (() => { try { return require('rebrowser-puppeteer-core'); } catch { return require('puppeteer-core'); } })();
         browser = await puppeteer.connect({
           browserURL: 'http://localhost:9222',
           defaultViewport: null,
