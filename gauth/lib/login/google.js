@@ -433,14 +433,9 @@ async function loginGoogle(account, { browser, sessionStore, broadcast }) {
 
   let context = null
   try {
-    // 공식: browser.createBrowserContext(options) — proxyServer 계정별 지정 가능
-    // https://pptr.dev/api/puppeteer.browsercontextoptions
-    const { nextProxy } = require('../providers/proxy')
-    const px = nextProxy()
-    const ctxOpts = px ? { proxyServer: px.server } : {}
-    context = await browser.createBrowserContext(ctxOpts)
-    if (px) log(`프록시 사용: ${px.provider} ${px.server}`)
-    const page = await context.newPage()
+    // 프록시 비활성화 — 무료 프록시 불안정, 직접 연결 사용
+    context = await browser.createBrowserContext()
+    let page = await context.newPage()
     await configurePage(page)
 
     // 1. 저장된 쿠키가 있으면 재사용 시도
