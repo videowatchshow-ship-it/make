@@ -611,7 +611,20 @@ let mergeAccount;
 try { mergeAccount = require('./merge_strategy').mergeAccount; } catch { mergeAccount = null; }
 
 module.exports = function attachUpload(app) {
-  app.post('/api/upload-excels', function (req, res, next) {
+  const crypto = require('crypto');
+  function uploadAuth(req, res, next) {
+    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+      || (req.query && req.query.token) || '';
+    const expected = process.env.GAUTH_API_TOKEN || '';
+    if (!expected) return res.status(503).json({ ok: false, error: 'GAUTH_API_TOKEN not configured' });
+    if (!token) return res.status(401).json({ ok: false, error: 'unauthorized' });
+    const hmac = (s) => crypto.createHmac('sha256', 'gauth').update(s).digest();
+    if (!crypto.timingSafeEqual(hmac(token), hmac(expected))) {
+      return res.status(401).json({ ok: false, error: 'unauthorized' });
+    }
+    next();
+  }
+  app.post('/api/upload-excels', uploadAuth, function (req, res, next) {
     uploadMiddleware.array('files', 50)(req, res, function (err) {
       if (err) return res.status(400).json({ ok: false, error: 'upload failed' });
       next();

@@ -65,7 +65,7 @@ jobs:
           for ep in /api/deploy /api/batch-connect/stop /api/upload-excels; do
             NUM=$((TOTAL+1))
             CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE$ep")
-            [ "$CODE" = "401" ] && report $NUM AUTH "POST $ep 인증" PASS || report $NUM AUTH "POST $ep 인증" SKIP "got $CODE"
+            [ "$CODE" = "401" ] && report $NUM AUTH "POST $ep 인증" PASS || report $NUM AUTH "POST $ep 인증" FAIL "got $CODE"
           done
 
           # 16-20. 잘못된 메서드
