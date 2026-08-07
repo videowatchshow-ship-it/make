@@ -6,6 +6,7 @@ on:
     paths:
       - 'gauth/index.html'
       - 'gauth/upload_excels.js'
+      - 'gauth/auto_deploy.js'
 
 jobs:
   deploy:
@@ -13,13 +14,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy via API (no SSH needed)
+      - name: Deploy via API
+        env:
+          GAUTH_TOKEN: ${{ secrets.GAUTH_API_TOKEN }}
         run: |
           echo "=== Triggering server-side deploy ==="
+          BRANCH="${GITHUB_REF_NAME}"
           RESPONSE=$(curl -sf -X POST https://gauth.cent-solution.online/api/deploy \
             -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${GAUTH_TOKEN}" \
+            -d "{\"branch\":\"${BRANCH}\"}" \
             --connect-timeout 15 \
-            --max-time 60 \
+            --max-time 180 \
             2>&1) || {
             echo "::warning::API deploy failed, falling back to SSH deploy"
             exit 1
@@ -28,10 +34,9 @@ jobs:
           import json,sys
           d=json.load(sys.stdin)
           if d.get('ok'):
-            print('✅ Deployed:', ', '.join(d.get('deployed',[])))
-            print(d.get('message',''))
+            print('Deployed:', ', '.join(d.get('deployed',[])))
           else:
-            print('❌ Error:', d.get('error','unknown'))
+            print('Error:', d.get('error','unknown'))
             sys.exit(1)
           "
 
@@ -42,7 +47,7 @@ jobs:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          source: "gauth/index.html,gauth/upload_excels.js"
+          source: "gauth/index.html,gauth/upload_excels.js,gauth/auto_deploy.js"
           target: "/tmp/gauth-deploy/"
           strip_components: 1
 
@@ -54,8 +59,9 @@ jobs:
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
           script: |
-            cp /tmp/gauth-deploy/index.html /var/www/sites/gauth/public/index.html
-            cp /tmp/gauth-deploy/upload_excels.js /opt/gauth-full/upload_excels.js
+            [ -f /tmp/gauth-deploy/index.html ] && cp /tmp/gauth-deploy/index.html /var/www/sites/gauth/public/index.html
+            [ -f /tmp/gauth-deploy/upload_excels.js ] && cp /tmp/gauth-deploy/upload_excels.js /opt/gauth-full/upload_excels.js
+            [ -f /tmp/gauth-deploy/auto_deploy.js ] && cp /tmp/gauth-deploy/auto_deploy.js /opt/gauth-full/auto_deploy.js
             sudo systemctl restart gauth
             sleep 2
             sudo systemctl status gauth --no-pager | head -5
