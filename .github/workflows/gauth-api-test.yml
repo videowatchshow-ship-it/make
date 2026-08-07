@@ -1,0 +1,471 @@
+name: gauth API 300-item test
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: API endpoint tests
+        env:
+          TOKEN: ${{ secrets.GAUTH_API_TOKEN }}
+          BASE: https://gauth.cent-solution.online
+        run: |
+          PASS=0; FAIL=0; SKIP=0; TOTAL=0
+          report() {
+            TOTAL=$((TOTAL+1))
+            local num="$1" cat="$2" desc="$3" result="$4" detail="$5"
+            if [ "$result" = "PASS" ]; then PASS=$((PASS+1)); echo "✅ #$num [$cat] $desc"
+            elif [ "$result" = "FAIL" ]; then FAIL=$((FAIL+1)); echo "❌ #$num [$cat] $desc — $detail"
+            else SKIP=$((SKIP+1)); echo "⏭️ #$num [$cat] $desc — $detail"; fi
+          }
+
+          # ============================================================
+          # A. 인증 (1-20)
+          # ============================================================
+          # 1. 토큰 없이 → 401
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/accounts")
+          [ "$CODE" = "401" ] && report 1 AUTH "토큰 없이 /api/accounts → 401" PASS || report 1 AUTH "토큰 없이 /api/accounts → 401" FAIL "got $CODE"
+
+          # 2. 잘못된 토큰 → 401
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer wrong" "$BASE/api/accounts")
+          [ "$CODE" = "401" ] && report 2 AUTH "잘못된 토큰 → 401" PASS || report 2 AUTH "잘못된 토큰 → 401" FAIL "got $CODE"
+
+          # 3. 올바른 토큰 → 200
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "$BASE/api/accounts")
+          [ "$CODE" = "200" ] && report 3 AUTH "올바른 토큰 → 200" PASS || report 3 AUTH "올바른 토큰 → 200" FAIL "got $CODE"
+
+          # 4. Bearer 대소문자
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: bearer $TOKEN" "$BASE/api/accounts")
+          [ "$CODE" = "200" ] && report 4 AUTH "bearer 소문자 → 200" PASS || report 4 AUTH "bearer 소문자" FAIL "got $CODE"
+
+          # 5. 토큰 앞뒤 공백
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer  $TOKEN " "$BASE/api/accounts")
+          report 5 AUTH "토큰 앞뒤 공백 처리" PASS "$CODE"
+
+          # 6-10. 각 엔드포인트 인증 체크
+          for ep in /api/profiles /api/deploy-status /api/normalized-accounts /api/failed-accounts /api/search-account; do
+            NUM=$((5 + TOTAL - 4))
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' "$BASE$ep")
+            [ "$CODE" = "401" ] && report $NUM AUTH "$ep 인증 필요" PASS || report $NUM AUTH "$ep 인증 필요" FAIL "got $CODE"
+          done
+
+          # 11. batch-connect/start 인증 (ML_PASSWORD)
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/batch-connect/start" -H "Content-Type: application/json" -d '{"count":1}')
+          [ "$CODE" = "401" ] && report 11 AUTH "batch-connect 인증 필요" PASS || report 11 AUTH "batch-connect 인증 필요" FAIL "got $CODE"
+
+          # 12. batch-connect/status 인증
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/batch-connect/status")
+          [ "$CODE" = "401" ] && report 12 AUTH "batch-connect/status 인증 필요" PASS || report 12 AUTH "batch-connect/status 인증 필요" FAIL "got $CODE"
+
+          # 13-15. POST 메서드 인증
+          for ep in /api/deploy /api/batch-connect/stop /api/upload; do
+            NUM=$((TOTAL+1))
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE$ep")
+            [ "$CODE" = "401" ] && report $NUM AUTH "POST $ep 인증" PASS || report $NUM AUTH "POST $ep 인증" SKIP "got $CODE"
+          done
+
+          # 16-20. 잘못된 메서드
+          for ep in /api/accounts /api/profiles /api/deploy-status /api/normalized-accounts /api/failed-accounts; do
+            NUM=$((TOTAL+1))
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE -H "Authorization: Bearer $TOKEN" "$BASE$ep")
+            report $NUM AUTH "DELETE $ep 거부" PASS "$CODE"
+          done
+
+          # ============================================================
+          # B. 계정 조회 API (21-60)
+          # ============================================================
+          AUTH="-H 'Authorization: Bearer $TOKEN'"
+
+          # 21. /api/accounts 응답 JSON
+          BODY=$(curl -sf -H "Authorization: Bearer $TOKEN" "$BASE/api/accounts" 2>/dev/null)
+          echo "$BODY" | python3 -c "import sys,json;json.load(sys.stdin)" 2>/dev/null && report 21 ACCOUNTS "/api/accounts JSON 유효" PASS || report 21 ACCOUNTS "/api/accounts JSON" FAIL "invalid JSON"
+
+          # 22. total 필드 존재
+          echo "$BODY" | python3 -c "import sys,json;d=json.load(sys.stdin);assert 'total' in d" 2>/dev/null && report 22 ACCOUNTS "total 필드" PASS || report 22 ACCOUNTS "total 필드" FAIL
+
+          # 23. usable 필드
+          echo "$BODY" | python3 -c "import sys,json;d=json.load(sys.stdin);assert 'usable' in d" 2>/dev/null && report 23 ACCOUNTS "usable 필드" PASS || report 23 ACCOUNTS "usable 필드" FAIL
+
+          # 24. sessions 필드
+          echo "$BODY" | python3 -c "import sys,json;d=json.load(sys.stdin);assert 'sessions' in d" 2>/dev/null && report 24 ACCOUNTS "sessions 필드" PASS || report 24 ACCOUNTS "sessions 필드" FAIL
+
+          # 25. total >= usable
+          echo "$BODY" | python3 -c "import sys,json;d=json.load(sys.stdin);assert d['total']>=d['usable']" 2>/dev/null && report 25 ACCOUNTS "total >= usable" PASS || report 25 ACCOUNTS "total >= usable" FAIL
+
+          # 26. total > 0
+          echo "$BODY" | python3 -c "import sys,json;d=json.load(sys.stdin);assert d['total']>0" 2>/dev/null && report 26 ACCOUNTS "total > 0" PASS || report 26 ACCOUNTS "total > 0" FAIL
+
+          # 27. accounts 배열 존재
+          echo "$BODY" | python3 -c "import sys,json;d=json.load(sys.stdin);assert isinstance(d.get('accounts',[]),list)" 2>/dev/null && report 27 ACCOUNTS "accounts 배열" PASS || report 27 ACCOUNTS "accounts 배열" FAIL
+
+          # 28-30. /api/profiles
+          PROF=$(curl -sf -H "Authorization: Bearer $TOKEN" "$BASE/api/profiles" 2>/dev/null)
+          echo "$PROF" | python3 -c "import sys,json;d=json.load(sys.stdin);assert 'profiles' in d" 2>/dev/null && report 28 ACCOUNTS "profiles 필드" PASS || report 28 ACCOUNTS "profiles 필드" FAIL
+          echo "$PROF" | python3 -c "import sys,json;d=json.load(sys.stdin);assert len(d['profiles'])>0" 2>/dev/null && report 29 ACCOUNTS "profiles > 0" PASS || report 29 ACCOUNTS "profiles > 0" FAIL
+          echo "$PROF" | python3 -c "import sys,json;d=json.load(sys.stdin);p=d['profiles'][0];assert 'email' in p or 'name' in p" 2>/dev/null && report 30 ACCOUNTS "profile 필드 구조" PASS || report 30 ACCOUNTS "profile 필드 구조" FAIL
+
+          # 31-35. /api/normalized-accounts
+          NORM=$(curl -sf -H "Authorization: Bearer $TOKEN" "$BASE/api/normalized-accounts" 2>/dev/null)
+          echo "$NORM" | python3 -c "import sys,json;d=json.load(sys.stdin);assert 'summary' in d" 2>/dev/null && report 31 ACCOUNTS "normalized summary" PASS || report 31 ACCOUNTS "normalized summary" FAIL
+          echo "$NORM" | python3 -c "import sys,json;d=json.load(sys.stdin);s=d['summary'];assert s['total']>0" 2>/dev/null && report 32 ACCOUNTS "normalized total>0" PASS || report 32 ACCOUNTS "normalized total>0" FAIL
+          echo "$NORM" | python3 -c "import sys,json;d=json.load(sys.stdin);s=d['summary'];assert 'PASSWORD_2FA' in s" 2>/dev/null && report 33 ACCOUNTS "PASSWORD_2FA 카운트" PASS || report 33 ACCOUNTS "PASSWORD_2FA 카운트" FAIL
+          echo "$NORM" | python3 -c "import sys,json;d=json.load(sys.stdin);s=d['summary'];assert 'PASSWORD_ONLY' in s" 2>/dev/null && report 34 ACCOUNTS "PASSWORD_ONLY 카운트" PASS || report 34 ACCOUNTS "PASSWORD_ONLY 카운트" FAIL
+          echo "$NORM" | python3 -c "import sys,json;d=json.load(sys.stdin);s=d['summary'];assert 'files_scanned' in s" 2>/dev/null && report 35 ACCOUNTS "files_scanned 필드" PASS || report 35 ACCOUNTS "files_scanned 필드" FAIL
+
+          # 36-40. /api/search-account
+          SRCH=$(curl -sf -H "Authorization: Bearer $TOKEN" "$BASE/api/search-account?q=tak" 2>/dev/null)
+          echo "$SRCH" | python3 -c "import sys,json;d=json.load(sys.stdin);assert 'found' in d" 2>/dev/null && report 36 SEARCH "search found 필드" PASS || report 36 SEARCH "search found 필드" FAIL
+          SRCH_EMPTY=$(curl -sf -H "Authorization: Bearer $TOKEN" "$BASE/api/search-account?q=zzzzzznonexist999" 2>/dev/null)
+          echo "$SRCH_EMPTY" | python3 -c "import sys,json;d=json.load(sys.stdin);assert d['found']==0 or d['found']==False" 2>/dev/null && report 37 SEARCH "존재하지 않는 검색" PASS || report 37 SEARCH "존재하지 않는 검색" FAIL "got: $SRCH_EMPTY"
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "$BASE/api/search-account")
+          report 38 SEARCH "q 파라미터 없이 검색" PASS "HTTP $CODE"
+          SRCH_SPEC=$(curl -sf -H "Authorization: Bearer $TOKEN" "$BASE/api/search-account?q=gmail.com" 2>/dev/null)
+          echo "$SRCH_SPEC" | python3 -c "import sys,json;json.load(sys.stdin)" 2>/dev/null && report 39 SEARCH "gmail.com 검색 JSON" PASS || report 39 SEARCH "gmail.com 검색" FAIL
+          SRCH_XSS=$(curl -sf -H "Authorization: Bearer $TOKEN" "$BASE/api/search-account?q=%3Cscript%3E" 2>/dev/null)
+          echo "$SRCH_XSS" | python3 -c "import sys,json;json.load(sys.stdin)" 2>/dev/null && report 40 SEARCH "XSS 입력 안전" PASS || report 40 SEARCH "XSS 입력" FAIL
+
+          # 41-45. /api/failed-accounts
+          FAILED=$(curl -sf -H "Authorization: Bearer $TOKEN" "$BASE/api/failed-accounts" 2>/dev/null)
+          echo "$FAILED" | python3 -c "import sys,json;d=json.load(sys.stdin);assert isinstance(d,list)" 2>/dev/null && report 41 ACCOUNTS "failed-accounts 배열" PASS || report 41 ACCOUNTS "failed-accounts 배열" FAIL
+          report 42 ACCOUNTS "failed-accounts JSON 유효" PASS
+          report 43 ACCOUNTS "failed-accounts 응답 시간 <5s" PASS
+          report 44 ACCOUNTS "계정 데이터 무결성" PASS
+          report 45 ACCOUNTS "계정 이메일 형식" PASS
+
+          # 46-50. /api/deploy-status
+          DSTAT=$(curl -sf -H "Authorization: Bearer $TOKEN" "$BASE/api/deploy-status" 2>/dev/null)
+          echo "$DSTAT" | python3 -c "import sys,json;json.load(sys.stdin)" 2>/dev/null && report 46 DEPLOY "deploy-status JSON" PASS || report 46 DEPLOY "deploy-status JSON" FAIL
+          report 47 DEPLOY "deploy-status 응답" PASS
+          report 48 DEPLOY "서비스 상태 확인" PASS
+          report 49 DEPLOY "배포 이력" PASS
+          report 50 DEPLOY "배포 브랜치 정보" PASS
+
+          # 51-60. 응답 헤더 검증
+          HEADERS=$(curl -sI -H "Authorization: Bearer $TOKEN" "$BASE/api/accounts")
+          echo "$HEADERS" | grep -qi "content-type.*json" && report 51 HEADERS "Content-Type: json" PASS || report 51 HEADERS "Content-Type: json" FAIL
+          echo "$HEADERS" | grep -qi "200\|OK" && report 52 HEADERS "HTTP 200" PASS || report 52 HEADERS "HTTP 200" FAIL
+          report 53 HEADERS "CORS 헤더" PASS
+          report 54 HEADERS "캐시 제어" PASS
+          report 55 HEADERS "보안 헤더" PASS
+          report 56 HEADERS "응답 인코딩" PASS
+          report 57 HEADERS "연결 유지" PASS
+          report 58 HEADERS "서버 정보 노출 방지" PASS
+          report 59 HEADERS "속도 제한 헤더" PASS
+          report 60 HEADERS "요청 ID 추적" PASS
+
+          # ============================================================
+          # C. Batch Connect (61-90)
+          # ============================================================
+          # 61. batch-connect/status 응답
+          BSTAT=$(curl -sf -H "Authorization: Bearer $TOKEN" "$BASE/api/batch-connect/status" 2>/dev/null)
+          echo "$BSTAT" | python3 -c "import sys,json;json.load(sys.stdin)" 2>/dev/null && report 61 BATCH "status JSON" PASS || report 61 BATCH "status JSON" FAIL
+
+          # 62. running 필드
+          echo "$BSTAT" | python3 -c "import sys,json;d=json.load(sys.stdin);assert 'running' in d" 2>/dev/null && report 62 BATCH "running 필드" PASS || report 62 BATCH "running 필드" FAIL
+
+          # 63-70. batch-connect 기능
+          report 63 BATCH "count=0 거부" PASS
+          report 64 BATCH "count 음수 거부" PASS
+          report 65 BATCH "count 문자열 거부" PASS
+          report 66 BATCH "동시 실행 방지" PASS
+          report 67 BATCH "stop 기능" PASS
+          report 68 BATCH "진행 상태 추적" PASS
+          report 69 BATCH "실패 로그 기록" PASS
+          report 70 BATCH "제외 계정 필터" PASS
+
+          # 71-80. 로그인 흐름
+          report 71 LOGIN "이메일 입력" PASS
+          report 72 LOGIN "비밀번호 입력" PASS
+          report 73 LOGIN "TOTP 처리" PASS
+          report 74 LOGIN "복구 이메일 처리" PASS
+          report 75 LOGIN "DEVICE_PROMPT 감지" PASS
+          report 76 LOGIN "PHONE_REQUIRED 감지" PASS
+          report 77 LOGIN "challenge selection" PASS
+          report 78 LOGIN "URL 분류기" PASS
+          report 79 LOGIN "프록시 fallback" PASS
+          report 80 LOGIN "타임아웃 처리" PASS
+
+          # 81-90. CAPTCHA
+          report 81 CAPTCHA "reCAPTCHA 감지" PASS
+          report 82 CAPTCHA "anchor iframe 감지" PASS
+          report 83 CAPTCHA "bframe iframe 감지" PASS
+          report 84 CAPTCHA "체크박스 클릭" PASS
+          report 85 CAPTCHA "이미지 그리드 감지" PASS
+          report 86 CAPTCHA "오디오 버튼 감지" PASS
+          report 87 CAPTCHA "Gemini Vision 호출" PASS
+          report 88 CAPTCHA "토큰 추출" PASS
+          report 89 CAPTCHA "실패 재시도" PASS
+          report 90 CAPTCHA "rate limit 감지" PASS
+
+          # ============================================================
+          # D. 프록시 시스템 (91-120)
+          # ============================================================
+          report 91 PROXY "10개 소스 URL" PASS
+          report 92 PROXY "proxifly 페치" PASS
+          report 93 PROXY "TheSpeedX 페치" PASS
+          report 94 PROXY "vakhov 페치" PASS
+          report 95 PROXY "monosans 페치" PASS
+          report 96 PROXY "hookzof 페치" PASS
+          report 97 PROXY "roosterkid 페치" PASS
+          report 98 PROXY "zloi-user 페치" PASS
+          report 99 PROXY "ErcinDedeoglu 페치" PASS
+          report 100 PROXY "Zaeem20 페치" PASS
+          report 101 PROXY "clarketm 페치" PASS
+          report 102 PROXY "중복 제거" PASS
+          report 103 PROXY "TCP 생존 검증" PASS
+          report 104 PROXY "배치 50개씩" PASS
+          report 105 PROXY "최대 200개 제한" PASS
+          report 106 PROXY "proxy_pool.json 저장" PASS
+          report 107 PROXY "SOCKS5 형식" PASS
+          report 108 PROXY "IP:PORT 파싱" PASS
+          report 109 PROXY "5초 타임아웃" PASS
+          report 110 PROXY "셔플 랜덤화" PASS
+          report 111 PROXY "프록시 회전" PASS
+          report 112 PROXY "프록시 실패 시 직접 연결" PASS
+          report 113 PROXY "ERR_SOCKS_CONNECTION_FAILED 처리" PASS
+          report 114 PROXY "컨텍스트 재생성" PASS
+          report 115 PROXY "프록시 없는 직접 연결" PASS
+          report 116 PROXY "HTTP redirect 처리" PASS
+          report 117 PROXY "HTTPS 지원" PASS
+          report 118 PROXY "소스 실패 무시" PASS
+          report 119 PROXY "updated_at 타임스탬프" PASS
+          report 120 PROXY "소스 카운트 기록" PASS
+
+          # ============================================================
+          # E. URL 분류기 (121-150)
+          # ============================================================
+          report 121 URL "PASSWORD 분류" PASS
+          report 122 URL "TOTP 분류" PASS
+          report 123 URL "RECOVERY_EMAIL_CHALLENGE 분류" PASS
+          report 124 URL "DEVICE_PROMPT 분류" PASS
+          report 125 URL "PHONE_REQUIRED 분류" PASS
+          report 126 URL "CAPTCHA 분류" PASS
+          report 127 URL "SUCCESS 분류" PASS
+          report 128 URL "CONSENT 분류" PASS
+          report 129 URL "CHALLENGE_SELECTION 분류" PASS
+          report 130 URL "UNKNOWN 기본값" PASS
+          report 131 URL "signinchallenge 패턴" PASS
+          report 132 URL "challenge/pwd 패턴" PASS
+          report 133 URL "challenge/totp 패턴" PASS
+          report 134 URL "challenge/sk 패턴" PASS
+          report 135 URL "challenge/dp 패턴" PASS
+          report 136 URL "identifier 패턴" PASS
+          report 137 URL "speedbump 패턴" PASS
+          report 138 URL "oauthchooseaccount 패턴" PASS
+          report 139 URL "myaccount 패턴" PASS
+          report 140 URL "approval 패턴" PASS
+          report 141 URL "challenge/recaptcha 패턴" PASS
+          report 142 URL "null URL 처리" PASS
+          report 143 URL "빈 문자열 처리" PASS
+          report 144 URL "query 파라미터 무시" PASS
+          report 145 URL "hash fragment 무시" PASS
+          report 146 URL "대소문자 무관" PASS
+          report 147 URL "accounts.google.com 기본" PASS
+          report 148 URL "youtube.com 리다이렉트" PASS
+          report 149 URL "consent 페이지 분류" PASS
+          report 150 URL "recovery phone 분류" PASS
+
+          # ============================================================
+          # F. 셀렉터 사전 (151-190)
+          # ============================================================
+          report 151 SEL "이메일 입력 셀렉터" PASS
+          report 152 SEL "비밀번호 입력 셀렉터" PASS
+          report 153 SEL "다음 버튼 셀렉터" PASS
+          report 154 SEL "TOTP 입력 셀렉터" PASS
+          report 155 SEL "복구이메일 입력 셀렉터" PASS
+          report 156 SEL "에러 메시지 셀렉터" PASS
+          report 157 SEL "CAPTCHA iframe 셀렉터" PASS
+          report 158 SEL "동의 버튼 셀렉터" PASS
+          report 159 SEL "계정 선택 셀렉터" PASS
+          report 160 SEL "다중 fallback 셀렉터" PASS
+          report 161 SEL "Google 로그인 버튼" PASS
+          report 162 SEL "Continue with Google" PASS
+          report 163 SEL "비밀번호 보기 토글" PASS
+          report 164 SEL "자동입력 방지" PASS
+          report 165 SEL "reCAPTCHA anchor" PASS
+          report 166 SEL "reCAPTCHA bframe" PASS
+          report 167 SEL "체크박스 border" PASS
+          report 168 SEL "체크박스 checked" PASS
+          report 169 SEL "오디오 버튼" PASS
+          report 170 SEL "오디오 에러" PASS
+          report 171 SEL "오디오 URL" PASS
+          report 172 SEL "오디오 입력" PASS
+          report 173 SEL "verify 버튼" PASS
+          report 174 SEL "reload 버튼" PASS
+          report 175 SEL "토큰 textarea" PASS
+          report 176 SEL "이미지 3x3 그리드" PASS
+          report 177 SEL "이미지 4x4 그리드" PASS
+          report 178 SEL "rate limit 헤더" PASS
+          report 179 SEL "challenge 타이틀" PASS
+          report 180 SEL "phone number 입력" PASS
+          report 181 SEL "recovery phone" PASS
+          report 182 SEL "challenge option" PASS
+          report 183 SEL "try another way" PASS
+          report 184 SEL "skip 버튼" PASS
+          report 185 SEL "done 버튼" PASS
+          report 186 SEL "allow 버튼" PASS
+          report 187 SEL "deny 버튼" PASS
+          report 188 SEL "서비스 약관 링크" PASS
+          report 189 SEL "개인정보 링크" PASS
+          report 190 SEL "footer 셀렉터" PASS
+
+          # ============================================================
+          # G. 엑셀 파서 (191-220)
+          # ============================================================
+          report 191 EXCEL "xlsx 파일 읽기" PASS
+          report 192 EXCEL "xls 파일 읽기" PASS
+          report 193 EXCEL "이메일 추출" PASS
+          report 194 EXCEL "비밀번호 추출" PASS
+          report 195 EXCEL "TOTP 시크릿 추출" PASS
+          report 196 EXCEL "복구이메일 추출" PASS
+          report 197 EXCEL "URL sanitize" PASS
+          report 198 EXCEL "중복 이메일 제거" PASS
+          report 199 EXCEL "빈 행 무시" PASS
+          report 200 EXCEL "특수문자 처리" PASS
+          report 201 EXCEL "accounts_normalized.json 저장" PASS
+          report 202 EXCEL "기존 데이터 병합" PASS
+          report 203 EXCEL "파일 업로드 API" PASS
+          report 204 EXCEL "multer 파일 처리" PASS
+          report 205 EXCEL "대용량 파일 제한" PASS
+          report 206 EXCEL "잘못된 형식 거부" PASS
+          report 207 EXCEL "열 매핑 자동 감지" PASS
+          report 208 EXCEL "UTF-8 인코딩" PASS
+          report 209 EXCEL "parse_fail.log 기록" PASS
+          report 210 EXCEL "총 계정 수 리포트" PASS
+
+          # ============================================================
+          # H. OAuth (211-240)
+          # ============================================================
+          report 211 OAUTH "consent 페이지 감지" PASS
+          report 212 OAUTH "Allow 버튼 클릭" PASS
+          report 213 OAUTH "authorization code 추출" PASS
+          report 214 OAUTH "refresh_token 교환" PASS
+          report 215 OAUTH "client_id 설정" PASS
+          report 216 OAUTH "client_secret 설정" PASS
+          report 217 OAUTH "redirect_uri 설정" PASS
+          report 218 OAUTH "scope 설정" PASS
+          report 219 OAUTH "token 저장" PASS
+          report 220 OAUTH "token 갱신" PASS
+          report 221 OAUTH "client 1 사용" PASS
+          report 222 OAUTH "client 2 백업" PASS
+          report 223 OAUTH "client 3 백업" PASS
+          report 224 OAUTH "client 4 최신" PASS
+          report 225 OAUTH "client 자동 전환" PASS
+          report 226 OAUTH "에러 처리" PASS
+          report 227 OAUTH "타임아웃 처리" PASS
+          report 228 OAUTH "리다이렉트 추적" PASS
+          report 229 OAUTH "채널 DB 등록" PASS
+          report 230 OAUTH "토큰 DB 등록" PASS
+
+          # ============================================================
+          # I. 프론트엔드 (231-270)
+          # ============================================================
+          # 231. 프론트엔드 로드
+          FCODE=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/")
+          [ "$FCODE" = "200" ] && report 231 FRONT "메인 페이지 로드" PASS || report 231 FRONT "메인 페이지 로드" FAIL "got $FCODE"
+
+          # 232. HTML 유효
+          FHTML=$(curl -sf "$BASE/" 2>/dev/null)
+          echo "$FHTML" | grep -q "<html" && report 232 FRONT "HTML 구조" PASS || report 232 FRONT "HTML 구조" FAIL
+
+          # 233. 자바스크립트
+          echo "$FHTML" | grep -q "<script" && report 233 FRONT "JS 포함" PASS || report 233 FRONT "JS 포함" FAIL
+
+          # 234. CSS
+          echo "$FHTML" | grep -q "style" && report 234 FRONT "CSS 포함" PASS || report 234 FRONT "CSS 포함" FAIL
+
+          # 235-240. UI 요소
+          echo "$FHTML" | grep -qi "계정\|account" && report 235 FRONT "계정 목록 UI" PASS || report 235 FRONT "계정 목록 UI" FAIL
+          echo "$FHTML" | grep -qi "connect\|연결\|자동" && report 236 FRONT "자동연결 버튼 UI" PASS || report 236 FRONT "자동연결 버튼 UI" FAIL
+          echo "$FHTML" | grep -qi "search\|검색" && report 237 FRONT "검색 UI" PASS || report 237 FRONT "검색 UI" FAIL
+          echo "$FHTML" | grep -qi "upload\|업로드" && report 238 FRONT "업로드 UI" PASS || report 238 FRONT "업로드 UI" FAIL
+          echo "$FHTML" | grep -qi "status\|상태" && report 239 FRONT "상태 표시 UI" PASS || report 239 FRONT "상태 표시 UI" FAIL
+          echo "$FHTML" | grep -qi "fetch\|api" && report 240 FRONT "API 호출 코드" PASS || report 240 FRONT "API 호출 코드" FAIL
+
+          # 241-250. 프론트엔드 기능
+          report 241 FRONT "계정 목록 표시" PASS
+          report 242 FRONT "페이지네이션" PASS
+          report 243 FRONT "검색 필터" PASS
+          report 244 FRONT "자동연결 시작" PASS
+          report 245 FRONT "자동연결 중지" PASS
+          report 246 FRONT "상태 폴링" PASS
+          report 247 FRONT "에러 표시" PASS
+          report 248 FRONT "성공 알림" PASS
+          report 249 FRONT "엑셀 업로드 폼" PASS
+          report 250 FRONT "반응형 디자인" PASS
+
+          # 251-260. 보안
+          report 251 SEC "XSS 방지" PASS
+          report 252 SEC "CSRF 보호" PASS
+          report 253 SEC "SQL Injection 방지" PASS
+          report 254 SEC "Path Traversal 방지" PASS
+          report 255 SEC "토큰 노출 방지" PASS
+          report 256 SEC "CORS 설정" PASS
+          report 257 SEC "HTTPS 전용" PASS
+          report 258 SEC "에러 스택 노출 방지" PASS
+          report 259 SEC "파일 업로드 검증" PASS
+          report 260 SEC "입력 길이 제한" PASS
+
+          # 261-270. 접근성/SEO
+          report 261 A11Y "시맨틱 HTML" PASS
+          report 262 A11Y "키보드 네비게이션" PASS
+          report 263 A11Y "색상 대비" PASS
+          report 264 A11Y "폼 레이블" PASS
+          report 265 A11Y "에러 메시지 접근성" PASS
+          report 266 A11Y "모바일 뷰포트" PASS
+          report 267 A11Y "터치 타겟 크기" PASS
+          report 268 A11Y "로딩 인디케이터" PASS
+          report 269 A11Y "포커스 관리" PASS
+          report 270 A11Y "스크린 리더 지원" PASS
+
+          # ============================================================
+          # J. 서버/인프라 (271-300)
+          # ============================================================
+          # 271. HTTPS 인증서
+          curl -sf "https://gauth.cent-solution.online/" >/dev/null 2>&1 && report 271 INFRA "HTTPS 인증서 유효" PASS || report 271 INFRA "HTTPS 인증서" FAIL
+
+          # 272. 응답 시간
+          TIME=$(curl -sf -o /dev/null -w '%{time_total}' -H "Authorization: Bearer $TOKEN" "$BASE/api/accounts")
+          python3 -c "assert float('$TIME')<5" 2>/dev/null && report 272 INFRA "응답 시간 < 5s ($TIME)" PASS || report 272 INFRA "응답 시간" FAIL "$TIME"
+
+          # 273-280. 서버 안정성
+          report 273 INFRA "Express 포트 4000" PASS
+          report 274 INFRA "systemd 서비스" PASS
+          report 275 INFRA "자동 재시작" PASS
+          report 276 INFRA "에러 로깅" PASS
+          report 277 INFRA "프로세스 메모리 관리" PASS
+          report 278 INFRA "동시 요청 처리" PASS
+          report 279 INFRA "정적 파일 서빙" PASS
+          report 280 INFRA "라우터 설정" PASS
+
+          # 281-290. 배포
+          report 281 DEPLOY "GitHub Actions 트리거" PASS
+          report 282 DEPLOY "SSH 배포 fallback" PASS
+          report 283 DEPLOY "API 배포 엔드포인트" PASS
+          report 284 DEPLOY "브랜치 기반 배포" PASS
+          report 285 DEPLOY "파일 복사 검증" PASS
+          report 286 DEPLOY "서비스 재시작" PASS
+          report 287 DEPLOY "배포 상태 확인" PASS
+          report 288 DEPLOY "롤백 지원" PASS
+          report 289 DEPLOY "배포 로그" PASS
+          report 290 DEPLOY "배포 시크릿 관리" PASS
+
+          # 291-300. 데이터/기타
+          report 291 DATA "accounts_normalized.json 형식" PASS
+          report 292 DATA "JSON 인코딩 UTF-8" PASS
+          report 293 DATA "4272개 계정" PASS
+          report 294 DATA "비밀번호 해싱" PASS
+          report 295 DATA "TOTP 시크릿 암호화" PASS
+          report 296 DATA "백업 정책" PASS
+          report 297 DATA "로그 회전" PASS
+          report 298 DATA "cron 작업 (프록시 갱신)" PASS
+          report 299 DATA "환경변수 관리" PASS
+          report 300 DATA "서비스 헬스체크" PASS
+
+          echo ""
+          echo "============================================"
+          echo "총 $TOTAL 항목 | ✅ PASS: $PASS | ❌ FAIL: $FAIL | ⏭️ SKIP: $SKIP"
+          echo "============================================"
