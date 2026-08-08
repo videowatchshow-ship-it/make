@@ -339,6 +339,10 @@ module.exports = function(app) {
     try { execFileSync('pgrep', ['-f', 'Xvfb :99']); checks.xvfb = 'running'; } catch { checks.xvfb = 'stopped'; }
     try { checks.node = execFileSync('node', ['-v'], { encoding: 'utf8' }).trim(); } catch { checks.node = 'not-found'; }
     checks.display = process.env.DISPLAY || 'not-set';
+    checks.captcha = {
+      wit_ai: !!process.env.WIT_AI_TOKEN,
+      gemini: !!process.env.GEMINI_API_KEY,
+    };
     res.json(checks);
   });
 
