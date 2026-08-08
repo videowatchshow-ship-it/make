@@ -140,6 +140,7 @@ GitHub push → 서버 SSH로 clone + cp + 서비스 재시작.
 
 ### CAPTCHA
 - wit.ai Speech API (오디오 STT, 무료): https://wit.ai/docs/http/20240304/#post__speech_link
+- reCAPTCHA Enterprise iframe URL: `recaptcha/enterprise/anchor`, `recaptcha/enterprise/bframe` (NOT `api2/anchor`)
 - reCAPTCHA v2 오디오 solver 참조: https://github.com/njraladdin/recaptcha-v2-solver
 - Gemini Vision API 공식: https://ai.google.dev/gemini-api/docs/image-understanding
 - Gemini generationConfig 공식: https://ai.google.dev/api/generate-content

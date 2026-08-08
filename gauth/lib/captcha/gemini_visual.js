@@ -13,7 +13,7 @@ async function solveWithGeminiVision({ page, apiKey, log = () => {} }) {
   // bframe 찾기
   let bframe = null;
   for (const frame of page.frames()) {
-    if (frame.url().includes('api2/bframe') || frame.url().includes('recaptcha/api2/bframe')) {
+    if (frame.url().includes('api2/bframe') || frame.url().includes('recaptcha/api2/bframe') || frame.url().includes('enterprise/bframe') || frame.url().includes('recaptcha/enterprise/bframe')) {
       bframe = frame;
       break;
     }

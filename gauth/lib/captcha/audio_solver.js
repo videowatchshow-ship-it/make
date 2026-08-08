@@ -136,7 +136,7 @@ async function solveAudioCaptcha({ page, witToken, geminiKey, log = () => {}, ma
   // ref: https://github.com/njraladdin/recaptcha-v2-solver — frame.url().includes('api2/anchor')
   let anchorFrame = null;
   for (const frame of page.frames()) {
-    if (frame.url().includes('api2/anchor') || frame.url().includes('recaptcha/api2/anchor')) {
+    if (frame.url().includes('api2/anchor') || frame.url().includes('recaptcha/api2/anchor') || frame.url().includes('enterprise/anchor') || frame.url().includes('recaptcha/enterprise/anchor')) {
       anchorFrame = frame;
       break;
     }
@@ -172,7 +172,7 @@ async function solveAudioCaptcha({ page, witToken, geminiKey, log = () => {}, ma
   // 3. bframe iframe 찾기
   let bframe = null;
   for (const frame of page.frames()) {
-    if (frame.url().includes('api2/bframe') || frame.url().includes('recaptcha/api2/bframe')) {
+    if (frame.url().includes('api2/bframe') || frame.url().includes('recaptcha/api2/bframe') || frame.url().includes('enterprise/bframe') || frame.url().includes('recaptcha/enterprise/bframe')) {
       bframe = frame;
       break;
     }
