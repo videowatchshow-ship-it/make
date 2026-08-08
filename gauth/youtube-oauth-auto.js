@@ -206,32 +206,35 @@ async function autoOAuthConsent(browser, oauthConfig, loginPage, log) {
         log(`  [OAuth] 고급 후 요소: ${JSON.stringify(allAfter.slice(0, 20)).slice(0, 600)}`);
 
         const oldUrl = page.url();
-        // "Go to ... (unsafe)" 링크를 정확히 찾아 href로 직접 이동
-        const unsafeHref = await page.evaluate(() => {
+        // "Go to ... (unsafe)" 링크를 DOM click으로 실행 (href가 # 해시라 goto 불가)
+        const unsafeClicked = await page.evaluate(() => {
           const links = document.querySelectorAll('a');
           for (const a of links) {
             const t = a.textContent.trim();
-            if (t.includes('unsafe') || t.includes('안전하지 않음')) return a.href;
+            if (t.includes('unsafe') || t.includes('안전하지 않음')) {
+              a.click();
+              return t;
+            }
           }
           return null;
         }).catch(() => null);
-        log(`  [OAuth] unsafe href: ${unsafeHref ? unsafeHref.slice(0, 120) : 'null'}`);
+        log(`  [OAuth] unsafe DOM click: ${unsafeClicked ? unsafeClicked.slice(0, 80) : 'null'}`);
 
-        if (unsafeHref) {
-          await page.goto(unsafeHref, { waitUntil: 'networkidle2', timeout: CONSENT_TIMEOUT }).catch(() => {});
+        if (unsafeClicked) {
+          await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: CONSENT_TIMEOUT }).catch(() => {});
           await delay(1500, 2500);
-        } else {
-          const unsafeClicked = await clickByText(page,
+        }
+
+        if (page.url() === oldUrl || page.url().includes('/warning')) {
+          log(`  [OAuth] DOM click 후에도 warning, Puppeteer click 시도`);
+          const pptrClicked = await clickByText(page,
             ['이동(안전하지 않음)', 'Go to', '(unsafe)'],
-            'a,button,span,div'
+            'a'
           );
-          log(`  [OAuth] unsafe 클릭 fallback: ${unsafeClicked}`);
-          if (unsafeClicked) {
-            for (let w = 0; w < 10; w++) {
-              await delay(1000, 1500);
-              if (page.url() !== oldUrl) break;
-            }
-            await delay(1000, 2000);
+          log(`  [OAuth] Puppeteer click: ${pptrClicked}`);
+          if (pptrClicked) {
+            await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: CONSENT_TIMEOUT }).catch(() => {});
+            await delay(1500, 2500);
           }
         }
       }
