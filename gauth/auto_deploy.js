@@ -343,6 +343,11 @@ module.exports = function(app) {
       wit_ai: !!process.env.WIT_AI_TOKEN,
       gemini: !!process.env.GEMINI_API_KEY,
     };
+    checks.oauth = {
+      client_id: !!(process.env.YOUTUBE_OAUTH_CLIENT_ID),
+      client_secret: !!(process.env.YOUTUBE_OAUTH_CLIENT_SECRET),
+      redirect_uri: process.env.YOUTUBE_OAUTH_REDIRECT_URI || 'default',
+    };
     const libFiles = [
       'lib/captcha/index.js',
       'lib/captcha/audio_solver.js',
