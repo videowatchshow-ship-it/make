@@ -7,6 +7,7 @@ on:
       - 'gauth/index.html'
       - 'gauth/upload_excels.js'
       - 'gauth/auto_deploy.js'
+      - 'gauth/youtube-oauth-auto.js'
       - 'gauth/lib/**'
 
 jobs:
@@ -48,7 +49,7 @@ jobs:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          source: "gauth/index.html,gauth/upload_excels.js,gauth/auto_deploy.js,gauth/lib/"
+          source: "gauth/index.html,gauth/upload_excels.js,gauth/auto_deploy.js,gauth/youtube-oauth-auto.js,gauth/lib/"
           target: "/tmp/gauth-deploy/"
           strip_components: 1
 
@@ -66,6 +67,7 @@ jobs:
             [ -f /tmp/gauth-deploy/index.html ] && cp /tmp/gauth-deploy/index.html /var/www/sites/gauth/public/index.html
             [ -f /tmp/gauth-deploy/upload_excels.js ] && cp /tmp/gauth-deploy/upload_excels.js /opt/gauth-full/upload_excels.js
             [ -f /tmp/gauth-deploy/auto_deploy.js ] && cp /tmp/gauth-deploy/auto_deploy.js /opt/gauth-full/auto_deploy.js
+            [ -f /tmp/gauth-deploy/youtube-oauth-auto.js ] && cp /tmp/gauth-deploy/youtube-oauth-auto.js /opt/gauth-full/youtube-oauth-auto.js
             if [ -d /tmp/gauth-deploy/lib ]; then
               mkdir -p /opt/gauth-full/lib/captcha /opt/gauth-full/lib/providers/captcha
               cp -r /tmp/gauth-deploy/lib/* /opt/gauth-full/lib/
