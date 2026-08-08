@@ -45,6 +45,44 @@ function downloadAudio(url) {
   });
 }
 
+// ref: https://ai.google.dev/gemini-api/docs/audio
+function geminiTranscribe(audioBuffer, apiKey) {
+  const b64 = audioBuffer.toString('base64');
+  const body = JSON.stringify({
+    contents: [{
+      parts: [
+        { text: 'Transcribe this audio. Reply with ONLY the spoken words, nothing else. No punctuation.' },
+        { inline_data: { mime_type: 'audio/mp3', data: b64 } }
+      ]
+    }],
+    generationConfig: { temperature: 0, maxOutputTokens: 100 }
+  });
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: 'generativelanguage.googleapis.com',
+      path: `/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 30000,
+    }, res => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try {
+          const j = JSON.parse(data);
+          const text = j.candidates?.[0]?.content?.parts?.[0]?.text?.trim()?.toLowerCase();
+          if (text) resolve(text);
+          else reject(new Error('Gemini audio: no text'));
+        } catch (e) { reject(new Error('Gemini audio parse: ' + e.message)); }
+      });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('Gemini audio timeout')); });
+    req.write(body);
+    req.end();
+  });
+}
+
 // ref: https://wit.ai/docs/http/20240304/#post__speech_link
 function witAiTranscribe(audioBuffer, witToken) {
   return new Promise((resolve, reject) => {
@@ -91,8 +129,8 @@ function witAiTranscribe(audioBuffer, witToken) {
  * @param {number} [opts.maxRetries=3]
  * @returns {Promise<{success: boolean, token?: string, error?: string}>}
  */
-async function solveAudioCaptcha({ page, witToken, log = () => {}, maxRetries = 3 }) {
-  if (!witToken) return { success: false, error: 'WIT_AI_TOKEN not set' };
+async function solveAudioCaptcha({ page, witToken, geminiKey, log = () => {}, maxRetries = 3 }) {
+  if (!witToken && !geminiKey) return { success: false, error: 'No STT token (WIT_AI_TOKEN or GEMINI_API_KEY)' };
 
   // 1. anchor iframe 찾기
   // ref: https://github.com/njraladdin/recaptcha-v2-solver — frame.url().includes('api2/anchor')
@@ -212,10 +250,14 @@ async function solveAudioCaptcha({ page, witToken, log = () => {}, maxRetries = 
       continue;
     }
 
-    // STT
+    // STT (wit.ai 우선, 없으면 Gemini)
     let transcript;
     try {
-      transcript = await witAiTranscribe(audioBuffer, witToken);
+      if (witToken) {
+        transcript = await witAiTranscribe(audioBuffer, witToken);
+      } else {
+        transcript = await geminiTranscribe(audioBuffer, geminiKey);
+      }
       log(`STT 결과: "${transcript}"`);
     } catch (e) {
       log('STT 실패: ' + e.message);

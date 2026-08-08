@@ -14,7 +14,7 @@ const { solveAudioCaptcha } = require('./audio_solver');
 
 function availablePageAdapters() {
   const adapters = [];
-  if (process.env.WIT_AI_TOKEN) adapters.push('wit-audio');
+  if (process.env.WIT_AI_TOKEN || process.env.GEMINI_API_KEY) adapters.push('audio-stt');
   if (process.env.GEMINI_API_KEY) adapters.push('gemini-vision');
   return adapters;
 }
@@ -27,13 +27,13 @@ async function solveAny({ page, sitekey, pageurl, invisible, log = () => {} }) {
   const witToken = process.env.WIT_AI_TOKEN || '';
   const geminiKey = process.env.GEMINI_API_KEY || '';
 
-  if (witToken) {
-    log('[captcha] wit.ai 오디오 모드 시도');
-    const result = await solveAudioCaptcha({ page, witToken, log });
+  if (witToken || geminiKey) {
+    log(`[captcha] 오디오 STT 모드 시도 (${witToken ? 'wit.ai' : 'gemini'})`);
+    const result = await solveAudioCaptcha({ page, witToken, geminiKey, log });
     if (result.success && result.token) {
-      return { token: result.token, provider: 'wit-audio' };
+      return { token: result.token, provider: witToken ? 'wit-audio' : 'gemini-audio' };
     }
-    log(`[captcha] wit.ai 실패: ${result.error}`);
+    log(`[captcha] 오디오 실패: ${result.error}`);
   }
 
   if (geminiKey) {
