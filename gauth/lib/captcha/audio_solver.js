@@ -140,8 +140,10 @@ function witAiTranscribe(audioBuffer, witToken) {
  * @param {number} [opts.maxRetries=3]
  * @returns {Promise<{success: boolean, token?: string, error?: string}>}
  */
-async function solveAudioCaptcha({ page, witToken, geminiKey, log = () => {}, maxRetries = 3 }) {
-  if (!witToken && !geminiKey) return { success: false, error: 'No STT token (WIT_AI_TOKEN or GEMINI_API_KEY)' };
+async function solveAudioCaptcha({ page, witToken, geminiKey, geminiKeys, log = () => {}, maxRetries = 3 }) {
+  const allGeminiKeys = geminiKeys && geminiKeys.length ? geminiKeys : (geminiKey ? [geminiKey] : []);
+  let gkIdx = 0;
+  if (!witToken && !allGeminiKeys.length) return { success: false, error: 'No STT token (WIT_AI_TOKEN or GEMINI_API_KEY)' };
 
   // 1. anchor iframe 찾기
   // ref: https://github.com/njraladdin/recaptcha-v2-solver — frame.url().includes('api2/anchor')
@@ -261,13 +263,29 @@ async function solveAudioCaptcha({ page, witToken, geminiKey, log = () => {}, ma
       continue;
     }
 
-    // STT (wit.ai 우선, 없으면 Gemini)
+    // STT (wit.ai 우선, 없으면 Gemini — 429시 키 로테이션)
     let transcript;
     try {
       if (witToken) {
         transcript = await witAiTranscribe(audioBuffer, witToken);
       } else {
-        transcript = await geminiTranscribe(audioBuffer, geminiKey, log);
+        let sttErr;
+        for (let ki = 0; ki < allGeminiKeys.length; ki++) {
+          const useKey = allGeminiKeys[gkIdx % allGeminiKeys.length];
+          gkIdx++;
+          try {
+            transcript = await geminiTranscribe(audioBuffer, useKey, log);
+            break;
+          } catch (e) {
+            sttErr = e;
+            if (e.message.includes('429') || e.message.includes('quota')) {
+              log(`STT 429, 키 ${gkIdx}/${allGeminiKeys.length} 시도`);
+              continue;
+            }
+            throw e;
+          }
+        }
+        if (!transcript && sttErr) throw sttErr;
       }
       log(`STT 결과: "${transcript}"`);
     } catch (e) {
