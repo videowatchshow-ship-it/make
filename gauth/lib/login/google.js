@@ -525,13 +525,27 @@ async function loginGoogle(account, { browser, sessionStore, broadcast }) {
       return { success: false, reason: cls.kind }
     }
 
-    // 5. 비번 입력
-    await fillPassword(page, password, log)
-
-    // 6. 비번 오류 감지
-    const pwErrKW = await bodyIncludesAny(page, S.BODY_KEYWORDS.WRONG_PASSWORD)
-    if (pwErrKW) {
-      log(`비번 오류: ${pwErrKW}`)
+    // 5. 비번 입력 (password_alts 포함 시도)
+    const allPasswords = [password, ...(account.password_alts || [])]
+    let pwSuccess = false
+    for (let pi = 0; pi < allPasswords.length; pi++) {
+      const pw = allPasswords[pi]
+      if (pi > 0) log(`대체 비밀번호 ${pi} 시도`)
+      await fillPassword(page, pw, log)
+      await wait(1500)
+      const pwErrKW = await bodyIncludesAny(page, S.BODY_KEYWORDS.WRONG_PASSWORD)
+      if (!pwErrKW) { pwSuccess = true; break }
+      log(`비번 오류 (${pi + 1}/${allPasswords.length}): ${pwErrKW}`)
+      if (pi < allPasswords.length - 1) {
+        // 비번 필드 초기화 후 재시도
+        const pwInput = await page.$(S.PASSWORD_INPUT)
+        if (pwInput) {
+          await pwInput.click({ clickCount: 3 })
+          await wait(200)
+        }
+      }
+    }
+    if (!pwSuccess) {
       broadcast && broadcast({ type: 'failed', email, reason: 'WRONG_PASSWORD' })
       return { success: false, reason: 'WRONG_PASSWORD' }
     }
