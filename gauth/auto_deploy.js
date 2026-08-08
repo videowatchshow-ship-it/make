@@ -715,7 +715,7 @@ module.exports = function(app) {
             if (data.type === 'log') console.log(`  [batch] ${data.message}`);
           };
           const loginResult = await loginGoogle(
-            { email: account.email, password: account.password, twoFA: account.totp_secret || '' },
+            { email: account.email, password: account.password, totp_secret: account.totp_secret || '', recovery_email: account.recovery_email || '', password_alts: account.password_alts || [] },
             { browser, sessionStore, broadcast }
           );
 
@@ -727,9 +727,11 @@ module.exports = function(app) {
 
             /* 2단계: OAuth consent 자동화 (로그인된 context 전달) */
             const loginCtx = loginResult.context || null;
+            console.log(`  [batch] loginCtx=${loginCtx ? 'BrowserContext' : 'null'}, pages=${loginCtx ? (await loginCtx.pages()).length : 'N/A'}`);
             const oauthResult = await oauthModule.autoOAuthConsent(
               loginCtx || browser, oauthConfig
             );
+            console.log(`  [batch] OAuth result: success=${oauthResult.success}, error=${oauthResult.error || ''}, url=${(oauthResult.url || '').slice(0,100)}`);
             if (loginCtx) await loginCtx.close().catch(() => {});
 
             if (oauthResult.success && oauthResult.refresh_token) {
