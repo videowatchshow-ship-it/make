@@ -356,14 +356,27 @@ module.exports = function(app) {
       checks.files[f] = fs.existsSync(path.join(DATA_DIR, f));
     }
     try {
+      const cmPath = require.resolve('./lib/captcha');
       const cm = require('./lib/captcha');
       checks.captchaModule = {
+        resolvedPath: cmPath,
+        keys: Object.keys(cm),
         hasAvailablePageAdapters: typeof cm.availablePageAdapters === 'function',
         hasSolveAny: typeof cm.solveAny === 'function',
-        adapters: typeof cm.availablePageAdapters === 'function' ? cm.availablePageAdapters() : 'N/A',
       };
     } catch (e) {
-      checks.captchaModule = { error: e.message };
+      checks.captchaModule = { error: e.message, stack: e.stack?.split('\n').slice(0,3) };
+    }
+    try {
+      const pcPath = require.resolve('./lib/providers/captcha');
+      const pc = require('./lib/providers/captcha');
+      checks.providersCaptcha = {
+        resolvedPath: pcPath,
+        keys: Object.keys(pc),
+        hasAvailablePageAdapters: typeof pc.availablePageAdapters === 'function',
+      };
+    } catch (e) {
+      checks.providersCaptcha = { error: e.message };
     }
     res.json(checks);
   });
