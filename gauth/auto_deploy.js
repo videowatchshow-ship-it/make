@@ -597,6 +597,22 @@ module.exports = function(app) {
   const FORBIDDEN_ACCOUNTS = ['vin7899', 'videowatch.show', 'rhkdrh999'];
   const SKIP_TOP_N = 30;
   const batchQueue = { running: false, results: [], total: 0, done: 0, current: '' };
+  const BATCH_LOG_FILE = path.join(DATA_DIR, 'batch_log.txt');
+  function batchLog(msg) {
+    const line = `[${new Date().toISOString()}] ${msg}\n`;
+    console.log(msg);
+    fs.appendFileSync(BATCH_LOG_FILE, line);
+  }
+
+  app.get('/api/batch-connect/logs', authMiddleware, (req, res) => {
+    try {
+      const lines = fs.readFileSync(BATCH_LOG_FILE, 'utf8').split('\n').filter(Boolean);
+      const last = parseInt(req.query.last) || 100;
+      res.json({ ok: true, lines: lines.slice(-last) });
+    } catch (e) {
+      res.json({ ok: true, lines: [] });
+    }
+  });
 
   function isForbidden(email) {
     const e = normalizeEmail(email);
@@ -712,7 +728,7 @@ module.exports = function(app) {
         try {
           /* 1단계: Google 로그인 (lib/login/google.js — 공유 브라우저) */
           const broadcast = (data) => {
-            if (data.type === 'log') console.log(`  [batch] ${data.message}`);
+            if (data.type === 'log') batchLog(`  [batch] ${data.message}`);
           };
           const loginResult = await loginGoogle(
             { email: account.email, password: account.password, totp_secret: account.totp_secret || '', recovery_email: account.recovery_email || '', password_alts: account.password_alts || [] },
