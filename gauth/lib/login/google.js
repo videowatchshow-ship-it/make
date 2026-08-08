@@ -156,7 +156,9 @@ async function trySolveCaptcha(page, log) {
       return null
     })
     const pageurl = page.url()
+    const frameUrls = page.frames().map(f => f.url().slice(0, 120))
     log(`CAPTCHA 매니저 호출: page=${pageAvail.length}개, sitekey=${skAvail.length}개, sitekey값=${info?.sitekey?.slice(0,15)||'없음'}`)
+    log(`frames (${frameUrls.length}): ${frameUrls.join(' | ')}`)
 
     const result = await captchaManager.solveAny({
       page,
