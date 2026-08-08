@@ -48,7 +48,6 @@ async function autoOAuthConsent(browser, oauthConfig) {
     'response_type=code',
     'scope=' + encodeURIComponent(scopes),
     'access_type=offline',
-    'prompt=consent',
     'state=' + state
   ].join('&');
 
