@@ -206,17 +206,33 @@ async function autoOAuthConsent(browser, oauthConfig, loginPage, log) {
         log(`  [OAuth] 고급 후 요소: ${JSON.stringify(allAfter.slice(0, 20)).slice(0, 600)}`);
 
         const oldUrl = page.url();
-        const unsafeClicked = await clickByText(page,
-          ['이동(안전하지 않음)', '안전하지 않음으로 이동', 'Go to', '(unsafe)', '으로 이동'],
-          'a,button,span,div'
-        );
-        log(`  [OAuth] unsafe 클릭: ${unsafeClicked}`);
-        if (unsafeClicked) {
-          for (let w = 0; w < 10; w++) {
-            await delay(1000, 1500);
-            if (page.url() !== oldUrl) break;
+        // "Go to ... (unsafe)" 링크를 정확히 찾아 href로 직접 이동
+        const unsafeHref = await page.evaluate(() => {
+          const links = document.querySelectorAll('a');
+          for (const a of links) {
+            const t = a.textContent.trim();
+            if (t.includes('unsafe') || t.includes('안전하지 않음')) return a.href;
           }
-          await delay(1000, 2000);
+          return null;
+        }).catch(() => null);
+        log(`  [OAuth] unsafe href: ${unsafeHref ? unsafeHref.slice(0, 120) : 'null'}`);
+
+        if (unsafeHref) {
+          await page.goto(unsafeHref, { waitUntil: 'networkidle2', timeout: CONSENT_TIMEOUT }).catch(() => {});
+          await delay(1500, 2500);
+        } else {
+          const unsafeClicked = await clickByText(page,
+            ['이동(안전하지 않음)', 'Go to', '(unsafe)'],
+            'a,button,span,div'
+          );
+          log(`  [OAuth] unsafe 클릭 fallback: ${unsafeClicked}`);
+          if (unsafeClicked) {
+            for (let w = 0; w < 10; w++) {
+              await delay(1000, 1500);
+              if (page.url() !== oldUrl) break;
+            }
+            await delay(1000, 2000);
+          }
         }
       }
       url = page.url();
