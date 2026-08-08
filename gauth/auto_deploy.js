@@ -706,7 +706,7 @@ module.exports = function(app) {
           defaultViewport: null,
           protocolTimeout: 180000,
         });
-        console.log('[batch-connect] 공유 Chrome 연결 완료');
+        batchLog('[batch-connect] 공유 Chrome 연결 완료');
       } catch (e) {
         console.error('[batch-connect] module load error:', e.message);
         batchQueue.running = false;
@@ -715,13 +715,13 @@ module.exports = function(app) {
 
       for (let i = 0; i < selected.length; i++) {
         if (!batchQueue.running) {
-          console.log('[batch-connect] 중지됨');
+          batchLog('[batch-connect] 중지됨');
           break;
         }
 
         const account = selected[i];
         batchQueue.current = account.email;
-        console.log(`\n[batch-connect] ${i + 1}/${selected.length}: ${account.email}`);
+        batchLog(`[batch-connect] ${i + 1}/${selected.length}: ${account.email}`);
 
         let result = { email: account.email, success: false, error: '' };
 
@@ -737,17 +737,17 @@ module.exports = function(app) {
 
           if (!loginResult || !loginResult.success) {
             result.error = 'LOGIN_FAILED: ' + (loginResult ? loginResult.reason : 'null');
-            console.log(`  [batch] 로그인 실패: ${result.error}`);
+            batchLog(`  [batch] 로그인 실패: ${result.error}`);
           } else {
-            console.log(`  [batch] 로그인 성공, OAuth consent 시작...`);
+            batchLog(`  [batch] 로그인 성공, OAuth consent 시작...`);
 
             /* 2단계: OAuth consent 자동화 (로그인된 context 전달) */
             const loginCtx = loginResult.context || null;
-            console.log(`  [batch] loginCtx=${loginCtx ? 'BrowserContext' : 'null'}, pages=${loginCtx ? (await loginCtx.pages()).length : 'N/A'}`);
+            batchLog(`  [batch] loginCtx=${loginCtx ? 'BrowserContext' : 'null'}`);
             const oauthResult = await oauthModule.autoOAuthConsent(
               loginCtx || browser, oauthConfig
             );
-            console.log(`  [batch] OAuth result: success=${oauthResult.success}, error=${oauthResult.error || ''}, url=${(oauthResult.url || '').slice(0,100)}`);
+            batchLog(`  [batch] OAuth result: success=${oauthResult.success}, error=${oauthResult.error || ''}, url=${(oauthResult.url || '').slice(0,100)}`);
             if (loginCtx) await loginCtx.close().catch(() => {});
 
             if (oauthResult.success && oauthResult.refresh_token) {
@@ -755,27 +755,27 @@ module.exports = function(app) {
               result.channel_id = oauthResult.channel_id;
               result.channel_title = oauthResult.channel_title;
               result.refresh_token = oauthResult.refresh_token ? '***' : '';
-              console.log(`  [batch] OAuth 성공! 채널: ${oauthResult.channel_title} (${oauthResult.channel_id})`);
+              batchLog(`  [batch] OAuth 성공! 채널: ${oauthResult.channel_title} (${oauthResult.channel_id})`);
 
               /* 3단계: 참교육 DB에 등록 */
               try {
                 await registerToChagyoDB(oauthResult, oauthProject);
                 result.db_registered = true;
-                console.log(`  [batch] DB 등록 완료`);
+                batchLog(`  [batch] DB 등록 완료`);
               } catch (dbErr) {
                 result.db_error = dbErr.message;
-                console.log(`  [batch] DB 등록 실패: ${dbErr.message}`);
+                batchLog(`  [batch] DB 등록 실패: ${dbErr.message}`);
               }
             } else {
               result.error = 'OAUTH_FAILED: ' + (oauthResult.error || 'unknown');
-              console.log(`  [batch] OAuth 실패: ${result.error}`);
+              batchLog(`  [batch] OAuth 실패: ${result.error}`);
             }
 
             /* 공유 브라우저 사용 — 닫지 않음 (loginGoogle이 context를 자체 정리) */
           }
         } catch (e) {
           result.error = 'EXCEPTION: ' + e.message;
-          console.log(`  [batch] 예외: ${e.message}`);
+          batchLog(`  [batch] 예외: ${e.message}`);
         }
 
         batchQueue.results.push(result);
@@ -784,14 +784,14 @@ module.exports = function(app) {
         /* 다음 계정 전 딜레이 (분 단위) */
         if (i < selected.length - 1 && batchQueue.running) {
           const delayMs = delayMinutes * 60000;
-          console.log(`  [batch] 다음 계정까지 ${delayMinutes}분 대기...`);
+          batchLog(`  [batch] 다음 계정까지 ${delayMinutes}분 대기...`);
           await new Promise(r => setTimeout(r, delayMs));
         }
       }
 
       batchQueue.running = false;
       batchQueue.current = '';
-      console.log(`\n[batch-connect] 완료: ${batchQueue.results.filter(r => r.success).length}/${batchQueue.total} 성공`);
+      batchLog(`[batch-connect] 완료: ${batchQueue.results.filter(r => r.success).length}/${batchQueue.total} 성공`);
     })();
   });
 
