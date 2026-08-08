@@ -82,7 +82,7 @@ async function autoOAuthConsent(browser, oauthConfig, loginPage, log) {
 
     /* TOTP 재인증 요구 시 자동 처리 */
     if (url.includes('challenge/totp') || url.includes('challenge/pwd')) {
-      log('  [OAuth] Google 재인증 요구:', url.includes('totp') ? 'TOTP' : 'PASSWORD');
+      log(`  [OAuth] Google 재인증 요구: ${url.includes('totp') ? 'TOTP' : 'PASSWORD'}, generateTotpLocal=${!!generateTotpLocal}`);
 
       if (url.includes('challenge/pwd') && accountInfo.password) {
         const pwInput = await page.$('input[type="password"]').catch(() => null);
@@ -99,16 +99,21 @@ async function autoOAuthConsent(browser, oauthConfig, loginPage, log) {
 
       if (url.includes('challenge/totp') && accountInfo.totp_secret && generateTotpLocal) {
         const code = generateTotpLocal(accountInfo.totp_secret);
-        log('  [OAuth] TOTP 입력:', code);
+        log(`  [OAuth] TOTP 입력: ${code}`);
         const totpInput = await page.$('input[type="tel"]').catch(() => null);
+        log(`  [OAuth] totpInput=${!!totpInput}`);
         if (totpInput) {
           await totpInput.type(code, { delay: 60 });
           const totpBtn = await page.$('#totpNext').catch(() => null);
+          log(`  [OAuth] totpBtn=${!!totpBtn}`);
           if (totpBtn) await totpBtn.click();
           else await page.keyboard.press('Enter');
           await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: CONSENT_TIMEOUT }).catch(() => {});
           await delay(1500, 2500);
           url = page.url();
+          log(`  [OAuth] TOTP 후 URL: ${url.slice(0, 120)}`);
+        } else {
+          log(`  [OAuth] TOTP input 못 찾음, page URL: ${url.slice(0, 120)}`);
         }
       }
     }
@@ -173,8 +178,8 @@ async function autoOAuthConsent(browser, oauthConfig, loginPage, log) {
 
     if (!code) {
       const bodyText = await page.evaluate(() => document.body.innerText).catch(() => '');
-      log('  [OAuth] code 못 찾음. URL:', url.substring(0, 120));
-      log('  [OAuth] body:', bodyText.substring(0, 200));
+      log(`  [OAuth] code 못 찾음. URL: ${url.substring(0, 120)}`);
+      log(`  [OAuth] body: ${bodyText.substring(0, 200)}`);
 
       if (bodyText.includes('suspended') || bodyText.includes('정지')) {
         return { success: false, error: 'CHANNEL_SUSPENDED' };
