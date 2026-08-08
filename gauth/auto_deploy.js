@@ -356,8 +356,8 @@ module.exports = function(app) {
       checks.files[f] = fs.existsSync(path.join(DATA_DIR, f));
     }
     try {
-      const cmPath = require.resolve('./lib/captcha');
-      const cm = require('./lib/captcha');
+      const cmPath = require.resolve('./lib/captcha/index');
+      const cm = require('./lib/captcha/index');
       checks.captchaModule = {
         resolvedPath: cmPath,
         keys: Object.keys(cm),
