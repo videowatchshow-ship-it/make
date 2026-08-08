@@ -6,7 +6,7 @@
 |------|---|
 | URL | https://gauth.cent-solution.online |
 | 인스턴스 | `gucci-yanolza` (GCP asia-southeast1-b, e2-small) |
-| IP | 35.247.130.253 |
+| IP | 35.247.xxx.xxx |
 | GCP 프로젝트 | `quantum-bonus-455522-b4` |
 | SSH 유저 | `chamgyo` |
 | 서비스 | systemd `gauth` (Express, port 4000) |
@@ -22,10 +22,10 @@
 | `lib/login/google.js` | Google 자동 로그인 (CAPTCHA/TOTP/URL분류/디버그) |
 | `lib/login/selectors.js` | 셀렉터 사전 (40+개 fallback) |
 | `lib/login/urls.js` | URL 분류기 (classify — RECOVERY_EMAIL_CHALLENGE 포함) |
-| `lib/providers/proxy/index.js` | 프록시 회전 (환경변수 + proxy_pool.json) |
-| `lib/providers/proxy/fetch_free.js` | 무료 SOCKS5 프록시 자동 갱신 (30분 cron) |
+| `lib/captcha/audio_solver.js` | reCAPTCHA 오디오 CAPTCHA solver (wit.ai STT) |
+| `lib/captcha/index.js` | CAPTCHA 통합 매니저 (오디오 > Gemini Vision) |
+| `lib/providers/captcha/gemini_text.js` | Gemini Vision 텍스트 CAPTCHA solver |
 | `lib/providers/captcha/gemini_visual.js` | Gemini Vision CAPTCHA solver (safeBfAction) |
-| `proxy_pool.json` | 무료 프록시 200개 (자동 갱신) |
 | `accounts_normalized.json` | 계정 데이터 (4272개) |
 | `upload_excels.js` | 엑셀 파서 (TOTP/URL sanitize) |
 
@@ -58,7 +58,7 @@
 ### 흐름
 
 1. Chrome + Xvfb (port 9222, `--disable-blink-features=AutomationControlled`)
-2. 프록시 회전 (proxy_pool.json 200개 SOCKS5 — CAPTCHA 회피)
+2. 직접 연결 (프록시 비활성화 — 무료 프록시 불안정)
 3. `lib/login/google.js`로 Google 로그인 (이메일→비밀번호→TOTP/복구이메일)
 4. RECOVERY_EMAIL_CHALLENGE → recovery_email 자동 입력
 5. DEVICE_PROMPT/PHONE_REQUIRED → challenge selection → TOTP 또는 복구이메일
@@ -90,6 +90,35 @@
 | 3 | 백업 |
 | 4 | 최신 (`.env`에 설정) |
 
+## 비밀번호·인증 정리
+
+| 항목 | 값 | 용도 |
+|------|---|------|
+| ML_PASSWORD | `1147` | 참교육 멀티라이브 admin 로그인, batch-connect 인증 |
+| GAUTH_API_TOKEN | GitHub Secret | gauth API 인증 (계정 조회, 배포 등) |
+| WIT_AI_TOKEN | GitHub Secret → 서버 `/etc/gauth/env` | CAPTCHA 오디오 solver (wit.ai STT) |
+| GEMINI_API_KEY | 서버 환경변수 | CAPTCHA 이미지 solver (Gemini Vision) |
+| OAuth Client 1~4 | `.env` | YouTube OAuth consent (4개 로테이션) |
+
+### batch-connect 인증 흐름
+
+1. 참교육 admin 페이지에서 `🎬 20개 자동연결` 클릭
+2. `prompt('멀티라이브 비밀번호:')` → `1147` 입력
+3. `Authorization: Bearer 1147`로 gauth API `POST /api/batch-connect/start` 호출
+4. gauth 서버의 `batchAuth` 미들웨어가 `ML_PASSWORD` 또는 `GAUTH_API_TOKEN` 검증
+5. status 폴링: `GET /api/batch-connect/status` (인증 불필요)
+
+### Google 계정 비밀번호 (accounts_normalized.json)
+
+- 4272개 계정 보유 (엑셀 파일에서 파싱)
+- 비밀번호 오류(`WRONG_PASSWORD`) 원인:
+  - 엑셀 원본 비밀번호가 잘못됨
+  - Google이 비밀번호 강제 변경함
+  - 계정 정지/삭제됨
+  - `password_alts` 필드에 대체 비밀번호 있을 수 있음
+- TOTP: `totp_secret` 필드 (2FA 코드 자동 생성)
+- 복구 이메일: `recovery_email` 필드 (Challenge 시 자동 입력)
+
 ## 배포
 
 GitHub push → 서버 SSH로 clone + cp + 서비스 재시작.
@@ -110,14 +139,10 @@ GitHub push → 서버 SSH로 clone + cp + 서비스 재시작.
 - Puppeteer BrowserContext proxy: https://pptr.dev/api/puppeteer.browsercontextoptions
 
 ### CAPTCHA
+- wit.ai Speech API (오디오 STT, 무료): https://wit.ai/docs/http/20240304/#post__speech_link
+- reCAPTCHA v2 오디오 solver 참조: https://github.com/njraladdin/recaptcha-v2-solver
 - Gemini Vision API 공식: https://ai.google.dev/gemini-api/docs/image-understanding
 - Gemini generationConfig 공식: https://ai.google.dev/api/generate-content
-- reCAPTCHA solver 프롬프트 패턴: https://github.com/njraladdin/recaptcha-v2-solver
-
-### 프록시 (무료, GitHub 자동 갱신)
-- proxifly/free-proxy-list (5분 갱신): https://github.com/proxifly/free-proxy-list
-- TheSpeedX/PROXY-List (매일): https://github.com/TheSpeedX/PROXY-List
-- vakhov/fresh-proxy-list (5-20분): https://github.com/vakhov/fresh-proxy-list
 
 ### YouTube / OAuth
 - YouTube OAuth 공식: https://developers.google.com/identity/protocols/oauth2/web-server
