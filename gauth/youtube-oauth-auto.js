@@ -131,24 +131,35 @@ async function autoOAuthConsent(browser, oauthConfig, loginPage, log) {
       url = page.url();
     }
 
-    /* "확인하지 않은 앱" 경고 처리 */
-    if (url.includes('/warning') || url.includes('oauth/warning')) {
-      log('  [OAuth] 확인하지 않은 앱 경고 → 고급 클릭...');
+    /* "확인하지 않은 앱" 경고 처리 — 최대 3회 반복 */
+    for (let warnTry = 0; warnTry < 3 && (url.includes('/warning') || url.includes('oauth/warning')); warnTry++) {
+      const bodySnippet = await page.evaluate(() => document.body.innerText.slice(0, 300)).catch(() => '');
+      log(`  [OAuth] warning 페이지 (${warnTry + 1}/3): ${bodySnippet.slice(0, 150)}`);
       await delay(500, 1000);
-      const clicked = await clickByText(page, ['고급', '고급 설정 숨기기', 'Advanced'], 'a,button,span,div');
+
+      const allLinks = await page.evaluate(() => {
+        return Array.from(document.querySelectorAll('a,button,span,div')).map(e => ({
+          tag: e.tagName, text: e.textContent.trim().slice(0, 60), id: e.id || '', href: e.href || ''
+        })).filter(e => e.text.length > 0);
+      }).catch(() => []);
+      log(`  [OAuth] warning 요소: ${JSON.stringify(allLinks.slice(0, 15)).slice(0, 500)}`);
+
+      const clicked = await clickByText(page, ['고급', 'Advanced', 'Show Advanced'], 'a,button,span,div');
+      log(`  [OAuth] 고급 클릭: ${clicked}`);
       if (clicked) {
-        await delay(1000, 2000);
+        await delay(1500, 2500);
         const unsafeClicked = await clickByText(page,
-          ['이동(안전하지 않음)', '안전하지 않음', 'Go to', 'unsafe'],
+          ['이동(안전하지 않음)', '안전하지 않음', 'Go to', 'unsafe', 'Back to safety'],
           'a,button,span,div'
         );
+        log(`  [OAuth] unsafe 클릭: ${unsafeClicked}`);
         if (unsafeClicked) {
-          log('  [OAuth] 안전하지 않음 → 이동 클릭');
           await delay(2000, 3000);
           await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: CONSENT_TIMEOUT }).catch(() => {});
         }
       }
       url = page.url();
+      log(`  [OAuth] warning 처리 후 URL: ${url.slice(0, 120)}`);
     }
 
     /* consent 화면 — "모두 선택" 체크 + "계속" 클릭 */
