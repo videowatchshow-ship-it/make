@@ -47,7 +47,8 @@ async function clickByText(page, texts, tag = 'button,a,span,div') {
  * @param {object} oauthConfig - { client_id, client_secret, redirect_uri, scopes }
  * @returns {object} { success, channel_id, channel_title, refresh_token, access_token, error }
  */
-async function autoOAuthConsent(browser, oauthConfig, loginPage) {
+async function autoOAuthConsent(browser, oauthConfig, loginPage, log) {
+  if (!log) log = (...args) => console.log(...args);
   const { client_id, client_secret, redirect_uri } = oauthConfig;
   const scopes = oauthConfig.scopes || 'https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube.force-ssl';
   const state = 'auto_' + Date.now();
@@ -73,7 +74,7 @@ async function autoOAuthConsent(browser, oauthConfig, loginPage) {
 
     const accountInfo = oauthConfig._account || {};
 
-    console.log('  [OAuth] consent URL 접속...');
+    log('  [OAuth] consent URL 접속...');
     await page.goto(authUrl, { waitUntil: 'networkidle2', timeout: CONSENT_TIMEOUT });
     await delay(1500, 2500);
 
@@ -81,7 +82,7 @@ async function autoOAuthConsent(browser, oauthConfig, loginPage) {
 
     /* TOTP 재인증 요구 시 자동 처리 */
     if (url.includes('challenge/totp') || url.includes('challenge/pwd')) {
-      console.log('  [OAuth] Google 재인증 요구:', url.includes('totp') ? 'TOTP' : 'PASSWORD');
+      log('  [OAuth] Google 재인증 요구:', url.includes('totp') ? 'TOTP' : 'PASSWORD');
 
       if (url.includes('challenge/pwd') && accountInfo.password) {
         const pwInput = await page.$('input[type="password"]').catch(() => null);
@@ -98,7 +99,7 @@ async function autoOAuthConsent(browser, oauthConfig, loginPage) {
 
       if (url.includes('challenge/totp') && accountInfo.totp_secret && generateTotpLocal) {
         const code = generateTotpLocal(accountInfo.totp_secret);
-        console.log('  [OAuth] TOTP 입력:', code);
+        log('  [OAuth] TOTP 입력:', code);
         const totpInput = await page.$('input[type="tel"]').catch(() => null);
         if (totpInput) {
           await totpInput.type(code, { delay: 60 });
@@ -114,7 +115,7 @@ async function autoOAuthConsent(browser, oauthConfig, loginPage) {
 
     /* 브랜드 채널 선택 화면 — delegation 페이지면 첫 번째(기본) 채널 선택 */
     if (url.includes('/delegation') || url.includes('accountchooser')) {
-      console.log('  [OAuth] 계정/브랜드 채널 선택 화면...');
+      log('  [OAuth] 계정/브랜드 채널 선택 화면...');
       /* 기본 계정(첫 번째) 클릭 */
       const firstAccount = await page.$('ul li:first-child, div[data-identifier], div[data-email]');
       if (firstAccount) {
@@ -127,7 +128,7 @@ async function autoOAuthConsent(browser, oauthConfig, loginPage) {
 
     /* "확인하지 않은 앱" 경고 처리 */
     if (url.includes('/warning') || url.includes('oauth/warning')) {
-      console.log('  [OAuth] 확인하지 않은 앱 경고 → 고급 클릭...');
+      log('  [OAuth] 확인하지 않은 앱 경고 → 고급 클릭...');
       await delay(500, 1000);
       const clicked = await clickByText(page, ['고급', '고급 설정 숨기기', 'Advanced'], 'a,button,span,div');
       if (clicked) {
@@ -137,7 +138,7 @@ async function autoOAuthConsent(browser, oauthConfig, loginPage) {
           'a,button,span,div'
         );
         if (unsafeClicked) {
-          console.log('  [OAuth] 안전하지 않음 → 이동 클릭');
+          log('  [OAuth] 안전하지 않음 → 이동 클릭');
           await delay(2000, 3000);
           await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: CONSENT_TIMEOUT }).catch(() => {});
         }
@@ -147,7 +148,7 @@ async function autoOAuthConsent(browser, oauthConfig, loginPage) {
 
     /* consent 화면 — "모두 선택" 체크 + "계속" 클릭 */
     if (url.includes('consentsummary') || url.includes('consent')) {
-      console.log('  [OAuth] consent 화면 → 모두 선택 + 계속...');
+      log('  [OAuth] consent 화면 → 모두 선택 + 계속...');
       await delay(500, 1000);
 
       const selectAll = await page.$('input[type="checkbox"]');
@@ -159,7 +160,7 @@ async function autoOAuthConsent(browser, oauthConfig, loginPage) {
 
       const submitClicked = await clickByText(page, ['계속', 'Continue', '허용', 'Allow'], 'button,div,span');
       if (submitClicked) {
-        console.log('  [OAuth] 계속 클릭됨, 리다이렉트 대기...');
+        log('  [OAuth] 계속 클릭됨, 리다이렉트 대기...');
         await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: CONSENT_TIMEOUT }).catch(() => {});
       }
       url = page.url();
@@ -172,8 +173,8 @@ async function autoOAuthConsent(browser, oauthConfig, loginPage) {
 
     if (!code) {
       const bodyText = await page.evaluate(() => document.body.innerText).catch(() => '');
-      console.log('  [OAuth] code 못 찾음. URL:', url.substring(0, 120));
-      console.log('  [OAuth] body:', bodyText.substring(0, 200));
+      log('  [OAuth] code 못 찾음. URL:', url.substring(0, 120));
+      log('  [OAuth] body:', bodyText.substring(0, 200));
 
       if (bodyText.includes('suspended') || bodyText.includes('정지')) {
         return { success: false, error: 'CHANNEL_SUSPENDED' };
@@ -181,7 +182,7 @@ async function autoOAuthConsent(browser, oauthConfig, loginPage) {
       return { success: false, error: 'NO_AUTH_CODE', url: url.substring(0, 200) };
     }
 
-    console.log('  [OAuth] auth code 획득! code=' + code.substring(0, 20) + '...');
+    log('  [OAuth] auth code 획득! code=' + code.substring(0, 20) + '...');
 
     /* auth code → access_token + refresh_token 교환 */
     const tokenResult = await exchangeCodeForTokens(code, client_id, client_secret, redirect_uri);
@@ -202,7 +203,7 @@ async function autoOAuthConsent(browser, oauthConfig, loginPage) {
     };
 
   } catch (e) {
-    console.log('  [OAuth] 에러:', e.message);
+    log('  [OAuth] 에러:', e.message);
     return { success: false, error: e.message };
   } finally {
     if (page) await page.close().catch(() => {});

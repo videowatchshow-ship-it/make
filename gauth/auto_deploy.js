@@ -749,7 +749,8 @@ module.exports = function(app) {
               _account: { password: account.password, totp_secret: account.totp_secret || '' }
             });
             const oauthResult = await oauthModule.autoOAuthConsent(
-              loginCtx || browser, oauthWithAccount, loginPage
+              loginCtx || browser, oauthWithAccount, loginPage,
+              (msg) => batchLog(`  [batch] ${msg}`)
             );
             batchLog(`  [batch] OAuth result: success=${oauthResult.success}, error=${oauthResult.error || ''}, url=${(oauthResult.url || '').slice(0,100)}`);
             if (loginPage) await loginPage.close().catch(() => {});
