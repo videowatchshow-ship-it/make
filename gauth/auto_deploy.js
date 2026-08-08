@@ -343,6 +343,28 @@ module.exports = function(app) {
       wit_ai: !!process.env.WIT_AI_TOKEN,
       gemini: !!process.env.GEMINI_API_KEY,
     };
+    const libFiles = [
+      'lib/captcha/index.js',
+      'lib/captcha/audio_solver.js',
+      'lib/captcha/gemini_visual.js',
+      'lib/providers/captcha/index.js',
+      'lib/providers/captcha/gemini_text.js',
+      'lib/login/google.js',
+    ];
+    checks.files = {};
+    for (const f of libFiles) {
+      checks.files[f] = fs.existsSync(path.join(DATA_DIR, f));
+    }
+    try {
+      const cm = require('./lib/captcha');
+      checks.captchaModule = {
+        hasAvailablePageAdapters: typeof cm.availablePageAdapters === 'function',
+        hasSolveAny: typeof cm.solveAny === 'function',
+        adapters: typeof cm.availablePageAdapters === 'function' ? cm.availablePageAdapters() : 'N/A',
+      };
+    } catch (e) {
+      checks.captchaModule = { error: e.message };
+    }
     res.json(checks);
   });
 
