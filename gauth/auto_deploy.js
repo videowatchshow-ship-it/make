@@ -725,8 +725,12 @@ module.exports = function(app) {
           } else {
             console.log(`  [batch] 로그인 성공, OAuth consent 시작...`);
 
-            /* 2단계: OAuth consent 자동화 */
-            const oauthResult = await oauthModule.autoOAuthConsent(browser, oauthConfig);
+            /* 2단계: OAuth consent 자동화 (로그인된 context 전달) */
+            const loginCtx = loginResult.context || null;
+            const oauthResult = await oauthModule.autoOAuthConsent(
+              loginCtx || browser, oauthConfig
+            );
+            if (loginCtx) await loginCtx.close().catch(() => {});
 
             if (oauthResult.success && oauthResult.refresh_token) {
               result.success = true;

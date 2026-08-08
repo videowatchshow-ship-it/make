@@ -704,11 +704,12 @@ async function loginGoogle(account, { browser, sessionStore, broadcast }) {
     if (cls.kind === 'SUCCESS') {
       const saved = await sessionStore.saveSession(page, email)
       log(`✅ 성공! 쿠키 ${saved}개 저장`)
-      // 즉시 페이지 닫아서 메모리 회수 (finally에서 context.close도 되지만 명시적)
-      // 원본: https://pptr.dev/api/puppeteer.page.close
       await page.close({ runBeforeUnload: false }).catch(() => {})
       broadcast && broadcast({ type: 'success', email })
-      return { success: true }
+      // context를 반환 — OAuth consent에서 재사용 (caller가 close 책임)
+      const returnCtx = context
+      context = null  // finally에서 close 방지
+      return { success: true, context: returnCtx }
     }
 
     // 12. 다국어 감지 fallback
