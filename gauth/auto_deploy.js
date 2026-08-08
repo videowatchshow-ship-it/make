@@ -597,7 +597,7 @@ module.exports = function(app) {
   const FORBIDDEN_ACCOUNTS = ['vin7899', 'videowatch.show', 'rhkdrh999'];
   const SKIP_TOP_N = 30;
   const batchQueue = { running: false, results: [], total: 0, done: 0, current: '' };
-  const BATCH_LOG_FILE = path.join(DATA_DIR, 'batch_log.txt');
+  const BATCH_LOG_FILE = '/tmp/gauth-batch-log.txt';
   function batchLog(msg) {
     const line = `[${new Date().toISOString()}] ${msg}\n`;
     console.log(msg);
