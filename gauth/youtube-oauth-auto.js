@@ -98,23 +98,66 @@ async function autoOAuthConsent(browser, oauthConfig, loginPage, log) {
       }
 
       if (url.includes('challenge/totp') && accountInfo.totp_secret && generateTotpLocal) {
-        const code = generateTotpLocal(accountInfo.totp_secret);
-        log(`  [OAuth] TOTP 입력: ${code}`);
-        const totpInput = await page.$('input[type="tel"]').catch(() => null);
-        log(`  [OAuth] totpInput=${!!totpInput}`);
-        if (totpInput) {
-          await totpInput.type(code, { delay: 60 });
+        for (let totpAttempt = 0; totpAttempt < 2; totpAttempt++) {
+          const curUrl = page.url();
+          if (!curUrl.includes('challenge/totp')) break;
+
+          const bodyText = await page.evaluate(() => document.body.innerText.slice(0, 200)).catch(() => '');
+          log(`  [OAuth] TOTP attempt ${totpAttempt + 1}, body: ${bodyText.slice(0, 80)}`);
+
+          if (bodyText.trim() === 'Loading' || bodyText.trim().length < 10) {
+            log(`  [OAuth] 페이지 로딩 중, 3초 대기...`);
+            await delay(3000, 4000);
+            const afterBody = await page.evaluate(() => document.body.innerText.slice(0, 200)).catch(() => '');
+            log(`  [OAuth] 대기 후 body: ${afterBody.slice(0, 80)}`);
+            if (afterBody.trim() === 'Loading' || afterBody.trim().length < 10) {
+              log(`  [OAuth] 여전히 로딩, 리로드 시도`);
+              await page.reload({ waitUntil: 'networkidle2', timeout: CONSENT_TIMEOUT }).catch(() => {});
+              await delay(2000, 3000);
+            }
+          }
+
+          const totpInput = await page.$('input[type="tel"]').catch(() => null);
+          if (!totpInput) {
+            const totpInput2 = await page.$('input[type="text"][name="totpPin"]').catch(() => null);
+            if (!totpInput2) {
+              log(`  [OAuth] TOTP input 못 찾음, URL: ${page.url().slice(0, 120)}`);
+              break;
+            }
+          }
+          const inputEl = totpInput || await page.$('input[type="text"][name="totpPin"]').catch(() => null);
+          if (!inputEl) break;
+
+          const code = generateTotpLocal(accountInfo.totp_secret);
+          log(`  [OAuth] TOTP 입력: ${code}`);
+          await inputEl.click({ clickCount: 3 });
+          await inputEl.type(code, { delay: 60 });
+
           const totpBtn = await page.$('#totpNext').catch(() => null);
           log(`  [OAuth] totpBtn=${!!totpBtn}`);
+          const oldUrl = page.url();
           if (totpBtn) await totpBtn.click();
           else await page.keyboard.press('Enter');
-          await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: CONSENT_TIMEOUT }).catch(() => {});
-          await delay(1500, 2500);
+
+          // URL 변경 폴링 (waitForNavigation 대신)
+          for (let w = 0; w < 15; w++) {
+            await delay(1000, 1500);
+            const newUrl = page.url();
+            if (newUrl !== oldUrl) {
+              log(`  [OAuth] TOTP 후 URL 변경: ${newUrl.slice(0, 120)}`);
+              break;
+            }
+            const bdy = await page.evaluate(() => document.body.innerText.slice(0, 50)).catch(() => '');
+            if (w === 5) log(`  [OAuth] TOTP 대기 ${w}s, body: ${bdy}`);
+          }
+          await delay(1000, 2000);
           url = page.url();
-          log(`  [OAuth] TOTP 후 URL: ${url.slice(0, 120)}`);
-        } else {
-          log(`  [OAuth] TOTP input 못 찾음, page URL: ${url.slice(0, 120)}`);
+          log(`  [OAuth] TOTP 최종 URL: ${url.slice(0, 120)}`);
+          if (!url.includes('challenge/totp')) break;
+          log(`  [OAuth] 여전히 TOTP 페이지, 재시도...`);
+          await delay(2000, 3000);
         }
+        url = page.url();
       }
     }
 
@@ -124,9 +167,13 @@ async function autoOAuthConsent(browser, oauthConfig, loginPage, log) {
       /* 기본 계정(첫 번째) 클릭 */
       const firstAccount = await page.$('ul li:first-child, div[data-identifier], div[data-email]');
       if (firstAccount) {
+        const oldUrl = page.url();
         await firstAccount.click();
-        await delay(2000, 3000);
-        await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: CONSENT_TIMEOUT }).catch(() => {});
+        for (let w = 0; w < 10; w++) {
+          await delay(1000, 1500);
+          if (page.url() !== oldUrl) break;
+        }
+        await delay(1000, 2000);
       }
       url = page.url();
     }
@@ -144,18 +191,32 @@ async function autoOAuthConsent(browser, oauthConfig, loginPage, log) {
       }).catch(() => []);
       log(`  [OAuth] warning 요소: ${JSON.stringify(allLinks.slice(0, 15)).slice(0, 500)}`);
 
-      const clicked = await clickByText(page, ['고급', 'Advanced', 'Show Advanced'], 'a,button,span,div');
+      const clicked = await clickByText(page, ['고급', 'Advanced', 'Show Advanced', '詳細'], 'a,button,span,div');
       log(`  [OAuth] 고급 클릭: ${clicked}`);
       if (clicked) {
-        await delay(1500, 2500);
+        await delay(2000, 3000);
+        const afterAdvBody = await page.evaluate(() => document.body.innerText.slice(0, 400)).catch(() => '');
+        log(`  [OAuth] 고급 클릭 후 body: ${afterAdvBody.slice(0, 200)}`);
+
+        const allAfter = await page.evaluate(() => {
+          return Array.from(document.querySelectorAll('a,button,span,div')).map(e => ({
+            tag: e.tagName, text: e.textContent.trim().slice(0, 80), id: e.id || '', href: e.href || ''
+          })).filter(e => e.text.length > 0 && e.text.length < 80);
+        }).catch(() => []);
+        log(`  [OAuth] 고급 후 요소: ${JSON.stringify(allAfter.slice(0, 20)).slice(0, 600)}`);
+
+        const oldUrl = page.url();
         const unsafeClicked = await clickByText(page,
-          ['이동(안전하지 않음)', '안전하지 않음', 'Go to', 'unsafe', 'Back to safety'],
+          ['이동(안전하지 않음)', '안전하지 않음으로 이동', 'Go to', '(unsafe)', '으로 이동'],
           'a,button,span,div'
         );
         log(`  [OAuth] unsafe 클릭: ${unsafeClicked}`);
         if (unsafeClicked) {
-          await delay(2000, 3000);
-          await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: CONSENT_TIMEOUT }).catch(() => {});
+          for (let w = 0; w < 10; w++) {
+            await delay(1000, 1500);
+            if (page.url() !== oldUrl) break;
+          }
+          await delay(1000, 2000);
         }
       }
       url = page.url();
@@ -174,10 +235,15 @@ async function autoOAuthConsent(browser, oauthConfig, loginPage, log) {
         await delay(500, 1000);
       }
 
+      const consentOldUrl = page.url();
       const submitClicked = await clickByText(page, ['계속', 'Continue', '허용', 'Allow'], 'button,div,span');
       if (submitClicked) {
         log('  [OAuth] 계속 클릭됨, 리다이렉트 대기...');
-        await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: CONSENT_TIMEOUT }).catch(() => {});
+        for (let w = 0; w < 15; w++) {
+          await delay(1000, 1500);
+          if (page.url() !== consentOldUrl) break;
+        }
+        await delay(1000, 2000);
       }
       url = page.url();
     }
@@ -222,7 +288,7 @@ async function autoOAuthConsent(browser, oauthConfig, loginPage, log) {
     log('  [OAuth] 에러:', e.message);
     return { success: false, error: e.message };
   } finally {
-    if (page) await page.close().catch(() => {});
+    if (page && !loginPage) await page.close().catch(() => {});
   }
 }
 
