@@ -706,12 +706,10 @@ async function loginGoogle(account, { browser, sessionStore, broadcast }) {
     if (cls.kind === 'SUCCESS') {
       const saved = await sessionStore.saveSession(page, email)
       log(`✅ 성공! 쿠키 ${saved}개 저장`)
-      await page.close({ runBeforeUnload: false }).catch(() => {})
       broadcast && broadcast({ type: 'success', email })
-      // context를 반환 — OAuth consent에서 재사용 (caller가 close 책임)
       const returnCtx = context
-      context = null  // finally에서 close 방지
-      return { success: true, context: returnCtx }
+      context = null
+      return { success: true, context: returnCtx, page }
     }
 
     // 12. 다국어 감지 fallback

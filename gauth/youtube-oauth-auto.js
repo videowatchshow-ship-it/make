@@ -37,7 +37,7 @@ async function clickByText(page, texts, tag = 'button,a,span,div') {
  * @param {object} oauthConfig - { client_id, client_secret, redirect_uri, scopes }
  * @returns {object} { success, channel_id, channel_title, refresh_token, access_token, error }
  */
-async function autoOAuthConsent(browser, oauthConfig) {
+async function autoOAuthConsent(browser, oauthConfig, loginPage) {
   const { client_id, client_secret, redirect_uri } = oauthConfig;
   const scopes = oauthConfig.scopes || 'https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube.force-ssl';
   const state = 'auto_' + Date.now();
@@ -53,8 +53,13 @@ async function autoOAuthConsent(browser, oauthConfig) {
 
   let page;
   try {
-    page = await browser.newPage();
-    await page.setDefaultNavigationTimeout(CONSENT_TIMEOUT);
+    if (loginPage) {
+      page = loginPage;
+      await page.setDefaultNavigationTimeout(CONSENT_TIMEOUT);
+    } else {
+      page = await browser.newPage();
+      await page.setDefaultNavigationTimeout(CONSENT_TIMEOUT);
+    }
 
     console.log('  [OAuth] consent URL 접속...');
     await page.goto(authUrl, { waitUntil: 'networkidle2', timeout: CONSENT_TIMEOUT });

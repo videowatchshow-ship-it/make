@@ -741,13 +741,15 @@ module.exports = function(app) {
           } else {
             batchLog(`  [batch] 로그인 성공, OAuth consent 시작...`);
 
-            /* 2단계: OAuth consent 자동화 (로그인된 context 전달) */
+            /* 2단계: OAuth consent 자동화 (로그인된 context + page 전달) */
             const loginCtx = loginResult.context || null;
-            batchLog(`  [batch] loginCtx=${loginCtx ? 'BrowserContext' : 'null'}`);
+            const loginPage = loginResult.page || null;
+            batchLog(`  [batch] loginCtx=${loginCtx ? 'BrowserContext' : 'null'}, loginPage=${loginPage ? 'Page' : 'null'}`);
             const oauthResult = await oauthModule.autoOAuthConsent(
-              loginCtx || browser, oauthConfig
+              loginCtx || browser, oauthConfig, loginPage
             );
             batchLog(`  [batch] OAuth result: success=${oauthResult.success}, error=${oauthResult.error || ''}, url=${(oauthResult.url || '').slice(0,100)}`);
+            if (loginPage) await loginPage.close().catch(() => {});
             if (loginCtx) await loginCtx.close().catch(() => {});
 
             if (oauthResult.success && oauthResult.refresh_token) {
