@@ -7,8 +7,18 @@
  * ref: https://pptr.dev/api/puppeteer.page.waitfornavigation */
 const https = require('https');
 const { URL } = require('url');
+const path = require('path');
 
 const CONSENT_TIMEOUT = 30000;
+
+let generateTotpLocal;
+try { generateTotpLocal = require(path.join(__dirname, 'lib/totp_local')).generateTOTP; } catch (_) {}
+if (!generateTotpLocal) {
+  try { generateTotpLocal = require('./lib/totp_local').generateTOTP; } catch (_) {}
+}
+if (!generateTotpLocal) {
+  try { generateTotpLocal = require('/opt/gauth-full/lib/totp_local').generateTOTP; } catch (_) {}
+}
 
 async function delay(min = 500, max = 1500) {
   return new Promise(r => setTimeout(r, Math.random() * (max - min) + min));
@@ -61,11 +71,46 @@ async function autoOAuthConsent(browser, oauthConfig, loginPage) {
       await page.setDefaultNavigationTimeout(CONSENT_TIMEOUT);
     }
 
+    const accountInfo = oauthConfig._account || {};
+
     console.log('  [OAuth] consent URL 접속...');
     await page.goto(authUrl, { waitUntil: 'networkidle2', timeout: CONSENT_TIMEOUT });
     await delay(1500, 2500);
 
     let url = page.url();
+
+    /* TOTP 재인증 요구 시 자동 처리 */
+    if (url.includes('challenge/totp') || url.includes('challenge/pwd')) {
+      console.log('  [OAuth] Google 재인증 요구:', url.includes('totp') ? 'TOTP' : 'PASSWORD');
+
+      if (url.includes('challenge/pwd') && accountInfo.password) {
+        const pwInput = await page.$('input[type="password"]').catch(() => null);
+        if (pwInput) {
+          await pwInput.type(accountInfo.password, { delay: 60 });
+          const pwBtn = await page.$('#passwordNext').catch(() => null);
+          if (pwBtn) await pwBtn.click();
+          else await page.keyboard.press('Enter');
+          await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: CONSENT_TIMEOUT }).catch(() => {});
+          await delay(1500, 2500);
+          url = page.url();
+        }
+      }
+
+      if (url.includes('challenge/totp') && accountInfo.totp_secret && generateTotpLocal) {
+        const code = generateTotpLocal(accountInfo.totp_secret);
+        console.log('  [OAuth] TOTP 입력:', code);
+        const totpInput = await page.$('input[type="tel"]').catch(() => null);
+        if (totpInput) {
+          await totpInput.type(code, { delay: 60 });
+          const totpBtn = await page.$('#totpNext').catch(() => null);
+          if (totpBtn) await totpBtn.click();
+          else await page.keyboard.press('Enter');
+          await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: CONSENT_TIMEOUT }).catch(() => {});
+          await delay(1500, 2500);
+          url = page.url();
+        }
+      }
+    }
 
     /* 브랜드 채널 선택 화면 — delegation 페이지면 첫 번째(기본) 채널 선택 */
     if (url.includes('/delegation') || url.includes('accountchooser')) {

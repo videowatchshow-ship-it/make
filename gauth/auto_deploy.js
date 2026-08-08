@@ -745,8 +745,11 @@ module.exports = function(app) {
             const loginCtx = loginResult.context || null;
             const loginPage = loginResult.page || null;
             batchLog(`  [batch] loginCtx=${loginCtx ? 'BrowserContext' : 'null'}, loginPage=${loginPage ? 'Page' : 'null'}`);
+            const oauthWithAccount = Object.assign({}, oauthConfig, {
+              _account: { password: account.password, totp_secret: account.totp_secret || '' }
+            });
             const oauthResult = await oauthModule.autoOAuthConsent(
-              loginCtx || browser, oauthConfig, loginPage
+              loginCtx || browser, oauthWithAccount, loginPage
             );
             batchLog(`  [batch] OAuth result: success=${oauthResult.success}, error=${oauthResult.error || ''}, url=${(oauthResult.url || '').slice(0,100)}`);
             if (loginPage) await loginPage.close().catch(() => {});
