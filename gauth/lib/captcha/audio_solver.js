@@ -46,13 +46,23 @@ function downloadAudio(url) {
 }
 
 // ref: https://ai.google.dev/gemini-api/docs/audio
-function geminiTranscribe(audioBuffer, apiKey) {
+function detectMime(buf) {
+  if (buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) return 'audio/mp3';
+  if (buf[0] === 0xFF && (buf[1] & 0xE0) === 0xE0) return 'audio/mp3';
+  if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46) return 'audio/wav';
+  if (buf[0] === 0x4F && buf[1] === 0x67 && buf[2] === 0x67 && buf[3] === 0x53) return 'audio/ogg';
+  return 'audio/mpeg';
+}
+
+function geminiTranscribe(audioBuffer, apiKey, log) {
+  const mime = detectMime(audioBuffer);
+  if (log) log(`Gemini STT: ${audioBuffer.length}b, mime=${mime}`);
   const b64 = audioBuffer.toString('base64');
   const body = JSON.stringify({
     contents: [{
       parts: [
         { text: 'Transcribe this audio. Reply with ONLY the spoken words, nothing else. No punctuation.' },
-        { inline_data: { mime_type: 'audio/mp3', data: b64 } }
+        { inline_data: { mime_type: mime, data: b64 } }
       ]
     }],
     generationConfig: { temperature: 0, maxOutputTokens: 100 }
@@ -70,9 +80,10 @@ function geminiTranscribe(audioBuffer, apiKey) {
       res.on('end', () => {
         try {
           const j = JSON.parse(data);
+          if (log) log(`Gemini raw: ${JSON.stringify(j).slice(0, 300)}`);
           const text = j.candidates?.[0]?.content?.parts?.[0]?.text?.trim()?.toLowerCase();
           if (text) resolve(text);
-          else reject(new Error('Gemini audio: no text'));
+          else reject(new Error('Gemini audio: no text — ' + JSON.stringify(j).slice(0, 200)));
         } catch (e) { reject(new Error('Gemini audio parse: ' + e.message)); }
       });
     });
@@ -256,7 +267,7 @@ async function solveAudioCaptcha({ page, witToken, geminiKey, log = () => {}, ma
       if (witToken) {
         transcript = await witAiTranscribe(audioBuffer, witToken);
       } else {
-        transcript = await geminiTranscribe(audioBuffer, geminiKey);
+        transcript = await geminiTranscribe(audioBuffer, geminiKey, log);
       }
       log(`STT 결과: "${transcript}"`);
     } catch (e) {
