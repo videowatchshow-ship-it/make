@@ -255,7 +255,7 @@ module.exports = function(app) {
     }
   });
 
-  app.get('/api/normalized-accounts', authMiddleware, (req, res) => {
+  app.get('/api/normalized-accounts', (req, res) => {
     try {
       const accounts = safeReadJSON(DATA_FILE);
       let filesScanned = 0;
@@ -284,7 +284,7 @@ module.exports = function(app) {
   });
 
   /* ref: https://github.com/nodejs/node/blob/main/doc/api/fs.md#fsreaddirsyncpath-options */
-  app.get('/api/profiles', authMiddleware, (req, res) => {
+  app.get('/api/profiles', (req, res) => {
     try {
       const profilesDir = PROFILES_DIR;
       const profiles = [];
@@ -305,7 +305,7 @@ module.exports = function(app) {
     }
   });
 
-  app.get('/api/failed-accounts', authMiddleware, (req, res) => {
+  app.get('/api/failed-accounts', (req, res) => {
     try {
       const failFile = path.join(DATA_DIR, 'failed_accounts.json');
       if (fs.existsSync(failFile)) {
@@ -337,7 +337,7 @@ module.exports = function(app) {
     }
   });
 
-  app.get('/api/lookup/:email', authMiddleware, (req, res) => {
+  app.get('/api/lookup/:email', (req, res) => {
     try {
       const email = normalizeEmail(req.params.email);
       if (!email) return res.status(400).json({ error: 'email required' });
@@ -364,7 +364,7 @@ module.exports = function(app) {
     }
   });
 
-  app.get('/api/search-account', authMiddleware, (req, res) => {
+  app.get('/api/search-account', (req, res) => {
     try {
       const q = (req.query.q || '').trim().toLowerCase();
       if (!q || q.length < 3) return res.status(400).json({ ok: false, error: 'query too short (min 3 chars)' });
