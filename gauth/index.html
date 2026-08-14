@@ -640,8 +640,9 @@ async function load(){
     n = await safeJson(r1, {accounts:[],summary:{}});
     p = await safeJson(r2, {profiles:[]});
     f = await safeJson(r3, {});
-    if(!r1.ok){
-      document.getElementById('spacer').innerHTML='<div style="padding:20px;color:#ffb469;font-size:14px">⚠ API 응답: HTTP '+r1.status+' — API 토큰을 입력하세요</div>';
+    if(!r1.ok || !n.accounts){
+      var _msg = r1.ok ? 'accounts 키 없음 (응답: '+JSON.stringify(n).slice(0,200)+')' : 'HTTP '+r1.status;
+      document.getElementById('spacer').innerHTML='<div style="padding:20px;color:#ffb469;font-size:14px">⚠ API 상태: '+_esc(_msg)+'</div>';
     }
   } catch(e) { n={accounts:[],summary:{}}; p={profiles:[]}; f={}; }
   FAILED = f || {}
