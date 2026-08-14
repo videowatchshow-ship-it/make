@@ -114,7 +114,8 @@ make/
 // HMAC으로 고정 길이(SHA-256 32바이트) 다이제스트 생성 → 길이 누출 방지
 // ref: https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html
 // ref: https://nodejs.org/api/crypto.html#cryptotimingsafeequala-b
-const hmac = (s) => crypto.createHmac('sha256', 'gauth').update(s).digest();
+const key = process.env.GAUTH_API_TOKEN || 'gauth';
+const hmac = (s) => crypto.createHmac('sha256', key).update(s).digest();
 if (!crypto.timingSafeEqual(hmac(token), hmac(expected)))
 ```
 
@@ -439,7 +440,7 @@ otpauth:// URL 지원:
 
 | 보안 항목 | 구현 | 공식 문서 |
 |-----------|------|-----------|
-| 타이밍 공격 방지 | `crypto.createHmac('sha256','gauth')` → `timingSafeEqual` (HMAC 고정 길이 비교, 길이 누출 방지) | https://nodejs.org/api/crypto.html#cryptotimingsafeequala-b |
+| 타이밍 공격 방지 | `crypto.createHmac('sha256', GAUTH_API_TOKEN)` → `timingSafeEqual` (HMAC 고정 길이 비교, 길이 누출 방지) | https://nodejs.org/api/crypto.html#cryptotimingsafeequala-b |
 | 셸 인젝션 방지 | `execFileSync` (인자 배열, 셸 미사용) | https://github.com/nodejs/node/blob/main/doc/api/child_process.md#child_processexecfilesyncfile-args-options |
 | XSS 방지 | `escapeHtml()` — `& < > " '` 이스케이프 | https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html |
 | 경로 탐색 방지 | `sanitizeEmail()` — POSIX 금지 문자 + Windows 금지 문자만 제거 (`/[\/\\<>:"|?*\x00-\x1f]/g`) | https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap03.html#tag_03_170 |
@@ -591,6 +592,7 @@ otpauth:// URL 지원:
 | 41 | deploy-gauth.yml | 로그 출력량 | journalctl 150줄 + 모듈 체크 | 서비스 상태 10줄로 축소 | — |
 | 42 | package.json | multer 버전 | ^1.4.5-lts.1 유지 | v2.x API 비호환 → 롤백 | https://github.com/expressjs/multer |
 | 43 | index.html | CSS 이중 세미콜론 | `;;` | `;` | — |
+| 44 | index.html | 스크롤 정렬 깨짐 | `position:absolute` + 고정 44px 행 높이 → 텍스트 줄바꿈 시 행 겹침 | `position` 제거, 자연 문서 흐름 사용 (페이지당 50개이므로 성능 영향 없음) | MDN normal flow: https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/CSS_layout/Normal_Flow |
 
 ---
 

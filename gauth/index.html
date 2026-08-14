@@ -14,9 +14,9 @@ input{background:#161a20;border:1px solid #2a323c;color:#e8ecef;padding:9px 12px
 input:focus{outline:0;border-color:#2b6cff}
 select{background:#161a20;border:1px solid #2a323c;color:#e8ecef;padding:9px 10px;border-radius:6px;font-size:13px}
 #count{color:#8a95a5;font-size:12px;white-space:nowrap}
-#viewport{position:relative;overflow-y:auto;height:calc(100vh - 220px)}
-#spacer{position:relative}
-.row{position:absolute;left:0;right:0;padding:10px 20px;border-bottom:1px solid #1a1f26;display:grid;grid-template-columns:280px 100px 1fr 1fr 180px 170px;gap:10px;align-items:center;font-size:12.5px}
+#viewport{overflow-y:auto;height:calc(100vh - 220px)}
+#spacer{}
+.row{padding:10px 20px;border-bottom:1px solid #1a1f26;display:grid;grid-template-columns:280px 100px 1fr 1fr 180px 170px;gap:10px;align-items:center;font-size:12.5px}
 .row:hover{background:#141821}
 .email{font-weight:500;word-break:break-all}
 .badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:10.5px;font-weight:600}
@@ -44,8 +44,7 @@ button:disabled{background:#333;cursor:not-allowed}
   .controls{padding:8px 12px;gap:6px}
   .controls input{min-width:120px;font-size:13px;padding:8px}
   #viewport{height:auto;max-height:none;overflow:visible}
-  .row{position:relative!important;top:auto!important;grid-template-columns:1fr!important;gap:4px!important;padding:10px 12px!important;font-size:13px}
-  #spacer{height:auto!important}
+  .row{grid-template-columns:1fr!important;gap:4px!important;padding:10px 12px!important;font-size:13px}
   #td-result .td-card{padding:14px!important}
   #td-result .td-card .td-grid{grid-template-columns:1fr!important;gap:8px 0!important;font-size:15px!important}
   #td-result .td-card .td-label{color:#8a95a5;font-size:12px;font-weight:600;margin-bottom:2px}
@@ -694,7 +693,6 @@ function render(){
   const _curIdx = _cur ? FILTERED.findIndex(x=>x.email===_cur) : -1
   for (let i=start;i<end;i++){
     const a = FILTERED[i]
-    const y = (i-start) * 44
     const sess = accessBadge(a)
     const tfa = a.totp_secret ? '<span class="badge b-2fa">2FA</span>' : ''
     const lock = a.lock_reason ? `<span class="badge b-lock" title="잠김 사유: ${escapeHtml(a.lock_reason)} (수동 처리 필요)">🔒 ${escapeHtml(a.lock_reason)}</span>` : ''
@@ -719,7 +717,7 @@ function render(){
     const _p = escapeHtml(a.password||'—')
     const _t = a.totp_secret ? escapeHtml(a.totp_secret.slice(0,20))+'…' : '—'
     const _r = escapeHtml(rec||'—')
-    rows.push(`<div class="row" style="top:${y}px;${_hl}">
+    rows.push(`<div class="row" style="${_hl}">
       <div class="email" style="cursor:pointer;color:${_isCur?'#3ddc84':_isNext?'#7dabff':'#7dabff'}" onclick="quickLookup('${_e}')">${_e}${_label}</div>
       <div>${sess}${tfa}${lock}</div>
       <div class="mono pw">${_p}</div>
@@ -728,7 +726,6 @@ function render(){
       <div style="display:flex;gap:4px;flex-wrap:wrap">${btnOpen}${btnLogin}</div>
     </div>`)
   }
-  sp.style.height = ((end-start) * 44) + 'px'
   sp.innerHTML = rows.join('')
   renderPagination(totalPages)
 }
