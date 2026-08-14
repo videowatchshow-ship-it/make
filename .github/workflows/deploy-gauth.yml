@@ -655,6 +655,30 @@ jobs:
 
             echo "=== Deploy complete ==="
 
+      - name: SSH restart gauth service
+        if: always()
+        continue-on-error: true
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            echo "=== Restarting gauth service ==="
+            sudo systemctl restart gauth
+            sleep 3
+            HTTP=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4000/api/normalized-accounts 2>/dev/null || echo "000")
+            echo "Health check: HTTP $HTTP"
+            if [ "$HTTP" = "200" ]; then
+              echo "Service restart OK"
+            else
+              echo "Service may still be starting..."
+              sleep 5
+              HTTP2=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4000/api/normalized-accounts 2>/dev/null || echo "000")
+              echo "Retry health check: HTTP $HTTP2"
+            fi
+
       - name: Cloudflare cache purge
         if: always()
         continue-on-error: true
