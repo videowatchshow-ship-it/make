@@ -637,23 +637,19 @@ async function load(){
     ])
   } catch(e) { n={accounts:[],summary:{}}; p={profiles:[]}; f={}; }
   FAILED = f || {}
-  /* 프로필 폴더명→이메일: 서버가 email 필드를 반환하면 우선 사용.
-   * 폴더명 변환은 최초 _를 @로, 이후 _를 .로 치환 — multi-dot 도메인(co.uk 등) 대응
-   * 서버가 email을 반환하지 않는 레거시 경우에만 사용 */
-  const sess = new Set(p.profiles.map(x => x.email || x.folder.replace(/^([^_]+)_(.+)$/, (_, u, d) => u + '@' + d.replace(/_/g, '.'))))
-  // 최신 순 (엑셀 mtime 내림차순) + 잠금 상태 표시
-  ALL = (n.accounts||[]).map(a => ({
-    ...a,
-    has_session: sess.has(a.email),
-    lock_reason: (FAILED[a.email] || {}).reason || null
-  })).sort((x,y) => (y.source_mtime||0) - (x.source_mtime||0))
+  var _profiles = (p && p.profiles) || []
+  var _accounts = (n && n.accounts) || []
+  var sess = new Set(_profiles.map(function(x){ return x.email || x.folder.replace(/^([^_]+)_(.+)$/, function(_, u, d){ return u + '@' + d.replace(/_/g, '.') }) }))
+  ALL = _accounts.map(function(a){
+    var f = (FAILED[a.email] || {});
+    return Object.assign({}, a, {has_session: sess.has(a.email), lock_reason: f.reason || null});
+  }).sort(function(x,y){ return (y.source_mtime||0) - (x.source_mtime||0) })
   var _fc = n.summary && n.summary.files_scanned;
   if(_fc == null){
     try { var _rp = await fetch(authQuery('/api/parse-report'),{cache:'no-store',headers:authHeaders()}).then(r=>r.json()); _fc = _rp && _rp.last_run && _rp.last_run.files; } catch(_){}
   }
   document.getElementById('s-files').textContent = (_fc != null ? _fc : 0).toLocaleString()
   document.getElementById('s-acc').textContent = ALL.length.toLocaleString()
-  document.getElementById('count').textContent = 'ALL:'+ALL.length+'건 로드됨'
   document.getElementById('s-sess').textContent = ALL.filter(a=>a.has_session).length.toLocaleString()
   var _2faCount = ALL.filter(a => a.totp_secret && a.totp_secret.trim()).length
   var _pwOnly = ALL.filter(a => a.password && (!a.totp_secret || !a.totp_secret.trim())).length
@@ -690,7 +686,6 @@ function render(){
   var start = (PAGE-1) * PAGE_SIZE
   var end = Math.min(FILTERED.length, start + PAGE_SIZE)
   var rows = []
-  document.title = 'render:'+FILTERED.length+'건'
   const _cur = localStorage.getItem('gauth_last_lookup')||''
   const _curIdx = _cur ? FILTERED.findIndex(x=>x.email===_cur) : -1
   for (let i=start;i<end;i++){
@@ -1251,10 +1246,7 @@ if(_exportBtn) _exportBtn.addEventListener('click', async () => {
   const a = document.createElement('a'); a.href=url; a.download=`gauth-split-${parts}.zip`; a.click()
   setTimeout(()=>URL.revokeObjectURL(url),60000)
 })
-load().catch(function(err){
-  document.getElementById('spacer').innerHTML='<div style="padding:40px;color:#ff6060;font-size:16px;text-align:center">로드 에러: '+_esc(err.message)+'</div>';
-  console.error('load() error:', err);
-})
+load()
 </script><!-- GCP VM 제어 패널 (하단, 모바일 반응형)
      ref: MDN CSS Grid https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout
      ref: MDN CSS @media https://developer.mozilla.org/en-US/docs/Web/CSS/@media -->
