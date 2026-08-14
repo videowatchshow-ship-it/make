@@ -653,6 +653,7 @@ async function load(){
   }
   document.getElementById('s-files').textContent = (_fc != null ? _fc : 0).toLocaleString()
   document.getElementById('s-acc').textContent = ALL.length.toLocaleString()
+  document.getElementById('count').textContent = 'ALL:'+ALL.length+'건 로드됨'
   document.getElementById('s-sess').textContent = ALL.filter(a=>a.has_session).length.toLocaleString()
   var _2faCount = ALL.filter(a => a.totp_secret && a.totp_secret.trim()).length
   var _pwOnly = ALL.filter(a => a.password && (!a.totp_secret || !a.totp_secret.trim())).length
@@ -684,11 +685,12 @@ function applyFilter(){
   render()
 }
 function render(){
-  const totalPages = Math.max(1, Math.ceil(FILTERED.length / PAGE_SIZE))
+  var totalPages = Math.max(1, Math.ceil(FILTERED.length / PAGE_SIZE))
   if (PAGE > totalPages) PAGE = totalPages
-  const start = (PAGE-1) * PAGE_SIZE
-  const end = Math.min(FILTERED.length, start + PAGE_SIZE)
-  const rows = []
+  var start = (PAGE-1) * PAGE_SIZE
+  var end = Math.min(FILTERED.length, start + PAGE_SIZE)
+  var rows = []
+  document.title = 'render:'+FILTERED.length+'건'
   const _cur = localStorage.getItem('gauth_last_lookup')||''
   const _curIdx = _cur ? FILTERED.findIndex(x=>x.email===_cur) : -1
   for (let i=start;i<end;i++){
@@ -1249,7 +1251,10 @@ if(_exportBtn) _exportBtn.addEventListener('click', async () => {
   const a = document.createElement('a'); a.href=url; a.download=`gauth-split-${parts}.zip`; a.click()
   setTimeout(()=>URL.revokeObjectURL(url),60000)
 })
-load()
+load().catch(function(err){
+  document.getElementById('spacer').innerHTML='<div style="padding:40px;color:#ff6060;font-size:16px;text-align:center">로드 에러: '+_esc(err.message)+'</div>';
+  console.error('load() error:', err);
+})
 </script><!-- GCP VM 제어 패널 (하단, 모바일 반응형)
      ref: MDN CSS Grid https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout
      ref: MDN CSS @media https://developer.mozilla.org/en-US/docs/Web/CSS/@media -->
