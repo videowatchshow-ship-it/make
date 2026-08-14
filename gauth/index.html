@@ -628,13 +628,21 @@ function noCacheQuery(url){var u=authQuery(url);return u+(u.includes('?')?'&':'?
 
 let FAILED = {}
 async function load(){
-  let n, p, f
+  var n, p, f
+  function safeJson(r, fallback){
+    if(!r.ok) return fallback;
+    return r.json().catch(function(){ return fallback });
+  }
   try {
-    [n, p, f] = await Promise.all([
-      fetch(authQuery('/api/normalized-accounts'),{headers:authHeaders()}).then(r=>r.json()).catch(()=>({accounts:[],summary:{}})),
-      fetch(authQuery('/api/profiles'),{headers:authHeaders()}).then(r=>r.json()).catch(()=>({profiles:[]})),
-      fetch(authQuery('/api/failed-accounts'),{headers:authHeaders()}).then(r=>r.json()).catch(()=>({}))
-    ])
+    var r1 = await fetch(authQuery('/api/normalized-accounts'),{headers:authHeaders()}).catch(function(){ return {ok:false} });
+    var r2 = await fetch(authQuery('/api/profiles'),{headers:authHeaders()}).catch(function(){ return {ok:false} });
+    var r3 = await fetch(authQuery('/api/failed-accounts'),{headers:authHeaders()}).catch(function(){ return {ok:false} });
+    n = await safeJson(r1, {accounts:[],summary:{}});
+    p = await safeJson(r2, {profiles:[]});
+    f = await safeJson(r3, {});
+    if(!r1.ok){
+      document.getElementById('spacer').innerHTML='<div style="padding:20px;color:#ffb469;font-size:14px">⚠ API 응답: HTTP '+r1.status+' — API 토큰을 입력하세요</div>';
+    }
   } catch(e) { n={accounts:[],summary:{}}; p={profiles:[]}; f={}; }
   FAILED = f || {}
   var _profiles = (p && p.profiles) || []
