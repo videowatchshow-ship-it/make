@@ -1,0 +1,127 @@
+name: Verify photo2 all 20 tables vs Cambodia source
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-verify-all-tables.yml'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch tables.json + all 20 rooms + collector source hints
+        run: |
+          set +e
+          mkdir -p out
+          BASE="https://xn--9d0bw2fjtyymch7de9d.info/photo2"
+          TS=$(date +%s)
+
+          echo "===== [1] tables.json (실제 서버 매핑) ====="
+          curl -sS --max-time 30 "$BASE/data/tables.json?_t=$TS" -o out/tables.json -w "HTTP:%{http_code}\n"
+          echo "--- content ---"
+          cat out/tables.json
+          echo ""
+
+          echo ""
+          echo "===== [2] selected_room.json / sel_*.json ====="
+          for f in selected_room.json sel_tak.json sel_cent.json sel_jay.json sel_otuki.json; do
+            echo "--- $f ---"
+            curl -sS --max-time 15 "$BASE/data/$f?_t=$TS" -w " [HTTP %{http_code}]\n"
+          done
+
+          echo ""
+          echo "===== [3] 모든 방 데이터 (label 순서) ====="
+          echo "화면에 표시된 매핑: 방10=10 방11=11 방12=12 방15=15 방16=16(용호) 방17=87 방18=18 방19=89 방20=20 방21=21 방22=22 방23=23 방25=25 방26=26 방27=27 방55=31 방66=32 방77=33 방88=34 방99=35"
+          NOW=$(date +%s)
+          echo "server_now: $NOW"
+          echo ""
+          printf "%-8s %-12s %-8s %-6s %-8s %-8s %s\n" "label" "api_id" "http" "age_s" "nums_len" "ver" "tail_nums"
+          echo "-----------------------------------------------------------------------------------"
+          # Room labels shown on write.php (based on user screenshot)
+          for pair in "10:10" "11:11" "12:12" "15:15" "16:16" "17:87" "18:18" "19:89" "20:20" "21:21" "22:22" "23:23" "25:25" "26:26" "27:27" "55:31" "66:32" "77:33" "88:34" "99:35"; do
+            LABEL="${pair%%:*}"
+            APIID="${pair##*:}"
+            CODE=$(curl -sS --max-time 15 -o "out/room_${LABEL}.json" -w "%{http_code}" "$BASE/data/room_${LABEL}.json?_t=$TS")
+            if [ "$CODE" = "200" ] && [ -s "out/room_${LABEL}.json" ]; then
+              python3 -c "
+import json,time
+d=json.load(open('out/room_${LABEL}.json'))
+t=d.get('t',0)
+nums=d.get('nums',[])
+ver=d.get('ver','-')
+apiId=d.get('apiId','-')
+age=int(${NOW})-int(t) if t else -1
+tail=nums[-8:] if isinstance(nums,list) else '?'
+print(f'{'${LABEL}':<8} {'${APIID}':<12} {'${CODE}':<8} {age:<6} {len(nums) if isinstance(nums,list) else \"?\":<8} {str(ver):<8} apiId={apiId} tail={tail}')
+" 2>/dev/null || echo "$LABEL $APIID $CODE PARSE_ERROR"
+            else
+              printf "%-8s %-12s %-8s MISSING\n" "$LABEL" "$APIID" "$CODE"
+            fi
+          done
+
+          echo ""
+          echo "===== [4] api_all_rooms.php (프론트가 보는 방 리스트) ====="
+          curl -sS --max-time 20 "$BASE/api_all_rooms.php?_t=$TS" -o out/api_all_rooms.json -w "HTTP:%{http_code} SIZE:%{size_download}B\n"
+          python3 -c "
+import json
+try:
+    d=json.load(open('out/api_all_rooms.json'))
+    if isinstance(d,list):
+        print(f'count: {len(d)}')
+        for r in d[:30]:
+            print(' ', json.dumps(r, ensure_ascii=False)[:200])
+    else:
+        print(json.dumps(d, ensure_ascii=False, indent=2)[:3000])
+except Exception as e:
+    print('parse error:', e)
+    print(open('out/api_all_rooms.json').read()[:500])
+"
+
+          echo ""
+          echo "===== [5] collector_xtd.php 원본 확인 (PHP 실행되지 않는 원본 소스 시도) ====="
+          for ext in "" ".txt" ".bak" ".php.bak" "-src"; do
+            CODE=$(curl -sSI --max-time 10 "$BASE/collector_xtd.php${ext}" -w "%{http_code}" -o /dev/null)
+            echo "collector_xtd.php${ext}: HTTP $CODE"
+          done
+
+          echo ""
+          echo "===== [6] bgl.js / bundle.js 에서 xtd6688 API URL 흔적 검색 ====="
+          for js in bgl.js dragon_fx.js modules/dist/bundle.js signal.js signal_common.js luzhu_render.js hot-patch.js; do
+            SAFE=$(echo "$js" | tr '/' '_')
+            [ -s "out/$SAFE" ] || curl -sS --max-time 20 "$BASE/$js" -o "out/$SAFE" 2>/dev/null
+            HITS=$(grep -o -E 'xtd6688|xtd\.|api\.xtd|cambodia|캄보디아|http[s]?://[^"'\''`\ ]+' "out/$SAFE" 2>/dev/null | sort -u | head -20)
+            if [ -n "$HITS" ]; then
+              echo "--- $js ---"
+              echo "$HITS"
+            fi
+          done
+
+      - name: Cross-verify — 원본 소스 API 있으면 20개 테이블 대조
+        run: |
+          set +e
+          # xtd6688 후보 URL들 시도
+          echo "===== xtd6688 upstream 후보 URL 시도 ====="
+          for URL in \
+            "http://xtd6688.com/api/game/pai/log" \
+            "https://xtd6688.com/api/game/pai/log" \
+            "http://api.xtd6688.com/log" \
+            "https://api.xtd6688.com/log" \
+            "http://xtd6688.com:8080/api" \
+            "https://www.xtd6688.com/getlog" \
+            "https://xtd6688.com/pai/api"; do
+            CODE=$(curl -sS -o /tmp/probe -w "%{http_code}" --max-time 8 --connect-timeout 5 "$URL" 2>/dev/null)
+            SIZE=$(stat -c%s /tmp/probe 2>/dev/null || echo 0)
+            echo "$URL → HTTP $CODE (${SIZE}B)"
+            [ "$CODE" = "200" ] && [ "$SIZE" -gt 20 ] && echo "  BODY: $(head -c 200 /tmp/probe)"
+          done
+
+      - name: Upload raw
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: photo2-tables-audit
+          path: out/
+          retention-days: 7
