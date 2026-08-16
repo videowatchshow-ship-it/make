@@ -1,4 +1,4 @@
-name: SNW 채팅 "처음 하시는 분 배려" 제거 + 4채널 방 101 설정
+name: SNW 하단 창 (ban_wrap) 전체 삭제
 
 on:
   workflow_dispatch:
@@ -9,10 +9,10 @@ on:
       - '.github/workflows/photo2-remove-chat.yml'
 
 jobs:
-  fix:
+  nuke:
     runs-on: ubuntu-latest
     steps:
-      - name: 채팅 문구 삭제 + sel_{cent,tak,jay,otuki}.json 을 room_id=101 로
+      - name: 하단 ban_wrap 창 통째로 삭제 + ㅋㅌ/카톡/가능 등 모든 한글 문구 grep
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -30,83 +30,47 @@ jobs:
             P1="/var/www/sites/chamgyo/public/photo"
             TS=$(date +%s)
 
-            echo "===== [A-1] "처음/배려/하시는/🤝" grep - 어느 파일에 있는지 ====="
-            sudo grep -rln -E "처음 하시는|처음.*배려|배려|🤝|하시는 분" "$P1" 2>/dev/null | head -20
+            echo "===== [1] SNW_1.html 하단 한글 문구 grep - ㅋㅌ/카톡/가능/텔레/문의/공지 ====="
+            sudo grep -n -E "ㅋㅌ|카톡|카카오|텔레|문의|공지|입장|가입|가능|안내|참여|배려|처음|메신저|SKY|채팅|@|친구|초대|배팅|입금|출금" "$P1/SNW_1.html" 2>/dev/null | head -50
 
             echo ""
-            echo "===== [A-2] SNW_1/2 NEWSJ NUSJ 등에서 문구 위치 ====="
+            echo "===== [2] hot_patches.json / hot-patch.js (핫패치가 뭘 주입하는지) ====="
+            for HP in "$P1/hot_patches.json" "$P1/hot-patch.js"; do
+              [ -f "$HP" ] && echo "--- $HP ---" && sudo cat "$HP" | head -50
+            done
+
+            echo ""
+            echo "===== [3] bundle.js 안에 ㅋㅌ/카톡/가능 등 검색 ====="
+            sudo grep -oE "ㅋㅌ|카톡|가능|메신저|카카오|공지|안내|처음|배려|하시는" "$P1/modules/dist/bundle.js" 2>/dev/null | sort -u | head -30
+
+            echo ""
+            echo "===== [4] SNW_1.html - ban_wrap 블록 전체 (line 55~90) 확인 ====="
+            sudo sed -n "55,90p" "$P1/SNW_1.html"
+
+            echo ""
+            echo "===== [5] 백업 + ban_wrap div 통째로 삭제 (4개 파일) ====="
             for f in SNW_1.html SNW_2.html NEWSJ.html NUSJ0814.html; do
               [ -f "$P1/$f" ] || continue
-              echo "--- $f ---"
-              sudo grep -n -E "처음|배려|🤝|하시는" "$P1/$f" 2>/dev/null | head -10
+              sudo cp "$P1/$f" "$P1/$f.bak.nuke.$TS"
+              # Python으로 <div class="ban_wrap">…</div> 태그 블록 전체 제거
+              sudo TARGET="$P1/$f" python3 -c "
+            import re, os
+            p = os.environ[\"TARGET\"]
+            s = open(p).read()
+            # ban_wrap 블록 전체 매치 (여러 라인)
+            new = re.sub(r\"<div class=\\\"ban_wrap\\\".*?</div>\\s*</div>\", \"</div>\", s, flags=re.DOTALL)
+            # 더 안전: 라인 단위로 ban_wrap 시작부터 매칭되는 </div> 마감까지
+            open(p, \"w\").write(new)
+            print(f\"before={len(s)}B after={len(new)}B diff={len(s)-len(new)}B\")
+            "
+              echo "$f 이후 grep:"
+              sudo grep -n "ban_wrap\|brand_logo\|메신저\|처음\|배려" "$P1/$f" 2>/dev/null | head -10 || echo "  (완전 제거)"
+              sudo chown www-data:www-data "$P1/$f"
             done
 
             echo ""
-            echo "===== [A-3] 백업 + 삭제 (여러 패턴) ====="
-            for f in SNW_1.html SNW_2.html NEWSJ.html NUSJ0814.html; do
-              [ -f "$P1/$f" ] || continue
-              sudo cp "$P1/$f" "$P1/$f.bak.chat.$TS"
-              # 라인 통째 삭제 (문구 포함된 <div class="chat"> 또는 <div class="notice"> 라인)
-              sudo sed -i "/처음 하시는 분 배려/d" "$P1/$f"
-              sudo sed -i "/처음.*하시는.*분.*배려/d" "$P1/$f"
-              sudo sed -i "/🤝.*처음/d" "$P1/$f"
-              sudo sed -i "s|🤝||g" "$P1/$f"
-              # class chat/notice 관련 요소 통째 삭제
-              sudo sed -i "/<div class=\"chat\"/d" "$P1/$f"
-              sudo sed -i "/<div class=\"chat_msg\"/d" "$P1/$f"
-              sudo sed -i "/<div class=\"notice\"/d" "$P1/$f"
-              sudo sed -i "/<div class=\"chat-notice\"/d" "$P1/$f"
-              sudo sed -i "/<div id=\"chat\"/d" "$P1/$f"
-              echo "$f 이후 매칭 (남은 흔적):"
-              sudo grep -cn -E "처음|배려|🤝|하시는" "$P1/$f" 2>/dev/null || echo "0"
-            done
-
-            echo ""
-            echo "===== [B-1] 현재 sel_*.json 상태 ====="
-            for ch in cent tak jay otuki denny aass0707; do
-              F="$P1/data/sel_${ch}.json"
-              [ -f "$F" ] && echo "sel_${ch}.json: $(sudo cat $F)" || echo "sel_${ch}.json: MISSING"
-            done
-
-            echo ""
-            echo "===== [B-2] 방 101 데이터 확인 (room_101.json 존재/신선?) ====="
-            F="$P1/data/room_101.json"
-            if [ -f "$F" ]; then
-              MT=$(stat -c %Y "$F")
-              NOW=$(date +%s)
-              AGE=$((NOW - MT))
-              echo "room_101.json: age=${AGE}s"
-              sudo cat "$F" | head -c 300
-              echo ""
-            else
-              echo "room_101.json MISSING!"
-            fi
-
-            echo ""
-            echo "===== [B-3] tables.json sinji_new 리스트 (101 있는지 확인) ====="
-            sudo cat "$P1/data/tables.json"
-            echo ""
-
-            echo ""
-            echo "===== [C] 4채널 sel_*.json 을 방 101 로 세팅 ====="
-            for ch in cent tak jay otuki; do
-              F="$P1/data/sel_${ch}.json"
-              sudo cp "$F" "$F.bak.$TS" 2>/dev/null || true
-              echo "{\"room_id\":101,\"board\":\"CAH_1\"}" | sudo tee "$F" > /dev/null
-              sudo chown www-data:www-data "$F"
-              echo "sel_${ch}.json → $(sudo cat $F)"
-            done
-
-            echo ""
-            echo "===== [D] HTTP 라이브 확인 - 4채널 sel_ 응답 ====="
-            for ch in cent tak jay otuki; do
-              R=$(curl -sS --max-time 10 "http://localhost/photo/data/sel_${ch}.json?_t=$TS")
-              echo "sel_${ch} → $R"
-            done
-
-            echo ""
-            echo "===== [E] SNW_1.html "처음/배려" 완전 제거 확인 ====="
-            sudo grep -cE "처음|배려|🤝|하시는" "$P1/SNW_1.html" 2>/dev/null || echo "0"
+            echo "===== [6] AFTER 확인 - SNW_1.html 라인 55~90 ====="
+            sudo sed -n "55,90p" "$P1/SNW_1.html"
 
             echo ""
             echo "===== DONE ====="
