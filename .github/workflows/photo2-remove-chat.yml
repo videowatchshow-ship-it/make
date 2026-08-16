@@ -1,4 +1,4 @@
-name: photo/SNW_1,2 파랑 메신저 SKY82892 요소 제거 + T101 확인
+name: photo/SNW vstamp 제거 + 하단 badge 정체 확인
 
 on:
   workflow_dispatch:
@@ -9,10 +9,10 @@ on:
       - '.github/workflows/photo2-remove-chat.yml'
 
 jobs:
-  remove:
+  vstamp:
     runs-on: ubuntu-latest
     steps:
-      - name: SNW_1/SNW_2 메신저 div 제거
+      - name: vstamp span 제거 + bgl.js에서 T101/6R 렌더 코드 위치 확인
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -28,58 +28,43 @@ jobs:
               --command='bash -s' << "REMOTE"
             set -uo pipefail
             P1="/var/www/sites/chamgyo/public/photo"
-
-            echo "===== [1] SNW_1.html 55~70줄 (메신저 div 컨텍스트) ====="
-            sudo sed -n "55,70p" "$P1/SNW_1.html"
-
-            echo ""
-            echo "===== [2] SNW_1.html v[0-9]+ 표시자, 6 R T101 관련 grep ====="
-            sudo grep -nE "v[0-9]+|hotv|version|ban_num|ban_wrap|badge|hotpatch|T[0-9]+" "$P1/SNW_1.html" 2>/dev/null | head -30
-
-            echo ""
-            echo "===== [3] 백업 + line 61 (메신저 div) 삭제 (SNW_1.html) ====="
             TS=$(date +%s)
-            sudo cp "$P1/SNW_1.html" "$P1/SNW_1.html.bak.msg.$TS"
-            sudo sed -i "/<div class=\"msg\">파랑 메신저/d" "$P1/SNW_1.html"
-            echo "SNW_1.html 이후 grep:"
-            sudo grep -n "메신저\|SKY82892" "$P1/SNW_1.html" | head -5 || echo "  (완전 제거됨)"
 
-            echo ""
-            echo "===== [4] SNW_2.html 도 같은 방식 ====="
-            if [ -f "$P1/SNW_2.html" ]; then
-              sudo cp "$P1/SNW_2.html" "$P1/SNW_2.html.bak.msg.$TS"
-              sudo sed -i "/<div class=\"msg\">파랑 메신저/d" "$P1/SNW_2.html"
-              echo "SNW_2.html 이후 grep:"
-              sudo grep -n "메신저\|SKY82892" "$P1/SNW_2.html" | head -5 || echo "  (완전 제거됨)"
-            fi
-
-            echo ""
-            echo "===== [5] NEWSJ.html / NUSJ0814.html 도 같은 방식 ====="
-            for f in NEWSJ.html NUSJ0814.html; do
-              if [ -f "$P1/$f" ]; then
-                sudo cp "$P1/$f" "$P1/$f.bak.msg.$TS"
-                sudo sed -i "/<div class=\"msg\">파랑 메신저/d" "$P1/$f"
-                echo "$f 이후 grep:"
-                sudo grep -n "메신저\|SKY82892" "$P1/$f" | head -3 || echo "  (완전 제거됨)"
-              fi
-            done
-
-            echo ""
-            echo "===== [6] AFTER — SNW_1.html에 메신저 흔적 남았나 ====="
-            sudo grep -c "메신저\|SKY82892" "$P1/SNW_1.html" || echo "0"
-
-            echo ""
-            echo "===== [7] T101 / v[0-9]+ 표시자 검색 (모든 SNW 관련 파일) ====="
+            echo "===== [1] vstamp span 삭제 (SNW_1/2 NEWSJ NUSJ) ====="
             for f in SNW_1.html SNW_2.html NEWSJ.html NUSJ0814.html; do
               [ -f "$P1/$f" ] || continue
-              echo "--- $f ---"
-              sudo grep -nE "'T'\+|T[0-9]{3}|version|v[0-9]+|ban_num[^-]|hotpatch" "$P1/$f" | head -10
+              sudo cp "$P1/$f" "$P1/$f.bak.vstamp.$TS"
+              # <span class="vstamp" id="vstamp">v110</span> 통째 제거
+              sudo sed -i "s|<span class=\"vstamp\" id=\"vstamp\">v[0-9]*</span>||g" "$P1/$f"
+              echo "$f: vstamp 이후"
+              sudo grep -n "vstamp\|v110\|v109" "$P1/$f" | head -3 || echo "  (완전 제거)"
             done
 
             echo ""
-            echo "===== [8] Cloudflare purge (내부 서버에서는 못함, 여기서 skip) ====="
+            echo "===== [2] bgl.js에서 T[0-9]+ / badge / table 번호 렌더 코드 검색 ====="
+            sudo grep -nE "T[0-9]{2,4}|badge|table_num|ban_num|drawText|fillText.*T|Table [0-9]" "$P1/bgl.js" 2>/dev/null | head -30
+
+            echo ""
+            echo "===== [3] SNW_1.html 안에 T[0-9] 렌더 코드 (canvas 위에 텍스트 그리는 부분) ====="
+            sudo grep -nE "fillText|strokeText|T[0-9]{2,4}|ctx\.font.*T" "$P1/SNW_1.html" 2>/dev/null | head -30
+
+            echo ""
+            echo "===== [4] 6R 이 canvas 렌더 데이터인지 확인 - bgl.js 방번호/table id 관련 ====="
+            sudo grep -nE "room_id|table_id|drawTable|drawRoom|테이블|방번호|Table\s*[0-9]|R\s*T[0-9]" "$P1/bgl.js" 2>/dev/null | head -20
+
+            echo ""
+            echo "===== [5] 심볼릭 체인 확인 - photo2/SNW_1.html 존재? photo3? ====="
+            for FOLDER in photo2 photo3; do
+              [ -f "/var/www/sites/chamgyo/public/$FOLDER/SNW_1.html" ] && echo "$FOLDER/SNW_1.html 존재" || echo "$FOLDER/SNW_1.html 없음"
+            done
+
+            echo ""
+            echo "===== [6] 최종 확인 - SNW_1.html HTTP fetch (라이브 확인) ====="
+            curl -sS -o /tmp/live_snw1 -w "HTTP:%{http_code} SIZE:%{size_download}\n" "http://localhost/photo/SNW_1.html?ch=cent&_t=$TS"
+            grep -c "vstamp\|SKY82892\|메신저" /tmp/live_snw1 || echo "0 matches"
+            echo "--- ban_wrap 근처 라인 ---"
+            grep -n -A1 "ban_wrap\|vstamp\|brand_logo" /tmp/live_snw1 | head -20
 
             echo ""
             echo "===== DONE ====="
             REMOTE
-
