@@ -1,0 +1,74 @@
+name: 원본 xn--2z1b92mg3alyphom.com 전체 sweep
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-orig-sweep.yml'
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 원본 write_url.php 완전 파싱 + 경로 sweep
+        run: |
+          set +e
+          mkdir -p out
+          ORIG="https://xn--2z1b92mg3alyphom.com"
+          TS=$(date +%s)
+
+          echo "===== write_url.php 전체 body ====="
+          curl -sSL --max-time 30 -o out/orig_write_url.html "$ORIG/write_url.php?_t=$TS"
+          wc -c out/orig_write_url.html
+          echo "--- content ---"
+          cat out/orig_write_url.html
+
+          echo ""
+          echo "===== / (홈) body에서 링크 뽑기 ====="
+          curl -sSL --max-time 30 -o out/orig_index.html "$ORIG/?_t=$TS"
+          echo "--- 링크/URL/스크립트 ---"
+          grep -oE 'href=["'"'"'][^"'"'"']*["'"'"']|src=["'"'"'][^"'"'"']*["'"'"']|https?://[a-z0-9._/-]+' out/orig_index.html | sort -u | head -50
+
+          echo ""
+          echo "===== 원본에서 우리와 같은 이름 파일들 시도 ====="
+          for path in \
+              "bgl.js" "dragon_fx.js" "signal.js" "signal_common.js" \
+              "luzhu_render.js" "hot-patch.js" "hot_patches.json" \
+              "modules/dist/bundle.js" "collector_xtd.php" "collector.php" \
+              "api_all_rooms.php" "api_selected_room.php" "api_hot_patch.php" \
+              "session_conf.php" "login.php" \
+              "CAH_1.html" "CAW_1.html" "CAW_2.html" "CAW_3.html" "CAW_4.html" \
+              "cam1.html" "table.html" "view.html" "board.html" \
+              "list.php" "table.php" "view.php" "photo.php" "photo2.php" \
+              "photo3.php" "board.php" "room.php" "cam.php" \
+              "api/rooms" "api/tables" "api.php" "get.php" "read.php" \
+              "sitemap.xml" "robots.txt" ".well-known/security.txt"; do
+            CODE=$(curl -sSI --max-time 10 -o /dev/null -w "%{http_code}" "$ORIG/$path")
+            [ "$CODE" != "404" ] && [ "$CODE" != "000" ] && echo "  $path → HTTP $CODE"
+          done
+
+          echo ""
+          echo "===== POST 시도 (write_url.php 로그인 없이 데이터 요청) ====="
+          for path in "write_url.php" "write.php"; do
+            echo "--- POST $ORIG/$path (빈 POST) ---"
+            curl -sS -X POST --max-time 15 "$ORIG/$path" -w " [HTTP %{http_code}, %{size_download}B]\n"
+          done
+
+          echo ""
+          echo "===== 원본 서버 정보 헤더 ====="
+          curl -sSI --max-time 15 "$ORIG/" | head -30
+
+          echo ""
+          echo "===== IP 확인 ====="
+          getent hosts xn--2z1b92mg3alyphom.com
+          getent hosts xn--9d0bw2fjtyymch7de9d.info
+
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: orig-sweep
+          path: out/
+          retention-days: 7
