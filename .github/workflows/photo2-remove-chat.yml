@@ -1,4 +1,4 @@
-name: photo2 - CAH_1.html 채팅/메신저/T101/v11 요소 제거
+name: photo2 - 채팅/메신저 요소 위치 찾기 v2 (모든 파일 sweep)
 
 on:
   workflow_dispatch:
@@ -9,10 +9,10 @@ on:
       - '.github/workflows/photo2-remove-chat.yml'
 
 jobs:
-  find-and-remove:
+  find:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. 찾기 - "메신저", "SKY82892", "T101", "v11" 소스 위치 확인
+      - name: 모든 photo2 파일 sweep - SKY82892 / 메신저 / T101 찾기
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -25,45 +25,62 @@ jobs:
               --project=quantum-bonus-455522-b4 \
               --ssh-flag="-o StrictHostKeyChecking=no" \
               --quiet \
-              --command='
+              --command='bash -s' << "REMOTE"
             set -uo pipefail
             P2="/var/www/sites/chamgyo/public/photo2"
             P1="/var/www/sites/chamgyo/public/photo"
 
-            echo "===== [1] photo2/CAH_1.html에서 검색 (메신저/SKY/T101/v[0-9]+) ====="
-            for kw in "메신저" "SKY82892" "SKY8" "T101" "signal_panel" "chat" "채팅" "messenger" "파랑"; do
-              echo "--- keyword: $kw ---"
-              sudo grep -n -E "$kw" "$P2/CAH_1.html" 2>/dev/null | head -20 || echo "(no match)"
+            echo "===== [1] photo2/ 전체 파일에서 SKY 검색 (recursive) ====="
+            sudo grep -rn "SKY82892" "$P2" 2>/dev/null | head -20
+            echo "---"
+            sudo grep -rn "SKY[0-9]" "$P2" --include="*.html" --include="*.js" --include="*.php" 2>/dev/null | head -30
+
+            echo ""
+            echo "===== [2] photo2/ 전체 파일에서 메신저 검색 ====="
+            sudo grep -rn "메신저" "$P2" 2>/dev/null | head -20
+
+            echo ""
+            echo "===== [3] photo2/ 전체 파일에서 T101 검색 ====="
+            sudo grep -rn "T101" "$P2" 2>/dev/null | head -20
+
+            echo ""
+            echo "===== [4] photo2/ 전체 파일에서 파랑 검색 ====="
+            sudo grep -rn "파랑" "$P2" 2>/dev/null | head -20
+
+            echo ""
+            echo "===== [5] CAW_1~4.html 전체 script 라인 (chat/messenger 힌트) ====="
+            for f in CAW_1.html CAW_2.html CAW_3.html CAW_4.html CBW_1.html CBW_2.html CBW_3.html CBW_4.html live.html; do
+              if [ -f "$P2/$f" ]; then
+                COUNT=$(sudo grep -ciE "메신저|SKY|T101|파랑|chat|채팅|messenger|signal_panel" "$P2/$f" 2>/dev/null)
+                echo "$f: 매칭 $COUNT개"
+                sudo grep -n -E "메신저|SKY[0-9]|T101|파랑" "$P2/$f" 2>/dev/null | head -10
+              fi
             done
 
             echo ""
-            echo "===== [2] photo2/signal.js + signal_common.js 확인 ====="
-            for f in signal.js signal_common.js hot-patch.js; do
-              echo "--- $f ---"
-              sudo grep -n -E "메신저|SKY82892|T101|파랑|채팅|messenger" "$P2/$f" 2>/dev/null | head -10 || echo "(none)"
-            done
+            echo "===== [6] photo/ 도 확인 (심볼릭 아니고 실체) ====="
+            sudo grep -rn "SKY82892\|메신저\|T101" "$P1" --include="*.html" --include="*.js" --include="*.php" 2>/dev/null | head -20
 
             echo ""
-            echo "===== [3] hot_patches.json 전체 (v[0-9]+가 hot patch 버전일 수 있음) ====="
-            sudo cat "$P2/hot_patches.json"
-            echo ""
+            echo "===== [7] bundle.js 안에 SKY / T101 검색 ====="
+            sudo grep -oE "SKY[0-9]+|T101|메신저" "$P2/modules/dist/bundle.js" 2>/dev/null | sort -u | head -20
 
             echo ""
-            echo "===== [4] photo/CAH_1.html도 같은지 확인 ====="
-            sudo grep -n -E "메신저|SKY82892|T101|파랑" "$P1/CAH_1.html" 2>/dev/null | head -20 || echo "(none)"
+            echo "===== [8] api_selected_room.php 반환 (sel_ 파일 기반, 방번호 표시 소스) ====="
+            sudo cat "$P2/api_selected_room.php"
 
             echo ""
-            echo "===== [5] modules/dist/bundle.js 검색 ====="
-            sudo grep -oE "메신저[^"'"'"'`]{0,50}|SKY[0-9]+|T101|파랑[^"'"'"'`]{0,30}" "$P2/modules/dist/bundle.js" 2>/dev/null | sort -u | head -20 || echo "(none in bundle)"
+            echo "===== [9] hot_patches.json photo/ (photo2와 다를 수 있음) ====="
+            sudo cat "$P1/hot_patches.json" 2>/dev/null || echo "MISSING"
 
             echo ""
-            echo "===== [6] CAH_1.html signal_panel / mnv-hd / chat / tg-info 관련 블록 ====="
-            sudo grep -n -E "signal_panel|mnv-hd|chat_|채팅|tg-info|tg-id|chat-|messenger" "$P2/CAH_1.html" 2>/dev/null | head -30
+            echo "===== [10] 라이브 상태 - api_live_status.php ====="
+            sudo cat "$P2/api_live_status.php"
 
             echo ""
-            echo "===== [7] preview_baccarat.html / live.html 도 확인 ====="
-            for f in preview_baccarat.html live.html luzhu.html; do
-              echo "--- $f ---"
-              sudo grep -n -E "메신저|SKY82892|T101|파랑" "$P2/$f" 2>/dev/null | head -10 || echo "(none)"
-            done
-            '
+            echo "===== [11] 시그널 관련 hot_patches.json 확인 - photo3 도 ====="
+            sudo find /var/www/sites/chamgyo -name "hot_patches.json" -exec sh -c '"'"'echo "--- $1 ---"; sudo cat "$1"'"'"' _ {} \; 2>/dev/null
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE
