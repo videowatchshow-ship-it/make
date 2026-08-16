@@ -12,7 +12,7 @@ jobs:
   refresh-and-verify:
     runs-on: ubuntu-latest
     steps:
-      - name: "[1]" Trigger collectors (HTTP GET forces a fresh poll cycle)
+      - name: "[1] Trigger collectors (HTTP GET forces a fresh poll cycle)"
         run: |
           set +e
           BASE="https://xn--9d0bw2fjtyymch7de9d.info"
@@ -47,10 +47,10 @@ jobs:
             fi
           done
 
-      - name: "[2]" Wait 8s for cron/collector output to land
+      - name: "[2] Wait 8s for cron/collector output to land"
         run: sleep 8
 
-      - name: "[3]" Re-check all 20 rooms after force-refresh
+      - name: "[3] Re-check all 20 rooms after force-refresh"
         run: |
           set +e
           mkdir -p out
@@ -106,7 +106,7 @@ jobs:
             fi
           done
 
-      - name: "[4]" Cambodia Bin upstream probe — fcj.oqogyf.com per room_id
+      - name: "[4] Cambodia Bin upstream probe — fcj.oqogyf.com per room_id"
         run: |
           set +e
           echo "===== fcj.oqogyf.com per room_id (signal.js에서 발견된 URL) ====="
@@ -126,7 +126,7 @@ jobs:
             fi
           done
 
-      - name: "[5]" Try xjh.liveview2024.vip (다른 원본)
+      - name: "[5] Try xjh.liveview2024.vip (다른 원본)"
         run: |
           set +e
           echo "===== xjh.liveview2024.vip ====="
@@ -138,7 +138,7 @@ jobs:
             [ "$SIZE" -gt 0 ] && [ "$SIZE" -lt 500 ] && echo " → $(head -c 150 /tmp/xjh | tr '\n' ' ')" || echo ""
           done
 
-      - name: "[6]" Grep bundle.js more carefully for upstream host
+      - name: "[6] Grep bundle.js more carefully for upstream host"
         run: |
           set +e
           BASE="https://xn--9d0bw2fjtyymch7de9d.info/photo2"
@@ -155,7 +155,7 @@ jobs:
           echo "===== CAH_1.html: kambodia/캄보디아/table 관련 텍스트 ====="
           grep -n -E '캄보디아|kambodia|cambodia|bin|table.*=' /tmp/CAH_1.html | head -20
 
-      - name: "[7]" Fetch write.php raw response (login redirect / partial HTML)
+      - name: "[7] Fetch write.php raw response (login redirect / partial HTML)"
         run: |
           set +e
           BASE="https://xn--9d0bw2fjtyymch7de9d.info/photo2"
