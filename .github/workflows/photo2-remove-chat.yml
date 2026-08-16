@@ -1,4 +1,4 @@
-name: photo/SNW vstamp 제거 + 하단 badge 정체 확인
+name: SNW 채팅 "처음 하시는 분 배려" 제거 + 4채널 방 101 설정
 
 on:
   workflow_dispatch:
@@ -9,10 +9,10 @@ on:
       - '.github/workflows/photo2-remove-chat.yml'
 
 jobs:
-  vstamp:
+  fix:
     runs-on: ubuntu-latest
     steps:
-      - name: vstamp span 제거 + bgl.js에서 T101/6R 렌더 코드 위치 확인
+      - name: 채팅 문구 삭제 + sel_{cent,tak,jay,otuki}.json 을 room_id=101 로
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -30,40 +30,83 @@ jobs:
             P1="/var/www/sites/chamgyo/public/photo"
             TS=$(date +%s)
 
-            echo "===== [1] vstamp span 삭제 (SNW_1/2 NEWSJ NUSJ) ====="
+            echo "===== [A-1] "처음/배려/하시는/🤝" grep - 어느 파일에 있는지 ====="
+            sudo grep -rln -E "처음 하시는|처음.*배려|배려|🤝|하시는 분" "$P1" 2>/dev/null | head -20
+
+            echo ""
+            echo "===== [A-2] SNW_1/2 NEWSJ NUSJ 등에서 문구 위치 ====="
             for f in SNW_1.html SNW_2.html NEWSJ.html NUSJ0814.html; do
               [ -f "$P1/$f" ] || continue
-              sudo cp "$P1/$f" "$P1/$f.bak.vstamp.$TS"
-              # <span class="vstamp" id="vstamp">v110</span> 통째 제거
-              sudo sed -i "s|<span class=\"vstamp\" id=\"vstamp\">v[0-9]*</span>||g" "$P1/$f"
-              echo "$f: vstamp 이후"
-              sudo grep -n "vstamp\|v110\|v109" "$P1/$f" | head -3 || echo "  (완전 제거)"
+              echo "--- $f ---"
+              sudo grep -n -E "처음|배려|🤝|하시는" "$P1/$f" 2>/dev/null | head -10
             done
 
             echo ""
-            echo "===== [2] bgl.js에서 T[0-9]+ / badge / table 번호 렌더 코드 검색 ====="
-            sudo grep -nE "T[0-9]{2,4}|badge|table_num|ban_num|drawText|fillText.*T|Table [0-9]" "$P1/bgl.js" 2>/dev/null | head -30
-
-            echo ""
-            echo "===== [3] SNW_1.html 안에 T[0-9] 렌더 코드 (canvas 위에 텍스트 그리는 부분) ====="
-            sudo grep -nE "fillText|strokeText|T[0-9]{2,4}|ctx\.font.*T" "$P1/SNW_1.html" 2>/dev/null | head -30
-
-            echo ""
-            echo "===== [4] 6R 이 canvas 렌더 데이터인지 확인 - bgl.js 방번호/table id 관련 ====="
-            sudo grep -nE "room_id|table_id|drawTable|drawRoom|테이블|방번호|Table\s*[0-9]|R\s*T[0-9]" "$P1/bgl.js" 2>/dev/null | head -20
-
-            echo ""
-            echo "===== [5] 심볼릭 체인 확인 - photo2/SNW_1.html 존재? photo3? ====="
-            for FOLDER in photo2 photo3; do
-              [ -f "/var/www/sites/chamgyo/public/$FOLDER/SNW_1.html" ] && echo "$FOLDER/SNW_1.html 존재" || echo "$FOLDER/SNW_1.html 없음"
+            echo "===== [A-3] 백업 + 삭제 (여러 패턴) ====="
+            for f in SNW_1.html SNW_2.html NEWSJ.html NUSJ0814.html; do
+              [ -f "$P1/$f" ] || continue
+              sudo cp "$P1/$f" "$P1/$f.bak.chat.$TS"
+              # 라인 통째 삭제 (문구 포함된 <div class="chat"> 또는 <div class="notice"> 라인)
+              sudo sed -i "/처음 하시는 분 배려/d" "$P1/$f"
+              sudo sed -i "/처음.*하시는.*분.*배려/d" "$P1/$f"
+              sudo sed -i "/🤝.*처음/d" "$P1/$f"
+              sudo sed -i "s|🤝||g" "$P1/$f"
+              # class chat/notice 관련 요소 통째 삭제
+              sudo sed -i "/<div class=\"chat\"/d" "$P1/$f"
+              sudo sed -i "/<div class=\"chat_msg\"/d" "$P1/$f"
+              sudo sed -i "/<div class=\"notice\"/d" "$P1/$f"
+              sudo sed -i "/<div class=\"chat-notice\"/d" "$P1/$f"
+              sudo sed -i "/<div id=\"chat\"/d" "$P1/$f"
+              echo "$f 이후 매칭 (남은 흔적):"
+              sudo grep -cn -E "처음|배려|🤝|하시는" "$P1/$f" 2>/dev/null || echo "0"
             done
 
             echo ""
-            echo "===== [6] 최종 확인 - SNW_1.html HTTP fetch (라이브 확인) ====="
-            curl -sS -o /tmp/live_snw1 -w "HTTP:%{http_code} SIZE:%{size_download}\n" "http://localhost/photo/SNW_1.html?ch=cent&_t=$TS"
-            grep -c "vstamp\|SKY82892\|메신저" /tmp/live_snw1 || echo "0 matches"
-            echo "--- ban_wrap 근처 라인 ---"
-            grep -n -A1 "ban_wrap\|vstamp\|brand_logo" /tmp/live_snw1 | head -20
+            echo "===== [B-1] 현재 sel_*.json 상태 ====="
+            for ch in cent tak jay otuki denny aass0707; do
+              F="$P1/data/sel_${ch}.json"
+              [ -f "$F" ] && echo "sel_${ch}.json: $(sudo cat $F)" || echo "sel_${ch}.json: MISSING"
+            done
+
+            echo ""
+            echo "===== [B-2] 방 101 데이터 확인 (room_101.json 존재/신선?) ====="
+            F="$P1/data/room_101.json"
+            if [ -f "$F" ]; then
+              MT=$(stat -c %Y "$F")
+              NOW=$(date +%s)
+              AGE=$((NOW - MT))
+              echo "room_101.json: age=${AGE}s"
+              sudo cat "$F" | head -c 300
+              echo ""
+            else
+              echo "room_101.json MISSING!"
+            fi
+
+            echo ""
+            echo "===== [B-3] tables.json sinji_new 리스트 (101 있는지 확인) ====="
+            sudo cat "$P1/data/tables.json"
+            echo ""
+
+            echo ""
+            echo "===== [C] 4채널 sel_*.json 을 방 101 로 세팅 ====="
+            for ch in cent tak jay otuki; do
+              F="$P1/data/sel_${ch}.json"
+              sudo cp "$F" "$F.bak.$TS" 2>/dev/null || true
+              echo "{\"room_id\":101,\"board\":\"CAH_1\"}" | sudo tee "$F" > /dev/null
+              sudo chown www-data:www-data "$F"
+              echo "sel_${ch}.json → $(sudo cat $F)"
+            done
+
+            echo ""
+            echo "===== [D] HTTP 라이브 확인 - 4채널 sel_ 응답 ====="
+            for ch in cent tak jay otuki; do
+              R=$(curl -sS --max-time 10 "http://localhost/photo/data/sel_${ch}.json?_t=$TS")
+              echo "sel_${ch} → $R"
+            done
+
+            echo ""
+            echo "===== [E] SNW_1.html "처음/배려" 완전 제거 확인 ====="
+            sudo grep -cE "처음|배려|🤝|하시는" "$P1/SNW_1.html" 2>/dev/null || echo "0"
 
             echo ""
             echo "===== DONE ====="
