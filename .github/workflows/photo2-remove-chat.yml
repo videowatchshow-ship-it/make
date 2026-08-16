@@ -1,4 +1,4 @@
-name: photo2 - 채팅/메신저 요소 위치 찾기 v2 (모든 파일 sweep)
+name: photo/SNW_1.html 채팅/메신저 요소 제거
 
 on:
   workflow_dispatch:
@@ -9,10 +9,10 @@ on:
       - '.github/workflows/photo2-remove-chat.yml'
 
 jobs:
-  find:
+  fix:
     runs-on: ubuntu-latest
     steps:
-      - name: 모든 photo2 파일 sweep - SKY82892 / 메신저 / T101 찾기
+      - name: SNW_1.html 확인 + 채팅/메신저/T101 요소 제거
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -27,59 +27,34 @@ jobs:
               --quiet \
               --command='bash -s' << "REMOTE"
             set -uo pipefail
-            P2="/var/www/sites/chamgyo/public/photo2"
             P1="/var/www/sites/chamgyo/public/photo"
 
-            echo "===== [1] photo2/ 전체 파일에서 SKY 검색 (recursive) ====="
-            sudo grep -rn "SKY82892" "$P2" 2>/dev/null | head -20
-            echo "---"
-            sudo grep -rn "SKY[0-9]" "$P2" --include="*.html" --include="*.js" --include="*.php" 2>/dev/null | head -30
+            echo "===== [1] SNW_1.html 존재 확인 ====="
+            ls -la "$P1/SNW_1.html" 2>&1 | head -3
+            wc -l "$P1/SNW_1.html" 2>&1
 
             echo ""
-            echo "===== [2] photo2/ 전체 파일에서 메신저 검색 ====="
-            sudo grep -rn "메신저" "$P2" 2>/dev/null | head -20
+            echo "===== [2] SKY82892 / 메신저 / T101 / 파랑 grep ====="
+            sudo grep -n -E "SKY82892|SKY[0-9]|메신저|T101|파랑|채팅|chat|messenger|signal_panel|tg-info|tg-id|mnv-hd" "$P1/SNW_1.html" 2>/dev/null | head -50
 
             echo ""
-            echo "===== [3] photo2/ 전체 파일에서 T101 검색 ====="
-            sudo grep -rn "T101" "$P2" 2>/dev/null | head -20
+            echo "===== [3] SNW_1.html 하단 100줄 (채팅/버전 표시자 있을 자리) ====="
+            sudo tail -100 "$P1/SNW_1.html"
 
             echo ""
-            echo "===== [4] photo2/ 전체 파일에서 파랑 검색 ====="
-            sudo grep -rn "파랑" "$P2" 2>/dev/null | head -20
+            echo "===== [4] modules/dist/bundle.js에 SKY / 메신저 있나 ====="
+            sudo grep -oE "SKY[0-9]+|메신저|T101|파랑[^\"'\`]{0,20}" "$P1/modules/dist/bundle.js" 2>/dev/null | sort -u | head -20
+            echo "--- photo/hot-patch.js 안 ---"
+            sudo cat "$P1/hot-patch.js"
+            echo ""
+            echo "--- photo/hot_patches.json 전체 ---"
+            sudo cat "$P1/hot_patches.json"
 
             echo ""
-            echo "===== [5] CAW_1~4.html 전체 script 라인 (chat/messenger 힌트) ====="
-            for f in CAW_1.html CAW_2.html CAW_3.html CAW_4.html CBW_1.html CBW_2.html CBW_3.html CBW_4.html live.html; do
-              if [ -f "$P2/$f" ]; then
-                COUNT=$(sudo grep -ciE "메신저|SKY|T101|파랑|chat|채팅|messenger|signal_panel" "$P2/$f" 2>/dev/null)
-                echo "$f: 매칭 $COUNT개"
-                sudo grep -n -E "메신저|SKY[0-9]|T101|파랑" "$P2/$f" 2>/dev/null | head -10
-              fi
-            done
-
-            echo ""
-            echo "===== [6] photo/ 도 확인 (심볼릭 아니고 실체) ====="
-            sudo grep -rn "SKY82892\|메신저\|T101" "$P1" --include="*.html" --include="*.js" --include="*.php" 2>/dev/null | head -20
-
-            echo ""
-            echo "===== [7] bundle.js 안에 SKY / T101 검색 ====="
-            sudo grep -oE "SKY[0-9]+|T101|메신저" "$P2/modules/dist/bundle.js" 2>/dev/null | sort -u | head -20
-
-            echo ""
-            echo "===== [8] api_selected_room.php 반환 (sel_ 파일 기반, 방번호 표시 소스) ====="
-            sudo cat "$P2/api_selected_room.php"
-
-            echo ""
-            echo "===== [9] hot_patches.json photo/ (photo2와 다를 수 있음) ====="
-            sudo cat "$P1/hot_patches.json" 2>/dev/null || echo "MISSING"
-
-            echo ""
-            echo "===== [10] 라이브 상태 - api_live_status.php ====="
-            sudo cat "$P2/api_live_status.php"
-
-            echo ""
-            echo "===== [11] 시그널 관련 hot_patches.json 확인 - photo3 도 ====="
-            sudo find /var/www/sites/chamgyo -name "hot_patches.json" -exec sh -c '"'"'echo "--- $1 ---"; sudo cat "$1"'"'"' _ {} \; 2>/dev/null
+            echo "===== [5] photo/ 전체 recursive grep - SKY82892 ====="
+            sudo grep -rln "SKY82892" "$P1" 2>/dev/null | head -10
+            sudo grep -rln "메신저" "$P1" 2>/dev/null | head -10
+            sudo grep -rln "T101" "$P1" 2>/dev/null | head -10
 
             echo ""
             echo "===== DONE ====="
