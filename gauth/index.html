@@ -44,6 +44,8 @@ button:disabled{background:#333;cursor:not-allowed}
   .controls{padding:8px 12px;gap:6px}
   .controls input{min-width:120px;font-size:13px;padding:8px}
   #viewport{height:auto;max-height:none;overflow:visible}
+  .controls{flex-wrap:wrap;padding:8px 12px}
+  .controls input#q{min-width:100px}
   .row{grid-template-columns:1fr!important;gap:4px!important;padding:10px 12px!important;font-size:13px}
   #td-result .td-card{padding:14px!important}
   #td-result .td-card .td-grid{grid-template-columns:1fr!important;gap:8px 0!important;font-size:15px!important}
@@ -57,7 +59,7 @@ button:disabled{background:#333;cursor:not-allowed}
   #td-result .td-card button{padding:8px 14px!important;font-size:13px!important}
   #excelUpBox{margin:10px 8px;padding:10px}
   #vmCtrlBox{margin:10px 8px;padding:10px}
-  #viewport,#pagination,.controls{display:none!important}
+  #pagination{flex-wrap:wrap}
   #site-map-footer{max-width:calc(100vw - 16px)}
 }
 @media(min-width:769px){
