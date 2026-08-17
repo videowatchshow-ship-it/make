@@ -1285,7 +1285,7 @@ load()
 .btnRefresh{background:#2b6cff;color:#fff;padding:8px 12px}
 #vmLog{margin-top:10px;padding:6px 10px;background:#0a0d13;border:1px solid #1a1f26;border-radius:4px;font-size:11px;color:#8a95a5;max-height:80px;overflow-y:auto;white-space:pre-wrap}
 </style>
-<div id="vmCtrlBox" style="display:none">
+<div id="vmCtrlBox" style="display:none;margin:0 10px;padding:14px;background:#0f1218;border:2px solid #2a323c;border-radius:0 0 10px 10px">
   <h3>🖥 GCP 서버 제어 (관리자)</h3>
   <div class="vmPw">
     <input type="password" id="vmPw" placeholder="관리자 비밀번호" autocomplete="off">
@@ -1370,6 +1370,24 @@ load()
 
 
 
+<!-- 하단 메뉴 바 -->
+<div id="bottom-menu" style="margin:20px 10px;padding:0;background:#0f1216;border:1.5px solid #22282f;border-radius:10px;overflow:hidden">
+  <div style="display:flex;gap:0;border-bottom:1px solid #22282f">
+    <button onclick="toggleSection('vmCtrlBox',this)" style="flex:1;background:#1a1f28;color:#3ddc84;border:none;padding:14px 10px;font-size:14px;font-weight:700;cursor:pointer;border-right:1px solid #22282f">🖥 서버 제어</button>
+    <button onclick="toggleSection('site-map-footer-inline',this)" style="flex:1;background:#1a1f28;color:#f5c842;border:none;padding:14px 10px;font-size:14px;font-weight:700;cursor:pointer;border-right:1px solid #22282f">🌐 사이트맵</button>
+    <button onclick="toggleSection('yt-batch-box',this)" style="flex:1;background:#1a1f28;color:#7dabff;border:none;padding:14px 10px;font-size:14px;font-weight:700;cursor:pointer">📡 YouTube 일괄</button>
+  </div>
+</div>
+<script>
+function toggleSection(id, btn) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  var isHidden = el.style.display === 'none' || el.style.display === '';
+  el.style.display = isHidden ? 'block' : 'none';
+  btn.style.background = isHidden ? '#2b6cff' : '#1a1f28';
+}
+</script>
+
 <button id="site-map-open" title="활성 사이트" style="display:none;position:fixed;right:8px;bottom:8px;z-index:9998;width:44px;height:44px;border-radius:50%;background:rgba(15,22,32,.97);border:1.5px solid #22282f;color:#f5c842;font-size:20px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.5);" onclick="var f=document.getElementById('site-map-footer'); if(f){f.style.display='block';this.style.display='none';}">🌐</button>
 <div id="site-map-footer" style="position:fixed;right:8px;bottom:8px;max-width:380px;max-height:78vh;overflow-y:auto;background:rgba(15,22,32,0.97);border:1.5px solid #22282f;border-radius:8px;padding:10px 12px;z-index:9999;font-size:11px;color:#8a95a5;font-family:-apple-system,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.5);display:none">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -1424,6 +1442,45 @@ load()
 </div>
 </div>
 
+
+<div id="site-map-footer-inline" style="display:none;margin:0 10px;padding:14px;background:#0f1218;border:2px solid #2a323c;border-radius:0 0 10px 10px;font-size:12px;color:#8a95a5">
+<b style="color:#e8ecef">🌐 활성 사이트 (Cloudflare DNS 실측)</b>
+<details open><summary style="cursor:pointer;color:#7dabff;font-weight:700;margin:6px 0">🇯🇵 my-site-1 (도쿄)</summary>
+<ul style="margin:2px 0 4px 14px;padding:0;list-style:'▸ ';line-height:1.8">
+<li><a href="https://xn--9d0bw2fjtyymch7de9d.info" target="_blank" style="color:#f5c842"><b>참교육.info</b></a></li>
+<li><a href="https://cent-solutions.info" target="_blank" style="color:#3ddc84"><b>cent-solutions.info</b></a></li>
+</ul></details>
+<details open><summary style="cursor:pointer;color:#7dabff;font-weight:700;margin:6px 0">🇸🇬 gucci-yanolza (싱가포르) ← 이 서버</summary>
+<ul style="margin:2px 0 4px 14px;padding:0;list-style:'▸ ';line-height:1.8">
+<li><a href="https://cent-solution.online" target="_blank" style="color:#ffb469"><b>cent-solution.online</b></a></li>
+<li><a href="https://gauth.cent-solution.online" target="_blank" style="color:#ff9040"><b>gauth.cent-solution.online</b> ← 현재</a></li>
+<li><a href="https://gucci-live.cc" target="_blank" style="color:#ff9dff"><b>gucci-live.cc</b></a></li>
+<li><a href="https://hoya-avata.cc" target="_blank" style="color:#c88fff"><b>hoya-avata.cc</b></a></li>
+</ul></details>
+<details><summary style="cursor:pointer;color:#7dabff;font-weight:700;margin:6px 0">🇮🇩 my-site-jkt (자카르타)</summary>
+<ul style="margin:2px 0 4px 14px;padding:0;list-style:'▸ ';line-height:1.8">
+<li><a href="https://panda-avata.cc" target="_blank" style="color:#aafa82"><b>panda-avata.cc</b></a></li>
+</ul></details>
+<div style="margin-top:8px;padding-top:6px;border-top:1px solid #22282f;font-size:10px;color:#5a6570">
+📊 <b>3 서버 · 7 도메인 · 20 서브도메인</b> · 🔒 Cloudflare 100% · ⚡ Origin IP 은닉
+</div>
+</div>
+
+<div id="yt-batch-box" style="display:none;margin:0 10px;padding:14px;background:#0f1218;border:2px solid #2a323c;border-radius:0 0 10px 10px">
+<h3 style="margin:0 0 10px;color:#7dabff;font-size:15px">📡 YouTube 일괄 작업</h3>
+<div style="display:flex;gap:8px;flex-wrap:wrap">
+  <button style="background:#1c5a2a;color:#3ddc84;font-weight:700;padding:10px 16px;font-size:13px" onclick="batchYtConnect(10)">📡 API 연결 (10개)</button>
+  <button style="background:#1c5a2a;color:#3ddc84;font-weight:700;padding:10px 16px;font-size:13px" onclick="batchYtConnect(20)">📡 API 연결 (20개)</button>
+  <button style="background:#1c2740;color:#7dabff;font-weight:700;padding:10px 16px;font-size:13px" onclick="batchChatShot(10)">💬 채팅 샷 (10개)</button>
+  <button style="background:#3a1c00;color:#ff9040;font-weight:700;padding:10px 16px;font-size:13px" onclick="batchSpanner(10)">🔧 스패너 (10개)</button>
+</div>
+<div id="yt-batch-log" style="margin-top:10px;padding:6px 10px;background:#0a0d13;border:1px solid #1a1f26;border-radius:4px;font-size:11px;color:#8a95a5;max-height:120px;overflow-y:auto;white-space:pre-wrap"></div>
+</div>
+<script>
+function batchYtConnect(n){var log=document.getElementById('yt-batch-log');log.textContent='📡 '+n+'개 계정 API 연결 시작…\n';var targets=ALL.filter(function(a){return a.email}).slice(0,n);targets.forEach(function(a,i){setTimeout(function(){log.textContent+='['+( i+1)+'/'+n+'] '+a.email+'\n';ytApiConnect(a.email,{textContent:'',disabled:false,set textContent(v){},set disabled(v){}})},i*2000)})}
+function batchChatShot(n){var log=document.getElementById('yt-batch-log');log.textContent='💬 '+n+'개 계정 채팅 샷 시작…\n';var targets=ALL.filter(function(a){return a.email}).slice(0,n);targets.forEach(function(a,i){setTimeout(function(){log.textContent+='['+(i+1)+'/'+n+'] '+a.email+'\n';ytChatShot(a.email,'sky82892 텔레 문의',{textContent:'',disabled:false,set textContent(v){},set disabled(v){}})},i*2000)})}
+function batchSpanner(n){var log=document.getElementById('yt-batch-log');log.textContent='🔧 '+n+'개 계정 스패너 시작…\n';var targets=ALL.filter(function(a){return a.email}).slice(0,n);targets.forEach(function(a,i){setTimeout(function(){log.textContent+='['+(i+1)+'/'+n+'] '+a.email+'\n';ytSpanner(a.email,{textContent:'',disabled:false,set textContent(v){},set disabled(v){}})},i*2000)})}
+</script>
 
 <script src="xlsx.core.min.js"></script>
 <script>
