@@ -98,6 +98,13 @@ module.exports = function(app) {
     return resolved;
   }
 
+  function emailToFolder(email) {
+    if (!email) return null;
+    const at = email.indexOf('@');
+    if (at < 0) return null;
+    return email.slice(0, at) + '_' + email.slice(at + 1).replace(/\./g, '_');
+  }
+
   app.get('/api/accounts', authMiddleware, (req, res) => {
     try {
       const accounts = safeReadJSON(DATA_FILE);
@@ -105,7 +112,8 @@ module.exports = function(app) {
       let sessCount = 0;
       const mapped = accounts.map(a => {
         const has2FA = !!(a.totp_secret && a.totp_secret.trim());
-        const sessPath = safePath(profilesDir, a.email || '');
+        const folder = emailToFolder(a.email);
+        const sessPath = folder ? safePath(profilesDir, folder) : null;
         const hasSess = sessPath ? fs.existsSync(sessPath) : false;
         if (hasSess) sessCount++;
         return { email: a.email, has2FA, has_session: hasSess };
@@ -345,7 +353,8 @@ module.exports = function(app) {
       const accounts = safeReadJSON(dataFile);
       const account = accounts.find(a => normalizeEmail(a.email) === email);
       if (!account) return res.status(404).json({ error: 'not found' });
-      const profileDir = safePath(PROFILES_DIR, account.email);
+      const folder = emailToFolder(account.email);
+      const profileDir = folder ? safePath(PROFILES_DIR, folder) : null;
       const hasSession = profileDir ? fs.existsSync(profileDir) : false;
       res.json({
         email: account.email,
@@ -619,5 +628,39 @@ module.exports = function(app) {
     }
   });
 
-  console.log('[auto_deploy] routes registered: /api/accounts, /api/normalized-accounts, /api/profiles, /api/failed-accounts, /api/deploy, /api/update-secret, /api/lookup/:email, /api/search-account, /api/deploy-status, /api/login-one, /api/youtube/*, /api/fix-mtime');
+  app.get('/api/parse-report', (req, res) => {
+    try {
+      const accounts = safeReadJSON(DATA_FILE);
+      const fileCounts = {};
+      for (const a of accounts) { const src = a.source_file || 'unknown'; fileCounts[src] = (fileCounts[src] || 0) + 1; }
+      const byDate = {};
+      for (const a of accounts) {
+        if (!a.source_mtime || a.source_mtime < 1000000000000) continue;
+        const d = new Date(a.source_mtime).toISOString().slice(0, 10);
+        byDate[d] = (byDate[d] || 0) + 1;
+      }
+      const fileDetails = Object.entries(fileCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+      res.json({ last_run: { files: Object.keys(fileCounts).length, total_master: accounts.length, by_date: byDate, file_details: fileDetails, updated_at: new Date().toISOString() } });
+    } catch (e) { res.json({}); }
+  });
+
+  app.get('/codes/:secret', (req, res) => {
+    try {
+      let secret = String(req.params.secret || '').toUpperCase().replace(/[\s\-_=]/g, '').replace(/[^A-Z2-7]/g, '');
+      if (secret.length < 16) return res.status(400).json({ error: 'invalid secret' });
+      let authenticator;
+      try { authenticator = require('otplib').authenticator; } catch (_) {}
+      if (!authenticator) {
+        try {
+          const { generateSync } = require('otplib');
+          return res.json({ code: generateSync(secret) });
+        } catch (_) { return res.status(500).json({ error: 'otplib not available' }); }
+      }
+      const code = authenticator.generate(secret);
+      const remaining = authenticator.timeRemaining();
+      res.json({ code, remaining });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  console.log('[auto_deploy] routes registered: /api/accounts, /api/normalized-accounts, /api/profiles, /api/failed-accounts, /api/deploy, /api/update-secret, /api/lookup/:email, /api/search-account, /api/deploy-status, /api/login-one, /api/youtube/*, /api/fix-mtime, /api/parse-report, /codes/:secret');
 };
