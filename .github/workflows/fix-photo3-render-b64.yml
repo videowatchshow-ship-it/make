@@ -1,0 +1,51 @@
+name: Fix photo3 render b64
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Replace render function
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 300s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 --zone=asia-northeast1-a --project=quantum-bonus-455522-b4 --ssh-flag="-o StrictHostKeyChecking=no" --quiet --command="
+            P3=/var/www/sites/chamgyo/public/photo3
+            P1=/var/www/sites/chamgyo/public/photo
+            echo BEFORE
+            wc -c \$P3/CAH_1.html
+            grep -c _dpr \$P3/CAH_1.html || echo 0
+            sudo cp \$P3/CAH_1.html \$P3/CAH_1.html.bak.b64.\$(date +%s)
+            echo aW1wb3J0IHJlLCBzeXMKCnAzX3BhdGggPSBzeXMuYXJndlsxXQpwMV9wYXRoID0gc3lzLmFyZ3ZbMl0KCndpdGggb3BlbihwM19wYXRoLCAiciIpIGFzIGY6CiAgICBwMyA9IGYucmVhZCgpCndpdGggb3BlbihwMV9wYXRoLCAiciIpIGFzIGY6CiAgICBwMSA9IGYucmVhZCgpCgptMSA9IHJlLnNlYXJjaChyIihmdW5jdGlvbiByZW5kZXJcKG51bXNcKVx7bnVtcz1udW1zXHxcfFxbXF0uKj9yZW5kZXJcKFxbXF1cKTtCR0xcLnN0YXJ0XChyZW5kZXJcKTspIiwgcDEsIHJlLkRPVEFMTCkKaWYgbm90IG0xOgogICAgcHJpbnQoIkVSUk9SOiByZW5kZXIgbm90IGZvdW5kIGluIHBob3RvIikKICAgIHN5cy5leGl0KDEpCnNpbXBsZSA9IG0xLmdyb3VwKDEpCnByaW50KCJwaG90byByZW5kZXI6ICVkIGNoYXJzIiAlIGxlbihzaW1wbGUpKQoKbTMgPSByZS5zZWFyY2gociJmdW5jdGlvbiByZW5kZXJcKG51bXNcKVx7bnVtcz1udW1zXHxcfFxbXF0uKj9yZW5kZXJcKFxbXF1cKTtCR0xcLnN0YXJ0XChyZW5kZXJcKTsiLCBwMywgcmUuRE9UQUxMKQppZiBub3QgbTM6CiAgICBwcmludCgiRVJST1I6IHJlbmRlciBub3QgZm91bmQgaW4gcGhvdG8zIikKICAgIHN5cy5leGl0KDEpCnByaW50KCJwaG90bzMgcmVuZGVyOiAlZCBjaGFycyIgJSBsZW4obTMuZ3JvdXAoMCkpKQoKaWYgIl9kcHIiIGluIG0zLmdyb3VwKDApOgogICAgcHJpbnQoIkNPTkZJUk1FRDogcGhvdG8zIGhhcyBEUFIgc2NhbGluZyBjb2RlIikKZWxzZToKICAgIHByaW50KCJXQVJOSU5HOiBubyBEUFIgY29kZSBmb3VuZCIpCgpyZXN1bHQgPSBwM1s6bTMuc3RhcnQoKV0gKyBzaW1wbGUgKyBwM1ttMy5lbmQoKTpdCnByaW50KCJSZXN1bHQ6ICVkIC0+ICVkIGJ5dGVzIiAlIChsZW4ocDMpLCBsZW4ocmVzdWx0KSkpCgp3aXRoIG9wZW4ocDNfcGF0aCwgInciKSBhcyBmOgogICAgZi53cml0ZShyZXN1bHQpCnByaW50KCJXUklUVEVOIE9LIikK | base64 -d > /tmp/fix_render.py
+            sudo python3 /tmp/fix_render.py \$P3/CAH_1.html \$P1/CAH_1.html
+            sudo chown www-data:www-data \$P3/CAH_1.html
+            sudo chmod 644 \$P3/CAH_1.html
+            echo AFTER
+            wc -c \$P3/CAH_1.html
+            grep -c _dpr \$P3/CAH_1.html || echo 0_OK
+            grep -o 'BGL.drawBead[^;]*' \$P3/CAH_1.html | head -1
+            grep -c 'shfOverlay' \$P3/CAH_1.html
+            sudo apachectl configtest 2>&1
+            sudo systemctl reload apache2 2>&1
+            curl -sI http://localhost/photo3/CAH_1.html?ch=tak | head -3
+            echo DONE
+            "
+
+      - name: External verify
+        if: always()
+        run: |
+          sleep 5
+          BODY=$(curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak&_t=$(date +%s)" 2>/dev/null)
+          echo "size: $(echo "$BODY" | wc -c)"
+          echo "$BODY" | grep -c "_dpr" && echo "FAIL" || echo "OK_DPR_REMOVED"
+          echo "$BODY" | grep -c "shfOverlay" && echo "OK_EXTRAS" || echo "WARN"
+          echo "$BODY" | grep -o "BGL.drawBead[^;]*" | head -1
+          curl -so /dev/null -w 'HTTP: %{http_code}\n' "https://xn--9d0bw2fjtyymch7de9d.info/photo3/CAH_1.html?ch=tak" 2>/dev/null
