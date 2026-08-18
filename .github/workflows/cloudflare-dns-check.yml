@@ -1,0 +1,66 @@
+name: Cloudflare DNS lookup
+on:
+  workflow_dispatch:
+
+jobs:
+  dns:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: List all DNS records
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          echo "===== ALL cent-solution.online DNS records ====="
+          curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?per_page=100" \
+            -H "Authorization: Bearer ${CF_TOKEN}" | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)
+          if not d.get('success'): print('ERROR:', d); sys.exit(1)
+          for r in d['result']:
+            print(f\"{r['type']:6s} {r['name']:45s} -> {r.get('content','')}\")
+          print(f'Total: {len(d[\"result\"])} records')
+          "
+          echo ""
+          echo "===== Search for gain ====="
+          curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?name=gain.cent-solution.online" \
+            -H "Authorization: Bearer ${CF_TOKEN}" | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)
+          if d.get('result'):
+            for r in d['result']: print(f\"{r['type']} {r['name']} -> {r['content']}\")
+          else:
+            print('gain.cent-solution.online: NOT FOUND')
+          "
+
+      - name: Server scan
+        env:
+          SSH_KEY: ${{ secrets.GAUTH_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.GAUTH_SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          cat >> ~/.ssh/config << EOF2
+          Host gs
+            HostName ${{ secrets.GAUTH_SSH_HOST }}
+            User ${{ secrets.GAUTH_SSH_USER }}
+            IdentityFile ~/.ssh/id_ed25519
+            StrictHostKeyChecking no
+          EOF2
+
+          echo "===== All sites ====="
+          ssh gs 'ls -la /var/www/sites/ 2>/dev/null'
+
+          echo ""
+          echo "===== Search gain everywhere ====="
+          ssh gs 'grep -rl "gain" /var/www/ /opt/ /etc/apache2/ /etc/nginx/ 2>/dev/null | head -30 || echo "none"'
+
+          echo ""
+          echo "===== Vhosts ====="
+          ssh gs 'cat /etc/apache2/sites-enabled/*.conf 2>/dev/null || cat /etc/nginx/sites-enabled/* 2>/dev/null || echo "no vhosts"'
+
+          echo ""
+          echo "===== Ports ====="
+          ssh gs 'ss -tlnp 2>/dev/null | head -20'
