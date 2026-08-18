@@ -1,0 +1,38 @@
+name: Check server index.html
+on:
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            echo '=== SERVER index.html sections ==='
+            FILE=/var/www/sites/gauth/public/index.html
+            echo "File size: $(wc -c < $FILE) bytes, $(wc -l < $FILE) lines"
+            echo ''
+            echo '=== All id= attributes ==='
+            grep -oP 'id="[^"]+"' $FILE | sort -u
+            echo ''
+            echo '=== Menu/Nav/Tab related ==='
+            grep -n -i 'menu\|nav-\|tab-bar\|tab-btn\|sidebar\|drawer\|bottom-menu\|toggle.*section\|hamburger' $FILE || echo 'NONE FOUND'
+            echo ''
+            echo '=== Hidden sections (display:none) ==='
+            grep -n 'display:none\|display: none' $FILE | head -20
+            echo ''
+            echo '=== Section headers/titles ==='
+            grep -n -oP '<h[1-6][^>]*>.*?</h[1-6]>' $FILE || true
+            grep -n '섹션\|패널\|제어\|사이트맵\|YouTube\|일괄\|메뉴\|서버 제어' $FILE | head -30
+            echo ''
+            echo '=== File hash ==='
+            md5sum $FILE
+            echo ''
+            echo '=== Last 5 deploys (file modification) ==='
+            ls -la --time=ctime $FILE
+            stat $FILE | grep -i modify
