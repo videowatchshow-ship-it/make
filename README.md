@@ -42,6 +42,19 @@ Express :4000 (rebrowser-login.js)
 | 가상 디스플레이 | Xvfb :99 (Puppeteer용) |
 | 서버 IP | (마스킹) |
 
+### 동일 서버(gucci-yanolza) 서브도메인
+
+| 사이트 | 포트 | DocumentRoot |
+|--------|------|-------------|
+| gauth.cent-solution.online | 4000 | `/var/www/sites/gauth/public` |
+| gain.cent-solution.online | 3021 | `/var/www/sites/gain/public` |
+| win.cent-solution.online | 4001 | `/var/www/sites/win/public` |
+| romi.cent-solution.online | 3019 | `/var/www/sites/romi/public` |
+| simmani.cent-solution.online | 3011 | `/var/www/sites/simmani/public` |
+| woodong.cent-solution.online | 3012 | `/var/www/sites/woodong/public` |
+| sunbi.cent-solution.online | 3013 | `/var/www/sites/sunbi/public` |
+| soktv.cent-solution.online | 3017 | `/var/www/sites/soktv/public` |
+
 ## 파일 구조
 
 ```
