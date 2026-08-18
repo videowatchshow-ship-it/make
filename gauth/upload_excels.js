@@ -123,6 +123,7 @@ const HEADER_PATTERNS = {
   totp:     /^(totp|2fa|secret|otp|mfa|인증코드|시크릿|인증\s*키)/i,
   recovery: /^(recover|backup|alt.*mail|second.*mail|복구|보조)/i,
   youtube:  /^(youtube|yt|url|link|channel|채널|주소)/i,
+  date:     /^(date|created|생성|날짜|등록|가입|일자|작성)/i,
 };
 
 function detectHeaderMapping(row) {
@@ -182,7 +183,7 @@ function analyzeColumns(rows) {
   const stats = [];
   for (let c = 0; c < maxCols; c++) {
     const values = [];
-    let emails = 0, totps = 0, urls = 0, phones = 0, codes = 0, nonEmpty = 0;
+    let emails = 0, totps = 0, urls = 0, phones = 0, codes = 0, dates = 0, nonEmpty = 0;
     for (let r = 0; r < rows.length; r++) {
       const v = String((rows[r] && rows[r][c]) || '').trim();
       if (!v) continue;
@@ -193,8 +194,9 @@ function analyzeColumns(rows) {
       if (isUrlLike(v) && !isOtpauthUrl(v)) urls++;
       if (isPhoneNumber(v)) phones++;
       if (isSixDigitCode(v)) codes++;
+      if (isDateLike(v)) dates++;
     }
-    stats.push({ col: c, nonEmpty, emails, totps, urls, phones, codes, values });
+    stats.push({ col: c, nonEmpty, emails, totps, urls, phones, codes, dates, values });
   }
 
   const mapping = {};
@@ -256,6 +258,20 @@ function analyzeColumns(rows) {
     used.add(bestUrl);
   }
 
+  let bestDate = null, bestDateRatio = 0;
+  for (const s of stats) {
+    if (used.has(s.col) || s.nonEmpty === 0) continue;
+    var ratio = s.dates / s.nonEmpty;
+    if (ratio > bestDateRatio && ratio > 0.3) {
+      bestDateRatio = ratio;
+      bestDate = s.col;
+    }
+  }
+  if (bestDate !== null) {
+    mapping.date = bestDate;
+    used.add(bestDate);
+  }
+
   for (const s of stats) {
     if (used.has(s.col)) continue;
     if (s.nonEmpty > 0) {
@@ -282,6 +298,7 @@ const LABEL_PATTERNS = {
   totp:     /^(totp|2fa|secret|otp|mfa|인증코드|시크릿|인증\s*키)\s*[:：=]/i,
   recovery: /^(recover|backup|alt.*mail|second.*mail|복구|보조)\s*[:：=]/i,
   youtube:  /^(youtube|yt|url|link|channel|채널|주소)\s*[:：=]/i,
+  date:     /^(date|created|생성|날짜|등록|가입|일자|작성)\s*[:：=]/i,
 };
 
 function extractLabelValue(cell) {
@@ -289,6 +306,47 @@ function extractLabelValue(cell) {
   for (const [field, pattern] of Object.entries(LABEL_PATTERNS)) {
     const m = s.match(pattern);
     if (m) return { field, value: s.slice(m[0].length).trim() };
+  }
+  return null;
+}
+
+function isDateLike(s) {
+  s = String(s || '').trim();
+  if (/^\d{4}[\.\-\/]\d{1,2}[\.\-\/]\d{1,2}/.test(s)) return true;
+  if (/^\d{1,2}[\.\-\/]\d{1,2}[\.\-\/]\d{2,4}/.test(s)) return true;
+  if (/^\d{5}$/.test(s) && parseInt(s) > 40000 && parseInt(s) < 55000) return true;
+  if (/\d{4}년\s*\d{1,2}월\s*\d{1,2}일/.test(s)) return true;
+  return false;
+}
+
+function parseDateValue(s) {
+  s = String(s || '').trim();
+  if (/^\d{5}$/.test(s)) {
+    var n = parseInt(s);
+    if (n > 40000 && n < 55000) {
+      var d = new Date((n - 25569) * 86400000);
+      return d.getTime();
+    }
+  }
+  var m = s.match(/^(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/);
+  if (m) return new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3])).getTime();
+  m = s.match(/^(\d{1,2})[\.\-\/](\d{1,2})[\.\-\/](\d{4})/);
+  if (m) return new Date(parseInt(m[3]), parseInt(m[1])-1, parseInt(m[2])).getTime();
+  m = s.match(/(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/);
+  if (m) return new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3])).getTime();
+  return null;
+}
+
+function parseDateFromFilename(name) {
+  if (!name) return null;
+  var s = String(name);
+  var m = s.match(/(\d{4})[\.\-_](\d{1,2})[\.\-_](\d{1,2})/);
+  if (m) return new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3])).getTime();
+  m = s.match(/(\d{8})/);
+  if (m) {
+    var ds = m[1];
+    var y = parseInt(ds.slice(0,4)), mo = parseInt(ds.slice(4,6)), d = parseInt(ds.slice(6,8));
+    if (y >= 2020 && y <= 2030 && mo >= 1 && mo <= 12 && d >= 1 && d <= 31) return new Date(y, mo-1, d).getTime();
   }
   return null;
 }
@@ -302,6 +360,7 @@ function classifyValue(s) {
   if (isUrlLike(s)) return 'url';
   if (isPhoneNumber(s)) return 'phone';
   if (isSixDigitCode(s)) return 'code';
+  if (isDateLike(s)) return 'date';
   return 'unknown';
 }
 
@@ -366,6 +425,7 @@ function tryLabelValueExtract(rows, maxCols, sourceFile, sourceMtime) {
         totp_secret: isTotpLike(totpVal) ? normalizeTotp(totpVal) : totpVal,
         recovery_email: rec,
         youtube_url: cur.youtube || '',
+        account_date: (cur.date && parseDateValue(cur.date)) || parseDateFromFilename(sourceFile) || null,
         extra: [],
         source_file: sourceFile || 'unknown',
         source_mtime: sourceMtime || Date.now(),
@@ -443,7 +503,7 @@ function tryStackedExtract(rows, maxCols, sourceFile, sourceMtime) {
         continue;
       }
       if (cur && cur.email) accounts.push(cur);
-      cur = { email: v, password: '', totp: '', recovery: '', youtube: '', extra: [], source_file: sourceFile || 'unknown', source_mtime: sourceMtime || Date.now() };
+      cur = { email: v, password: '', totp: '', recovery: '', youtube: '', account_date: parseDateFromFilename(sourceFile) || null, extra: [], source_file: sourceFile || 'unknown', source_mtime: sourceMtime || Date.now() };
       afterBlank = false;
       continue;
     }
@@ -455,6 +515,7 @@ function tryStackedExtract(rows, maxCols, sourceFile, sourceMtime) {
     }
     else if (isTotpLike(v) && !cur.totp) { cur.totp = v; }
     else if (isUrlLike(v) && !cur.youtube) { cur.youtube = v; }
+    else if (isDateLike(v) && !cur.account_date) { cur.account_date = parseDateValue(v); }
     else if (isPhoneNumber(v)) { cur.extra.push(v); }
     else if (isSixDigitCode(v)) { cur.extra.push(v); }
     else if (!cur.password) { cur.password = v; }
@@ -528,7 +589,9 @@ function bruteForceExtract(rows, sourceFile, sourceMtime) {
         const real = passwordCandidates.find(p => !/^\d{1,4}$/.test(p));
         password = real || passwordCandidates[passwordCandidates.length - 1];
       }
-      accounts.push({ email: v, password, totp_secret, recovery_email: recovery, youtube_url: youtube, extra: extraValues, source_file: sourceFile || 'unknown', source_mtime: sourceMtime || Date.now() });
+      var _dateVal = null;
+      for (var _rv of rest) { if (isDateLike(_rv)) { _dateVal = parseDateValue(_rv); break; } }
+      accounts.push({ email: v, password, totp_secret, recovery_email: recovery, youtube_url: youtube, account_date: _dateVal || parseDateFromFilename(sourceFile) || null, extra: extraValues, source_file: sourceFile || 'unknown', source_mtime: sourceMtime || Date.now() });
     }
   }
   return accounts;
@@ -600,6 +663,7 @@ function extractAccountsFromSheet(sheet, sourceFile, sourceMtime) {
     let totpRaw = mapping.totp !== undefined ? String(row[mapping.totp] || '').trim() : '';
     let recovery = mapping.recovery !== undefined ? String(row[mapping.recovery] || '').trim() : '';
     const youtube = mapping.youtube !== undefined ? String(row[mapping.youtube] || '').trim() : '';
+    const dateRaw = mapping.date !== undefined ? String(row[mapping.date] || '').trim() : '';
 
     if (password && !totpRaw && isTotpLike(password)) { totpRaw = password; password = ''; }
     if (password && isEmail(password)) {
@@ -628,6 +692,7 @@ function extractAccountsFromSheet(sheet, sourceFile, sourceMtime) {
       totp_secret: isTotpLike(totpRaw) ? normalizeTotp(totpRaw) : totpRaw,
       recovery_email: recovery,
       youtube_url: youtube,
+      account_date: (dateRaw && parseDateValue(dateRaw)) || parseDateFromFilename(sourceFile) || null,
       extra,
       source_file: sourceFile || 'unknown',
       source_mtime: sourceMtime || Date.now(),

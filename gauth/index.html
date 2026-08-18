@@ -649,7 +649,7 @@ async function load(){
   ALL = _accounts.map(function(a){
     var f = (FAILED[a.email] || {});
     return Object.assign({}, a, {has_session: sess.has(a.email), lock_reason: f.reason || null});
-  }).sort(function(x,y){ return (y.source_mtime||0) - (x.source_mtime||0) })
+  }).sort(function(x,y){ return (y.account_date||y.source_mtime||0) - (x.account_date||x.source_mtime||0) })
   var _fc = n.summary && n.summary.files_scanned;
   if(_fc == null){
     try { var _rp = await fetch(authQuery('/api/parse-report'),{cache:'no-store',headers:authHeaders()}).then(r=>r.json()); _fc = _rp && _rp.last_run && _rp.last_run.files; } catch(_){}
@@ -679,7 +679,7 @@ function applyFilter(){
   if(sortOrder){
     var desc = sortOrder.value === 'desc'
     FILTERED.sort(function(x,y){
-      var d = (x.source_mtime||0) - (y.source_mtime||0)
+      var d = (x.account_date||x.source_mtime||0) - (y.account_date||y.source_mtime||0)
       return desc ? -d : d
     })
   }
@@ -710,7 +710,8 @@ async function render(){
     const _em = escapeHtml(a.email), _pw = escapeHtml(a.password||'—'), _ts = escapeHtml(a.totp_secret||'—')
     const yt = a.youtube_url || '', _yt = escapeHtml(yt)
     const _rc = escapeHtml(a.recovery_email||a.recovery_phone||'—'), _sf = escapeHtml(a.source_file||'—')
-    const dt = a.source_mtime ? new Date(a.source_mtime).toLocaleString('ko-KR') : '—'
+    const _dateMs = a.account_date || a.source_mtime
+    const dt = _dateMs ? new Date(_dateMs).toLocaleString('ko-KR') : '—'
     const sess = accessBadge(a)
     const tfa = a.totp_secret ? '<span class="badge b-2fa">2FA</span>' : ''
     const lock = a.lock_reason ? `<span class="badge b-lock" title="${escapeHtml(a.lock_reason)}">🔒 ${escapeHtml(a.lock_reason)}</span>` : ''
