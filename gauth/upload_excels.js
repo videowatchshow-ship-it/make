@@ -1,10 +1,24 @@
 /**
  * Excel parser for gauth accounts.
  *
- * ref: https://docs.sheetjs.com/ (xlsx)
- * ref: https://www.rfc-editor.org/rfc/rfc5321#section-4.5.3.1.3 (email 254 char limit)
- * ref: https://github.com/nickvdyck/totp-generator (Base32 TOTP)
- * ref: https://github.com/nickvdyck/totp-generator#totp-uri (otpauth:// URI)
+ * 각 엑셀 파일마다 컬럼 순서가 다르고, 헤더가 없을 수도 있음.
+ * 개인마다 다르게 정리하므로 공식 포맷이 없음.
+ *
+ * 전략:
+ * 1) 헤더 행이 있으면 → 헤더로 매핑
+ * 2) 헤더 없으면 → 컬럼 전체 데이터를 샘플링해서 각 컬럼의 타입을 판별
+ *    - 이메일 컬럼: @가 포함된 xxx@xxx.xxx 패턴이 10%+ → email
+ *    - TOTP 컬럼: Base32(A-Z2-7, 공백/하이픈 구분) 16~128자가 10%+ → totp
+ *    - 복구이메일 컬럼: 이메일 패턴이지만 메인 이메일 컬럼이 아닌 것 → recovery
+ *    - URL 컬럼: http/youtube 포함 20%+ → youtube
+ *    - 나머지 → password (가장 먼저 발견된 미할당 컬럼)
+ *
+ * Deploy: copy to /opt/gauth-full/upload_excels.js on gucci-yanolza
+ *
+ * Refs:
+ * - SheetJS sheet_to_json: https://github.com/SheetJS/sheetjs (raw:false returns formatted text, preserves leading zeros)
+ * - SheetJS merged cells: worksheet['!merges'] array (https://github.com/SheetJS/sheetjs)
+ * - Node.js fs: https://github.com/nodejs/node/blob/main/doc/api/fs.md
  */
 
 const XLSX = require('xlsx');
@@ -15,49 +29,44 @@ const path = require('path');
 
 function normalizeTotp(s) {
   if (!s) return '';
-  return String(s).toUpperCase().replace(/[\s\-_]/g, '').replace(/[^A-Z2-7]/g, '');
+  const n = String(s).toUpperCase().replace(/[\s\-_=]/g, '').replace(/[^A-Z2-7]/g, '');
+  return n || '';
+}
+
+/* RFC 5322 Section 3.4.1 간소화 — IP 리터럴, 따옴표 로컬파트 등 미지원
+ * ref: https://datatracker.ietf.org/doc/html/rfc5322#section-3.4.1
+ * HTML5 email type도 유사한 간소화 사용: https://html.spec.whatwg.org/#valid-e-mail-address */
+function isEmail(s) {
+  s = String(s || '').trim();
+  if (s.length > 254) return false;
+  return /^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(s);
 }
 
 function normalizeEmail(s) {
-  if (!s) return '';
-  s = String(s).trim().toLowerCase();
-  // mailto: 링크 제거
-  s = s.replace(/^mailto:/i, '');
-  // 다중 @ 처리 — 유효 이메일은 @ 1개만
-  const atCount = (s.match(/@/g) || []).length;
-  if (atCount !== 1) return '';
-  return s;
-}
-
-function isEmail(s) {
-  s = String(s || '').trim();
-  // ref: RFC 5321 §4.5.3.1.3 — 전체 주소 254자 이하
-  if (s.length > 254) return false;
-  // mailto: 제거 후 체크
-  s = s.replace(/^mailto:/i, '');
-  if ((s.match(/@/g) || []).length !== 1) return false;
-  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s);
+  s = String(s || '').trim().toLowerCase();
+  if (!s || !s.includes('@')) return s;
+  const atIdx = s.lastIndexOf('@');
+  let local = s.slice(0, atIdx);
+  const domain = s.slice(atIdx + 1);
+  if (!local || !domain) return s;
+  if (domain === 'gmail.com' || domain === 'googlemail.com') {
+    local = local.replace(/\./g, '').split('+')[0];
+    return local + '@gmail.com';
+  }
+  return local + '@' + domain;
 }
 
 function isPhoneNumber(s) {
-  if (!s) return false;
-  s = String(s).trim();
-  // +82-10-1234-5678, 010-1234-5678, (02) 123-4567 등
-  const digits = s.replace(/[\s\-().+]/g, '');
-  if (!/^\d{7,15}$/.test(digits)) return false;
-  // 반복 숫자 제거 (0000000000 등은 비밀번호일 수 있음)
-  if (/^(\d)\1{6,}$/.test(digits)) return false;
-  // 전화번호 패턴: +로 시작하거나 0으로 시작하거나 국가코드(1~3자리)
-  if (/^\+?\d[\d\s\-().]{5,}$/.test(s)) return true;
-  // 010, 011, 016, 017, 018, 019 (한국 휴대폰)
-  if (/^01[016789]/.test(digits)) return true;
-  return false;
+  s = String(s || '').trim();
+  if (!/^[\+]?[\d\s\-()]{7,20}$/.test(s)) return false;
+  const digits = s.replace(/[^\d]/g, '');
+  if (digits.length < 7 || digits.length > 15) return false;
+  if (/^(\d)\1+$/.test(digits)) return false;
+  return /[\s\-()]+/.test(s) || /^\+/.test(s) || (digits.length >= 10 && digits.length <= 15);
 }
 
-function isSixDigitOtp(s) {
-  if (!s) return false;
-  s = String(s).trim();
-  return /^\d{6}$/.test(s);
+function isSixDigitCode(s) {
+  return /^\d{6,8}$/.test(String(s || '').trim());
 }
 
 function isTotpLike(s) {
@@ -66,70 +75,101 @@ function isTotpLike(s) {
   if (s.includes('@')) return false;
   if (/^[0-9]+$/.test(s)) return false;
   if (/^https?:\/\//i.test(s)) return false;
-  if (/[\/\\:;!#$%^&*()=+\[\]{}|<>?]/.test(s)) return false;
+  if (isPhoneNumber(s)) return false;
+  if (/[\/\\:;!#$%^&*()+=\[\]{}|<>?]/.test(s) && !/^[A-Z2-7]+=*$/i.test(s)) return false;
+  if (/^[a-z0-9]{16,}$/.test(s) && /[089]/.test(s)) return false;
+  if (/^[A-Za-z0-9]{16,}$/.test(s) && /[a-z]/.test(s) && /[089]/.test(s)) return false;
+  if (/\s/.test(s) && !/^[A-Z2-7\s]+$/i.test(s)) return false;
   const n = normalizeTotp(s);
-  if (n.length < 16 || n.length > 128) return false;
-  // 대소문자 혼합 + 0/8/9 포함 시 Base32 아님
-  const raw = String(s).replace(/[\s\-_]/g, '');
-  if (/[a-z]/.test(raw) && /[A-Z]/.test(raw)) return false;
-  if (/[089]/.test(raw)) return false;
+  /* RFC 4226 Section 4: HMAC-SHA1 최소 128-bit = 20 Base32 문자
+   * ref: https://datatracker.ietf.org/doc/html/rfc4226#section-4
+   * 단, Google Authenticator는 80-bit(16자)도 허용하므로 16 유지 */
+  if (n.length < 16) return false;
+  if (n.length > 128) return false;
+  const raw = String(s).replace(/[\s\-_=]/g, '');
+  if (raw.length > 0 && n.length / raw.length < 0.8) return false;
+  if (raw.length > 0 && /[a-z]/.test(raw) && /[A-Z]/.test(raw) && n.length / raw.length < 0.95) return false;
   return true;
+}
+
+/* otpauth URI: https://github.com/google/google-authenticator/wiki/Key-Uri-Format
+ * secret 파라미터는 percent-encoding 가능 → decodeURIComponent 후 추출 */
+function extractTotpFromUrl(s) {
+  s = String(s || '').trim();
+  if (!/^otpauth:\/\//i.test(s)) return null;
+  try { s = decodeURIComponent(s); } catch (_) { return null; }
+  const m = s.match(/[?&]secret=([A-Z2-7=]+)/i);
+  if (m) {
+    const secret = m[1].toUpperCase().replace(/=+$/, '');
+    return secret.length >= 16 ? secret : null;
+  }
+  return null;
 }
 
 function isUrlLike(s) {
   s = String(s || '').trim();
-  if (/^https?:\/\//i.test(s)) return true;
-  // youtube.com 임베디드 매칭 차단 — 단독 도메인일 때만
-  if (/^(www\.)?(youtube\.com|youtu\.be)\//i.test(s)) return true;
-  return false;
+  return /^https?:\/\//i.test(s) || /^(www\.)?youtube\.com/i.test(s) || /^(www\.)?youtu\.be/i.test(s);
 }
 
-function extractTotpFromUrl(s) {
-  s = String(s || '').trim();
-  const m = s.match(/[?&]secret=([A-Za-z2-7]+)/i);
-  if (!m) return '';
-  const secret = m[1].toUpperCase();
-  // 시크릿 길이 검증 — 최소 16자 (80비트)
-  if (secret.length < 16 || secret.length > 128) return '';
-  return secret;
+function isOtpauthUrl(s) {
+  return /^otpauth:\/\//i.test(String(s || '').trim());
 }
 
 // ── header detection ──
 
 const HEADER_PATTERNS = {
-  email:    /^(e[-_]?mail|login|account|gmail|id|아이디|계정|메일)/i,
+  email:    /^(e[-_]?mail|login|account|gmail|아이디|계정|이메일|메일)/i,
   password: /^(pass(word)?|pw|pwd|비밀번호|비번|암호)/i,
-  totp:     /^(totp|2fa|secret|otp|mfa|인증|시크릿)/i,
+  totp:     /^(totp|2fa|secret|otp|mfa|인증코드|시크릿|인증\s*키)/i,
   recovery: /^(recover|backup|alt.*mail|second.*mail|복구|보조)/i,
   youtube:  /^(youtube|yt|url|link|channel|채널|주소)/i,
+  date:     /^(date|created|생성|날짜|등록|가입|일자|작성)/i,
 };
-// "코드" → TOTP 오인 제거 (코드는 OTP 6자리 코드이지 시크릿 아님)
-// "user" → 이메일 오인 제거 (user는 사용자명이지 이메일 아님)
 
 function detectHeaderMapping(row) {
   if (!Array.isArray(row)) return null;
   const mapping = {};
   let matched = 0;
-
-  // 데이터 행 오인 방지 — 행에 이메일 값이 있으면 헤더가 아님
-  for (let i = 0; i < row.length; i++) {
-    const cell = String(row[i] || '').trim();
-    if (isEmail(cell)) return null;
-  }
-
   for (let i = 0; i < row.length; i++) {
     const cell = String(row[i] || '').trim();
     if (!cell) continue;
+    if (/^\d+$/.test(cell)) continue;
     for (const [field, pattern] of Object.entries(HEADER_PATTERNS)) {
       if (!mapping[field] && pattern.test(cell)) {
+        if (field === 'email' && /^(id|user)$/i.test(cell)) continue;
         mapping[field] = i;
         matched++;
         break;
       }
     }
   }
-  if (matched >= 2 && mapping.email !== undefined) return mapping;
+  if (matched >= 2 && mapping.email !== undefined) {
+    const hasDataValues = row.some(c => { const v = String(c || '').trim(); return v && isEmail(v); });
+    if (hasDataValues) return null;
+    return mapping;
+  }
   return null;
+}
+
+// ── merged cells expansion ──
+
+function expandMergedCells(sheet) {
+  const merges = sheet['!merges'];
+  if (!merges || !merges.length) return;
+  for (const merge of merges) {
+    const startCell = XLSX.utils.encode_cell({ r: merge.s.r, c: merge.s.c });
+    const val = sheet[startCell];
+    if (!val) continue;
+    for (let r = merge.s.r; r <= merge.e.r; r++) {
+      for (let c = merge.s.c; c <= merge.e.c; c++) {
+        if (r === merge.s.r && c === merge.s.c) continue;
+        const addr = XLSX.utils.encode_cell({ r, c });
+        if (!sheet[addr]) {
+          sheet[addr] = { t: val.t, v: val.v, w: val.w };
+        }
+      }
+    }
+  }
 }
 
 // ── column-level type analysis (no header) ──
@@ -137,40 +177,37 @@ function detectHeaderMapping(row) {
 function analyzeColumns(rows) {
   if (!rows.length) return {};
 
-  const maxCols = Math.max(...rows.map(r => (r && r.length) || 0));
+  const maxCols = rows.reduce((mx, r) => Math.max(mx, (r && r.length) || 0), 0);
   if (maxCols === 0) return {};
 
   const stats = [];
   for (let c = 0; c < maxCols; c++) {
     const values = [];
-    let emails = 0, gmails = 0, totps = 0, urls = 0, phones = 0, sixDigits = 0, nonEmpty = 0;
+    let emails = 0, totps = 0, urls = 0, phones = 0, codes = 0, dates = 0, nonEmpty = 0;
     for (let r = 0; r < rows.length; r++) {
       const v = String((rows[r] && rows[r][c]) || '').trim();
       if (!v) continue;
       nonEmpty++;
       values.push(v);
-      if (isEmail(v)) {
-        emails++;
-        if (/@gmail\.com$/i.test(v)) gmails++;
-      }
-      if (isTotpLike(v)) totps++;
-      if (isUrlLike(v)) urls++;
+      if (isEmail(v)) emails++;
+      if (isTotpLike(v) || isOtpauthUrl(v)) totps++;
+      if (isUrlLike(v) && !isOtpauthUrl(v)) urls++;
       if (isPhoneNumber(v)) phones++;
-      if (isSixDigitOtp(v)) sixDigits++;
+      if (isSixDigitCode(v)) codes++;
+      if (isDateLike(v)) dates++;
     }
-    stats.push({ col: c, nonEmpty, emails, gmails, totps, urls, phones, sixDigits, values });
+    stats.push({ col: c, nonEmpty, emails, totps, urls, phones, codes, dates, values });
   }
 
   const mapping = {};
   const used = new Set();
 
-  // 1. find ALL email-like columns (>50% email pattern)
   const emailCols = stats
-    .filter(s => s.nonEmpty > 0 && s.emails / s.nonEmpty > 0.5)
+    .filter(s => s.nonEmpty > 0 && s.emails / s.nonEmpty > 0.1)
     .sort((a, b) => {
-      // Gmail 컬럼 우선
-      const gRatioDiff = (b.gmails / b.nonEmpty) - (a.gmails / a.nonEmpty);
-      if (Math.abs(gRatioDiff) > 0.1) return gRatioDiff;
+      const aGmail = a.values.filter(v => isEmail(v) && /@g(oogle)?mail\.com$/i.test(v)).length;
+      const bGmail = b.values.filter(v => isEmail(v) && /@g(oogle)?mail\.com$/i.test(v)).length;
+      if (aGmail !== bGmail) return bGmail - aGmail;
       const rd = (b.emails / b.nonEmpty) - (a.emails / a.nonEmpty);
       return rd !== 0 ? rd : a.col - b.col;
     });
@@ -180,18 +217,23 @@ function analyzeColumns(rows) {
   mapping.email = emailCols[0].col;
   used.add(emailCols[0].col);
 
-  // 2번째 이메일 컬럼: 비율 검증 — 이메일 비율 50%+ 이어야 복구이메일
-  if (emailCols.length > 1 && emailCols[1].emails / emailCols[1].nonEmpty > 0.5) {
-    mapping.recovery = emailCols[1].col;
-    used.add(emailCols[1].col);
+  if (emailCols.length > 1) {
+    const mainRatio = emailCols[0].emails / emailCols[0].nonEmpty;
+    const secRatio = emailCols[1].emails / emailCols[1].nonEmpty;
+    if (secRatio > 0.05 && secRatio < mainRatio * 0.8) {
+      mapping.recovery = emailCols[1].col;
+      used.add(emailCols[1].col);
+    } else if (secRatio >= mainRatio * 0.8) {
+      used.add(emailCols[1].col);
+    }
   }
 
-  // 3. totp column: highest totp ratio, >40%
   let bestTotp = null, bestTotpRatio = 0;
   for (const s of stats) {
     if (used.has(s.col) || s.nonEmpty === 0) continue;
     const ratio = s.totps / s.nonEmpty;
-    if (ratio > bestTotpRatio && ratio > 0.4) {
+    /* 10% 임계값: TOTP 열 판정 — 엑셀 형식이 비표준이므로 경험적 임계값, 공식 규격 없음 */
+    if (ratio > bestTotpRatio && ratio > 0.1) {
       bestTotpRatio = ratio;
       bestTotp = s.col;
     }
@@ -201,12 +243,12 @@ function analyzeColumns(rows) {
     used.add(bestTotp);
   }
 
-  // 4. youtube/url column: >30%
   let bestUrl = null, bestUrlRatio = 0;
   for (const s of stats) {
     if (used.has(s.col) || s.nonEmpty === 0) continue;
     const ratio = s.urls / s.nonEmpty;
-    if (ratio > bestUrlRatio && ratio > 0.3) {
+    /* 20% 임계값: URL 열 판정 — 경험적 임계값, 공식 규격 없음 */
+    if (ratio > bestUrlRatio && ratio > 0.2) {
       bestUrlRatio = ratio;
       bestUrl = s.col;
     }
@@ -216,18 +258,33 @@ function analyzeColumns(rows) {
     used.add(bestUrl);
   }
 
-  // 5. password: first unassigned column with data
-  //    단, 6자리 OTP/전화번호 비율 높은 컬럼은 건너뜀
+  let bestDate = null, bestDateRatio = 0;
+  for (const s of stats) {
+    if (used.has(s.col) || s.nonEmpty === 0) continue;
+    var ratio = s.dates / s.nonEmpty;
+    if (ratio > bestDateRatio && ratio > 0.3) {
+      bestDateRatio = ratio;
+      bestDate = s.col;
+    }
+  }
+  if (bestDate !== null) {
+    mapping.date = bestDate;
+    used.add(bestDate);
+  }
+
   for (const s of stats) {
     if (used.has(s.col)) continue;
-    if (s.nonEmpty === 0) continue;
-    // 6자리 OTP 코드 컬럼 스킵 (80%+ 가 6자리 숫자)
-    if (s.sixDigits / s.nonEmpty > 0.8) continue;
-    // 전화번호 컬럼 스킵 (60%+ 가 전화번호)
-    if (s.phones / s.nonEmpty > 0.6) continue;
-    mapping.password = s.col;
-    used.add(s.col);
-    break;
+    if (s.nonEmpty > 0) {
+      const allNumbers = s.values.every(v => /^\d+$/.test(v));
+      const isSequential = allNumbers && s.values.length > 2 &&
+        s.values.every((v, i) => i === 0 || parseInt(v) === parseInt(s.values[i-1]) + 1);
+      if (isSequential) continue;
+      if (s.phones > 0 && s.phones / s.nonEmpty > 0.5) continue;
+      if (s.codes > 0 && s.codes / s.nonEmpty > 0.5) continue;
+      mapping.password = s.col;
+      used.add(s.col);
+      break;
+    }
   }
 
   return mapping;
@@ -236,11 +293,12 @@ function analyzeColumns(rows) {
 // ── label-value pair detection ──
 
 const LABEL_PATTERNS = {
-  email:    /^(e[-_]?mail|login|account|gmail|id|아이디|계정|메일)\s*[:：]/i,
-  password: /^(pass(word)?|pw|pwd|비밀번호|비번|암호)\s*[:：]/i,
-  totp:     /^(totp|2fa|secret|otp|mfa|인증|시크릿)\s*[:：]/i,
-  recovery: /^(recover|backup|alt.*mail|second.*mail|복구|보조)\s*[:：]/i,
-  youtube:  /^(youtube|yt|url|link|channel|채널|주소)\s*[:：]/i,
+  email:    /^(e[-_]?mail|login|account|gmail|아이디|계정|이메일|메일)\s*[:：=]/i,
+  password: /^(pass(word)?|pw|pwd|비밀번호|비번|암호)\s*[:：=]/i,
+  totp:     /^(totp|2fa|secret|otp|mfa|인증코드|시크릿|인증\s*키)\s*[:：=]/i,
+  recovery: /^(recover|backup|alt.*mail|second.*mail|복구|보조)\s*[:：=]/i,
+  youtube:  /^(youtube|yt|url|link|channel|채널|주소)\s*[:：=]/i,
+  date:     /^(date|created|생성|날짜|등록|가입|일자|작성)\s*[:：=]/i,
 };
 
 function extractLabelValue(cell) {
@@ -252,17 +310,72 @@ function extractLabelValue(cell) {
   return null;
 }
 
+function isDateLike(s) {
+  s = String(s || '').trim();
+  if (/^\d{4}[\.\-\/]\d{1,2}[\.\-\/]\d{1,2}/.test(s)) return true;
+  if (/^\d{1,2}[\.\-\/]\d{1,2}[\.\-\/]\d{2,4}/.test(s)) return true;
+  if (/^\d{5}$/.test(s) && parseInt(s) > 40000 && parseInt(s) < 55000) return true;
+  if (/\d{4}년\s*\d{1,2}월\s*\d{1,2}일/.test(s)) return true;
+  return false;
+}
+
+function parseDateValue(s) {
+  s = String(s || '').trim();
+  if (/^\d{5}$/.test(s)) {
+    var n = parseInt(s);
+    if (n > 40000 && n < 55000) {
+      var d = new Date((n - 25569) * 86400000);
+      return d.getTime();
+    }
+  }
+  var m = s.match(/^(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/);
+  if (m) return new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3])).getTime();
+  m = s.match(/^(\d{1,2})[\.\-\/](\d{1,2})[\.\-\/](\d{4})/);
+  if (m) return new Date(parseInt(m[3]), parseInt(m[1])-1, parseInt(m[2])).getTime();
+  m = s.match(/(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/);
+  if (m) return new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3])).getTime();
+  return null;
+}
+
+function parseDateFromFilename(name) {
+  if (!name) return null;
+  var s = String(name);
+  var m = s.match(/(\d{4})[\.\-_](\d{1,2})[\.\-_](\d{1,2})/);
+  if (m) return new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3])).getTime();
+  m = s.match(/(\d{8})/);
+  if (m) {
+    var ds = m[1];
+    var y = parseInt(ds.slice(0,4)), mo = parseInt(ds.slice(4,6)), d = parseInt(ds.slice(6,8));
+    if (y >= 2020 && y <= 2030 && mo >= 1 && mo <= 12 && d >= 1 && d <= 31) return new Date(y, mo-1, d).getTime();
+  }
+  return null;
+}
+
+function classifyValue(s) {
+  s = String(s || '').trim();
+  if (!s) return null;
+  if (isEmail(s)) return 'email';
+  if (isOtpauthUrl(s)) return 'totp';
+  if (isTotpLike(s)) return 'totp';
+  if (isUrlLike(s)) return 'url';
+  if (isPhoneNumber(s)) return 'phone';
+  if (isSixDigitCode(s)) return 'code';
+  if (isDateLike(s)) return 'date';
+  return 'unknown';
+}
+
 // ── vertical/stacked layout detection ──
 
 function tryVerticalExtract(rows, sourceFile, sourceMtime) {
-  const maxCols = Math.max(...rows.map(r => (r && r.length) || 0));
-  if (maxCols > 3) return null;
+  const maxCols = rows.reduce((mx, r) => Math.max(mx, (r && r.length) || 0), 0);
 
   const lvAccounts = tryLabelValueExtract(rows, maxCols, sourceFile, sourceMtime);
   if (lvAccounts && lvAccounts.length) return lvAccounts;
 
-  const stackedAccounts = tryStackedExtract(rows, maxCols, sourceFile, sourceMtime);
-  if (stackedAccounts && stackedAccounts.length) return stackedAccounts;
+  if (maxCols <= 4) {
+    const stackedAccounts = tryStackedExtract(rows, maxCols, sourceFile, sourceMtime);
+    if (stackedAccounts && stackedAccounts.length) return stackedAccounts;
+  }
 
   return null;
 }
@@ -295,17 +408,27 @@ function tryLabelValueExtract(rows, maxCols, sourceFile, sourceMtime) {
 
   function flushCur() {
     if (cur.email && isEmail(cur.email)) {
-      const pw = sanitizePassword(cur.password || '', cur.email);
-      const rec = sanitizeRecovery(cur.recovery || '', cur.email);
+      let totpVal = cur.totp || '';
+      let pw = cur.password || '';
+      let rec = cur.recovery || '';
+      if (isOtpauthUrl(totpVal)) {
+        totpVal = extractTotpFromUrl(totpVal) || totpVal;
+      }
+      if (pw && !totpVal && isTotpLike(pw)) { totpVal = pw; pw = ''; }
+      if (pw && isEmail(pw)) { if (!rec) rec = pw; pw = ''; }
+      if (pw && (isPhoneNumber(pw) || isSixDigitCode(pw))) { pw = ''; }
+      if (rec && !isEmail(rec)) rec = '';
+      if (rec && normalizeEmail(rec) === normalizeEmail(cur.email)) rec = '';
       accounts.push({
-        email: normalizeEmail(cur.email),
+        email: cur.email,
         password: pw,
-        totp_secret: cur.totp && isTotpLike(cur.totp) ? normalizeTotp(cur.totp) : (cur.totp || ''),
+        totp_secret: isTotpLike(totpVal) ? normalizeTotp(totpVal) : totpVal,
         recovery_email: rec,
         youtube_url: cur.youtube || '',
-        extra: cur.extra || [],
+        account_date: (cur.date && parseDateValue(cur.date)) || parseDateFromFilename(sourceFile) || null,
+        extra: [],
         source_file: sourceFile || 'unknown',
-        source_mtime: sourceMtime || '',
+        source_mtime: sourceMtime || Date.now(),
       });
     }
     cur = {};
@@ -350,7 +473,7 @@ function tryLabelValueExtract(rows, maxCols, sourceFile, sourceMtime) {
 }
 
 function tryStackedExtract(rows, maxCols, sourceFile, sourceMtime) {
-  if (maxCols > 3) return null;
+  if (maxCols > 4) return null;
 
   const values = [];
   for (const row of rows) {
@@ -375,22 +498,27 @@ function tryStackedExtract(rows, maxCols, sourceFile, sourceMtime) {
       continue;
     }
     if (isEmail(v)) {
-      if (cur && cur.email && !cur.recovery && (cur.password || cur.totp) && cur._hasBlankBefore) {
+      if (cur && cur.email && !cur.recovery && (cur.password || cur.totp) && normalizeEmail(v) !== normalizeEmail(cur.email)) {
         cur.recovery = v;
         continue;
       }
       if (cur && cur.email) accounts.push(cur);
-      cur = { email: v, password: '', totp: '', recovery: '', youtube: '', extra: [], _hasBlankBefore: afterBlank, source_file: sourceFile || 'unknown', source_mtime: sourceMtime || '' };
+      cur = { email: v, password: '', totp: '', recovery: '', youtube: '', account_date: parseDateFromFilename(sourceFile) || null, extra: [], source_file: sourceFile || 'unknown', source_mtime: sourceMtime || Date.now() };
       afterBlank = false;
       continue;
     }
 
     if (!cur) continue;
 
-    if (isTotpLike(v) && !cur.totp) { cur.totp = v; }
+    if (isOtpauthUrl(v) && !cur.totp) {
+      cur.totp = extractTotpFromUrl(v) || v;
+    }
+    else if (isTotpLike(v) && !cur.totp) { cur.totp = v; }
     else if (isUrlLike(v) && !cur.youtube) { cur.youtube = v; }
-    else if (isEmail(v) && !cur.recovery) { cur.recovery = v; }
-    else if (!cur.password && !isPhoneNumber(v) && !isSixDigitOtp(v)) { cur.password = v; }
+    else if (isDateLike(v) && !cur.account_date) { cur.account_date = parseDateValue(v); }
+    else if (isPhoneNumber(v)) { cur.extra.push(v); }
+    else if (isSixDigitCode(v)) { cur.extra.push(v); }
+    else if (!cur.password) { cur.password = v; }
     else { cur.extra.push(v); }
   }
   if (cur && cur.email) accounts.push(cur);
@@ -398,78 +526,89 @@ function tryStackedExtract(rows, maxCols, sourceFile, sourceMtime) {
   if (accounts.length < 1) return null;
 
   return accounts.map(a => {
-    const pw = sanitizePassword(a.password || '', a.email);
-    const rec = sanitizeRecovery(a.recovery || '', a.email);
+    let pw = a.password || '';
+    let totp = a.totp || '';
+    let rec = a.recovery || '';
+    if (pw && !totp && isTotpLike(pw)) { totp = pw; pw = ''; }
+    if (pw && isEmail(pw)) { if (!rec) rec = pw; pw = ''; }
+    if (pw && (isPhoneNumber(pw) || isSixDigitCode(pw))) { pw = ''; }
+    if (rec && !isEmail(rec)) rec = '';
+    if (rec && normalizeEmail(rec) === normalizeEmail(a.email)) rec = '';
     return {
-      email: normalizeEmail(a.email),
+      email: a.email,
       password: pw,
-      totp_secret: a.totp && isTotpLike(a.totp) ? normalizeTotp(a.totp) : (a.totp || ''),
+      totp_secret: totp && isTotpLike(totp) ? normalizeTotp(totp) : totp,
       recovery_email: rec,
       youtube_url: a.youtube || '',
       extra: a.extra || [],
       source_file: a.source_file,
-      source_mtime: a.source_mtime || '',
+      source_mtime: a.source_mtime || sourceMtime || Date.now(),
     };
   });
 }
 
-// ── post-extraction sanitizers ──
+// ── brute-force fallback: scan every cell for emails ──
 
-function sanitizePassword(pw, mainEmail) {
-  if (!pw) return '';
-  // 비밀번호가 TOTP → 빈값 (totp_secret에 이미 있거나 별도 재분류)
-  if (isTotpLike(pw)) return '';
-  // 비밀번호가 이메일 → 빈값 (복구이메일로 재분류는 caller에서)
-  if (isEmail(pw)) return '';
-  // 비밀번호가 URL → 제거
-  if (isUrlLike(pw)) return '';
-  // 비밀번호가 전화번호 → 제거
-  if (isPhoneNumber(pw)) return '';
-  // 비밀번호가 6자리 OTP 코드 → 제거
-  if (isSixDigitOtp(pw)) return '';
-  return pw;
-}
-
-function sanitizeRecovery(recovery, mainEmail) {
-  if (!recovery) return '';
-  // TOTP가 recovery에 잘못 들어온 경우 제거
-  if (isTotpLike(recovery)) return '';
-  // URL이 recovery에 들어온 경우 제거
-  if (isUrlLike(recovery)) return '';
-  // 복구이메일이 이메일이 아닌 값 → 제거
-  if (!isEmail(recovery)) return '';
-  // 복구이메일이 메인 이메일과 동일 → 제거
-  if (normalizeEmail(recovery) === normalizeEmail(mainEmail)) return '';
-  return normalizeEmail(recovery);
-}
-
-function reclassifyPassword(account) {
-  const pw = account.password || '';
-  if (!pw) return;
-  // 비밀번호가 TOTP → totp_secret으로 재분류
-  if (isTotpLike(pw) && !account.totp_secret) {
-    account.totp_secret = normalizeTotp(pw);
-    account.password = '';
-    return;
+function bruteForceExtract(rows, sourceFile, sourceMtime) {
+  const seen = new Set();
+  const accounts = [];
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row) continue;
+    for (let c = 0; c < row.length; c++) {
+      const v = String(row[c] || '').trim();
+      if (!isEmail(v)) continue;
+      const key = normalizeEmail(v);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const rest = [];
+      for (let c2 = 0; c2 < row.length; c2++) {
+        if (c2 === c) continue;
+        const rv = String(row[c2] || '').trim();
+        if (rv) rest.push(rv);
+      }
+      if (rest.length === 0 && i + 1 < rows.length && rows[i + 1]) {
+        for (let c2 = 0; c2 < rows[i + 1].length; c2++) {
+          const rv = String(rows[i + 1][c2] || '').trim();
+          if (rv && !isEmail(rv)) rest.push(rv);
+        }
+      }
+      let password = '', totp_secret = '', recovery = '', youtube = '';
+      const passwordCandidates = [];
+      const extraValues = [];
+      for (const rv of rest) {
+        if (!totp_secret && isOtpauthUrl(rv)) { totp_secret = extractTotpFromUrl(rv) || normalizeTotp(rv); }
+        else if (!totp_secret && isTotpLike(rv)) { totp_secret = normalizeTotp(rv); }
+        else if (!youtube && isUrlLike(rv)) { youtube = rv; }
+        else if (!recovery && isEmail(rv) && normalizeEmail(rv) !== key) { recovery = rv; }
+        else if (isPhoneNumber(rv)) { extraValues.push(rv); }
+        else if (isSixDigitCode(rv)) { extraValues.push(rv); }
+        else { passwordCandidates.push(rv); }
+      }
+      if (passwordCandidates.length > 0) {
+        const real = passwordCandidates.find(p => !/^\d{1,4}$/.test(p));
+        password = real || passwordCandidates[passwordCandidates.length - 1];
+      }
+      var _dateVal = null;
+      for (var _rv of rest) { if (isDateLike(_rv)) { _dateVal = parseDateValue(_rv); break; } }
+      accounts.push({ email: v, password, totp_secret, recovery_email: recovery, youtube_url: youtube, account_date: _dateVal || parseDateFromFilename(sourceFile) || null, extra: extraValues, source_file: sourceFile || 'unknown', source_mtime: sourceMtime || Date.now() });
+    }
   }
-  // 비밀번호가 이메일 → 복구이메일로 재분류
-  if (isEmail(pw) && !account.recovery_email) {
-    account.recovery_email = sanitizeRecovery(pw, account.email);
-    account.password = '';
-    return;
-  }
+  return accounts;
 }
 
 // ── main extraction ──
 
 function extractAccountsFromSheet(sheet, sourceFile, sourceMtime) {
-  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+  expandMergedCells(sheet);
+
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
   if (!rows.length) return [];
 
   let mapping = null;
   let startRow = 0;
 
-  for (let i = 0; i < Math.min(5, rows.length); i++) {
+  for (let i = 0; i < Math.min(10, rows.length); i++) {
     const m = detectHeaderMapping(rows[i]);
     if (m) {
       mapping = m;
@@ -479,33 +618,34 @@ function extractAccountsFromSheet(sheet, sourceFile, sourceMtime) {
   }
 
   if (!mapping) {
-    const maxCols = Math.max(...rows.map(r => (r && r.length) || 0));
-    if (maxCols <= 3) {
-      const vertAccounts = tryVerticalExtract(rows, sourceFile, sourceMtime);
-      if (vertAccounts && vertAccounts.length) return vertAccounts;
-    }
+    const vertAccounts = tryVerticalExtract(rows, sourceFile, sourceMtime);
+    if (vertAccounts && vertAccounts.length) return vertAccounts;
   }
 
   if (!mapping) {
     let sampleStart = 0;
     if (rows.length > 1) {
-      const firstRow = rows[0];
-      // 헤더 감지 — 첫 행이 데이터(이메일 포함)면 헤더 아님
-      const hasEmailInFirst = firstRow && firstRow.some(c => isEmail(String(c || '').trim()));
-      if (!hasEmailInFirst) {
-        const firstCell = String((firstRow && firstRow[0]) || '').trim();
-        if (firstCell && !isEmail(firstCell)) {
-          sampleStart = 1;
+      for (let i = 0; i < Math.min(3, rows.length); i++) {
+        const row = rows[i];
+        if (!row) break;
+        const firstCell = String((row[0]) || '').trim();
+        if (!firstCell) break;
+        const hasEmail = row.some(c => isEmail(String(c || '').trim()));
+        if (hasEmail) break;
+        if (!Object.values(HEADER_PATTERNS).some(p => p.test(firstCell))) {
+          sampleStart = i + 1;
+        } else {
+          break;
         }
       }
     }
 
-    const sampleRows = rows.slice(sampleStart, sampleStart + Math.min(100, rows.length));
+    const sampleRows = rows.slice(sampleStart);
     mapping = analyzeColumns(sampleRows);
     startRow = sampleStart;
 
     if (!mapping || mapping.email === undefined) {
-      return [];
+      return bruteForceExtract(rows, sourceFile, sourceMtime);
     }
   }
 
@@ -520,20 +660,23 @@ function extractAccountsFromSheet(sheet, sourceFile, sourceMtime) {
     if (!isEmail(email)) continue;
 
     let password = mapping.password !== undefined ? String(row[mapping.password] || '').trim() : '';
-    const totpRaw = mapping.totp !== undefined ? String(row[mapping.totp] || '').trim() : '';
+    let totpRaw = mapping.totp !== undefined ? String(row[mapping.totp] || '').trim() : '';
     let recovery = mapping.recovery !== undefined ? String(row[mapping.recovery] || '').trim() : '';
     const youtube = mapping.youtube !== undefined ? String(row[mapping.youtube] || '').trim() : '';
+    const dateRaw = mapping.date !== undefined ? String(row[mapping.date] || '').trim() : '';
 
-    // 인접 행 패스워드 탐색 — 패스워드 컬럼이 없고 미할당 컬럼에 값 있으면
-    if (!password && mapping.password === undefined) {
-      for (let c = 0; c < row.length; c++) {
-        if (usedCols.has(c)) continue;
-        const v = String(row[c] || '').trim();
-        if (v && !isEmail(v) && !isTotpLike(v) && !isUrlLike(v) && !isPhoneNumber(v) && !isSixDigitOtp(v)) {
-          password = v;
-          break;
-        }
-      }
+    if (password && !totpRaw && isTotpLike(password)) { totpRaw = password; password = ''; }
+    if (password && isEmail(password)) {
+      if (!recovery) { recovery = password; }
+      password = '';
+    }
+    if (password && (isPhoneNumber(password) || isSixDigitCode(password))) { password = ''; }
+    if (password && isUrlLike(password)) { password = ''; }
+    if (recovery && !isEmail(recovery)) recovery = '';
+    if (recovery && normalizeEmail(recovery) === normalizeEmail(email)) recovery = '';
+
+    if (isOtpauthUrl(totpRaw)) {
+      totpRaw = extractTotpFromUrl(totpRaw) || totpRaw;
     }
 
     const extra = [];
@@ -543,22 +686,17 @@ function extractAccountsFromSheet(sheet, sourceFile, sourceMtime) {
       if (v) extra.push(v);
     }
 
-    password = sanitizePassword(password, email);
-    recovery = sanitizeRecovery(recovery, email);
-
-    const account = {
-      email: normalizeEmail(email),
+    accounts.push({
+      email,
       password,
-      totp_secret: isTotpLike(totpRaw) ? normalizeTotp(totpRaw) : (totpRaw.startsWith('otpauth://') ? extractTotpFromUrl(totpRaw) : totpRaw),
+      totp_secret: isTotpLike(totpRaw) ? normalizeTotp(totpRaw) : totpRaw,
       recovery_email: recovery,
       youtube_url: youtube,
+      account_date: (dateRaw && parseDateValue(dateRaw)) || parseDateFromFilename(sourceFile) || null,
       extra,
       source_file: sourceFile || 'unknown',
-      source_mtime: sourceMtime || '',
-    };
-
-    reclassifyPassword(account);
-    accounts.push(account);
+      source_mtime: sourceMtime || Date.now(),
+    });
   }
   return accounts;
 }
@@ -567,13 +705,22 @@ function parseExcelFile(filePath) {
   const wb = XLSX.readFile(filePath);
   const allAccounts = [];
   const baseName = path.basename(filePath);
-  // fileMtime 실제 mtime 사용
-  let mtime = '';
-  try { mtime = fs.statSync(filePath).mtime.toISOString(); } catch (_) {}
+  let fileMtime = Date.now();
+  try { fileMtime = fs.statSync(filePath).mtimeMs; } catch (_) {}
 
   for (const sheetName of wb.SheetNames) {
     const sheet = wb.Sheets[sheetName];
-    const accounts = extractAccountsFromSheet(sheet, baseName, mtime);
+    for (const k of Object.keys(sheet)) {
+      if (k[0] === '!') continue;
+      const c = sheet[k];
+      if (c && c.l && c.l.Target && /^mailto:/i.test(String(c.l.Target))) {
+        const t = String(c.l.Target).replace(/^mailto:/i, '').replace(/\?.*$/, '');
+        if (isEmail(t)) {
+          c.v = t; c.w = t;
+        }
+      }
+    }
+    const accounts = extractAccountsFromSheet(sheet, baseName, fileMtime);
     allAccounts.push(...accounts);
   }
 
@@ -591,137 +738,346 @@ function parseMultipleFiles(filePaths) {
       report.files.push({ file: path.basename(fp), count: accounts.length });
       report.total_parsed += accounts.length;
     } catch (e) {
-      // 에러 메시지 내부정보 노출 차단
-      report.errors.push({ file: path.basename(fp), error: 'parse failed' });
+      report.errors.push({ file: path.basename(fp), error: e.message });
     }
   }
 
   return { accounts: allAccounts, report };
 }
 
-// ref: https://www.npmjs.com/package/multer (multipart/form-data handling)
-const multer = require('multer');
-
-const uploadMiddleware = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024, files: 50 },
-});
-
-let mergeAccount;
-try { mergeAccount = require('./merge_strategy').mergeAccount; } catch { mergeAccount = null; }
-
-module.exports = function attachUpload(app) {
-  const crypto = require('crypto');
-  function uploadAuth(req, res, next) {
-    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
-      || (req.query && req.query.token) || '';
-    const expected = process.env.GAUTH_API_TOKEN || '';
-    if (!expected) return res.status(503).json({ ok: false, error: 'GAUTH_API_TOKEN not configured' });
-    if (!token) return res.status(401).json({ ok: false, error: 'unauthorized' });
-    const hmac = (s) => crypto.createHmac('sha256', 'gauth').update(s).digest();
-    if (!crypto.timingSafeEqual(hmac(token), hmac(expected))) {
-      return res.status(401).json({ ok: false, error: 'unauthorized' });
+function parseMultipartManual(req) {
+  return new Promise((resolve, reject) => {
+    const ct = req.headers['content-type'] || '';
+    console.log('[upload-excels] content-type:', ct.slice(0, 120));
+    console.log('[upload-excels] content-length:', req.headers['content-length'] || 'not set');
+    if (!ct.includes('multipart')) {
+      return reject(new Error('not multipart: ' + ct.slice(0, 80)));
     }
-    next();
-  }
-  app.post('/api/upload-excels', uploadAuth, function (req, res, next) {
-    uploadMiddleware.array('files', 50)(req, res, function (err) {
-      if (err) return res.status(400).json({ ok: false, error: 'upload failed' });
-      next();
+    const Busboy = (() => {
+      try { return require('busboy'); } catch (_) {}
+      try { require('multer'); return require('busboy'); } catch (_) {}
+      return null;
+    })();
+    if (!Busboy) return reject(new Error('busboy not available'));
+    console.log('[upload-excels] busboy loaded OK');
+    const uploadDir = path.join(__dirname, 'uploads') + '/';
+    try { fs.mkdirSync(uploadDir, { recursive: true }); } catch (_) {}
+    const files = [];
+    const pending = [];
+    let bbDone = false;
+    let settled = false;
+    const bb = Busboy({ headers: req.headers, limits: { fileSize: 200 * 1024 * 1024, files: 200 } });
+    bb.on('filesLimit', () => { console.warn('[upload-excels] file count limit reached (200)'); });
+    bb.on('partsLimit', () => { console.warn('[upload-excels] parts limit reached'); });
+    function tryResolve() {
+      if (settled) return;
+      if (bbDone && pending.every(p => p.done)) {
+        settled = true;
+        console.log('[upload-excels] busboy done, files:', files.length);
+        resolve(files);
+      }
+    }
+    bb.on('file', (fieldname, stream, info) => {
+      const filename = (typeof info === 'string' ? info : (info && info.filename || 'unknown')).normalize('NFC');
+      console.log('[upload-excels] file event:', fieldname, filename);
+      const tmpPath = path.join(uploadDir, 'up_' + Date.now() + '_' + Math.random().toString(36).slice(2));
+      const tracker = { done: false };
+      pending.push(tracker);
+      const ws = fs.createWriteStream(tmpPath);
+      ws.on('error', (e) => {
+        console.error('[upload-excels] write error:', filename, e.message);
+        tracker.done = true;
+        try { fs.unlinkSync(tmpPath); } catch (_) {}
+        tryResolve();
+      });
+      let truncated = false;
+      stream.on('limit', () => { truncated = true; console.warn('[upload-excels] file truncated (exceeded fileSize limit):', filename); });
+      stream.pipe(ws);
+      ws.on('close', () => {
+        if (truncated) { tracker.done = true; try { fs.unlinkSync(tmpPath); } catch (_) {} tryResolve(); return; }
+        const sz = (() => { try { return fs.statSync(tmpPath).size; } catch (_) { return -1; } })();
+        console.log('[upload-excels] file saved:', filename, sz, 'bytes');
+        files.push({ fieldname, originalname: filename, path: tmpPath, size: sz });
+        tracker.done = true;
+        tryResolve();
+      });
+      stream.on('error', (e) => {
+        console.error('[upload-excels] stream error:', filename, e.message);
+        tracker.done = true;
+        try { fs.unlinkSync(tmpPath); } catch (_) {}
+        tryResolve();
+      });
     });
-  }, (req, res) => {
-    try {
-      const files = req.files || [];
-      if (!files.length) return res.status(400).json({ ok: false, error: 'no files' });
-
-      const perFile = [];
-      const allAccounts = [];
-
-      for (const f of files) {
-        try {
-          const wb = XLSX.read(f.buffer, { type: 'buffer' });
-          let cnt = 0;
-          for (const sn of wb.SheetNames) {
-            const accs = extractAccountsFromSheet(wb.Sheets[sn], f.originalname);
-            accs.forEach(a => { a.source_sheet = sn; a.source_mtime = Date.now(); });
-            allAccounts.push(...accs);
-            cnt += accs.length;
-          }
-          perFile.push({ name: f.originalname, size: f.size, accounts: cnt, sheets: wb.SheetNames.length });
-        } catch {
-          perFile.push({ name: f.originalname, error: 'parse failed' });
+    bb.on('close', () => { console.log('[upload-excels] bb close'); bbDone = true; tryResolve(); });
+    bb.on('finish', () => { console.log('[upload-excels] bb finish'); bbDone = true; tryResolve(); });
+    bb.on('error', (err) => {
+      console.error('[upload-excels] busboy error:', err.message);
+      if (!settled) { settled = true; reject(err); }
+    });
+    const timeout = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        const pendingCount = pending.filter(p => !p.done).length;
+        console.error('[upload-excels] busboy timeout 5min, files so far:', files.length, 'pending:', pendingCount);
+        if (pendingCount > 0) {
+          reject(new Error('upload timeout with ' + pendingCount + ' pending files'));
+        } else {
+          resolve(files);
         }
       }
-
-      const uniq = {};
-      for (const a of allAccounts) {
-        const k = a.email;
-        if (!uniq[k]) { uniq[k] = a; continue; }
-        if (!uniq[k].password && a.password) uniq[k].password = a.password;
-        if (!uniq[k].totp_secret && a.totp_secret) uniq[k].totp_secret = a.totp_secret;
-        if (!uniq[k].recovery_email && a.recovery_email) uniq[k].recovery_email = a.recovery_email;
-      }
-      const finalList = Object.values(uniq);
-
-      const dateGrouped = {};
-      finalList.forEach(a => {
-        const m = (a.source_file || '').match(/(\d{4})[-_/]?(\d{2})[-_/]?(\d{2})|(\d{1,2})월\s*(\d{1,2})일/);
-        let key = '기타';
-        if (m) {
-          if (m[1]) key = `${m[1]}-${m[2]}-${m[3]}`;
-          else if (m[4]) key = `${new Date().getFullYear()}-${String(m[4]).padStart(2, '0')}-${String(m[5]).padStart(2, '0')}`;
-        }
-        (dateGrouped[key] = dateGrouped[key] || []).push(a);
-      });
-
-      const normPath = path.join(__dirname, 'accounts_normalized.json');
-      let existing = { accounts: [] };
-      try { if (fs.existsSync(normPath)) existing = JSON.parse(fs.readFileSync(normPath, 'utf8')); } catch {}
-      const existMap = {};
-      (existing.accounts || []).forEach(a => { existMap[normalizeEmail(a.email)] = a; });
-
-      let added = 0, updated = 0;
-      const conflicts = [];
-      for (const a of finalList) {
-        if (!existMap[a.email]) { existMap[a.email] = a; added++; }
-        else if (mergeAccount) {
-          const cur = existMap[a.email];
-          const before = JSON.stringify(cur);
-          mergeAccount(cur, a, conflicts);
-          if (JSON.stringify(cur) !== before) updated++;
-        }
-      }
-
-      const merged = { accounts: Object.values(existMap), updated_at: new Date().toISOString() };
-      try { fs.writeFileSync(normPath, JSON.stringify(merged, null, 2)); } catch {}
-
-      res.json({
-        ok: true,
-        files: perFile,
-        total_parsed: allAccounts.length,
-        unique: finalList.length,
-        added, updated,
-        total_master: merged.accounts.length,
-        conflicts, conflicts_count: conflicts.length,
-        by_date: Object.fromEntries(Object.entries(dateGrouped).sort().map(([k, v]) => [k, v.length])),
-      });
-    } catch {
-      res.status(500).json({ ok: false, error: 'upload processing failed' });
-    }
+    }, 300000);
+    req.on('error', (e) => {
+      console.error('[upload-excels] req error:', e.message);
+      if (!settled) { settled = true; clearTimeout(timeout); reject(e); }
+    });
+    req.on('aborted', () => {
+      console.error('[upload-excels] req aborted');
+      if (!settled) { settled = true; clearTimeout(timeout); reject(new Error('request aborted')); }
+    });
+    req.pipe(bb);
+    bb.on('close', () => clearTimeout(timeout));
+    bb.on('finish', () => clearTimeout(timeout));
   });
-};
+}
 
-module.exports.parseExcelFile = parseExcelFile;
-module.exports.parseMultipleFiles = parseMultipleFiles;
-module.exports.extractAccountsFromSheet = extractAccountsFromSheet;
-module.exports.normalizeTotp = normalizeTotp;
-module.exports.normalizeEmail = normalizeEmail;
-module.exports.isTotpLike = isTotpLike;
-module.exports.isEmail = isEmail;
-module.exports.isPhoneNumber = isPhoneNumber;
-module.exports.isSixDigitOtp = isSixDigitOtp;
-module.exports.isUrlLike = isUrlLike;
-module.exports.extractTotpFromUrl = extractTotpFromUrl;
-module.exports.analyzeColumns = analyzeColumns;
-module.exports.sanitizePassword = sanitizePassword;
-module.exports.sanitizeRecovery = sanitizeRecovery;
+function mountRoutes(app) {
+  if (!app || typeof app.post !== 'function') return;
+
+  let _fileLock = Promise.resolve();
+  function withFileLock(fn) {
+    _fileLock = _fileLock.then(fn, (err) => { console.error('[upload-excels] previous lock holder error:', err && err.message); return fn(); });
+    return _fileLock;
+  }
+
+  app.post('/api/scan-folder', async (req, res) => {
+    req.setTimeout(600000);
+    res.setTimeout(600000);
+    let body = '';
+    req.on('data', c => { body += c; });
+    req.on('end', async () => {
+      try {
+        const params = JSON.parse(body);
+        const targetDir = params.folder || '';
+        if (!targetDir || !fs.existsSync(targetDir)) {
+          return res.status(400).json({ ok: false, error: 'folder not found: ' + targetDir });
+        }
+        const exts = ['.xlsx', '.xls', '.csv'];
+        function walkDir(dir) {
+          let results = [];
+          try {
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            for (const e of entries) {
+              const full = path.join(dir, e.name);
+              if (e.isDirectory()) { results = results.concat(walkDir(full)); }
+              else if (exts.includes(path.extname(e.name).toLowerCase())) { results.push(full); }
+            }
+          } catch (_) {}
+          return results;
+        }
+        const files = walkDir(targetDir);
+        if (!files.length) {
+          return res.json({ ok: true, total_master: 0, total_parsed: 0, added: 0, updated: 0, files: [], message: 'no excel files found in ' + targetDir });
+        }
+        console.log('[scan-folder] found', files.length, 'excel files in', targetDir);
+        const parsedFiles = [];
+        for (const fp of files) {
+          try {
+            const st = fs.statSync(fp);
+            const result = parseExcelFile(fp);
+            for (const a of result.accounts) {
+              a.source_file = path.basename(fp);
+              if (!a.source_mtime) a.source_mtime = st.mtimeMs;
+              if (!a.account_date) a.account_date = parseDateFromFilename(path.basename(fp)) || null;
+            }
+            parsedFiles.push({ name: path.basename(fp), accounts: result.accounts });
+          } catch (e) {
+            parsedFiles.push({ name: path.basename(fp), accounts: [], error: e.message });
+          }
+        }
+        await withFileLock(() => {
+          try {
+            const dataFile = '/opt/gauth-full/accounts_normalized.json';
+            let existing = [];
+            try {
+              const raw = fs.readFileSync(dataFile, 'utf8');
+              if (!raw.trim()) throw new Error('empty file');
+              const d = JSON.parse(raw);
+              existing = Array.isArray(d) ? d : (d.accounts || []);
+            } catch(e) {
+              if (e.message !== 'empty file' && e.code !== 'ENOENT') {
+                const backupPath = dataFile + '.corrupt.' + Date.now();
+                try { fs.copyFileSync(dataFile, backupPath); } catch (_) {}
+              }
+            }
+            const byEmail = {};
+            for (const a of existing) { if (a && a.email) byEmail[normalizeEmail(a.email)] = a; }
+            let totalParsed = 0, totalAdded = 0, totalUpdated = 0;
+            const fileResults = [];
+            for (const pf of parsedFiles) {
+              if (pf.error) { fileResults.push({ name: pf.name, accounts: 0, error: pf.error }); continue; }
+              let added = 0, updated = 0;
+              for (const a of pf.accounts) {
+                if (!a.email) continue;
+                const key = normalizeEmail(a.email);
+                if (byEmail[key]) {
+                  const e = byEmail[key];
+                  if (a.password && a.password !== e.password && !isTotpLike(a.password) && !isEmail(a.password) && !isUrlLike(a.password) && !isSixDigitCode(a.password) && !isPhoneNumber(a.password)) {
+                    if (!e.password_alts) e.password_alts = [];
+                    if (e.password && !e.password_alts.includes(e.password)) e.password_alts.push(e.password);
+                    if (!e.password_alts.includes(a.password)) e.password_alts.push(a.password);
+                    e.password = a.password;
+                  }
+                  if (a.totp_secret && isTotpLike(a.totp_secret)) e.totp_secret = normalizeTotp(a.totp_secret);
+                  if (a.recovery_email && isEmail(a.recovery_email) && normalizeEmail(a.recovery_email) !== key) e.recovery_email = a.recovery_email;
+                  if (a.youtube_url && isUrlLike(a.youtube_url)) e.youtube_url = a.youtube_url;
+                  if (a.account_date) e.account_date = a.account_date;
+                  e.source_mtime = a.source_mtime || Date.now();
+                  e.source_file = a.source_file || e.source_file;
+                  updated++;
+                } else {
+                  byEmail[key] = a;
+                  added++;
+                }
+              }
+              totalParsed += pf.accounts.length;
+              totalAdded += added;
+              totalUpdated += updated;
+              fileResults.push({ name: pf.name, accounts: pf.accounts.length, added, updated });
+            }
+            const allAccounts = Object.values(byEmail);
+            const tmpFile = dataFile + '.tmp.' + process.pid + '.' + Date.now();
+            fs.writeFileSync(tmpFile, JSON.stringify(allAccounts, null, 2));
+            fs.renameSync(tmpFile, dataFile);
+            console.log('[scan-folder] merge done: total_master=' + allAccounts.length + ' parsed=' + totalParsed + ' added=' + totalAdded + ' updated=' + totalUpdated);
+            res.json({ ok: true, total_master: allAccounts.length, total_parsed: totalParsed, added: totalAdded, updated: totalUpdated, files: fileResults });
+          } catch(e) {
+            console.error('[scan-folder] error:', e);
+            if (!res.headersSent) res.status(500).json({ ok: false, error: 'internal error' });
+          }
+        });
+      } catch(e) {
+        console.error('[scan-folder] parse error:', e);
+        if (!res.headersSent) res.status(400).json({ ok: false, error: e.message });
+      }
+    });
+  });
+
+  app.post('/api/upload-excels', async (req, res) => {
+    req.setTimeout(600000);
+    res.setTimeout(600000);
+    let files;
+    try {
+      files = await parseMultipartManual(req);
+    } catch (err) {
+      console.error('[upload-excels] parse error:', err.message);
+      return res.status(500).json({ ok: false, error: 'upload failed' });
+    }
+    if (!files || !files.length) return res.status(400).json({ ok: false, error: 'no files' });
+
+    const parsedFiles = [];
+    for (const f of files) {
+      try {
+        const accounts = parseExcelFile(f.path);
+        parsedFiles.push({ name: f.originalname, accounts });
+      } catch(e) {
+        parsedFiles.push({ name: f.originalname, accounts: [], error: e.message });
+      }
+      try { fs.unlinkSync(f.path); } catch(e) { console.warn('[upload_excels] temp file cleanup failed:', f.path, e.message); }
+      if (global.gc) global.gc();
+    }
+
+    console.log('[upload-excels] parsed files:', parsedFiles.map(pf => ({ name: pf.name, accounts: pf.accounts.length, error: pf.error || null })));
+
+    await withFileLock(() => {
+      try {
+        const dataFile = '/opt/gauth-full/accounts_normalized.json';
+        let existing = [];
+        try {
+          const raw = fs.readFileSync(dataFile, 'utf8');
+          if (!raw.trim()) throw new Error('empty file');
+          const d = JSON.parse(raw);
+          existing = Array.isArray(d) ? d : (d.accounts || []);
+        } catch(e) {
+          if (e.message !== 'empty file' && e.code !== 'ENOENT') {
+            const backupPath = dataFile + '.corrupt.' + Date.now();
+            try { fs.copyFileSync(dataFile, backupPath); } catch (_) {}
+            console.error('[upload-excels] corrupted JSON backed up to', backupPath, e.message);
+          }
+        }
+        console.log('[upload-excels] existing accounts:', existing.length);
+        const byEmail = {};
+        for (const a of existing) {
+          if (a && a.email) byEmail[normalizeEmail(a.email)] = a;
+        }
+
+        const fileResults = [];
+        let totalParsed = 0, totalAdded = 0, totalUpdated = 0;
+        for (const pf of parsedFiles) {
+          if (pf.error) { fileResults.push({ name: pf.name, accounts: 0, error: pf.error }); continue; }
+          let added = 0, updated = 0;
+          for (const a of pf.accounts) {
+            if (!a.email) continue;
+            const key = normalizeEmail(a.email);
+            if (byEmail[key]) {
+              const e = byEmail[key];
+              if (a.password && a.password !== e.password && !isTotpLike(a.password) && !isEmail(a.password) && !isUrlLike(a.password) && !isSixDigitCode(a.password) && !isPhoneNumber(a.password)) {
+                if (!e.password_alts) e.password_alts = [];
+                if (e.password && !e.password_alts.includes(e.password)) e.password_alts.push(e.password);
+                if (!e.password_alts.includes(a.password)) e.password_alts.push(a.password);
+                e.password = a.password;
+              }
+              if (a.totp_secret && isTotpLike(a.totp_secret)) e.totp_secret = normalizeTotp(a.totp_secret);
+              if (a.recovery_email && isEmail(a.recovery_email) && normalizeEmail(a.recovery_email) !== key) e.recovery_email = a.recovery_email;
+              if (a.youtube_url && isUrlLike(a.youtube_url)) e.youtube_url = a.youtube_url;
+              if (a.extra && a.extra.length) {
+                if (!e.extra) e.extra = [];
+                for (const x of a.extra) { if (!e.extra.includes(x)) e.extra.push(x); }
+              }
+              e.source_mtime = a.source_mtime || Date.now();
+              e.source_file = a.source_file || e.source_file;
+              updated++;
+            } else {
+              byEmail[key] = a;
+              added++;
+            }
+          }
+          totalParsed += pf.accounts.length;
+          totalAdded += added;
+          totalUpdated += updated;
+          fileResults.push({ name: pf.name, accounts: pf.accounts.length, added, updated });
+        }
+
+        const allAccounts = Object.values(byEmail);
+        const tmpFile = dataFile + '.tmp.' + process.pid + '.' + Date.now();
+        fs.writeFileSync(tmpFile, JSON.stringify(allAccounts, null, 2));
+        fs.renameSync(tmpFile, dataFile);
+        console.log('[upload-excels] merge done: total_master=' + allAccounts.length + ' parsed=' + totalParsed + ' added=' + totalAdded + ' updated=' + totalUpdated);
+        res.json({ ok: true, total_master: allAccounts.length, total_parsed: totalParsed, added: totalAdded, updated: totalUpdated, files: fileResults, conflicts_count: 0, conflicts: [] });
+      } catch(e) {
+        console.error('[upload-excels] error:', e);
+        if (!res.headersSent) res.status(500).json({ ok: false, error: 'internal error' });
+      }
+    });
+  });
+}
+
+const _exports = mountRoutes;
+_exports.parseExcelFile = parseExcelFile;
+_exports.parseMultipleFiles = parseMultipleFiles;
+_exports.extractAccountsFromSheet = extractAccountsFromSheet;
+_exports.normalizeTotp = normalizeTotp;
+_exports.isTotpLike = isTotpLike;
+_exports.isEmail = isEmail;
+_exports.normalizeEmail = normalizeEmail;
+_exports.analyzeColumns = analyzeColumns;
+_exports.classifyValue = classifyValue;
+_exports.extractLabelValue = extractLabelValue;
+_exports.tryVerticalExtract = tryVerticalExtract;
+_exports.tryStackedExtract = tryStackedExtract;
+_exports.tryLabelValueExtract = tryLabelValueExtract;
+_exports.bruteForceExtract = bruteForceExtract;
+_exports.expandMergedCells = expandMergedCells;
+_exports.extractTotpFromUrl = extractTotpFromUrl;
+_exports.isPhoneNumber = isPhoneNumber;
+_exports.isSixDigitCode = isSixDigitCode;
+module.exports = _exports;

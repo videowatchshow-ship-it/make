@@ -14,9 +14,9 @@ input{background:#161a20;border:1px solid #2a323c;color:#e8ecef;padding:9px 12px
 input:focus{outline:0;border-color:#2b6cff}
 select{background:#161a20;border:1px solid #2a323c;color:#e8ecef;padding:9px 10px;border-radius:6px;font-size:13px}
 #count{color:#8a95a5;font-size:12px;white-space:nowrap}
-#viewport{position:relative;overflow-y:auto;height:calc(100vh - 220px)}
-#spacer{position:relative}
-.row{position:absolute;left:0;right:0;padding:10px 20px;border-bottom:1px solid #1a1f26;display:grid;grid-template-columns:280px 100px 1fr 1fr 180px 170px;gap:10px;align-items:center;font-size:12.5px}
+#viewport{overflow-y:auto;height:calc(100vh - 220px)}
+#spacer{}
+.row{padding:10px 20px;border-bottom:1px solid #1a1f26;display:grid;grid-template-columns:280px 100px 1fr 1fr 180px 170px;gap:10px;align-items:center;font-size:12.5px}
 .row:hover{background:#141821}
 .email{font-weight:500;word-break:break-all}
 .badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:10.5px;font-weight:600}
@@ -27,7 +27,7 @@ select{background:#161a20;border:1px solid #2a323c;color:#e8ecef;padding:9px 10p
 .b-off{background:#2a1e1e;color:#f47070}
 .b-2fa{background:#1c2740;color:#7dabff}
 .b-lock{background:#3a1c1c;color:#ff8080}
-.mono{font-family:'SF Mono',Menaco,monospace;color:#c9d2dc;font-size:12px;word-break:break-all}
+.mono{font-family:'SF Mono',Monaco,monospace;color:#c9d2dc;font-size:12px;word-break:break-all}
 .pw{color:#e8ecef}
 button{background:#2b6cff;color:#fff;border:0;padding:7px 12px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600}
 button:hover{background:#1e5ae0}
@@ -44,31 +44,30 @@ button:disabled{background:#333;cursor:not-allowed}
   .controls{padding:8px 12px;gap:6px}
   .controls input{min-width:120px;font-size:13px;padding:8px}
   #viewport{height:auto;max-height:none;overflow:visible}
-  .row{position:relative!important;top:auto!important;grid-template-columns:1fr!important;gap:4px!important;padding:10px 12px!important;font-size:13px}
-  #spacer{height:auto!important}
-  #td-result .td-card{padding:14px!important}
-  #td-result .td-card .td-grid{grid-template-columns:1fr!important;gap:8px 0!important;font-size:15px!important}
-  #td-result .td-card .td-label{color:#8a95a5;font-size:12px;font-weight:600;margin-bottom:2px}
-  #td-result .td-card .td-val{font-size:15px;line-height:1.5;word-break:break-all}
-  #td-result .td-card .td-email{font-size:17px!important}
-  #td-result .td-card .td-pw{font-size:17px!important}
-  #td-result .td-card .td-2fa-code{font-size:24px!important;letter-spacing:3px!important}
-  #td-result .td-card .td-secret{font-size:13px!important}
-  #td-result .td-card .cp{padding:6px 14px!important;font-size:13px!important;margin-left:8px!important;border-radius:4px}
-  #td-result .td-card button{padding:8px 14px!important;font-size:13px!important}
+  .controls{flex-wrap:wrap;padding:8px 12px}
+  .controls input#q{min-width:100px}
+  .row{grid-template-columns:1fr!important;gap:4px!important;padding:10px 12px!important;font-size:13px}
+  #viewport .td-card{padding:14px!important}
+  #viewport .td-card .td-grid{grid-template-columns:1fr!important;gap:8px 0!important;font-size:15px!important}
+  #viewport .td-card .td-label{color:#8a95a5;font-size:12px;font-weight:600;margin-bottom:2px}
+  #viewport .td-card .td-val{font-size:15px;line-height:1.5;word-break:break-all}
+  #viewport .td-card .td-email{font-size:17px!important}
+  #viewport .td-card .td-pw{font-size:17px!important}
+  #viewport .td-card .td-2fa-code{font-size:24px!important;letter-spacing:3px!important}
+  #viewport .td-card .td-secret{font-size:13px!important}
+  #viewport .td-card .cp{padding:6px 14px!important;font-size:13px!important;margin-left:8px!important;border-radius:4px}
+  #viewport .td-card button{padding:8px 14px!important;font-size:13px!important}
   #excelUpBox{margin:10px 8px;padding:10px}
-  #vmCtrlBox{margin:10px 8px;padding:10px}
-  #viewport,#pagination,.controls{display:none!important}
-  #site-map-footer{max-width:calc(100vw - 16px)}
+  #pagination{flex-wrap:wrap}
 }
 @media(min-width:769px){
-  #td-result .td-card .td-grid{grid-template-columns:100px 1fr;gap:6px 12px;font-size:14px}
-  #td-result .td-card{padding:16px;margin-bottom:10px}
-  #td-result .td-card .td-email{font-size:16px}
-  #td-result .td-card .td-pw{font-size:15px}
-  #td-result .td-card .td-2fa-code{font-size:20px;letter-spacing:2px}
-  #td-result .td-card .cp{padding:4px 10px;font-size:12px}
-  #td-result .td-card button{padding:6px 12px;font-size:12px}
+  #viewport .td-card .td-grid{grid-template-columns:100px 1fr;gap:6px 12px;font-size:14px}
+  #viewport .td-card{padding:16px;margin-bottom:10px}
+  #viewport .td-card .td-email{font-size:16px}
+  #viewport .td-card .td-pw{font-size:15px}
+  #viewport .td-card .td-2fa-code{font-size:20px;letter-spacing:2px}
+  #viewport .td-card .cp{padding:4px 10px;font-size:12px}
+  #viewport .td-card button{padding:6px 12px;font-size:12px}
 }
 #pwa-install-btn{display:none;width:calc(100% - 32px);margin:0 auto;padding:16px 24px;background:linear-gradient(135deg,#ff9040,#ff6020);color:#fff;border:none;border-radius:12px;font-size:20px;font-weight:800;cursor:pointer;box-shadow:0 4px 16px rgba(255,144,64,.4);text-align:center}
 #pwa-install-btn:hover{transform:scale(1.02);box-shadow:0 6px 24px rgba(255,144,64,.5)}
@@ -119,14 +118,19 @@ button:disabled{background:#333;cursor:not-allowed}
 })();
 </script>
 
+<!-- 상단 메뉴 -->
+<div id="top-menu" style="display:flex;gap:0;background:#111418;border-bottom:1px solid #22282f">
+  <button onclick="toggleSection('excelUpBox',this)" style="flex:1;background:#111418;color:#3ddc84;border:none;padding:12px 8px;font-size:13px;font-weight:700;cursor:pointer">📊 엑셀 업로드</button>
+</div>
+
 <div style="padding:12px 16px;background:#0d1117"><button id="pwa-install-btn">📲 앱으로 설치</button></div>
 <div id="stream-info-box">
   <div class="si-section">
-    <div class="si-header"><span class="si-label">🎙️ 스트리밍 제목</span><button class="si-btn si-refresh" onclick="cycleStreamTitle()">🔄 새로고침</button><button class="si-btn si-copy" onclick="copyStreamTitle()">📋 복사</button></div>
+    <div class="si-header"><span class="si-label">🎙️ 스트리밍 제목</span><button class="si-btn si-refresh" onclick="cycleStreamTitle()">🔄 새로고침</button><button class="si-btn si-copy" onclick="copyStreamTitle(event)">📋 복사</button></div>
     <div class="si-content" id="streamTitle">참교육 당해야 하는 것인가?</div>
   </div>
   <div class="si-section">
-    <div class="si-header"><span class="si-label">📝 설명</span><button class="si-btn si-copy" onclick="copyStreamDesc()">📋 복사</button></div>
+    <div class="si-header"><span class="si-label">📝 설명</span><button class="si-btn si-copy" onclick="copyStreamDesc(event)">📋 복사</button></div>
     <div class="si-content" id="streamDesc">#실시간게임 #라이브캄보디아 #대리운전 #아바타란 ?<br>참교육 채널입니다.<br>24시간 365일 1등급 생방송 진행!<br>탁&amp;제이 여러분 환영합니다.<br>스튜디오 아닌 현장에서 진행합니다.</div>
   </div>
 </div>
@@ -169,13 +173,13 @@ function _siCopy(text,btn){
     setTimeout(function(){btn.innerHTML=orig;btn.style.background='';},1200);
   });
 }
-function copyStreamTitle(){
-  _siCopy(document.getElementById('streamTitle').textContent,event.currentTarget);
+function copyStreamTitle(e){
+  _siCopy(document.getElementById('streamTitle').textContent,e.currentTarget||e);
 }
-function copyStreamDesc(){
+function copyStreamDesc(e){
   var el=document.getElementById('streamDesc');
   var text=el.innerHTML.replace(/<br\s*\/?>/gi,'\n').replace(/<[^>]*>/g,'').replace(/&amp;/g,'&');
-  _siCopy(text,event.currentTarget);
+  _siCopy(text,e.currentTarget||e);
 }
 </script>
 
@@ -183,7 +187,7 @@ function copyStreamDesc(){
 <div id="monthlyGroups" style="padding:6px 20px;background:#0d1520;border-bottom:1px solid #22282f;font-size:12px;color:#c9d2dc;text-align:center"></div>
 <script>
 /* MDN: Element.innerHTML XSS 방지 — https://developer.mozilla.org/en-US/docs/Web/API/Element/innerHTML#security_considerations */
-function _esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];})}
+function _esc(s){return String(s==null?'':s).replace(/[&<>"'`\\]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;','\\':'&#92;'}[c];})}
 var escapeHtml=_esc;
 async function refreshAccStats(){
   try {
@@ -262,11 +266,16 @@ refreshAccStats();
 })();
 </script>
 
-<style>#excelUpProg::-webkit-progress-bar{background:#1a1f26;border-radius:10px}#excelUpProg::-webkit-progress-value{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px;transition:width .2s}#excelUpProg::-moz-progress-bar{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px}#excelUpProg{-webkit-appearance:none;appearance:none;border:none;border-radius:10px;background:#1a1f26}</style><div id="excelUpBox" style="margin:16px 20px;padding:16px;background:#161a20;border:1px solid #2a323c;border-radius:8px">
+<style>#excelUpProg::-webkit-progress-bar{background:#1a1f26;border-radius:10px}#excelUpProg::-webkit-progress-value{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px;transition:width .2s}#excelUpProg::-moz-progress-bar{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px}#excelUpProg{-webkit-appearance:none;appearance:none;border:none;border-radius:10px;background:#1a1f26}</style><div id="excelUpBox" style="display:none;margin:16px 20px;padding:16px;background:#161a20;border:1px solid #2a323c;border-radius:8px">
   <h3 style="margin:0 0 10px 0;color:#3ddc84;font-size:14px">📤 엑셀 일괄 업로드 (한번에 여러 파일)</h3>
   <input type="file" id="excelFiles" multiple accept=".xlsx,.xls,.csv" style="color:#e8ecef;font-size:13px">
-  <button id="folderScanBtn" style="margin-left:8px;padding:6px 14px;background:linear-gradient(135deg,#2b6cff,#3ddc84);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold">📁 폴더 전체 스캔</button>
+  <button id="folderScanBtn" style="margin-left:8px;padding:6px 14px;background:linear-gradient(135deg,#2b6cff,#3ddc84);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold">📁 로컬 폴더 선택</button>
   <input type="file" id="folderInput" webkitdirectory multiple style="display:none">
+  <div style="margin-top:10px;display:flex;gap:6px;align-items:center">
+    <input type="text" id="serverFolderPath" placeholder="서버 폴더 경로 (예: /opt/gauth-full/excels)" style="background:#161a20;border:1px solid #2a323c;color:#e8ecef;padding:7px 10px;border-radius:6px;font-size:13px;flex:1;min-width:180px">
+    <button id="serverFolderScanBtn" style="padding:6px 14px;background:linear-gradient(135deg,#ff6b2b,#ffb347);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold;white-space:nowrap">📂 서버 폴더 스캔</button>
+  </div>
+  <div id="serverScanResult" style="margin-top:6px;font-size:12px;color:#9fb3e0;font-family:monospace;white-space:pre-wrap"></div>
   <div id="excelFileList" style="margin-top:8px;font-size:12px;color:#9fb3e0;font-family:monospace"></div>
   <button id="excelUpBtn" style="margin-left:10px">▶ 업로드 &amp; 취합</button>
   <div id="excelUpProgWrap" style="margin-top:10px;display:none"><progress id="excelUpProg" value="0" max="100" style="width:100%;height:20px"></progress><div id="excelUpProgTxt" style="margin-top:4px;font-size:12px;color:#3ddc84;text-align:right;font-family:monospace">0%</div></div><div id="excelUpResult" style="margin-top:12px;font-size:12.5px;color:#c9d2dc;font-family:'SF Mono',monospace;white-space:pre-wrap"></div>
@@ -289,7 +298,7 @@ function accessBadge(a){
   if(mt >= kstTodayMidnightMs()) return '<span class="badge b-today">🟢 오늘</span>';
   /* 86400000 = 24h × 60min × 60s × 1000ms — POSIX day in milliseconds */
   var days = Math.floor((Date.now()-mt)/86400000);
-  return '<span class="badge b-old">'+(days<=0?'어제':days+'일 전')+'</span>';
+  return '<span class="badge b-old">'+(days<=1?'어제':days+'일 전')+'</span>';
 }
 
 (function(){
@@ -325,6 +334,28 @@ function accessBadge(a){
       }
       renderList();
       if(count){ var o=document.getElementById('excelUpResult'); if(o) o.textContent='📁 폴더 스캔: 엑셀 '+count+'개 발견·추가 (총 '+window._picked.length+'개)'; }
+    });
+  }
+  var srvScanBtn = document.getElementById('serverFolderScanBtn');
+  var srvPathInput = document.getElementById('serverFolderPath');
+  var srvResult = document.getElementById('serverScanResult');
+  if(srvScanBtn && srvPathInput){
+    srvScanBtn.addEventListener('click', function(){
+      var folder = srvPathInput.value.trim();
+      if(!folder){ srvResult.textContent='⚠ 폴더 경로를 입력하세요'; return; }
+      srvScanBtn.disabled=true; srvScanBtn.textContent='⏳ 스캔 중...';
+      srvResult.textContent='서버 폴더 스캔 중: '+folder;
+      fetch(authQuery('/api/scan-folder'),{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({folder:folder})})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        srvScanBtn.disabled=false; srvScanBtn.textContent='📂 서버 폴더 스캔';
+        if(!d.ok){ srvResult.textContent='❌ '+d.error; return; }
+        var lines = ['✅ 스캔 완료 — 총 '+d.total_parsed+'개 파싱, '+d.added+'개 추가, '+d.updated+'개 갱신 (마스터 '+d.total_master+'개)'];
+        if(d.files){d.files.forEach(function(f){ lines.push('  '+(f.error?'❌':'✅')+' '+f.name+': '+(f.error||f.accounts+'개'+(f.added?' (+'+f.added+')':''))); });}
+        srvResult.textContent=lines.join('\n');
+        load();
+      })
+      .catch(function(e){ srvScanBtn.disabled=false; srvScanBtn.textContent='📂 서버 폴더 스캔'; srvResult.textContent='❌ 오류: '+e.message; });
     });
   }
   fi.addEventListener('change', function(){
@@ -579,18 +610,6 @@ updateUploadStatus();
   <div id="lookup-result" style="width:100%;display:none;background:#161a20;border:1px solid #2a323c;border-radius:8px;padding:16px;font-size:14px;margin-top:6px"></div>
 </div>
 
-<!-- 시간 순서 계정 정보 확인 -->
-<div style="padding:14px 20px;background:#1a1210;border-bottom:1px solid #22282f;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-  <span style="font-size:14px;color:#ffb469;font-weight:700">⏰ 시간 순서 계정 정보 확인</span>
-  <select id="td-order" style="flex:0 0 auto">
-    <option value="desc" selected>최신 순 (엑셀 날짜 최신 → 오래됨)</option>
-    <option value="asc">오래된 순 (엑셀 날짜 오래됨 → 최신)</option>
-  </select>
-  <button id="td-load" style="background:#ff9040">계정 조회</button>
-  <button id="td-refresh" style="background:#2a323c;color:#c9d2dc;font-size:16px;padding:12px 20px;font-weight:700;border-radius:8px" onclick="tdLoad()">🔄 새로고침</button>
-<div id="td-result" style="width:100%;display:none;background:#161a20;border:1px solid #2a323c;border-radius:8px;padding:16px;font-size:14px;margin-top:6px"></div>
-</div>
-
 <div class="controls">
   <input id="apiToken" type="password" placeholder="🔑 API 토큰" style="flex:0 0 140px;min-width:100px;font-size:12px" oninput="sessionStorage.setItem('gauth_token',this.value)">
   <span style="width:1px;height:24px;background:#2a323c"></span>
@@ -602,6 +621,10 @@ updateUploadStatus();
     <option value="never">미접속만</option>
     <option value="locked">잠김만 (폰/패스키/기기)</option>
   </select>
+  <select id="td-order" style="flex:0 0 auto">
+    <option value="desc" selected>최신순</option>
+    <option value="asc">오래된순</option>
+  </select>
   <span id="count"></span>
   <span style="width:1px;height:24px;background:#2a323c"></span>
   <span style="font-size:12px;color:#9aa5b5">엑셀로</span>
@@ -611,11 +634,6 @@ updateUploadStatus();
   <span style="width:1px;height:24px;background:#2a323c"></span>
   <button id="batch-run" style="background:#e0503a">▶ 미로그인만 로그인 (순서대로)</button>
   <button id="batch-stop" style="background:#666">■ 정지</button>
-  <span style="width:1px;height:24px;background:#2a323c"></span>
-  <button id="yt-batch-10" style="background:#1a73e8;font-weight:bold" onclick="startBatchConnect(10)">🎬 10개 자동연결</button>
-  <button id="yt-batch-20" style="background:#0d47a1;font-weight:bold" onclick="startBatchConnect(20)">🎬 20개 자동연결</button>
-  <button id="yt-batch-stop" style="background:#666;display:none" onclick="stopBatchConnect()">■ 연결 중지</button>
-  <span id="yt-batch-status" style="font-size:11px;color:#7dabff"></span>
 </div>
 <div id="viewport"><div id="spacer"></div></div>
 <div id="pagination" style="padding:12px 20px;background:#0f1216;border-top:1px solid #22282f;display:flex;gap:6px;flex-wrap:wrap;justify-content:center;align-items:center"></div>
@@ -634,22 +652,40 @@ function noCacheQuery(url){var u=authQuery(url);return u+(u.includes('?')?'&':'?
 
 let FAILED = {}
 async function load(){
-  const [n, p, f] = await Promise.all([
-    fetch(authQuery('/api/normalized-accounts'),{headers:authHeaders()}).then(r=>r.json()),
-    fetch(authQuery('/api/profiles'),{headers:authHeaders()}).then(r=>r.json()),
-    fetch(authQuery('/api/failed-accounts'),{headers:authHeaders()}).then(r=>r.json()).catch(()=>({}))
-  ])
+  var n, p, f
+  function safeJson(r, fallback){
+    if(!r.ok) return fallback;
+    return r.json().catch(function(){ return fallback });
+  }
+  try {
+    var r1 = await fetch(authQuery('/api/normalized-accounts'),{headers:authHeaders()}).catch(function(){ return {ok:false} });
+    var r2 = await fetch(authQuery('/api/profiles'),{headers:authHeaders()}).catch(function(){ return {ok:false} });
+    var r3 = await fetch(authQuery('/api/failed-accounts'),{headers:authHeaders()}).catch(function(){ return {ok:false} });
+    n = await safeJson(r1, {accounts:[],summary:{}});
+    p = await safeJson(r2, {profiles:[]});
+    f = await safeJson(r3, {});
+    if(!r1.ok || !n.accounts){
+      var _msg = r1.ok ? 'accounts 키 없음 (응답: '+JSON.stringify(n).slice(0,200)+')' : 'HTTP '+r1.status;
+      document.getElementById('spacer').innerHTML='<div style="padding:20px;color:#ffb469;font-size:14px">⚠ API 상태: '+_esc(_msg)+'</div>';
+    }
+  } catch(e) { n={accounts:[],summary:{}}; p={profiles:[]}; f={}; }
   FAILED = f || {}
-  /* 프로필 폴더명→이메일: 서버가 email 필드를 반환하면 우선 사용.
-   * 폴더명 변환은 최초 _를 @로, 이후 _를 .로 치환 — multi-dot 도메인(co.uk 등) 대응
-   * 서버가 email을 반환하지 않는 레거시 경우에만 사용 */
-  const sess = new Set(p.profiles.map(x => x.email || x.folder.replace(/^([^_]+)_(.+)$/, (_, u, d) => u + '@' + d.replace(/_/g, '.'))))
-  // 최신 순 (엑셀 mtime 내림차순) + 잠금 상태 표시
-  ALL = (n.accounts||[]).map(a => ({
-    ...a,
-    has_session: sess.has(a.email),
-    lock_reason: (FAILED[a.email] || {}).reason || null
-  })).sort((x,y) => (y.source_mtime||0) - (x.source_mtime||0))
+  var _profiles = (p && p.profiles) || []
+  var _accounts = (n && n.accounts) || []
+  var sess = new Set(_profiles.map(function(x){ return x.email || x.folder.replace(/^([^_]+)_(.+)$/, function(_, u, d){ return u + '@' + d.replace(/_/g, '.') }) }))
+  function _parseDateFromFilename(name){
+    if(!name) return null;
+    var m=name.match(/(\d{4})[\.\-_](\d{1,2})[\.\-_](\d{1,2})/);
+    if(m) return new Date(parseInt(m[1]),parseInt(m[2])-1,parseInt(m[3])).getTime();
+    m=name.match(/(\d{8})/);
+    if(m){var y=parseInt(m[1].slice(0,4)),mo=parseInt(m[1].slice(4,6)),d=parseInt(m[1].slice(6,8));if(y>=2020&&y<=2030&&mo>=1&&mo<=12&&d>=1&&d<=31) return new Date(y,mo-1,d).getTime();}
+    return null;
+  }
+  ALL = _accounts.map(function(a){
+    var f = (FAILED[a.email] || {});
+    var ad = a.account_date || _parseDateFromFilename(a.source_file) || null;
+    return Object.assign({}, a, {has_session: sess.has(a.email), lock_reason: f.reason || null, account_date: ad});
+  }).sort(function(x,y){ return (y.account_date||y.source_mtime||0) - (x.account_date||x.source_mtime||0) })
   var _fc = n.summary && n.summary.files_scanned;
   if(_fc == null){
     try { var _rp = await fetch(authQuery('/api/parse-report'),{cache:'no-store',headers:authHeaders()}).then(r=>r.json()); _fc = _rp && _rp.last_run && _rp.last_run.files; } catch(_){}
@@ -659,10 +695,9 @@ async function load(){
   document.getElementById('s-sess').textContent = ALL.filter(a=>a.has_session).length.toLocaleString()
   var _2faCount = ALL.filter(a => a.totp_secret && a.totp_secret.trim()).length
   var _pwOnly = ALL.filter(a => a.password && (!a.totp_secret || !a.totp_secret.trim())).length
-  document.getElementById('s-2fa').textContent = (n.summary?.PASSWORD_2FA || _2faCount).toLocaleString()
-  document.getElementById('s-pw').textContent = (n.summary?.PASSWORD_ONLY || _pwOnly).toLocaleString()
+  document.getElementById('s-2fa').textContent = ((n.summary && n.summary.PASSWORD_2FA) || _2faCount).toLocaleString()
+  document.getElementById('s-pw').textContent = ((n.summary && n.summary.PASSWORD_ONLY) || _pwOnly).toLocaleString()
   applyFilter()
-  if(window._gauthAutoLoad){ window._gauthAutoLoad=false; setTimeout(tdLoad, 300) }
 }
 function applyFilter(){
   const q = document.getElementById('q').value.trim().toLowerCase()
@@ -676,6 +711,14 @@ function applyFilter(){
     if (f==='locked' && !LOCK.includes(a.lock_reason)) return false
     return true
   })
+  var sortOrder = document.getElementById('td-order')
+  if(sortOrder){
+    var desc = sortOrder.value === 'desc'
+    FILTERED.sort(function(x,y){
+      var d = (x.account_date||x.source_mtime||0) - (y.account_date||y.source_mtime||0)
+      return desc ? -d : d
+    })
+  }
   const _ll = localStorage.getItem('gauth_last_lookup')
   if(_ll){
     const _li = FILTERED.findIndex(a=>a.email===_ll)
@@ -686,51 +729,43 @@ function applyFilter(){
   document.getElementById('count').textContent = `${FILTERED.length.toLocaleString()}개 · ${totalPages}페이지`
   render()
 }
-function render(){
-  const totalPages = Math.max(1, Math.ceil(FILTERED.length / PAGE_SIZE))
+async function render(){
+  var totalPages = Math.max(1, Math.ceil(FILTERED.length / PAGE_SIZE))
   if (PAGE > totalPages) PAGE = totalPages
-  const start = (PAGE-1) * PAGE_SIZE
-  const end = Math.min(FILTERED.length, start + PAGE_SIZE)
-  const rows = []
+  var start = (PAGE-1) * PAGE_SIZE
+  var end = Math.min(FILTERED.length, start + PAGE_SIZE)
+  const slice = FILTERED.slice(start, end)
+  const codes = await Promise.all(slice.map(a =>
+    a.totp_secret ? fetch(authQuery('/codes/'+a.totp_secret),{headers:authHeaders()}).then(r=>r.json()).then(j=>j.code||'—').catch(()=>'—') : Promise.resolve('—')
+  ))
   const _cur = localStorage.getItem('gauth_last_lookup')||''
-  const _curIdx = _cur ? FILTERED.findIndex(x=>x.email===_cur) : -1
-  for (let i=start;i<end;i++){
-    const a = FILTERED[i]
-    const y = (i-start) * 44
+  var rows = []
+  for (let i=0;i<slice.length;i++){
+    const a = slice[i]
+    const idx = start+i+1
+    const _em = escapeHtml(a.email), _pw = escapeHtml(a.password||'—'), _ts = escapeHtml(a.totp_secret||'—')
+    const yt = a.youtube_url || '', _yt = escapeHtml(yt)
+    const _rc = escapeHtml(a.recovery_email||a.recovery_phone||'—'), _sf = escapeHtml(a.source_file||'—')
+    const _dateMs = a.account_date || a.source_mtime
+    const dt = _dateMs ? new Date(_dateMs).toLocaleString('ko-KR') : '—'
     const sess = accessBadge(a)
     const tfa = a.totp_secret ? '<span class="badge b-2fa">2FA</span>' : ''
-    const lock = a.lock_reason ? `<span class="badge b-lock" title="잠김 사유: ${escapeHtml(a.lock_reason)} (수동 처리 필요)">🔒 ${escapeHtml(a.lock_reason)}</span>` : ''
-    const rec = a.recovery_email || ''
-    const _e = escapeHtml(a.email)
-    const _isLookup = _lookupEmail === a.email
-    const _isLogin = _loginEmail === a.email
-    const btnOpen = _isLookup
-      ? `<button style="background:#ff9040;padding:6px 8px;font-size:11px" disabled>⏳ 조회 중</button>`
-      : a.has_session
-      ? `<button onclick="openIt('${_e}')">🔓 열기</button>`
-      : `<button class="no-sess" onclick="quickLookup('${_e}')">🔍 정보</button>`
-    const btnLogin = _isLogin
-      ? `<button style="background:#f5c842;color:#000;padding:6px 8px;font-size:11px" disabled>⏳ 로그인 중…</button>`
-      : a.lock_reason
-      ? `<button style="background:#555;padding:6px 8px;font-size:11px" onclick="unlockAccount('${_e}',this)">🔓 잠금해제</button>`
-      : `<button style="background:#7c3aed;padding:6px 8px;font-size:11px" onclick="programLogin('${_e}',this)">🔑 로그인</button>`
+    const lock = a.lock_reason ? `<span class="badge b-lock" title="${escapeHtml(a.lock_reason)}">🔒 ${escapeHtml(a.lock_reason)}</span>` : ''
     const _isCur = a.email===_cur
-    const _isNext = _curIdx>=0 && i===_curIdx+1
-    const _hl = _isLookup ? 'background:#2a1a00;border-left:4px solid #ff9040;box-shadow:inset 0 0 20px rgba(255,144,64,0.1);' : _isLogin ? 'background:#2a2a00;border-left:4px solid #f5c842;box-shadow:inset 0 0 20px rgba(245,200,66,0.1);' : _isCur ? 'background:#0d2818;border-left:4px solid #3ddc84;box-shadow:inset 0 0 20px rgba(61,220,132,0.08);' : _isNext ? 'background:#0d1528;border-left:4px solid #7dabff;box-shadow:inset 0 0 20px rgba(125,171,255,0.08);' : ''
-    const _label = _isCur ? '<span style="background:#3ddc84;color:#000;font-size:10px;font-weight:800;margin-left:8px;padding:1px 6px;border-radius:3px">★ 현재 조회</span>' : _isNext ? '<span style="background:#7dabff;color:#000;font-size:10px;font-weight:800;margin-left:8px;padding:1px 6px;border-radius:3px">▶ 다음</span>' : ''
-    const _p = escapeHtml(a.password||'—')
-    const _t = a.totp_secret ? escapeHtml(a.totp_secret.slice(0,20))+'…' : '—'
-    const _r = escapeHtml(rec||'—')
-    rows.push(`<div class="row" style="top:${y}px;${_hl}">
-      <div class="email" style="cursor:pointer;color:${_isCur?'#3ddc84':_isNext?'#7dabff':'#7dabff'}" onclick="quickLookup('${_e}')">${_e}${_label}</div>
-      <div>${sess}${tfa}${lock}</div>
-      <div class="mono pw">${_p}</div>
-      <div class="mono">${_t}</div>
-      <div class="mono">${_r}</div>
-      <div style="display:flex;gap:4px;flex-wrap:wrap">${btnOpen}${btnLogin}</div>
+    const _hl = _isCur ? 'border-left:4px solid #3ddc84;background:#0d2818;' : ''
+    rows.push(`<div class="td-card" style="background:#161a20;border:1px solid #2a323c;border-radius:8px;padding:12px;margin-bottom:8px;${_hl}">
+      <div class="td-grid" style="display:grid;grid-template-columns:100px 1fr;gap:6px 12px;font-size:13px">
+        <div class="td-label" style="color:#8a95a5">#${idx}</div><div><b class="td-email" style="color:#ffb469;font-size:14px;cursor:pointer" onclick="quickLookup('${_em}')">${_em}</b>${cp(a.email)} ${sess}${tfa}${lock}</div>
+        <div class="td-label" style="color:#8a95a5">비밀번호</div><div class="mono td-val td-pw" style="color:#3ddc84">${_pw}${cp(a.password)}</div>
+        <div class="td-label" style="color:#8a95a5">2FA 시크릿</div><div class="mono td-val td-secret"><span id="sec-${idx}">${_ts}</span>${cp(a.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${_em}','sec-${idx}')">✏️</button></div>
+        <div class="td-label" style="color:#8a95a5">2FA 코드</div><div class="mono td-val td-2fa-code" style="color:#7dabff;font-size:18px;font-weight:700;letter-spacing:2px"><span id="tdcode-${idx}">${codes[i]}</span>${a.totp_secret?cp('_','tdcode-'+idx):cp(codes[i]!=='—'?codes[i]:'')}${a.totp_secret?`<button style="background:#2a323c;padding:3px 8px;font-size:11px;margin-left:6px;color:#c9d2dc" onclick="tdRefreshCode(${idx},'${escapeHtml(a.totp_secret)}',this)">🔄 새로고침</button>`:''}</div>
+        <div class="td-label" style="color:#8a95a5">동작</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button style="background:#7c3aed" onclick="programLogin('${_em}',this)">🔑 로그인</button><button style="background:#1c5a2a;color:#3ddc84;font-weight:700" onclick="ytApiConnect('${_em}',this)">📡 API 연결</button><button style="background:#1c2740;color:#7dabff;font-weight:700" onclick="ytChatShot('${_em}','sky82892 텔레 문의',this)">💬 채팅 샷</button><button style="background:#3a1c00;color:#ff9040;font-weight:700" onclick="ytSpanner('${_em}',this)">🔧 스패너</button></div>
+        <div class="td-label" style="color:#8a95a5">YouTube</div><div class="mono td-val" style="color:#ff8a8a;font-size:11px">${yt&&/^https?:\/\//i.test(yt)?`<a href="${_yt}" target="_blank" style="color:#ff8a8a">${_yt}</a>${cp(yt)}`:'—'}</div>
+        <div class="td-label" style="color:#8a95a5">복구</div><div class="mono td-val" style="font-size:11px">${_rc}</div>
+        <div class="td-label" style="color:#8a95a5">엑셀</div><div class="mono td-val" style="font-size:11px;color:#8a95a5">${_sf} · ${dt}</div>
+      </div>
     </div>`)
   }
-  sp.style.height = ((end-start) * 44) + 'px'
   sp.innerHTML = rows.join('')
   renderPagination(totalPages)
 }
@@ -993,77 +1028,18 @@ async function lookup(){
     PAGE = 1
     render()
     setTimeout(()=>{
-      const vp = document.getElementById('viewport')
-      if(vp) vp.scrollTo({top:0})
-      document.getElementById('viewport').scrollIntoView({behavior:'smooth',block:'start'})
+      var vp2 = document.getElementById('viewport')
+      if(vp2) vp2.scrollTo({top:0})
+      if(vp2) vp2.scrollIntoView({behavior:'smooth',block:'start'})
     }, 100)
   }
 }
-document.getElementById('lookup-btn').addEventListener('click', lookup)
-document.getElementById('lookup').addEventListener('keydown', e=>{if(e.key==='Enter')lookup()})
+var _lookupBtn = document.getElementById('lookup-btn')
+var _lookupInput = document.getElementById('lookup')
+if(_lookupBtn) _lookupBtn.addEventListener('click', lookup)
+if(_lookupInput) _lookupInput.addEventListener('keydown', e=>{if(e.key==='Enter')lookup()})
 ;(function(){var ll=localStorage.getItem('gauth_last_lookup');if(ll){document.getElementById('lookup').value=ll;lookup()}})()
 
-// --- 시간 순서 계정 정보 확인 (20개씩 페이지) ---
-const TD_PAGE_SIZE = window.innerWidth <= 768 ? 10 : 20
-let TD=[], TDP=1
-async function tdLoad(){
-  // ALL은 이미 로드됨 (accounts_normalized 전체, source_mtime 포함)
-  if(!ALL.length){alert('아직 계정 로드 안됨');return}
-  TD = [...ALL].sort((x,y)=>{
-    const d = (x.source_mtime||0) - (y.source_mtime||0)
-    return document.getElementById('td-order').value==='desc' ? -d : d
-  })
-  TDP = 1
-  document.getElementById('td-result').style.display='block'
-  tdRender()
-}
-async function tdRender(){
-  const total = TD.length, pages = Math.max(1, Math.ceil(total/TD_PAGE_SIZE))
-  if(TDP>pages) TDP=pages
-  const s = (TDP-1)*TD_PAGE_SIZE, e = Math.min(total, s+TD_PAGE_SIZE)
-  const box = document.getElementById('td-result')
-  box.innerHTML = `<div style="color:#8a95a5;margin-bottom:10px">${s+1}~${e} / 총 ${total}개 (${TDP}/${pages}페이지)</div><div id="td-loading">TOTP 코드 계산 중…</div>`
-
-  // 20개 각각의 TOTP 코드 병렬 fetch
-  const slice = TD.slice(s, e)
-  const codes = await Promise.all(slice.map(a =>
-    a.totp_secret ? fetch(authQuery('/codes/'+a.totp_secret),{headers:authHeaders()}).then(r=>r.json()).then(j=>j.code||'—').catch(()=>'—') : Promise.resolve('—')
-  ))
-
-  const cards = slice.map((a, i) => {
-    const dt = a.source_mtime ? new Date(a.source_mtime).toLocaleString('ko-KR') : '—'
-    const idx = s+i+1
-    const yt = a.youtube_url || ''
-    const _em = escapeHtml(a.email), _pw = escapeHtml(a.password||'—'), _ts = escapeHtml(a.totp_secret||'—'), _yt = escapeHtml(yt), _rc = escapeHtml(a.recovery_email||a.recovery_phone||'—'), _sf = escapeHtml(a.source_file||'—')
-    return `<div class="td-card" style="background:#161a20;border:1px solid #2a323c;border-radius:8px;padding:12px;margin-bottom:8px">
-      <div class="td-grid" style="display:grid;grid-template-columns:100px 1fr;gap:6px 12px;font-size:13px">
-        <div class="td-label" style="color:#8a95a5">#${idx}</div><div><b class="td-email" style="color:#ffb469;font-size:14px">${_em}</b>${cp(a.email)} ${accessBadge(a)}</div>
-        <div class="td-label" style="color:#8a95a5">비밀번호</div><div class="mono td-val td-pw" style="color:#3ddc84">${_pw}${cp(a.password)}</div>
-        <div class="td-label" style="color:#8a95a5">2FA 시크릿</div><div class="mono td-val td-secret"><span id="sec-${idx}">${_ts}</span>${cp(a.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${_em}','sec-${idx}')">✏️</button></div>
-        <div class="td-label" style="color:#8a95a5">2FA 코드</div><div class="mono td-val td-2fa-code" style="color:#7dabff;font-size:18px;font-weight:700;letter-spacing:2px"><span id="tdcode-${idx}">${codes[i]}</span>${a.totp_secret?cp('_', 'tdcode-'+idx):cp(codes[i]!=='—'?codes[i]:'')}${a.totp_secret?`<button style="background:#2a323c;padding:3px 8px;font-size:11px;margin-left:6px;color:#c9d2dc" onclick="tdRefreshCode(${idx},'${escapeHtml(a.totp_secret)}',this)">🔄 새로고침</button>`:''}</div>
-        <div class="td-label" style="color:#8a95a5">동작</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button style="background:#7c3aed" onclick="programLogin('${_em}',this)">🔑 로그인</button><button style="background:#1c5a2a;color:#3ddc84;font-weight:700" onclick="ytApiConnect('${_em}',this)">📡 API 연결</button><button style="background:#1c2740;color:#7dabff;font-weight:700" onclick="ytChatShot('${_em}','sky82892 텔레 문의',this)">💬 채팅 샷</button><button style="background:#3a1c00;color:#ff9040;font-weight:700" onclick="ytSpanner('${_em}',this)">🔧 스패너</button></div>
-        <div class="td-label" style="color:#8a95a5">YouTube</div><div class="mono td-val" style="color:#ff8a8a;font-size:11px">${yt&&/^https?:\/\//i.test(yt)?`<a href="${_yt}" target="_blank" style="color:#ff8a8a">${_yt}</a>${cp(yt)}`:'—'}</div>
-        <div class="td-label" style="color:#8a95a5">복구</div><div class="mono td-val" style="font-size:11px">${_rc}</div>
-        <div class="td-label" style="color:#8a95a5">엑셀</div><div class="mono td-val" style="font-size:11px;color:#8a95a5">${_sf} · ${dt}</div>
-      </div>
-    </div>`
-  }).join('')
-
-  // 페이지네이션
-  const btn = (l, p, disabled, active) => `<button ${disabled?'disabled':''} style="min-width:36px;background:${active?'#ff9040':'#2a323c'}" onclick="tdGoto(${p})">${l}</button>`
-  const from = Math.max(1, TDP-3), to = Math.min(pages, TDP+3)
-  let pgHtml = btn('«',1,TDP===1)+btn('‹',TDP-1,TDP===1)
-  if(from>1) pgHtml += '<span style="color:#8a95a5">…</span>'
-  for(let i=from;i<=to;i++) pgHtml += btn(i,i,false,i===TDP)
-  if(to<pages) pgHtml += '<span style="color:#8a95a5">…</span>'
-  pgHtml += btn('›',TDP+1,TDP===pages)+btn('»',pages,TDP===pages)
-  pgHtml += ` <span style="color:#8a95a5;font-size:12px;margin-left:10px">${TDP} / ${pages}</span>`
-
-  box.innerHTML = `
-    <div style="color:#8a95a5;margin-bottom:10px">${s+1}~${e} / 총 ${total}개 · ${TDP}/${pages}페이지 · 20개씩</div>
-    ${cards}
-    <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;padding:10px 0">${pgHtml}</div>`
-}
 async function lookupRefreshCode(secret, btn){
   const el = document.getElementById('lookup-code')
   if(!el) return
@@ -1081,7 +1057,7 @@ async function lookupRefreshCode(secret, btn){
   }catch{btn.textContent='❌';setTimeout(()=>btn.textContent=old, 1200)}
 }
 async function editSecret(email, spanId){
-  const cur = document.getElementById(spanId)?.textContent || ''
+  var el = document.getElementById(spanId); var cur = (el && el.textContent) || ''
   const ns = prompt('새 TOTP 시크릿 (Base32, 16자 이상):', cur === '—' ? '' : cur)
   if(!ns) return
   try{
@@ -1111,14 +1087,16 @@ async function tdRefreshCode(idx, secret, btn){
 }
 /* YouTube API OAuth 연동 */
 var _ytClientId = '';
-(async function(){ try { const r = await fetch('/api/youtube/client-id'); const j = await r.json(); _ytClientId = j.client_id || ''; } catch{} })();
+(async function(){ try { const r = await fetch(authQuery('/api/youtube/client-id'),{headers:authHeaders()}); const j = await r.json(); _ytClientId = j.client_id || ''; } catch{} })();
 
 async function ytApiConnect(email, btn) {
   if (!_ytClientId) { alert('YouTube OAuth Client ID가 서버에 설정되지 않았습니다.\nYOUTUBE_OAUTH_CLIENT_ID 환경변수를 설정하세요.'); return; }
   const orig = btn.textContent; btn.disabled = true; btn.textContent = '⏳ 연결 중…';
   const redirectUri = location.origin + '/';
   const scope = 'https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube.force-ssl';
-  const state = encodeURIComponent(JSON.stringify({ email }));
+  var _oauthNonce = Array.from(crypto.getRandomValues(new Uint8Array(16)),function(b){return b.toString(16).padStart(2,'0')}).join('');
+  sessionStorage.setItem('yt_oauth_nonce', _oauthNonce);
+  const state = encodeURIComponent(JSON.stringify({ email, nonce: _oauthNonce }));
   const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=' + encodeURIComponent(_ytClientId)
     + '&redirect_uri=' + encodeURIComponent(redirectUri)
     + '&response_type=token&scope=' + encodeURIComponent(scope)
@@ -1134,10 +1112,19 @@ async function ytApiConnect(email, btn) {
         const hash = popup.location.hash.substring(1);
         popup.close(); clearInterval(checkInterval);
         const params = new URLSearchParams(hash);
+        var returnedState = params.get('state');
+        try {
+          var stateObj = JSON.parse(decodeURIComponent(returnedState || '{}'));
+          var savedNonce = sessionStorage.getItem('yt_oauth_nonce');
+          if (!stateObj.nonce || stateObj.nonce !== savedNonce) {
+            btn.textContent = '❌ state 불일치'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000); return;
+          }
+          sessionStorage.removeItem('yt_oauth_nonce');
+        } catch(_) { btn.textContent = '❌ state 파싱 실패'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000); return; }
         const token = params.get('access_token');
         const expiresIn = parseInt(params.get('expires_in') || '3600');
         if (token) {
-          await fetch('/api/youtube/save-token', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, access_token: token, expires_at: Date.now() + expiresIn * 1000 }) });
+          await fetch(authQuery('/api/youtube/save-token'), { method: 'POST', headers: authHeaders({'content-type': 'application/json'}), body: JSON.stringify({ email, access_token: token, expires_at: Date.now() + expiresIn * 1000 }) });
           btn.textContent = '✅ 연결됨'; btn.style.background = '#0d3222'; btn.style.color = '#3ddc84';
           setTimeout(() => { btn.textContent = orig; btn.disabled = false; btn.style.background = ''; btn.style.color = ''; }, 2000);
         } else { btn.textContent = '❌ 실패'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000); }
@@ -1149,10 +1136,10 @@ async function ytApiConnect(email, btn) {
 async function ytChatShot(email, message, btn) {
   const orig = btn.textContent; btn.disabled = true; btn.textContent = '⏳ 전송 중…';
   try {
-    const br = await fetch('/api/youtube/live-chat-id/' + encodeURIComponent(email)); const bj = await br.json();
+    const br = await fetch(authQuery('/api/youtube/live-chat-id/' + encodeURIComponent(email)),{headers:authHeaders()}); const bj = await br.json();
     if (!bj.ok || !bj.broadcasts || !bj.broadcasts.length) { alert('현재 활성 방송이 없습니다.'); btn.textContent = orig; btn.disabled = false; return; }
     const liveChatId = bj.broadcasts[0].liveChatId;
-    const r = await fetch('/api/youtube/chat-message', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, liveChatId, message }) });
+    const r = await fetch(authQuery('/api/youtube/chat-message'), { method: 'POST', headers: authHeaders({'content-type': 'application/json'}), body: JSON.stringify({ email, liveChatId, message }) });
     const j = await r.json();
     if (j.ok) { btn.textContent = '✅ 전송됨'; btn.style.background = '#0d3222'; }
     else { btn.textContent = '❌ 실패'; alert('채팅 전송 실패: ' + JSON.stringify(j.data && j.data.error ? j.data.error.message : j)); }
@@ -1165,14 +1152,14 @@ async function ytSpanner(email, btn) {
   if (_spannerInterval) { clearInterval(_spannerInterval); _spannerInterval = null; }
   const orig = btn.textContent; btn.disabled = true; btn.textContent = '⏳ 로딩…';
   try {
-    const br = await fetch('/api/youtube/live-chat-id/' + encodeURIComponent(email)); const bj = await br.json();
+    const br = await fetch(authQuery('/api/youtube/live-chat-id/' + encodeURIComponent(email)),{headers:authHeaders()}); const bj = await br.json();
     if (!bj.ok || !bj.broadcasts || !bj.broadcasts.length) { alert('현재 활성 방송이 없습니다.'); btn.textContent = orig; btn.disabled = false; return; }
     const liveChatId = bj.broadcasts[0].liveChatId;
     let box = document.getElementById('spanner-box');
     if (!box) { box = document.createElement('div'); box.id = 'spanner-box'; box.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#0f1318;border:2px solid #ff9040;border-radius:12px;padding:20px;z-index:10000;max-width:400px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.7)'; document.body.appendChild(box); }
     box.style.display = 'block';
     async function loadViewers() {
-      const r = await fetch('/api/youtube/chat-list/' + encodeURIComponent(email) + '?liveChatId=' + encodeURIComponent(liveChatId));
+      const r = await fetch(authQuery('/api/youtube/chat-list/' + encodeURIComponent(email) + '?liveChatId=' + encodeURIComponent(liveChatId)),{headers:authHeaders()});
       const j = await r.json();
       if (!j.ok) return;
       const seen = new Map();
@@ -1194,7 +1181,7 @@ async function ytSpanner(email, btn) {
 async function ytAddMod(email, liveChatId, channelId, btn) {
   const orig = btn.textContent; btn.disabled = true; btn.textContent = '⏳';
   try {
-    const r = await fetch('/api/youtube/add-moderator', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, liveChatId, channelId }) });
+    const r = await fetch(authQuery('/api/youtube/add-moderator'), { method: 'POST', headers: authHeaders({'content-type': 'application/json'}), body: JSON.stringify({ email, liveChatId, channelId }) });
     const j = await r.json();
     if (j.ok) { btn.textContent = '✅ 완료'; btn.style.background = '#0d3222'; }
     else { btn.textContent = '❌'; alert('스패너 실패: ' + JSON.stringify(j.data && j.data.error ? j.data.error.message : j)); }
@@ -1202,29 +1189,26 @@ async function ytAddMod(email, liveChatId, channelId, btn) {
   setTimeout(() => { btn.textContent = orig; btn.disabled = false; btn.style.background = ''; }, 2000);
 }
 
-function tdGoto(n){
-  const pages = Math.max(1, Math.ceil(TD.length/TD_PAGE_SIZE))
-  TDP = Math.max(1, Math.min(pages, n))
-  tdRender()
-  document.getElementById('td-result').scrollIntoView({behavior:'smooth', block:'start'})
-}
-document.getElementById('td-load').addEventListener('click', tdLoad)
-document.getElementById('td-order').addEventListener('change', ()=>{if(TD.length){tdLoad()}})
-// Auto-load: 페이지 로드 후 자동으로 최신순 계정 목록 표시
-window._gauthAutoLoad = true
+var _tdOrder = document.getElementById('td-order')
+if(_tdOrder) _tdOrder.addEventListener('change', applyFilter)
 // 페이지네이션으로 전환: 스크롤 렌더 제거
-document.getElementById('q').addEventListener('input', applyFilter)
-document.getElementById('filter').addEventListener('change', applyFilter)
-document.getElementById('batch-run').addEventListener('click', async () => {
+var _qInput = document.getElementById('q')
+var _filterSelect = document.getElementById('filter')
+if(_qInput) _qInput.addEventListener('input', applyFilter)
+if(_filterSelect) _filterSelect.addEventListener('change', applyFilter)
+var _batchRunBtn = document.getElementById('batch-run')
+if(_batchRunBtn) _batchRunBtn.addEventListener('click', async () => {
   const total = ALL.length
   if (!confirm(`전체 ${total}개 중 미로그인만 순서대로 로그인 시도. 계속?`)) return
   const r = await fetch(authQuery('/api/start'),{method:'POST',headers:authHeaders({'content-type':'application/json'}),body:JSON.stringify({start:0,end:total,concurrency:8,skipLoggedIn:true})})
   alert('배치 시작: '+JSON.stringify(await r.json()))
 })
-document.getElementById('batch-stop').addEventListener('click', async () => {
+var _batchStopBtn = document.getElementById('batch-stop')
+if(_batchStopBtn) _batchStopBtn.addEventListener('click', async () => {
   await fetch(authQuery('/api/stop'),{method:'POST',headers:authHeaders()});alert('정지 요청 전송')
 })
-document.getElementById('export').addEventListener('click', async () => {
+var _exportBtn = document.getElementById('export')
+if(_exportBtn) _exportBtn.addEventListener('click', async () => {
   const parts = parseInt(document.getElementById('parts').value,10) || 1
   const filter = document.getElementById('filter').value
   const r = await fetch(authQuery('/api/export-split'),{method:'POST',headers:authHeaders({'content-type':'application/json'}),body:JSON.stringify({parts,filter})})
@@ -1232,261 +1216,33 @@ document.getElementById('export').addEventListener('click', async () => {
   const blob = await r.blob()
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href=url; a.download=`gauth-split-${parts}.zip`; a.click()
-  setTimeout(()=>URL.revokeObjectURL(url),1000)
+  setTimeout(()=>URL.revokeObjectURL(url),60000)
 })
 load()
 </script><!-- GCP VM 제어 패널 (하단, 모바일 반응형)
      ref: MDN CSS Grid https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout
      ref: MDN CSS @media https://developer.mozilla.org/en-US/docs/Web/CSS/@media -->
-<style>
-#vmCtrlBox{margin:20px 10px;padding:14px;background:#0f1218;border:2px solid #2a323c;border-radius:10px;font-family:'SF Mono',monospace}
-#vmCtrlBox h3{margin:0 0 12px;color:#3ddc84;font-size:15px}
-#vmCtrlBox .vmPw{display:flex;gap:6px;margin-bottom:10px}
-#vmCtrlBox .vmPw input{flex:1;background:#fff;border:3px solid #ffcc00;color:#000;padding:14px;border-radius:5px;font-size:18px;font-weight:700}
-#vmCtrlBox .vmPw input::placeholder{color:#666;font-weight:600}
-#vmCtrlBox .vmPw button{background:#2b6cff;color:#fff;border:0;padding:8px 14px;border-radius:5px;cursor:pointer;font-size:12px;white-space:nowrap}
-#vmList{display:grid;grid-template-columns:1fr;gap:8px}
-@media (min-width:640px){#vmList{grid-template-columns:1fr 1fr}}
-.vmCard{background:#161a20;border:1px solid #2a323c;border-radius:6px;padding:10px;font-size:12px}
-.vmCard b{color:#e8ecef;font-size:13px}
-.vmSt{display:inline-block;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:600;margin-left:6px}
-.st-RUNNING{background:#0d3222;color:#3ddc84}
-.st-TERMINATED,.st-STOPPED{background:#3a1c1c;color:#f47070}
-.st-STOPPING,.st-STARTING{background:#2a2a1a;color:#ffd400}
-.st-UNKNOWN{background:#252525;color:#888}
-.vmBtns{display:flex;gap:6px;margin-top:8px}
-.vmBtns button{flex:1;padding:8px;border:0;border-radius:5px;cursor:pointer;font-weight:600;font-size:12px}
-.btnStart{background:#0a8f3c;color:#fff}
-.btnStop{background:#e0503a;color:#fff}
-.btnSsh{background:#5b21b6;color:#fff}
-.btnRefresh{background:#2b6cff;color:#fff;padding:8px 12px}
-#vmLog{margin-top:10px;padding:6px 10px;background:#0a0d13;border:1px solid #1a1f26;border-radius:4px;font-size:11px;color:#8a95a5;max-height:80px;overflow-y:auto;white-space:pre-wrap}
-</style>
-<div id="vmCtrlBox" style="display:none">
-  <h3>🖥 GCP 서버 제어 (관리자)</h3>
-  <div class="vmPw">
-    <input type="password" id="vmPw" placeholder="관리자 비밀번호" autocomplete="off">
-    <button id="vmRefresh" class="btnRefresh">🔄 상태 새로고침</button>
-  </div>
-  <div id="vmList">불러오는 중…</div>
-  <div id="vmLog"></div>
-</div>
+
+
+
 <script>
-(function(){
-  var listEl = document.getElementById('vmList');
-  var pwEl = document.getElementById('vmPw');
-  var logEl = document.getElementById('vmLog');
-  var refreshBtn = document.getElementById('vmRefresh');
-  /* MDN sessionStorage: 탭 닫으면 소멸 — https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage */
-  try { pwEl.value = sessionStorage.getItem('vm_admin_pw') || ''; } catch(_) {}
-  pwEl.addEventListener('change', function(){ try{ sessionStorage.setItem('vm_admin_pw', pwEl.value); }catch(_){} });
-
-  function log(msg){
-    var t = new Date().toLocaleTimeString();
-    logEl.textContent = ('[' + t + '] ' + msg + String.fromCharCode(10) + logEl.textContent).slice(0, 2000);
-  }
-
-  function render(vms){
-    if (!vms.length) { listEl.textContent = 'VM 없음'; return; }
-    listEl.innerHTML = vms.map(function(v){
-      var st = v.status || 'UNKNOWN';
-      var canStart = st !== 'RUNNING' && st !== 'STARTING';
-      var canStop = st === 'RUNNING' && v.name !== 'gucci-yanolza';
-      return '<div class="vmCard">'
-        + '<b>' + escapeHtml(v.name) + '</b>'
-        + '<span class="vmSt st-' + escapeHtml(st) + '">' + escapeHtml(st) + '</span>'
-        + '<div style="color:#8a95a5;margin-top:4px">' + escapeHtml(v.label || '') + '</div>'
-        + '<div style="color:#666;font-size:10px;margin-top:2px">' + escapeHtml(v.zone) + '</div>'
-        + '<div class="vmBtns">'
-        + '<button class="btnStart" ' + (canStart?'':'disabled') + ' data-action="start" data-name="' + escapeHtml(v.name) + '" data-project="' + escapeHtml(v.project) + '" data-zone="' + escapeHtml(v.zone) + '">▶ 시작</button>'
-        + '<button class="btnStop"  ' + (canStop?'':'disabled')  + ' data-action="stop"  data-name="' + escapeHtml(v.name) + '" data-project="' + escapeHtml(v.project) + '" data-zone="' + escapeHtml(v.zone) + '">■ 정지</button>'
-        + '<button class="btnSsh" data-action="ssh" data-name="' + escapeHtml(v.name) + '" data-project="' + escapeHtml(v.project) + '" data-zone="' + escapeHtml(v.zone) + '">🖥 SSH</button>'
-        + '</div>'
-        + (v.error ? '<div style="color:#f47070;font-size:10px;margin-top:4px">' + escapeHtml(v.error) + '</div>' : '')
-        + '</div>';
-    }).join('');
-    /* 버튼 이벤트 위임 */
-    [].forEach.call(listEl.querySelectorAll('button[data-action]'), function(btn){
-      btn.addEventListener('click', function(){
-        var action = btn.getAttribute('data-action');
-        if (action === 'ssh') {
-          /* GCP 공식 SSH-in-browser: https://cloud.google.com/compute/docs/ssh-in-browser */
-          var url = 'https://console.cloud.google.com/compute/instancesDetail/zones/' + encodeURIComponent(btn.getAttribute('data-zone')) + '/instances/' + encodeURIComponent(btn.getAttribute('data-name')) + '?project=' + encodeURIComponent(btn.getAttribute('data-project'));
-          window.open(url, '_blank');
-          return;
-        }
-        var body = { pw: pwEl.value, name: btn.getAttribute('data-name'), project: btn.getAttribute('data-project'), zone: btn.getAttribute('data-zone') };
-        if (!body.pw) { log('❌ 비번 먼저 입력'); return; }
-        if (action === 'stop' && !confirm(body.name + ' 정지할까요?')) return;
-        btn.disabled = true;
-        log(action + ' → ' + body.name);
-        fetch(authQuery('/api/vm/' + action), { method:'POST', headers:authHeaders({'Content-Type':'application/json'}), body: JSON.stringify(body) })
-          .then(function(r){ return r.json().then(function(j){ return {status:r.status, j:j}; }); })
-          .then(function(x){
-            if (x.status === 200 && x.j.ok) log('✅ ' + action + ' 요청 접수: ' + body.name);
-            else log('❌ ' + (x.j.error || 'HTTP ' + x.status));
-            setTimeout(loadList, 3000);
-          })
-          .catch(function(e){ log('❌ ' + e.message); btn.disabled = false; });
-      });
-    });
-  }
-  function loadList(){
-    listEl.textContent = '⏳ 로딩…';
-    fetch(authQuery('/api/vm/list'), {cache:'no-store', headers:authHeaders()})
-      .then(function(r){ return r.json(); })
-      .then(function(d){ if (d.ok) render(d.vms); else { listEl.textContent = '❌ ' + (d.error||'실패'); } })
-      .catch(function(e){ listEl.textContent = '❌ ' + e.message; });
-  }
-  refreshBtn.addEventListener('click', loadList);
-  /* 초기 로드 + 30초마다 자동 새로고침 */
-  loadList();
-  /* auto-refresh disabled */
-})();
+function toggleSection(id, btn) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  var isHidden = el.style.display === 'none' || el.style.display === '';
+  el.style.display = isHidden ? 'block' : 'none';
+  btn.style.background = isHidden ? '#2b6cff' : '#1a1f28';
+}
 </script>
-
-
-
-<button id="site-map-open" title="활성 사이트" style="display:none" onclick="var f=document.getElementById('site-map-footer'); if(f){f.style.display='block';this.style.display='none';}" style="position:fixed;right:8px;bottom:8px;z-index:9998;width:44px;height:44px;border-radius:50%;background:rgba(15,22,32,.97);border:1.5px solid #22282f;color:#f5c842;font-size:20px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.5);">🌐</button>
-<div id="site-map-footer" style="position:fixed;right:8px;bottom:8px;max-width:380px;max-height:78vh;overflow-y:auto;background:rgba(15,22,32,0.97);border:1.5px solid #22282f;border-radius:8px;padding:10px 12px;z-index:9999;font-size:11px;color:#8a95a5;font-family:-apple-system,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.5);display:none">
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-  <b style="color:#e8ecef">🌐 활성 사이트 (Cloudflare DNS 실측)</b>
-  <span id="site-map-close" style="cursor:pointer;color:#666;font-size:13px" onclick="this.parentNode.parentNode.style.display='none';document.getElementById('site-map-open').style.display='block';">✕</span>
-</div>
-
-<details><summary style="cursor:pointer;color:#7dabff;font-weight:700;margin:4px 0">🇯🇵 my-site-1 (도쿄)</summary>
-<ul style="margin:2px 0 4px 14px;padding:0;list-style:'▸ ';line-height:1.6">
-<li><a href="https://xn--9d0bw2fjtyymch7de9d.info" target="_blank" style="color:#f5c842"><b>참교육카지노.info</b></a></li>
-<li><a href="https://www.xn--9d0bw2fjtyymch7de9d.info" target="_blank" style="color:#f5c842">www.참교육카지노.info</a></li>
-<li><a href="https://invest.xn--9d0bw2fjtyymch7de9d.info" target="_blank" style="color:#f5c842">invest.참교육카지노.info</a></li>
-<li><a href="https://studio.xn--9d0bw2fjtyymch7de9d.info" target="_blank" style="color:#f5c842">studio.참교육카지노.info</a></li>
-<li><a href="https://cent-solutions.info" target="_blank" style="color:#3ddc84"><b>cent-solutions.info</b></a></li>
-<li><a href="https://www.cent-solutions.info" target="_blank" style="color:#3ddc84">www.cent-solutions.info</a></li>
-<li><a href="https://mail.cent-solutions.info" target="_blank" style="color:#3ddc84">mail.cent-solutions.info</a></li>
-<li><a href="https://ns1.cent-solutions.info" target="_blank" style="color:#3ddc84">ns1.cent-solutions.info</a></li>
-<li><a href="https://ns2.cent-solutions.info" target="_blank" style="color:#3ddc84">ns2.cent-solutions.info</a></li>
-<li><a href="https://studio.cent-solutions.info" target="_blank" style="color:#3ddc84">studio.cent-solutions.info</a></li>
-</ul></details>
-
-<details><summary style="cursor:pointer;color:#7dabff;font-weight:700;margin:4px 0">🇸🇬 gucci-yanolza (싱가포르) ← 이 서버</summary>
-<ul style="margin:2px 0 4px 14px;padding:0;list-style:'▸ ';line-height:1.6">
-<li><a href="https://cent-solution.online" target="_blank" style="color:#ffb469"><b>cent-solution.online</b></a></li>
-<li><a href="https://www.cent-solution.online" target="_blank" style="color:#ffb469">www.cent-solution.online</a></li>
-<li><a href="https://admin.cent-solution.online" target="_blank" style="color:#ffb469">admin.cent-solution.online</a></li>
-<li><a href="https://gauth.cent-solution.online" target="_blank" style="color:#ff9040"><b>gauth.cent-solution.online</b> ← 현재</a></li>
-<li><a href="https://gucci-live.cc" target="_blank" style="color:#ff9dff"><b>gucci-live.cc</b></a></li>
-<li><a href="https://www.gucci-live.cc" target="_blank" style="color:#ff9dff">www.gucci-live.cc</a></li>
-<li><a href="https://hoya-avata.cc" target="_blank" style="color:#c88fff"><b>hoya-avata.cc</b></a></li>
-<li><a href="https://www.hoya-avata.cc" target="_blank" style="color:#c88fff">www.hoya-avata.cc</a></li>
-<li><a href="https://api.hoya-avata.cc" target="_blank" style="color:#c88fff">api.hoya-avata.cc</a></li>
-<li><a href="https://auth.hoya-avata.cc" target="_blank" style="color:#c88fff">auth.hoya-avata.cc</a></li>
-<li><a href="https://relay.hoya-avata.cc" target="_blank" style="color:#c88fff">relay.hoya-avata.cc</a></li>
-</ul></details>
-
-<details><summary style="cursor:pointer;color:#7dabff;font-weight:700;margin:4px 0">🇮🇩 my-site-jkt (자카르타)</summary>
-<ul style="margin:2px 0 4px 14px;padding:0;list-style:'▸ ';line-height:1.6">
-<li><a href="https://panda-avata.cc" target="_blank" style="color:#aafa82"><b>panda-avata.cc</b></a></li>
-<li><a href="https://www.panda-avata.cc" target="_blank" style="color:#aafa82">www.panda-avata.cc</a></li>
-</ul></details>
-
-<details><summary style="cursor:pointer;color:#f59090;font-weight:700;margin:4px 0">⏳ 초기화 중</summary>
-<ul style="margin:2px 0 4px 14px;padding:0;list-style:'▸ ';line-height:1.6">
-<li><span style="color:#7a7a7a">로망아바타.info (DNS 프록시 OFF, 네임서버 변경 대기)</span></li>
-</ul></details>
-
-<div style="margin-top:8px;padding-top:6px;border-top:1px solid #22282f;font-size:9.5px;color:#5a6570;line-height:1.5">
-📊 <b>3 서버 · 7 도메인 · 20 서브도메인</b> · 4 브랜드<br>
-🔒 Cloudflare 프록시 100% · SSL Google Trust Services (WE1)<br>
-⚡ Origin IP 은닉 · DDoS/WAF 보호
-</div>
-</div>
 
 
 <script src="xlsx.core.min.js"></script>
 <script>
 let _deferredPrompt;
 window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();_deferredPrompt=e;document.getElementById('pwa-install-btn').style.display='block'});
-document.getElementById('pwa-install-btn').addEventListener('click',function(){if(!_deferredPrompt)return;_deferredPrompt.prompt();_deferredPrompt.userChoice.then(function(){_deferredPrompt=null;document.getElementById('pwa-install-btn').style.display='none'})});
+document.getElementById('pwa-install-btn').addEventListener('click',function(){if(!_deferredPrompt)return;_deferredPrompt.prompt();_deferredPrompt.userChoice.then(function(r){if(r.outcome==='accepted'){_deferredPrompt=null;document.getElementById('pwa-install-btn').style.display='none'}}).catch(function(){})});
 window.addEventListener('appinstalled',function(){document.getElementById('pwa-install-btn').style.display='none'});
-if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){})}
-</script>
-
-<script>
-/* ━━━━━━ YouTube Batch Connect ━━━━━━
- * 무작위 N개 계정 선택 → 자동 로그인 → OAuth → 참교육 DB 등록
- * 절대 제외: vin7899, videowatch.show, rhkdrh999
- * 절대 제외: 리스트 상위 30개 */
-let _batchPoll = null;
-
-async function startBatchConnect(count) {
-  const token = getApiToken();
-  if (!token) { alert('API 토큰을 입력하세요'); return; }
-
-  const clientId = prompt('OAuth Client ID (비우면 서버 환경변수 사용):', '') || '';
-  const clientSecret = prompt('OAuth Client Secret (비우면 서버 환경변수 사용):', '') || '';
-  const delayMin = parseFloat(prompt('계정 간 대기 시간 (분, 기본 1):', '1')) || 1;
-
-  const body = { count, delay_minutes: delayMin, oauth_project: 4 };
-  if (clientId) body.client_id = clientId;
-  if (clientSecret) body.client_secret = clientSecret;
-
-  try {
-    const r = await fetch(authQuery('/api/batch-connect/start'), {
-      method: 'POST',
-      headers: authHeaders({ 'content-type': 'application/json' }),
-      body: JSON.stringify(body)
-    });
-    const j = await r.json();
-    if (!j.ok) { alert('시작 실패: ' + (j.error || JSON.stringify(j))); return; }
-
-    document.getElementById('yt-batch-10').disabled = true;
-    document.getElementById('yt-batch-20').disabled = true;
-    document.getElementById('yt-batch-stop').style.display = '';
-    updateBatchStatus('시작됨: ' + count + '개 계정');
-
-    if (_batchPoll) clearInterval(_batchPoll);
-    _batchPoll = setInterval(pollBatchStatus, 5000);
-  } catch (e) {
-    alert('에러: ' + e.message);
-  }
-}
-
-async function stopBatchConnect() {
-  try {
-    await fetch(authQuery('/api/batch-connect/stop'), {
-      method: 'POST', headers: authHeaders()
-    });
-    updateBatchStatus('중지 요청됨');
-  } catch (_) {}
-}
-
-async function pollBatchStatus() {
-  try {
-    const r = await fetch(authQuery('/api/batch-connect/status'), { headers: authHeaders() });
-    const j = await r.json();
-
-    const success = (j.results || []).filter(r => r.success).length;
-    const failed = (j.results || []).filter(r => !r.success).length;
-    let msg = `${j.done}/${j.total} 완료 (✅${success} ❌${failed})`;
-    if (j.current) msg += ` · 현재: ${j.current}`;
-
-    updateBatchStatus(msg);
-
-    if (!j.running && j.done > 0) {
-      clearInterval(_batchPoll);
-      _batchPoll = null;
-      document.getElementById('yt-batch-10').disabled = false;
-      document.getElementById('yt-batch-20').disabled = false;
-      document.getElementById('yt-batch-stop').style.display = 'none';
-      updateBatchStatus(`완료! ✅${success}개 성공 / ❌${failed}개 실패`);
-      if (success > 0) alert(`🎬 ${success}개 채널 자동 연결 완료!\n멀티라이브에서 송출을 시작하세요.`);
-    }
-  } catch (_) {}
-}
-
-function updateBatchStatus(msg) {
-  const el = document.getElementById('yt-batch-status');
-  if (el) el.textContent = msg;
-}
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(e){console.warn('SW registration failed:', e)})}
+document.addEventListener('visibilitychange',function(){if(document.hidden){if(_spannerInterval){clearInterval(_spannerInterval);_spannerInterval=-1}}else{if(_spannerInterval===-1){_spannerInterval=null}}})
 </script>
 </body></html>

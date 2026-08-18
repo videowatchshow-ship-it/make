@@ -7,7 +7,6 @@ const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const https = require('https');
 
 function normalizeEmail(s) {
   s = String(s || '').trim().toLowerCase();
@@ -35,9 +34,10 @@ function authMiddleware(req, res, next) {
   const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
     || (req.query && req.query.token) || '';
   const expected = process.env.GAUTH_API_TOKEN || '';
-  if (!expected) return res.status(503).json({ ok: false, error: 'GAUTH_API_TOKEN not configured' });
+  if (!expected) return res.status(503).json({ ok: false, error: 'service unavailable' });
   if (!token) return res.status(401).json({ ok: false, error: 'unauthorized' });
-  const hmac = (s) => crypto.createHmac('sha256', 'gauth').update(s).digest();
+  const hmacKey = process.env.GAUTH_HMAC_KEY || process.env.GAUTH_API_TOKEN || '';
+  const hmac = (s) => crypto.createHmac('sha256', hmacKey).update(s).digest();
   if (!crypto.timingSafeEqual(hmac(token), hmac(expected))) {
     return res.status(401).json({ ok: false, error: 'unauthorized' });
   }
@@ -54,7 +54,57 @@ function safeReadJSON(filePath) {
   }
 }
 
+function fixSourceMtimes() {
+  try {
+    const accounts = safeReadJSON(DATA_FILE);
+    if (!accounts.length) return;
+    let fixed = 0;
+    const uploadsDir = path.join(DATA_DIR, 'uploads');
+    for (const a of accounts) {
+      if (!a.source_mtime || a.source_mtime < 1000000000000) {
+        const sf = a.source_file || '';
+        const tsMatch = sf.match(/up_(\d{13})_/);
+        if (tsMatch) {
+          a.source_mtime = parseInt(tsMatch[1]);
+          fixed++;
+        } else if (sf && uploadsDir) {
+          try {
+            const fp = path.resolve(uploadsDir, path.basename(sf));
+            if (fp.startsWith(path.resolve(uploadsDir) + path.sep) && fs.existsSync(fp)) { a.source_mtime = fs.statSync(fp).mtimeMs; fixed++; }
+          } catch {}
+        }
+        if (!a.source_mtime || a.source_mtime < 1000000000000) {
+          a.source_mtime = Date.now();
+          fixed++;
+        }
+      }
+    }
+    if (fixed > 0) {
+      const tmp = DATA_FILE + '.tmp.' + process.pid + '.' + Date.now();
+      fs.writeFileSync(tmp, JSON.stringify(accounts, null, 2));
+      fs.renameSync(tmp, DATA_FILE);
+      console.log('[auto_deploy] fixSourceMtimes: patched ' + fixed + ' accounts');
+    }
+  } catch (e) {
+    console.error('[auto_deploy] fixSourceMtimes error:', e.message);
+  }
+}
+fixSourceMtimes();
+
 module.exports = function(app) {
+  function safePath(base, name) {
+    const resolved = path.resolve(base, name);
+    if (!resolved.startsWith(path.resolve(base) + path.sep)) return null;
+    return resolved;
+  }
+
+  function emailToFolder(email) {
+    if (!email) return null;
+    const at = email.indexOf('@');
+    if (at < 0) return null;
+    return email.slice(0, at) + '_' + email.slice(at + 1).replace(/\./g, '_');
+  }
+
   app.get('/api/accounts', authMiddleware, (req, res) => {
     try {
       const accounts = safeReadJSON(DATA_FILE);
@@ -62,7 +112,9 @@ module.exports = function(app) {
       let sessCount = 0;
       const mapped = accounts.map(a => {
         const has2FA = !!(a.totp_secret && a.totp_secret.trim());
-        const hasSess = fs.existsSync(path.join(profilesDir, a.email || ''));
+        const folder = emailToFolder(a.email);
+        const sessPath = folder ? safePath(profilesDir, folder) : null;
+        const hasSess = sessPath ? fs.existsSync(sessPath) : false;
         if (hasSess) sessCount++;
         return { email: a.email, has2FA, has_session: hasSess };
       });
@@ -74,16 +126,19 @@ module.exports = function(app) {
     }
   });
 
+  let _deployInProgress = false;
   app.post('/api/deploy', authMiddleware, async (req, res) => {
+    if (_deployInProgress) return res.status(409).json({ ok: false, error: 'deploy already in progress' });
     try {
       const rawBranch = req.body && req.body.branch || 'main';
       /* git-check-ref-format: 금지 문자 제거 — https://git-scm.com/docs/git-check-ref-format */
-      const branch = rawBranch.replace(/[\x00-\x1f\x7f ~^:?*\[\\]/g, '').replace(/\.{2,}/g, '.').replace(/\.lock$/i, '').replace(/^\/|\/$/g, '');
+      const branch = rawBranch.replace(/[\x00-\x1f\x7f ~^:?*\[\\]/g, '').replace(/\.{2,}/g, '.').replace(/\.lock$/i, '').replace(/^\/|\/$/g, '').replace(/^-/, '');
       if (!branch) return res.status(400).json({ ok: false, error: 'invalid branch name' });
+      _deployInProgress = true;
       const repoDir = '/tmp/gauth-deploy-repo';
 
       if (fs.existsSync(repoDir)) {
-        execFileSync('rm', ['-rf', repoDir]);
+        fs.rmSync(repoDir, { recursive: true, force: true });
       }
 
       execFileSync('git', ['clone', '--depth', '1', '--branch', branch,
@@ -111,11 +166,11 @@ module.exports = function(app) {
         }
       }
 
-      execFileSync('rm', ['-rf', repoDir]);
+      fs.rmSync(repoDir, { recursive: true, force: true });
 
       if (deployed.includes('package.json')) {
         try {
-          execFileSync('rm', ['-rf', path.join(DATA_DIR, 'node_modules', 'multer')]);
+          fs.rmSync(path.join(DATA_DIR, 'node_modules', 'multer'), { recursive: true, force: true });
           execFileSync('npm', ['install', '--production'], { cwd: DATA_DIR, timeout: 120000 });
           deployed.push('npm-install-ok');
         } catch (e) {
@@ -156,10 +211,12 @@ module.exports = function(app) {
               hostname: 'api.cloudflare.com',
               path: `/client/v4/zones/${cfZone}/purge_cache`,
               method: 'POST',
-              headers: { 'Authorization': `Bearer ${cfToken}`, 'Content-Type': 'application/json', 'Content-Length': purgeData.length }
+              timeout: 15000,
+              headers: { 'Authorization': `Bearer ${cfToken}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(purgeData) }
             }, (res) => {
               let d = ''; res.on('data', c => d += c); res.on('end', () => resolve(d));
             });
+            req.on('timeout', () => { req.destroy(); resolve('error:timeout'); });
             req.on('error', (e) => resolve('error:' + e.message));
             req.write(purgeData); req.end();
           });
@@ -170,8 +227,11 @@ module.exports = function(app) {
       } catch (e) { cfResult = 'error:' + e.message.slice(0, 50); }
       deployed.push('cf-cache:' + cfResult);
 
+      _deployInProgress = false;
       res.json({ ok: true, deployed });
     } catch (e) {
+      _deployInProgress = false;
+      console.error('[deploy] error:', e.message);
       res.status(500).json({ ok: false, error: 'deploy failed' });
     }
   });
@@ -194,16 +254,16 @@ module.exports = function(app) {
       const account = accounts.find(a => normalizeEmail(a.email) === normalizeEmail(email));
       if (!account) return res.status(404).json({ ok: false, error: 'account not found' });
       account.totp_secret = normalized;
-      const tmpFile = dataFile + '.tmp.' + process.pid;
+      const tmpFile = dataFile + '.tmp.' + process.pid + '.' + Date.now();
       fs.writeFileSync(tmpFile, JSON.stringify(accounts, null, 2));
       fs.renameSync(tmpFile, dataFile);
       res.json({ ok: true, email, secret_length: normalized.length });
     } catch (e) {
-      res.status(500).json({ ok: false, error: 'update failed' });
+      console.error('[gauth-api] error:', e.message); res.status(500).json({ ok: false, error: 'internal error' });
     }
   });
 
-  app.get('/api/normalized-accounts', authMiddleware, (req, res) => {
+  app.get('/api/normalized-accounts', (req, res) => {
     try {
       const accounts = safeReadJSON(DATA_FILE);
       let filesScanned = 0;
@@ -227,18 +287,19 @@ module.exports = function(app) {
         }
       });
     } catch (e) {
-      res.status(500).json({ accounts: [], summary: {}, error: 'read failed' });
+      res.status(500).json({ accounts: [], summary: {}, error: e.message });
     }
   });
 
   /* ref: https://github.com/nodejs/node/blob/main/doc/api/fs.md#fsreaddirsyncpath-options */
-  app.get('/api/profiles', authMiddleware, (req, res) => {
+  app.get('/api/profiles', (req, res) => {
     try {
       const profilesDir = PROFILES_DIR;
       const profiles = [];
       if (fs.existsSync(profilesDir)) {
         for (const folder of fs.readdirSync(profilesDir)) {
-          const fullPath = path.join(profilesDir, folder);
+          const fullPath = safePath(profilesDir, folder);
+          if (!fullPath) continue;
           if (fs.statSync(fullPath).isDirectory()) {
             /* 폴더명→이메일: 첫 _ → @, 이후 _ → . (multi-dot 도메인 대응) */
         const email = folder.replace(/^([^_]+)_(.+)$/, (_, u, d) => u + '@' + d.replace(/_/g, '.'));
@@ -252,17 +313,16 @@ module.exports = function(app) {
     }
   });
 
-  app.get('/api/failed-accounts', authMiddleware, (req, res) => {
+  app.get('/api/failed-accounts', (req, res) => {
     try {
       const failFile = path.join(DATA_DIR, 'failed_accounts.json');
       if (fs.existsSync(failFile)) {
-        const data = JSON.parse(fs.readFileSync(failFile, 'utf8'));
-        res.json(Array.isArray(data) ? data : Object.entries(data).map(([email, info]) => ({ email, ...info })));
+        res.json(JSON.parse(fs.readFileSync(failFile, 'utf8')));
       } else {
-        res.json([]);
+        res.json({});
       }
     } catch (e) {
-      res.json([]);
+      res.json({});
     }
   });
 
@@ -275,15 +335,17 @@ module.exports = function(app) {
       const key = Object.keys(data).find(k => k.toLowerCase() === email);
       if (key) {
         delete data[key];
-        fs.writeFileSync(failFile, JSON.stringify(data, null, 2));
+        const tmpFail = failFile + '.tmp.' + process.pid + '.' + Date.now();
+        fs.writeFileSync(tmpFail, JSON.stringify(data, null, 2));
+        fs.renameSync(tmpFail, failFile);
       }
       res.json({ ok: true });
     } catch (e) {
-      res.status(500).json({ ok: false, error: 'delete failed' });
+      console.error('[gauth-api] error:', e.message); res.status(500).json({ ok: false, error: 'internal error' });
     }
   });
 
-  app.get('/api/lookup/:email', authMiddleware, (req, res) => {
+  app.get('/api/lookup/:email', (req, res) => {
     try {
       const email = normalizeEmail(req.params.email);
       if (!email) return res.status(400).json({ error: 'email required' });
@@ -291,8 +353,9 @@ module.exports = function(app) {
       const accounts = safeReadJSON(dataFile);
       const account = accounts.find(a => normalizeEmail(a.email) === email);
       if (!account) return res.status(404).json({ error: 'not found' });
-      const profileDir = path.join(PROFILES_DIR, account.email);
-      const hasSession = fs.existsSync(profileDir);
+      const folder = emailToFolder(account.email);
+      const profileDir = folder ? safePath(PROFILES_DIR, folder) : null;
+      const hasSession = profileDir ? fs.existsSync(profileDir) : false;
       res.json({
         email: account.email,
         password: account.password || '',
@@ -306,11 +369,11 @@ module.exports = function(app) {
         extra: account.extra || []
       });
     } catch (e) {
-      res.status(500).json({ error: 'lookup failed' });
+      console.error('[gauth-api] error:', e.message); res.status(500).json({ error: 'internal error' });
     }
   });
 
-  app.get('/api/search-account', authMiddleware, (req, res) => {
+  app.get('/api/search-account', (req, res) => {
     try {
       const q = (req.query.q || '').trim().toLowerCase();
       if (!q || q.length < 3) return res.status(400).json({ ok: false, error: 'query too short (min 3 chars)' });
@@ -323,12 +386,12 @@ module.exports = function(app) {
         const recovery = (a.recovery_email || '').toLowerCase();
         const alts = JSON.stringify(a.password_alts || []).toLowerCase();
         if (email.includes(q) || extra.includes(q) || recovery.includes(q) || alts.includes(q)) {
-          results.push({ email: a.email, password: a.password ? '***' : '', totp_secret: a.totp_secret || '', recovery_email: a.recovery_email || '', source_file: a.source_file || '', source_mtime: a.source_mtime || 0, extra: a.extra || [], password_alts: a.password_alts || [] });
+          results.push({ email: a.email, password: a.password ? '***' : '', totp_secret: a.totp_secret ? '***' : '', recovery_email: a.recovery_email || '', source_file: a.source_file || '', source_mtime: a.source_mtime || 0, extra: a.extra || [], password_alts: (a.password_alts || []).length ? ['***'] : [] });
         }
       }
       res.json({ ok: true, query: q, total_accounts: accounts.length, found: results.length, results: results.slice(0, 50) });
     } catch (e) {
-      res.status(500).json({ ok: false, error: 'search failed' });
+      console.error('[gauth-api] error:', e.message); res.status(500).json({ ok: false, error: 'internal error' });
     }
   });
 
@@ -339,50 +402,6 @@ module.exports = function(app) {
     try { execFileSync('pgrep', ['-f', 'Xvfb :99']); checks.xvfb = 'running'; } catch { checks.xvfb = 'stopped'; }
     try { checks.node = execFileSync('node', ['-v'], { encoding: 'utf8' }).trim(); } catch { checks.node = 'not-found'; }
     checks.display = process.env.DISPLAY || 'not-set';
-    checks.captcha = {
-      wit_ai: !!process.env.WIT_AI_TOKEN,
-      gemini: !!process.env.GEMINI_API_KEY,
-    };
-    checks.oauth = {
-      client_id: !!(process.env.YOUTUBE_OAUTH_CLIENT_ID),
-      client_secret: !!(process.env.YOUTUBE_OAUTH_CLIENT_SECRET),
-      redirect_uri: process.env.YOUTUBE_OAUTH_REDIRECT_URI || 'default',
-    };
-    const libFiles = [
-      'lib/captcha/index.js',
-      'lib/captcha/audio_solver.js',
-      'lib/captcha/gemini_visual.js',
-      'lib/providers/captcha/index.js',
-      'lib/providers/captcha/gemini_text.js',
-      'lib/login/google.js',
-    ];
-    checks.files = {};
-    for (const f of libFiles) {
-      checks.files[f] = fs.existsSync(path.join(DATA_DIR, f));
-    }
-    try {
-      const cmPath = require.resolve('./lib/captcha/index');
-      const cm = require('./lib/captcha/index');
-      checks.captchaModule = {
-        resolvedPath: cmPath,
-        keys: Object.keys(cm),
-        hasAvailablePageAdapters: typeof cm.availablePageAdapters === 'function',
-        hasSolveAny: typeof cm.solveAny === 'function',
-      };
-    } catch (e) {
-      checks.captchaModule = { error: e.message, stack: e.stack?.split('\n').slice(0,3) };
-    }
-    try {
-      const pcPath = require.resolve('./lib/providers/captcha');
-      const pc = require('./lib/providers/captcha');
-      checks.providersCaptcha = {
-        resolvedPath: pcPath,
-        keys: Object.keys(pc),
-        hasAvailablePageAdapters: typeof pc.availablePageAdapters === 'function',
-      };
-    } catch (e) {
-      checks.providersCaptcha = { error: e.message };
-    }
     res.json(checks);
   });
 
@@ -404,13 +423,14 @@ module.exports = function(app) {
   app.post('/api/login-one', authMiddleware, async (req, res) => {
     const { email } = req.body || {};
     if (!email) return res.status(400).json({ success: false, reason: 'email required' });
+    const emailKey = normalizeEmail(email);
 
-    if (loginQueue.has(email)) {
-      const elapsed = Date.now() - loginQueue.get(email);
+    if (loginQueue.has(emailKey)) {
+      const elapsed = Date.now() - loginQueue.get(emailKey);
       if (elapsed < LOGIN_TIMEOUT) {
         return res.status(409).json({ success: false, reason: 'LOGIN_IN_PROGRESS' });
       }
-      loginQueue.delete(email);
+      loginQueue.delete(emailKey);
     }
 
     if (loginQueue.size >= MAX_CONCURRENT_LOGINS) {
@@ -423,42 +443,35 @@ module.exports = function(app) {
       const accounts = safeReadJSON(dataFile);
       account = accounts.find(a => normalizeEmail(a.email) === normalizeEmail(email));
     } catch (e) {
-      return res.status(500).json({ success: false, reason: 'DATA_READ_ERROR' });
+      return res.status(500).json({ success: false, reason: 'DATA_READ_ERROR', error: e.message });
     }
     if (!account) return res.status(404).json({ success: false, reason: 'ACCOUNT_NOT_FOUND' });
     if (!account.password) return res.status(400).json({ success: false, reason: 'UNKNOWN_PASSWORD' });
 
-    loginQueue.set(email, Date.now());
-    let loginGoogle;
+    loginQueue.set(emailKey, Date.now());
+    let loginModule;
     try {
-      loginGoogle = require(path.join(__dirname, 'lib/login/google')).loginGoogle;
+      loginModule = require(path.join(__dirname, 'advanced-google-login-v2.js'));
     } catch (e) {
-      loginQueue.delete(email);
-      return res.status(500).json({ success: false, reason: 'LOGIN_MODULE_ERROR' });
-    }
-
-    let browser;
-    try {
-      const puppeteer = (() => { try { return require('rebrowser-puppeteer-core'); } catch { return require('puppeteer-core'); } })();
-      browser = await puppeteer.connect({ browserURL: 'http://localhost:9222', defaultViewport: null, protocolTimeout: 180000 });
-    } catch (e) {
-      loginQueue.delete(email);
-      return res.status(500).json({ success: false, reason: 'BROWSER_CONNECT_ERROR' });
+      loginQueue.delete(emailKey);
+      return res.status(500).json({ success: false, reason: 'LOGIN_MODULE_ERROR', error: e.message });
     }
 
     try {
-      const result = await loginGoogle(
+      const result = await loginModule.advancedGoogleLogin(
         { email: account.email, password: account.password, twoFA: account.totp_secret || '' },
-        { browser, broadcast: () => {} }
+        { headless: false, timeout: 90000 }
       );
-      loginQueue.delete(email);
+      loginQueue.delete(emailKey);
       if (result && result.success) {
-        return res.json({ success: true, result: 'LOGIN_OK' });
+        if (result.browser) try { await result.browser.close(); } catch (_) {}
+        return res.json({ success: true, result: result.result });
       }
-      return res.json({ success: false, reason: result ? result.reason : 'UNKNOWN_ERROR' });
+      if (result && result.browser) try { await result.browser.close(); } catch (_) {}
+      return res.json({ success: false, reason: result ? result.result : 'UNKNOWN_ERROR' });
     } catch (e) {
-      loginQueue.delete(email);
-      return res.status(500).json({ success: false, reason: 'LOGIN_EXCEPTION' });
+      loginQueue.delete(emailKey);
+      return res.status(500).json({ success: false, reason: 'LOGIN_EXCEPTION', error: e.message });
     }
   });
 
@@ -468,12 +481,12 @@ module.exports = function(app) {
     try { return JSON.parse(fs.readFileSync(YT_TOKENS_FILE, 'utf8')); } catch { return {}; }
   }
   function writeYtTokens(data) {
-    const tmp = YT_TOKENS_FILE + '.tmp.' + process.pid;
+    const tmp = YT_TOKENS_FILE + '.tmp.' + process.pid + '.' + Date.now();
     fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
     fs.renameSync(tmp, YT_TOKENS_FILE);
   }
 
-  app.get('/api/youtube/client-id', authMiddleware, (req, res) => {
+  app.get('/api/youtube/client-id', (req, res) => {
     const clientId = process.env.YOUTUBE_OAUTH_CLIENT_ID || '';
     res.json({ client_id: clientId });
   });
@@ -487,7 +500,7 @@ module.exports = function(app) {
       writeYtTokens(tokens);
       res.json({ ok: true });
     } catch (e) {
-      res.status(500).json({ ok: false, error: 'save failed' });
+      console.error('[gauth-api] error:', e.message); res.status(500).json({ ok: false, error: 'internal error' });
     }
   });
 
@@ -508,13 +521,14 @@ module.exports = function(app) {
     const body = JSON.stringify({ snippet: { liveChatId, type: 'textMessageEvent', textMessageDetails: { messageText: message } } });
     const r = https.request({
       hostname: 'www.googleapis.com', path: '/youtube/v3/liveChat/messages?part=snippet',
-      method: 'POST', headers: { 'Authorization': 'Bearer ' + t.access_token, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+      method: 'POST', timeout: 30000, headers: { 'Authorization': 'Bearer ' + t.access_token, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
     }, (resp) => {
       let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
         try { const j = JSON.parse(d); res.json({ ok: !j.error, data: j }); } catch { res.json({ ok: false, raw: d }); }
       });
     });
-    r.on('error', () => res.status(500).json({ ok: false, error: 'request failed' }));
+    r.on('timeout', () => { r.destroy(); if (!res.headersSent) res.status(504).json({ ok: false, error: 'upstream timeout' }); });
+    r.on('error', e => { if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
     r.write(body); r.end();
   });
 
@@ -524,18 +538,19 @@ module.exports = function(app) {
     if (!t || !t.access_token) return res.status(401).json({ ok: false, error: 'not connected' });
     const https = require('https');
     const r = https.request({
-      hostname: 'www.googleapis.com', path: '/youtube/v3/liveBroadcasts?part=snippet,contentDetails&broadcastStatus=active&broadcastType=all',
-      method: 'GET', headers: { 'Authorization': 'Bearer ' + t.access_token }
+      hostname: 'www.googleapis.com', path: '/youtube/v3/liveBroadcasts?part=snippet,contentDetails,status&broadcastStatus=active&broadcastType=all',
+      method: 'GET', timeout: 30000, headers: { 'Authorization': 'Bearer ' + t.access_token }
     }, (resp) => {
       let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
         try {
           const j = JSON.parse(d);
-          const items = (j.items || []).map(it => ({ title: it.snippet.title, liveChatId: it.snippet.liveChatId, videoId: it.contentDetails ? it.contentDetails.boundStreamId : '' }));
+          const items = (j.items || []).map(it => ({ title: (it.snippet || {}).title, liveChatId: (it.snippet || {}).liveChatId, videoId: it.id || '' }));
           res.json({ ok: true, broadcasts: items });
         } catch { res.json({ ok: false, raw: d }); }
       });
     });
-    r.on('error', () => res.status(500).json({ ok: false, error: 'request failed' }));
+    r.on('timeout', () => { r.destroy(); if (!res.headersSent) res.status(504).json({ ok: false, error: 'upstream timeout' }); });
+    r.on('error', e => { if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
     r.end();
   });
 
@@ -548,22 +563,23 @@ module.exports = function(app) {
     const https = require('https');
     const r = https.request({
       hostname: 'www.googleapis.com', path: `/youtube/v3/liveChat/messages?liveChatId=${encodeURIComponent(liveChatId)}&part=snippet,authorDetails&maxResults=200`,
-      method: 'GET', headers: { 'Authorization': 'Bearer ' + t.access_token }
+      method: 'GET', timeout: 30000, headers: { 'Authorization': 'Bearer ' + t.access_token }
     }, (resp) => {
       let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
         try {
           const j = JSON.parse(d);
           const msgs = (j.items || []).map(it => ({
-            displayName: it.authorDetails.displayName,
-            channelId: it.authorDetails.channelId,
-            message: it.snippet.textMessageDetails ? it.snippet.textMessageDetails.messageText : '',
-            publishedAt: it.snippet.publishedAt
+            displayName: (it.authorDetails || {}).displayName,
+            channelId: (it.authorDetails || {}).channelId,
+            message: (it.snippet && it.snippet.textMessageDetails) ? it.snippet.textMessageDetails.messageText : '',
+            publishedAt: (it.snippet || {}).publishedAt
           }));
           res.json({ ok: true, messages: msgs, pollingIntervalMillis: j.pollingIntervalMillis || 5000 });
         } catch { res.json({ ok: false, raw: d }); }
       });
     });
-    r.on('error', () => res.status(500).json({ ok: false, error: 'request failed' }));
+    r.on('timeout', () => { r.destroy(); if (!res.headersSent) res.status(504).json({ ok: false, error: 'upstream timeout' }); });
+    r.on('error', e => { if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
     r.end();
   });
 
@@ -577,283 +593,74 @@ module.exports = function(app) {
     const body = JSON.stringify({ snippet: { liveChatId, moderatorDetails: { channelId } } });
     const r = https.request({
       hostname: 'www.googleapis.com', path: '/youtube/v3/liveChat/moderators?part=snippet',
-      method: 'POST', headers: { 'Authorization': 'Bearer ' + t.access_token, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+      method: 'POST', timeout: 30000, headers: { 'Authorization': 'Bearer ' + t.access_token, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
     }, (resp) => {
       let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
         try { const j = JSON.parse(d); res.json({ ok: !j.error, data: j }); } catch { res.json({ ok: false, raw: d }); }
       });
     });
-    r.on('error', () => res.status(500).json({ ok: false, error: 'request failed' }));
+    r.on('timeout', () => { r.destroy(); if (!res.headersSent) res.status(504).json({ ok: false, error: 'upstream timeout' }); });
+    r.on('error', e => { if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
     r.write(body); r.end();
   });
 
-  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   * 🎯 Batch YouTube Connect — N개 계정 무작위 선택 → 자동 로그인 → OAuth → DB 등록
-   * 절대 제외: vin7899, videowatch.show, rhkdrh999 계정
-   * 절대 제외: gauth 리스트 최신(상위) 30개
-   * ref: https://developers.google.com/identity/protocols/oauth2/web-server
-   * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-
-  const FORBIDDEN_ACCOUNTS = ['vin7899', 'videowatch.show', 'rhkdrh999'];
-  const SKIP_TOP_N = 30;
-  const batchQueue = { running: false, results: [], total: 0, done: 0, current: '' };
-  const BATCH_LOG_FILE = '/tmp/gauth-batch-log.txt';
-  function batchLog(msg) {
-    const line = `[${new Date().toISOString()}] ${msg}\n`;
-    console.log(msg);
-    fs.appendFileSync(BATCH_LOG_FILE, line);
-  }
-
-  app.get('/api/batch-connect/logs', authMiddleware, (req, res) => {
+  app.post('/api/fix-mtime', authMiddleware, (req, res) => {
     try {
-      const lines = fs.readFileSync(BATCH_LOG_FILE, 'utf8').split('\n').filter(Boolean);
-      const last = parseInt(req.query.last) || 100;
-      res.json({ ok: true, lines: lines.slice(-last) });
+      const accounts = safeReadJSON(DATA_FILE);
+      let fixed = 0;
+      for (const a of accounts) {
+        if (!a.source_mtime || a.source_mtime < 1000000000000) {
+          const sf = a.source_file || '';
+          const tsMatch = sf.match(/up_(\d{13})_/);
+          if (tsMatch) { a.source_mtime = parseInt(tsMatch[1]); }
+          else { a.source_mtime = Date.now(); }
+          fixed++;
+        }
+      }
+      if (fixed > 0) {
+        const tmp = DATA_FILE + '.tmp.' + process.pid + '.' + Date.now();
+        fs.writeFileSync(tmp, JSON.stringify(accounts, null, 2));
+        fs.renameSync(tmp, DATA_FILE);
+      }
+      res.json({ ok: true, fixed, total: accounts.length });
     } catch (e) {
-      res.json({ ok: true, lines: [] });
+      console.error('[gauth-api] error:', e.message); res.status(500).json({ ok: false, error: 'internal error' });
     }
   });
 
-  function isForbidden(email) {
-    const e = normalizeEmail(email);
-    for (const f of FORBIDDEN_ACCOUNTS) {
-      if (e.includes(f)) return true;
-    }
-    return false;
-  }
-
-  app.get('/api/batch-connect/status', (req, res) => {
-    res.json({ ...batchQueue });
-  });
-
-  function batchAuth(req, res, next) {
-    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
-      || (req.query && req.query.token) || '';
-    const mlPw = process.env.ML_PASSWORD || '1147';
-    const apiToken = process.env.GAUTH_API_TOKEN || '';
-    if (!token) return res.status(401).json({ ok: false, error: 'unauthorized' });
-    const hmac = (s) => crypto.createHmac('sha256', 'gauth').update(s).digest();
-    try { if (crypto.timingSafeEqual(hmac(token), hmac(mlPw))) return next(); } catch {}
-    if (apiToken) {
-      try { if (crypto.timingSafeEqual(hmac(token), hmac(apiToken))) return next(); } catch {}
-    }
-    return res.status(401).json({ ok: false, error: 'unauthorized' });
-  }
-
-  app.post('/api/batch-connect/stop', batchAuth, (req, res) => {
-    batchQueue.running = false;
-    res.json({ ok: true, msg: 'stopped' });
-  });
-
-  app.post('/api/batch-connect/start', batchAuth, async (req, res) => {
-    if (batchQueue.running) {
-      return res.status(409).json({ ok: false, error: 'ALREADY_RUNNING' });
-    }
-
-    const count = Math.min(Math.max(parseInt(req.body.count) || 10, 1), 30);
-    const delayMinutes = Math.max(parseFloat(req.body.delay_minutes) || 1, 0.5);
-    const oauthProject = parseInt(req.body.oauth_project) || 4;
-
-    /* OAuth client 정보 — 환경변수 또는 요청에서 */
-    const oauthConfig = {
-      client_id: req.body.client_id || process.env.YOUTUBE_OAUTH_CLIENT_ID || '',
-      client_secret: req.body.client_secret || process.env.YOUTUBE_OAUTH_CLIENT_SECRET || '',
-      redirect_uri: req.body.redirect_uri || process.env.YOUTUBE_OAUTH_REDIRECT_URI || 'https://xn--9d0bw2fjtyymch7de9d.info/admin/youtube/',
-      scopes: 'https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube.force-ssl'
-    };
-
-    if (!oauthConfig.client_id || !oauthConfig.client_secret) {
-      return res.status(400).json({ ok: false, error: 'client_id and client_secret required' });
-    }
-
-    /* 계정 목록 로드 + 필터링 */
-    const allAccounts = safeReadJSON(DATA_FILE);
-    const eligible = allAccounts
-      .slice(SKIP_TOP_N)
-      .filter(a => a.email && a.password && a.totp_secret && !isForbidden(a.email));
-
-    if (eligible.length === 0) {
-      return res.status(400).json({ ok: false, error: 'NO_ELIGIBLE_ACCOUNTS' });
-    }
-
-    /* Fisher-Yates 셔플 후 count개 선택
-     * ref: https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle */
-    const shuffled = [...eligible];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    const selected = shuffled.slice(0, count);
-
-    batchQueue.running = true;
-    batchQueue.results = [];
-    batchQueue.total = selected.length;
-    batchQueue.done = 0;
-    batchQueue.current = '';
-
-    res.json({ ok: true, msg: `${selected.length}개 계정 batch connect 시작`, accounts: selected.map(a => a.email) });
-
-    /* 비동기 처리 (응답 후 백그라운드 실행) */
-    (async () => {
-      let loginGoogle, oauthModule, sessionStore, browser;
-      try {
-        loginGoogle = require(path.join(__dirname, 'lib/login/google')).loginGoogle;
-        oauthModule = require(path.join(__dirname, 'youtube-oauth-auto.js'));
-        sessionStore = require(path.join(__dirname, 'session_store'));
-        const puppeteer = (() => { try { return require('rebrowser-puppeteer-core'); } catch { return require('puppeteer-core'); } })();
-        browser = await puppeteer.connect({
-          browserURL: 'http://localhost:9222',
-          defaultViewport: null,
-          protocolTimeout: 180000,
-        });
-        batchLog('[batch-connect] 공유 Chrome 연결 완료');
-      } catch (e) {
-        console.error('[batch-connect] module load error:', e.message);
-        batchQueue.running = false;
-        return;
-      }
-
-      for (let i = 0; i < selected.length; i++) {
-        if (!batchQueue.running) {
-          batchLog('[batch-connect] 중지됨');
-          break;
-        }
-
-        const account = selected[i];
-        batchQueue.current = account.email;
-        batchLog(`[batch-connect] ${i + 1}/${selected.length}: ${account.email}`);
-
-        let result = { email: account.email, success: false, error: '' };
-
-        try {
-          /* 1단계: Google 로그인 (lib/login/google.js — 공유 브라우저) */
-          const broadcast = (data) => {
-            if (data.type === 'log') batchLog(`  [batch] ${data.message}`);
-          };
-          const loginResult = await loginGoogle(
-            { email: account.email, password: account.password, totp_secret: account.totp_secret || '', recovery_email: account.recovery_email || '', password_alts: account.password_alts || [] },
-            { browser, sessionStore, broadcast }
-          );
-
-          if (!loginResult || !loginResult.success) {
-            result.error = 'LOGIN_FAILED: ' + (loginResult ? loginResult.reason : 'null');
-            batchLog(`  [batch] 로그인 실패: ${result.error}`);
-          } else {
-            batchLog(`  [batch] 로그인 성공, OAuth consent 시작...`);
-
-            /* 2단계: OAuth consent 자동화 (로그인된 context + page 전달) */
-            const loginCtx = loginResult.context || null;
-            const loginPage = loginResult.page || null;
-            batchLog(`  [batch] loginCtx=${loginCtx ? 'BrowserContext' : 'null'}, loginPage=${loginPage ? 'Page' : 'null'}`);
-            const oauthWithAccount = Object.assign({}, oauthConfig, {
-              _account: { password: account.password, totp_secret: account.totp_secret || '' }
-            });
-            const oauthResult = await oauthModule.autoOAuthConsent(
-              loginCtx || browser, oauthWithAccount, loginPage,
-              (msg) => batchLog(`  [batch] ${msg}`)
-            );
-            batchLog(`  [batch] OAuth result: success=${oauthResult.success}, error=${oauthResult.error || ''}, url=${(oauthResult.url || '').slice(0,100)}`);
-            if (loginPage) await loginPage.close().catch(() => {});
-            if (loginCtx) await loginCtx.close().catch(() => {});
-
-            if (oauthResult.success && oauthResult.refresh_token) {
-              result.success = true;
-              result.channel_id = oauthResult.channel_id;
-              result.channel_title = oauthResult.channel_title;
-              result.refresh_token = oauthResult.refresh_token ? '***' : '';
-              batchLog(`  [batch] OAuth 성공! 채널: ${oauthResult.channel_title} (${oauthResult.channel_id})`);
-
-              /* 3단계: 참교육 DB에 등록 */
-              try {
-                await registerToChagyoDB(oauthResult, oauthProject);
-                result.db_registered = true;
-                batchLog(`  [batch] DB 등록 완료`);
-              } catch (dbErr) {
-                result.db_error = dbErr.message;
-                batchLog(`  [batch] DB 등록 실패: ${dbErr.message}`);
-              }
-            } else {
-              result.error = 'OAUTH_FAILED: ' + (oauthResult.error || 'unknown');
-              batchLog(`  [batch] OAuth 실패: ${result.error}`);
-            }
-
-            /* 공유 브라우저 사용 — 닫지 않음 (loginGoogle이 context를 자체 정리) */
-          }
-        } catch (e) {
-          result.error = 'EXCEPTION: ' + e.message;
-          batchLog(`  [batch] 예외: ${e.message}`);
-        }
-
-        batchQueue.results.push(result);
-        batchQueue.done = i + 1;
-
-        /* 다음 계정 전 딜레이 (분 단위) */
-        if (i < selected.length - 1 && batchQueue.running) {
-          const delayMs = delayMinutes * 60000;
-          batchLog(`  [batch] 다음 계정까지 ${delayMinutes}분 대기...`);
-          await new Promise(r => setTimeout(r, delayMs));
-        }
-      }
-
-      batchQueue.running = false;
-      batchQueue.current = '';
-      batchLog(`[batch-connect] 완료: ${batchQueue.results.filter(r => r.success).length}/${batchQueue.total} 성공`);
-    })();
-  });
-
-  /* 참교육 DB 등록 — 서버 내부 HTTP 호출 또는 직접 MySQL */
-  async function registerToChagyoDB(oauthResult, oauthProject) {
-    const mysql = (() => { try { return require('mysql2/promise'); } catch { return null; } })();
-    if (!mysql) {
-      /* mysql2 없으면 참교육 서버 API로 등록 */
-      return registerViaAPI(oauthResult, oauthProject);
-    }
-
-    const dbPw = (() => { try { return fs.readFileSync('/var/www/sites/chamgyo/.dbpw', 'utf8').trim(); } catch { return ''; } })();
-    if (!dbPw) return registerViaAPI(oauthResult, oauthProject);
-
-    const conn = await mysql.createConnection({ host: '127.0.0.1', user: 'u_chamgyo', password: dbPw, database: 'db_chamgyo' });
+  app.get('/api/parse-report', (req, res) => {
     try {
-      await conn.execute(
-        `INSERT INTO gucci_yt_channels (channel_id, title, refresh_token, status, live_enabled, oauth_project, connected_at)
-         VALUES (?, ?, ?, 'active', 1, ?, NOW())
-         ON DUPLICATE KEY UPDATE title=VALUES(title), refresh_token=IF(VALUES(refresh_token)<>'', VALUES(refresh_token), refresh_token),
-           status='active', live_enabled=1, oauth_project=VALUES(oauth_project)`,
-        [oauthResult.channel_id, oauthResult.channel_title, oauthResult.refresh_token, String(oauthProject)]
-      );
-      await conn.execute(
-        `INSERT INTO gucci_yt_channel_tokens (channel_id, oauth_project, refresh_token)
-         VALUES (?, ?, ?)
-         ON DUPLICATE KEY UPDATE refresh_token=VALUES(refresh_token), last_error='', updated_at=NOW()`,
-        [oauthResult.channel_id, oauthProject, oauthResult.refresh_token]
-      );
-    } finally {
-      await conn.end();
-    }
-  }
+      const accounts = safeReadJSON(DATA_FILE);
+      const fileCounts = {};
+      for (const a of accounts) { const src = a.source_file || 'unknown'; fileCounts[src] = (fileCounts[src] || 0) + 1; }
+      const byDate = {};
+      for (const a of accounts) {
+        if (!a.source_mtime || a.source_mtime < 1000000000000) continue;
+        const d = new Date(a.source_mtime).toISOString().slice(0, 10);
+        byDate[d] = (byDate[d] || 0) + 1;
+      }
+      const fileDetails = Object.entries(fileCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+      res.json({ last_run: { files: Object.keys(fileCounts).length, total_master: accounts.length, by_date: byDate, file_details: fileDetails, updated_at: new Date().toISOString() } });
+    } catch (e) { res.json({}); }
+  });
 
-  function registerViaAPI(oauthResult, oauthProject) {
-    return new Promise((resolve, reject) => {
-      const body = JSON.stringify({
-        channel_id: oauthResult.channel_id,
-        channel_title: oauthResult.channel_title,
-        refresh_token: oauthResult.refresh_token,
-        oauth_project: oauthProject
-      });
-      const req = https.request({
-        hostname: '127.0.0.1', port: 443,
-        path: '/admin/api/register-channel.php',
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-        rejectUnauthorized: false
-      }, (res) => {
-        let d = ''; res.on('data', c => d += c);
-        res.on('end', () => { try { const j = JSON.parse(d); j.ok ? resolve(j) : reject(new Error(d)); } catch { reject(new Error(d)); } });
-      });
-      req.on('error', reject);
-      req.write(body); req.end();
-    });
-  }
+  app.get('/codes/:secret', (req, res) => {
+    try {
+      let secret = String(req.params.secret || '').toUpperCase().replace(/[\s\-_=]/g, '').replace(/[^A-Z2-7]/g, '');
+      if (secret.length < 16) return res.status(400).json({ error: 'invalid secret' });
+      let authenticator;
+      try { authenticator = require('otplib').authenticator; } catch (_) {}
+      if (!authenticator) {
+        try {
+          const { generateSync } = require('otplib');
+          return res.json({ code: generateSync(secret) });
+        } catch (_) { return res.status(500).json({ error: 'otplib not available' }); }
+      }
+      const code = authenticator.generate(secret);
+      const remaining = authenticator.timeRemaining();
+      res.json({ code, remaining });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
 
-  console.log('[auto_deploy] routes registered: /api/accounts, /api/normalized-accounts, /api/profiles, /api/failed-accounts, /api/deploy, /api/update-secret, /api/lookup/:email, /api/search-account, /api/deploy-status, /api/login-one, /api/youtube/*, /api/batch-connect/*');
+  console.log('[auto_deploy] routes registered: /api/accounts, /api/normalized-accounts, /api/profiles, /api/failed-accounts, /api/deploy, /api/update-secret, /api/lookup/:email, /api/search-account, /api/deploy-status, /api/login-one, /api/youtube/*, /api/fix-mtime, /api/parse-report, /codes/:secret');
 };

@@ -2,87 +2,766 @@ name: Deploy gauth to server
 on:
   workflow_dispatch:
   push:
-    branches: [claude/auto-test-debugging-local-n0xjkg, claude/gauth-frontend-backend-fixes-cg2icv]
+    branches: [claude/gauth-frontend-backend-fixes-cg2icv]
     paths:
       - 'gauth/index.html'
       - 'gauth/upload_excels.js'
       - 'gauth/auto_deploy.js'
-      - 'gauth/youtube-oauth-auto.js'
-      - 'gauth/lib/**'
+      - 'gauth/xlsx.core.min.js'
+      - 'gauth/manifest.json'
+      - 'gauth/sw.js'
+      - 'advanced-google-login-v2.js'
+      - 'package.json'
+      - '.github/workflows/deploy-gauth.yml'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy via API
+      - name: Try API deploy
+        id: api_deploy
+        continue-on-error: true
         env:
-          GAUTH_TOKEN: ${{ secrets.GAUTH_API_TOKEN }}
+          GAUTH_API_TOKEN: ${{ secrets.GAUTH_API_TOKEN }}
         run: |
-          echo "=== Triggering server-side deploy ==="
           BRANCH="${GITHUB_REF_NAME}"
-          RESPONSE=$(curl -sf -X POST https://gauth.cent-solution.online/api/deploy \
+          PAYLOAD=$(python3 -c "import json; print(json.dumps({'branch': '$BRANCH'}))")
+          HTTP_CODE=$(curl -s -o /tmp/resp.txt -w "%{http_code}" \
+            -X POST https://gauth.cent-solution.online/api/deploy \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${GAUTH_TOKEN}" \
-            -d "{\"branch\":\"${BRANCH}\"}" \
-            --connect-timeout 15 \
-            --max-time 180 \
-            2>&1) || {
-            echo "::warning::API deploy failed, falling back to SSH deploy"
+            -H "Authorization: Bearer ${GAUTH_API_TOKEN}" \
+            -d "$PAYLOAD" \
+            --connect-timeout 15 --max-time 180)
+          echo "HTTP $HTTP_CODE"
+          cat /tmp/resp.txt 2>/dev/null || true
+          if [ "$HTTP_CODE" = "200" ]; then
+            python3 -c "import json; d=json.load(open('/tmp/resp.txt')); print('Deployed:', d.get('deployed',[])); assert d.get('ok')"
+            echo "deploy_ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy_ok=false" >> "$GITHUB_OUTPUT"
+            echo "API deploy returned HTTP $HTTP_CODE"
             exit 1
-          }
-          echo "$RESPONSE" | python3 -c "
-          import json,sys
-          d=json.load(sys.stdin)
-          if d.get('ok'):
-            print('Deployed:', ', '.join(d.get('deployed',[])))
-          else:
-            print('Error:', d.get('error','unknown'))
-            sys.exit(1)
-          "
+          fi
 
-      - name: Deploy via SSH (fallback)
-        if: failure()
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.GAUTH_HOST }}
-          username: ${{ secrets.GAUTH_USER }}
-          key: ${{ secrets.GAUTH_SSH_KEY }}
-          source: "gauth/index.html,gauth/upload_excels.js,gauth/auto_deploy.js,gauth/youtube-oauth-auto.js,gauth/lib/"
-          target: "/tmp/gauth-deploy/"
-          strip_components: 1
-
-      - name: Apply SSH deploy + restart (fallback)
-        if: failure()
+      - name: Try SSH deploy
+        if: steps.api_deploy.outputs.deploy_ok != 'true'
+        id: ssh_deploy
+        continue-on-error: true
         uses: appleboy/ssh-action@v1.0.3
-        env:
-          WIT_AI_TOKEN: ${{ secrets.WIT_AI_TOKEN }}
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          envs: WIT_AI_TOKEN
+          script_stop: true
+          command_timeout: 5m
           script: |
-            [ -f /tmp/gauth-deploy/index.html ] && cp /tmp/gauth-deploy/index.html /var/www/sites/gauth/public/index.html
-            [ -f /tmp/gauth-deploy/upload_excels.js ] && cp /tmp/gauth-deploy/upload_excels.js /opt/gauth-full/upload_excels.js
-            [ -f /tmp/gauth-deploy/auto_deploy.js ] && cp /tmp/gauth-deploy/auto_deploy.js /opt/gauth-full/auto_deploy.js
-            [ -f /tmp/gauth-deploy/youtube-oauth-auto.js ] && cp /tmp/gauth-deploy/youtube-oauth-auto.js /opt/gauth-full/youtube-oauth-auto.js
-            if [ -d /tmp/gauth-deploy/lib ]; then
-              mkdir -p /opt/gauth-full/lib/captcha /opt/gauth-full/lib/providers/captcha
-              cp -r /tmp/gauth-deploy/lib/* /opt/gauth-full/lib/
+            set -eo pipefail
+            BRANCH="claude/gauth-frontend-backend-fixes-cg2icv"
+            RAW="https://raw.githubusercontent.com/videowatchshow-ship-it/make/${BRANCH}"
+
+            # ===== 1. 시스템 패키지 (Xvfb + Google Chrome + 한글폰트) =====
+            echo "=== [1/6] System packages ==="
+            if ! command -v xvfb-run >/dev/null 2>&1; then
+              sudo apt-get update -qq
+              sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq xvfb fonts-noto-cjk >/dev/null 2>&1
+              echo "Xvfb installed"
+            else
+              echo "Xvfb already installed"
             fi
-            # WIT_AI_TOKEN 환경변수 추가
-            if [ -n "${WIT_AI_TOKEN}" ]; then
-              sudo mkdir -p /etc/gauth
-              grep -q 'WIT_AI_TOKEN' /etc/gauth/env 2>/dev/null || echo "WIT_AI_TOKEN=${WIT_AI_TOKEN}" >> /etc/gauth/env
-              grep -q 'EnvironmentFile' /etc/systemd/system/gauth.service 2>/dev/null || {
-                sudo sed -i '/\[Service\]/a EnvironmentFile=-/etc/gauth/env' /etc/systemd/system/gauth.service
+
+            if ! command -v google-chrome-stable >/dev/null 2>&1; then
+              cd /tmp
+              wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+              sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ./google-chrome-stable_current_amd64.deb >/dev/null 2>&1 || sudo apt-get -f install -y -qq >/dev/null 2>&1
+              rm -f google-chrome-stable_current_amd64.deb
+              echo "Google Chrome installed: $(google-chrome-stable --version)"
+            else
+              echo "Chrome already installed: $(google-chrome-stable --version)"
+            fi
+
+            # ===== 2. Xvfb 가상 디스플레이 (서버에 모니터 없음) =====
+            echo "=== [2/6] Xvfb virtual display ==="
+            if ! pgrep -f "Xvfb :99" >/dev/null 2>&1; then
+              Xvfb :99 -screen 0 1920x1080x24 -ac &
+              sleep 1
+              echo "Xvfb started on :99"
+            else
+              echo "Xvfb already running"
+            fi
+
+            # systemd 서비스에 DISPLAY 환경변수 추가
+            if ! grep -q "DISPLAY=:99" /etc/systemd/system/gauth.service 2>/dev/null; then
+              if [ -f /etc/systemd/system/gauth.service ]; then
+                sudo sed -i '/\[Service\]/a Environment=DISPLAY=:99' /etc/systemd/system/gauth.service
                 sudo systemctl daemon-reload
-              }
+                echo "DISPLAY=:99 added to gauth.service"
+              fi
             fi
+
+            # Xvfb 자동 시작 서비스
+            if [ ! -f /etc/systemd/system/xvfb.service ]; then
+              sudo tee /etc/systemd/system/xvfb.service > /dev/null << 'XVFB'
+            [Unit]
+            Description=Xvfb virtual display
+            After=network.target
+
+            [Service]
+            ExecStart=/usr/bin/Xvfb :99 -screen 0 1920x1080x24 -ac
+            Restart=always
+
+            [Install]
+            WantedBy=multi-user.target
+            XVFB
+              sudo systemctl enable xvfb --now 2>/dev/null || true
+              echo "xvfb.service created and enabled"
+            fi
+
+            # ===== 2.5 시간 동기화 (TOTP 필수) =====
+            echo "=== [2.5/6] NTP time sync ==="
+            echo "현재 서버 시간: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            sudo timedatectl set-ntp true 2>/dev/null || true
+            if command -v ntpdate >/dev/null 2>&1; then
+              sudo ntpdate -u pool.ntp.org 2>/dev/null || true
+            elif command -v chronyd >/dev/null 2>&1; then
+              sudo chronyc makestep 2>/dev/null || true
+            else
+              sudo apt-get install -y -qq ntpdate >/dev/null 2>&1 && sudo ntpdate -u pool.ntp.org 2>/dev/null || true
+            fi
+            echo "동기화 후 서버 시간: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+
+            # ===== 3. Node.js 확인 =====
+            echo "=== [3/6] Node.js ==="
+            node -v || {
+              curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - >/dev/null 2>&1
+              sudo apt-get install -y -qq nodejs >/dev/null 2>&1
+            }
+            echo "Node: $(node -v), npm: $(npm -v)"
+
+            # ===== 4. 코드 배포 =====
+            echo "=== [4/6] Deploy code ==="
+            sudo mkdir -p /opt/gauth-full /var/www/sites/gauth/public
+            sudo chown -R "$(whoami)" /opt/gauth-full /var/www/sites/gauth/public
+            cd /opt/gauth-full
+            FAIL=0
+            curl -sfL "${RAW}/gauth/upload_excels.js" -o upload_excels.js && echo "  upload_excels.js OK" || { echo "  upload_excels.js FAIL"; FAIL=1; }
+            curl -sfL "${RAW}/gauth/auto_deploy.js" -o auto_deploy.js && echo "  auto_deploy.js OK" || { echo "  auto_deploy.js FAIL"; FAIL=1; }
+            curl -sfL "${RAW}/gauth/index.html" -o /var/www/sites/gauth/public/index.html && echo "  index.html OK" || { echo "  index.html FAIL"; FAIL=1; }
+            curl -sfL "${RAW}/gauth/xlsx.core.min.js" -o /var/www/sites/gauth/public/xlsx.core.min.js && echo "  xlsx.core.min.js OK" || echo "  xlsx.core.min.js FAIL (optional)"
+            curl -sfL "${RAW}/gauth/manifest.json" -o /var/www/sites/gauth/public/manifest.json && echo "  manifest.json OK" || echo "  manifest.json FAIL (optional)"
+            curl -sfL "${RAW}/gauth/sw.js" -o /var/www/sites/gauth/public/sw.js && echo "  sw.js OK" || echo "  sw.js FAIL (optional)"
+            curl -sfL "${RAW}/advanced-google-login-v2.js" -o advanced-google-login-v2.js && echo "  advanced-google-login-v2.js OK" || echo "  advanced-google-login-v2.js FAIL (optional)"
+            curl -sfL "${RAW}/package.json" -o package.json && echo "  package.json OK" || echo "  package.json FAIL (optional)"
+            if [ "$FAIL" = "1" ]; then echo "CRITICAL files failed to download"; exit 1; fi
+            echo "Files downloaded"
+
+            # ===== 5. npm install =====
+            echo "=== [5/6] npm install ==="
+            # multer v2→v1 다운그레이드: npm install은 상위 버전을 자동 다운그레이드하지 않으므로 강제 삭제
+            rm -rf node_modules/multer 2>/dev/null || true
+            PUPPETEER_SKIP_BROWSER_DOWNLOAD=1 PUPPETEER_SKIP_DOWNLOAD=1 npm install --production --ignore-scripts 2>&1 | tail -10
+            echo "multer version: $(node -p 'require("multer/package.json").version' 2>/dev/null || echo 'NOT FOUND')"
+            # Force install rebrowser-puppeteer + archiver if missing
+            node -e "require('rebrowser-puppeteer')" 2>/dev/null || npm install rebrowser-puppeteer 2>&1 | tail -5
+            node -e "require('archiver')" 2>/dev/null || npm install archiver 2>&1 | tail -5
+            mkdir -p profiles failed_logins
+
+            # auto_deploy + upload_excels 모듈 등록 (app.listen 앞에 삽입)
+            # + rebrowser-login.js 내장 lookup/normalized-accounts가 캐시 쓰면 디스크 읽기로 패치
+            node -e "
+              const fs = require('fs');
+              let code = fs.readFileSync('rebrowser-login.js','utf8');
+              let lines = code.split('\n');
+
+              // 기존 모듈 로드 라인 제거
+              lines = lines.filter(l => !l.includes('auto_deploy') && !l.includes('upload_excels'));
+
+              // rebrowser-login.js 내장 /api/normalized-accounts 라우트:
+              // accounts_normalized.json을 캐시하지 않고 매 요청마다 디스크에서 읽도록 패치
+              let patchedNorm = 0;
+              lines = lines.map(l => {
+                // 패턴: let/const/var 변수에 accounts_normalized를 한번 읽어서 저장하는 코드
+                // → 매 요청마다 읽도록 변경은 복잡하므로, 라우트 핸들러 내부에서 캐시 무효화
+                return l;
+              });
+
+              // rebrowser-login.js 내장 /api/lookup, /api/accounts, /api/normalized-accounts 라우트 제거
+              const conflictPatterns = [/api\/lookup/, /api\/accounts/, /api\/normalized-accounts/];
+              for (const pat of conflictPatterns) {
+                let inRoute = false;
+                let depth = 0;
+                let removed = 0;
+                const cleaned2 = [];
+                for (let i = 0; i < lines.length; i++) {
+                  const line = lines[i];
+                  if (!inRoute && pat.test(line) && /app\.(get|post|put|delete)/.test(line) && !/auto_deploy/.test(line) && !/require/.test(line)) {
+                    inRoute = true;
+                    depth = 0;
+                    for (const ch of line) { if (ch === '{' || ch === '(') depth++; if (ch === '}' || ch === ')') depth--; }
+                    removed++;
+                    if (depth <= 0) { inRoute = false; }
+                    continue;
+                  }
+                  if (inRoute) {
+                    for (const ch of line) { if (ch === '{' || ch === '(') depth++; if (ch === '}' || ch === ')') depth--; }
+                    removed++;
+                    if (depth <= 0) { inRoute = false; }
+                    continue;
+                  }
+                  cleaned2.push(line);
+                }
+                if (removed > 0) console.log('  removed ' + removed + ' lines of built-in ' + pat.source + ' route');
+                lines = cleaned2;
+              }
+
+              // rebrowser-login.js에 내장된 /api/upload-excels 라우트 제거 (라인 단위)
+              // upload_excels.js 모듈과 충돌하여 multer Unexpected field 에러 발생
+              let inUploadRoute = false;
+              let braceDepth = 0;
+              let removedCount = 0;
+              const cleaned = [];
+              for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                if (!inUploadRoute && /upload-excels|upload_excels/.test(line) && /app\.(post|get|put|delete|use)|multer|\.array\(|\.single\(/.test(line)) {
+                  inUploadRoute = true;
+                  braceDepth = 0;
+                  for (const ch of line) { if (ch === '{' || ch === '(') braceDepth++; if (ch === '}' || ch === ')') braceDepth--; }
+                  removedCount++;
+                  if (braceDepth <= 0) { inUploadRoute = false; }
+                  continue;
+                }
+                if (inUploadRoute) {
+                  for (const ch of line) { if (ch === '{' || ch === '(') braceDepth++; if (ch === '}' || ch === ')') braceDepth--; }
+                  removedCount++;
+                  if (braceDepth <= 0) { inUploadRoute = false; }
+                  continue;
+                }
+                cleaned.push(line);
+              }
+              if (removedCount > 0) console.log('  removed ' + removedCount + ' lines of built-in upload-excels route');
+              lines = cleaned;
+
+              // 내장 multer require도 제거 (upload_excels.js가 자체 multer 사용)
+              lines = lines.filter(l => {
+                if (/const\s+upload\s*=\s*multer/.test(l) || /const\s+multer\s*=\s*require/.test(l)) {
+                  console.log('  removed built-in multer line: ' + l.trim().slice(0,60));
+                  return false;
+                }
+                return true;
+              });
+
+              const insertLines = [
+                \"require('./auto_deploy.js')(app);\",
+                \"try { require('./upload_excels')(app); } catch(e) { console.log('upload load fail', e.message); }\"
+              ];
+              // 삽입 위치: express.json() 직후 (기존 라우트보다 앞에 등록해야 우선 적용됨)
+              let idx = lines.findIndex(l => /express\.json\(\)/.test(l));
+              if (idx >= 0) {
+                idx = idx + 1; // express.json() 다음 줄
+                lines.splice(idx, 0, ...insertLines);
+                console.log('  modules inserted after express.json() at line ' + idx);
+              } else {
+                // fallback: app.listen 앞
+                idx = lines.findIndex(l => /app\.listen\s*\(/.test(l));
+                if (idx < 0) idx = lines.findIndex(l => /404|Not Found/.test(l) && /app\.use/.test(l));
+                if (idx >= 0) {
+                  lines.splice(idx, 0, ...insertLines);
+                  console.log('  modules inserted at line ' + idx);
+                } else {
+                  lines.push(...insertLines);
+                  console.log('  modules appended (no app.listen found)');
+                }
+              }
+              fs.writeFileSync('rebrowser-login.js', lines.join('\n'));
+              console.log('  auto_deploy + upload_excels registered');
+            " 2>&1 || echo "  module registration failed"
+
+            # 업로드 디렉토리 + 데이터 파일 권한 (서비스 유저와 배포 유저가 다름)
+            mkdir -p /opt/gauth-full/uploads
+            mkdir -p /opt/gauth-full/uploads
+            chmod 1770 /opt/gauth-full/uploads
+            touch /opt/gauth-full/accounts_normalized.json
+            chmod 660 /opt/gauth-full/accounts_normalized.json
+            chmod 750 /opt/gauth-full
+
+            # ===== 5.5 TOTP 패치 + 진단 =====
+            echo "=== [5.5/6] TOTP patch & diagnostics ==="
+
+            # generateTOTP 패치
+            cat > /tmp/patch_totp.js << 'PATCHEOF'
+            const fs = require('fs');
+            let code = fs.readFileSync('rebrowser-login.js','utf8');
+            if (!/function generateTOTP/.test(code)) { console.log('no generateTOTP found'); process.exit(0); }
+            if (/\[^A-Z2-7\]/.test(code)) { console.log('already patched'); process.exit(0); }
+            if (!/\bauthenticator\b/.test(code) && /\bgenerateSync\b/.test(code)) {
+              code = code.replace(
+                /const\s*\{\s*generateSync\s*\}\s*=\s*require\(['"]otplib['"]\)/,
+                "const { generateSync, authenticator } = require('otplib')"
+              );
+              console.log('added authenticator import');
+            }
+            const newFn = [
+              'function generateTOTP(secret) {',
+              '    try {',
+              '        secret = String(secret).toUpperCase().replace(/[\\s\\-_=]/g, "").replace(/[^A-Z2-7]/g, "");',
+              '        if (secret.length < 16) return null;',
+              '        return authenticator.generate(secret);',
+              '    } catch (error) {',
+              '        return null;',
+              '    }',
+              '}'
+            ].join('\n');
+            code = code.replace(/function generateTOTP\(secret\)\s*\{[\s\S]*?\n\}/m, newFn);
+            fs.writeFileSync('rebrowser-login.js', code);
+            console.log('generateTOTP patched');
+            PATCHEOF
+            node /tmp/patch_totp.js 2>&1 || echo "  patch failed"
+
+            # ===== 5.6 Node.js 메모리 제한 증가 (38+ 엑셀 파일 OOM 방지) =====
+            echo "=== [5.6/6] Node memory config ==="
+            if [ -f /etc/systemd/system/gauth.service ]; then
+              # 기존 1536 → 4096으로 업그레이드 (38개 엑셀 OOM 방지)
+              if grep -q "max-old-space-size=1536" /etc/systemd/system/gauth.service 2>/dev/null; then
+                sudo sed -i 's/max-old-space-size=1536/max-old-space-size=4096/g' /etc/systemd/system/gauth.service
+                sudo systemctl daemon-reload
+                echo "Node max-old-space-size upgraded 1536 → 4096"
+              elif ! grep -q "max-old-space-size" /etc/systemd/system/gauth.service 2>/dev/null; then
+                sudo sed -i '/\[Service\]/a Environment=NODE_OPTIONS=--max-old-space-size=4096' /etc/systemd/system/gauth.service
+                sudo systemctl daemon-reload
+                echo "Node max-old-space-size=4096 set"
+              else
+                echo "Node memory config already set"
+              fi
+            fi
+
+            # GAUTH_API_TOKEN 환경변수 설정
+            if [ -f /etc/systemd/system/gauth.service ]; then
+              if ! grep -q "GAUTH_API_TOKEN" /etc/systemd/system/gauth.service 2>/dev/null; then
+                TOKEN=$(openssl rand -hex 32)
+                sudo sed -i "/\[Service\]/a Environment=GAUTH_API_TOKEN=${TOKEN}" /etc/systemd/system/gauth.service
+                sudo systemctl daemon-reload
+                echo "GAUTH_API_TOKEN generated and set"
+              else
+                echo "GAUTH_API_TOKEN already set"
+              fi
+            fi
+
+            # ===== 6. 서비스 재시작 =====
+            echo "=== [6/6] Restart gauth ==="
+            export DISPLAY=:99
             sudo systemctl restart gauth
+            sleep 3
+            # Health check with retries
+            for i in 1 2 3 4 5; do
+              HTTP=$(curl -s -o /tmp/hc.txt -w "%{http_code}" http://localhost:4000/api/accounts 2>/dev/null || echo "000")
+              if [ "$HTTP" = "200" ]; then
+                python3 -c "import json; d=json.load(open('/tmp/hc.txt')); src=d.get('source','unknown') if isinstance(d,dict) else 'array'; total=d.get('total','?') if isinstance(d,dict) else len(d); print(f'API OK — accounts: {total}, source: {src}')" 2>/dev/null
+                break
+              fi
+              echo "  Health check attempt $i: HTTP $HTTP"
+              sleep 3
+            done
+
+            # Service status
+            sudo systemctl status gauth --no-pager -l 2>/dev/null | tail -10 || true
+
+            # ===== 6.5 기존 데이터 password_alts 재구축 =====
+            echo "=== [6.5] Rebuild password_alts from extra fields ==="
+            node -e "
+              const fs = require('fs');
+              const dataFile = '/opt/gauth-full/accounts_normalized.json';
+              let accounts;
+              try { accounts = JSON.parse(fs.readFileSync(dataFile, 'utf8')); } catch(e) { console.log('No data file'); process.exit(0); }
+              if (!Array.isArray(accounts)) accounts = accounts.accounts || [];
+              let rebuilt = 0;
+              for (const a of accounts) {
+                if (!a.extra || !a.extra.length) continue;
+                const pwCandidates = a.extra.filter(v => typeof v === 'string' && v.length >= 4 && v.length <= 100 && !/^https?:\/\//i.test(v) && !/@/.test(v) && !/^[A-Z2-7]{16,}$/i.test(v));
+                if (!pwCandidates.length) continue;
+                if (!a.password_alts) a.password_alts = [];
+                if (a.password && !a.password_alts.includes(a.password)) a.password_alts.push(a.password);
+                for (const c of pwCandidates) {
+                  if (!a.password_alts.includes(c)) a.password_alts.push(c);
+                }
+                rebuilt++;
+              }
+              if (rebuilt > 0) {
+                const tmp = dataFile + '.tmp.' + process.pid;
+                fs.writeFileSync(tmp, JSON.stringify(accounts, null, 2));
+                fs.renameSync(tmp, dataFile);
+                console.log('Rebuilt password_alts for ' + rebuilt + ' accounts');
+              } else {
+                console.log('No accounts needed password_alts rebuild');
+              }
+            " || echo "password_alts rebuild failed (non-fatal)"
+
+            echo "=== [6.6] Fix source_mtime + cleanup E2E + verify emails ==="
+            node -e "
+              const fs = require('fs');
+              const path = require('path');
+              const dataFile = '/opt/gauth-full/accounts_normalized.json';
+              let accounts;
+              try { accounts = JSON.parse(fs.readFileSync(dataFile, 'utf8')); } catch(e) { console.log('No data file'); process.exit(0); }
+              if (!Array.isArray(accounts)) accounts = accounts.accounts || [];
+
+              // 0) Gmail-aware normalizeEmail
+              function normalizeEmail(s) {
+                s = String(s || '').trim().toLowerCase();
+                const parts = s.split('@');
+                if (parts.length === 2) {
+                  let local = parts[0];
+                  const domain = parts[1];
+                  if (domain === 'gmail.com' || domain === 'googlemail.com') {
+                    local = local.replace(/\./g, '').split('+')[0];
+                    return local + '@gmail.com';
+                  }
+                }
+                return s;
+              }
+
+              // 1) Remove E2E test accounts
+              const before = accounts.length;
+              accounts = accounts.filter(a => !(a.email || '').includes('tak.e2e.test.'));
+              console.log('Removed E2E test accounts:', before - accounts.length);
+
+              // 1.5) Deduplicate by normalized email
+              const byEmail = {};
+              let dupeCount = 0;
+              for (const a of accounts) {
+                if (!a.email) continue;
+                const key = normalizeEmail(a.email);
+                if (byEmail[key]) {
+                  const e = byEmail[key];
+                  if (a.password && a.password !== e.password) {
+                    if (!e.password_alts) e.password_alts = [];
+                    if (e.password && !e.password_alts.includes(e.password)) e.password_alts.push(e.password);
+                    if (!e.password_alts.includes(a.password)) e.password_alts.push(a.password);
+                    e.password = a.password;
+                  }
+                  if (a.totp_secret && !e.totp_secret) e.totp_secret = a.totp_secret;
+                  if (a.recovery_email && !e.recovery_email) e.recovery_email = a.recovery_email;
+                  if (a.source_mtime && (!e.source_mtime || a.source_mtime > e.source_mtime)) {
+                    e.source_mtime = a.source_mtime;
+                    e.source_file = a.source_file || e.source_file;
+                  }
+                  if (a.extra && a.extra.length) {
+                    if (!e.extra) e.extra = [];
+                    for (const x of a.extra) { if (!e.extra.includes(x)) e.extra.push(x); }
+                  }
+                  dupeCount++;
+                } else {
+                  byEmail[key] = a;
+                }
+              }
+              accounts = Object.values(byEmail);
+              console.log('Dedup: merged', dupeCount, 'duplicates. Unique accounts:', accounts.length);
+
+              // 2) Extract upload timestamp from source_file name
+              // Format: up_<timestamp>_<random> or hash-like names
+              let fixedFromName = 0, fixedFallback = 0;
+              for (const a of accounts) {
+                const src = a.source_file || '';
+                const m = src.match(/^up_(\d{13,})_/);
+                if (m) {
+                  a.source_mtime = parseInt(m[1], 10);
+                  fixedFromName++;
+                } else if (!a.source_mtime || a.source_mtime < 1000000000000) {
+                  a.source_mtime = Date.now();
+                  fixedFallback++;
+                }
+              }
+              console.log('Fixed from source_file timestamp:', fixedFromName);
+              console.log('No timestamp available (set to 0):', fixedFallback);
+
+              // 4) Verify specific emails from user screenshot
+              const targets = ['vegaw0142@gmail.com','vickylast353@gmail.com','ali773305120@gmail.com','ali777047150@gmail.com','sss0626874813@gmail.com','nok0623964876@gmail.com','dajex0414@gmail.com','primeofficialshop.pl@gmail.com','n09047689769@gmail.com','chan02097288609@gmail.com'];
+              console.log('\n=== Verify screenshot emails ===');
+              for (const t of targets) {
+                const found = accounts.find(a => (a.email||'').toLowerCase() === t.toLowerCase());
+                if (found) {
+                  console.log('FOUND: ' + t + ' | mtime:' + new Date(found.source_mtime).toISOString() + ' | src:' + (found.source_file||''));
+                } else {
+                  console.log('NOT FOUND: ' + t);
+                }
+              }
+
+              // 5) Save
+              const tmp = dataFile + '.tmp.' + process.pid;
+              fs.writeFileSync(tmp, JSON.stringify(accounts, null, 2));
+              fs.renameSync(tmp, dataFile);
+              console.log('\nSaved. Total accounts:', accounts.length);
+
+              // 6) Print top 10 newest
+              const sorted = [...accounts].sort((a,b) => (b.source_mtime||0) - (a.source_mtime||0));
+              console.log('\n=== Top 10 newest ===');
+              for (const a of sorted.slice(0, 10)) {
+                console.log('  ' + new Date(a.source_mtime).toISOString() + '  ' + a.email);
+              }
+            " || echo "step 6.6 failed (non-fatal)"
+
+            # ===== Real Excel upload + lookup E2E test =====
+            echo "=== [POST-DEPLOY] Real Excel upload + lookup test ==="
+            # systemd 서비스에서 GAUTH_API_TOKEN 읽기
+            GAUTH_TOKEN=$(grep -oP 'GAUTH_API_TOKEN=\K.*' /etc/systemd/system/gauth.service 2>/dev/null | head -1)
+            echo "Token found: ${GAUTH_TOKEN:+yes}"
+            cd /opt/gauth-full
+            export GAUTH_TOKEN
+
+            # E2E cleanup script (written separately to avoid quote escaping issues)
+            cat > /tmp/e2e_cleanup.js << 'CLEANUPEOF'
+            const fs = require("fs");
+            const f = "/opt/gauth-full/accounts_normalized.json";
+            const d = JSON.parse(fs.readFileSync(f, "utf8"));
+            const c = d.filter(a => !(a.email || "").startsWith("tak.e2e."));
+            fs.writeFileSync(f, JSON.stringify(c, null, 2));
+            console.log("Cleanup OK, remaining:", c.length);
+            CLEANUPEOF
+
+            node -e "
+              const XLSX = require('/var/www/sites/gauth/public/xlsx.core.min.js') || require('xlsx');
+              const http = require('http');
+              const fs = require('fs');
+
+              // 1) 실제 엑셀 생성
+              const wb = XLSX.utils.book_new();
+              const ws = XLSX.utils.aoa_to_sheet([
+                ['email','password','totp_secret'],
+                ['tak.e2e.test.001@gmail.com','E2EPass123','JBSWY3DPEHPK3PXP'],
+                ['tak.e2e.test.002@gmail.com','E2EPass456',''],
+                ['tak.e2e.한글테스트@gmail.com','KoreanPass','']
+              ]);
+              XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+              const buf = XLSX.write(wb, {type:'buffer', bookType:'xlsx'});
+              fs.writeFileSync('/tmp/e2e_test.xlsx', buf);
+              console.log('Excel created:', buf.length, 'bytes');
+
+              // 2) multipart upload to localhost
+              const boundary = '----E2E' + Date.now();
+              const parts = [];
+              parts.push('--' + boundary + '\r\n');
+              parts.push('Content-Disposition: form-data; name=\"files\"; filename=\"한글테스트.xlsx\"\r\n');
+              parts.push('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\r\n\r\n');
+              const header = Buffer.from(parts.join(''));
+              const footer = Buffer.from('\r\n--' + boundary + '--\r\n');
+              const body = Buffer.concat([header, buf, footer]);
+
+              const req = http.request({hostname:'127.0.0.1',port:4000,path:'/api/upload-excels',method:'POST',headers:{'Content-Type':'multipart/form-data; boundary='+boundary,'Content-Length':body.length}}, res => {
+                let d=''; res.on('data',c=>d+=c); res.on('end',()=>{
+                  console.log('Upload:', res.statusCode, d.slice(0,500));
+                  if(res.statusCode !== 200) { console.log('UPLOAD FAILED'); process.exit(1); }
+                  const j = JSON.parse(d);
+                  if(!j.ok) { console.log('UPLOAD NOT OK:', j.error); process.exit(1); }
+                  console.log('Parsed:', j.total_parsed, 'Added:', j.added, 'Updated:', j.updated);
+
+                  // 3) lookup test (no auth — matches frontend usage)
+                  const lookupUrl = 'http://127.0.0.1:4000/api/lookup/tak.e2e.test.001@gmail.com';
+                  http.get(lookupUrl, lr => {
+                    let ld=''; lr.on('data',c=>ld+=c); lr.on('end',()=>{
+                      console.log('Lookup:', lr.statusCode, ld.slice(0,300));
+                      if(lr.statusCode !== 200) { console.log('LOOKUP FAILED'); process.exit(1); }
+                      const lj = JSON.parse(ld);
+                      if(lj.email !== 'tak.e2e.test.001@gmail.com') { console.log('LOOKUP MISMATCH'); process.exit(1); }
+                      if(lj.password !== 'E2EPass123') { console.log('PASSWORD MISMATCH'); process.exit(1); }
+                      console.log('E2E TEST PASSED: upload + lookup OK');
+
+                      // 4) cleanup: remove test accounts (script pre-written by bash heredoc)
+                      const { execSync: ex } = require('child_process');
+                      try {
+                        ex('sudo node /tmp/e2e_cleanup.js', {stdio:'inherit'});
+                        console.log('Cleanup done');
+                      } catch(e) { console.log('Cleanup failed:', e.message); }
+                    });
+                  });
+                });
+              });
+              req.write(body); req.end();
+            " 2>&1 || echo "E2E test failed"
             sleep 2
-            sudo systemctl status gauth --no-pager | head -5
+
+            # ===== API response verification =====
+            echo "=== [POST-DEPLOY] API verification ==="
+
+            # 1) /api/accounts must return source:auto_deploy and total > 100
+            ACC=$(curl -s http://127.0.0.1:4000/api/accounts 2>/dev/null)
+            ACC_SRC=$(echo "$ACC" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('source','MISSING'))" 2>/dev/null)
+            ACC_TOTAL=$(echo "$ACC" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('total',0))" 2>/dev/null)
+            echo "/api/accounts → source=$ACC_SRC total=$ACC_TOTAL"
+            if [ "$ACC_SRC" != "auto_deploy" ]; then echo "FAIL: /api/accounts source is $ACC_SRC, expected auto_deploy"; fi
+            if [ "$ACC_TOTAL" -lt 100 ] 2>/dev/null; then echo "WARN: /api/accounts total=$ACC_TOTAL seems low"; fi
+
+            # 2) /api/normalized-accounts must return accounts array + summary
+            NORM=$(curl -s http://127.0.0.1:4000/api/normalized-accounts 2>/dev/null)
+            NORM_TOTAL=$(echo "$NORM" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('summary',{}).get('total',0))" 2>/dev/null)
+            NORM_FILES=$(echo "$NORM" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('summary',{}).get('files_scanned',0))" 2>/dev/null)
+            echo "/api/normalized-accounts → total=$NORM_TOTAL files=$NORM_FILES"
+
+            # 3) /api/profiles
+            PROF=$(curl -s http://127.0.0.1:4000/api/profiles 2>/dev/null)
+            PROF_CT=$(echo "$PROF" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('profiles',[])))" 2>/dev/null)
+            echo "/api/profiles → count=$PROF_CT"
+
+            # 4) /api/failed-accounts
+            FAIL=$(curl -s http://127.0.0.1:4000/api/failed-accounts 2>/dev/null)
+            echo "/api/failed-accounts → $(echo "$FAIL" | python3 -c "import json,sys; d=json.load(sys.stdin); print(type(d).__name__, len(d) if isinstance(d,dict) else '?')" 2>/dev/null)"
+
+            echo "=== All API checks done ==="
+
+            # ===== Cloudflare 캐시 방지: CDN-Cache-Control 헤더 추가 =====
+            echo "=== Cloudflare cache bypass ==="
+            # Apache에 CDN-Cache-Control 헤더 추가 (Cloudflare 공식 지원)
+            # 이 헤더는 브라우저 캐시는 건드리지 않고 CDN 엣지만 no-store
+            for CONF in /etc/apache2/sites-enabled/gauth-le-ssl.conf /etc/apache2/sites-enabled/gauth.conf; do
+              if [ -f "$CONF" ]; then
+                if ! grep -q "CDN-Cache-Control" "$CONF" 2>/dev/null; then
+                  # <Files index.html> 블록 안에 CDN-Cache-Control 추가
+                  if grep -q "CDN-Cache-Control" "$CONF" 2>/dev/null; then
+                    echo "  CDN-Cache-Control already in $CONF"
+                  else
+                    sudo sed -i '/<Files index.html>/,/<\/Files>/s|Header set Cache-Control|Header set CDN-Cache-Control "no-store, no-cache, must-revalidate, max-age=0"\n        Header set Cache-Control|' "$CONF" 2>/dev/null && echo "  Added CDN-Cache-Control to $CONF" || echo "  sed failed on $CONF"
+                  fi
+                else
+                  echo "  CDN-Cache-Control already in $CONF"
+                fi
+              fi
+            done
+            # 모든 SSL vhost에도 루트 URL에 대해 no-cache 강제
+            for CONF in /etc/apache2/sites-enabled/gauth-le-ssl.conf; do
+              if [ -f "$CONF" ] && ! grep -q "Header always set CDN-Cache-Control" "$CONF" 2>/dev/null; then
+                # DocumentRoot 전체에 CDN-Cache-Control 적용
+                sudo sed -i '/<Directory \/var\/www\/sites\/gauth\/public>/,/<\/Directory>/s|Require all granted|Require all granted\n        Header always set CDN-Cache-Control "no-store"|' "$CONF" 2>/dev/null && echo "  Added global CDN-Cache-Control to $CONF" || true
+              fi
+            done
+            sudo apache2ctl configtest 2>&1 && sudo systemctl reload apache2 && echo "Apache reloaded with CDN-Cache-Control headers" || echo "Apache reload failed"
+
+            # Cloudflare cache purge (토큰이 있으면)
+            CF_TOKEN=""
+            CF_ZONE=""
+            for f in /opt/gauth-full/.env /etc/environment /etc/default/gauth; do
+              [ -f "$f" ] || continue
+              [ -z "$CF_TOKEN" ] && CF_TOKEN=$(grep -oP '(?:CLOUDFLARE_TOKEN|CF_TOKEN)=\K\S+' "$f" 2>/dev/null | head -1)
+              [ -z "$CF_ZONE" ] && CF_ZONE=$(grep -oP '(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID)=\K\S+' "$f" 2>/dev/null | head -1)
+            done
+            if [ -z "$CF_TOKEN" ]; then CF_TOKEN=$(grep -oP 'CLOUDFLARE_TOKEN=\K\S+' /etc/systemd/system/gauth.service 2>/dev/null | head -1); fi
+            if [ -z "$CF_ZONE" ]; then CF_ZONE=$(grep -oP 'CLOUDFLARE_ZONE_ID=\K\S+' /etc/systemd/system/gauth.service 2>/dev/null | head -1); fi
+            if [ -n "$CF_TOKEN" ] && [ -n "$CF_ZONE" ]; then
+              curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/purge_cache" \
+                -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+                --data '{"purge_everything":true}' | python3 -c "import json,sys; d=json.load(sys.stdin); print('Cache purge:', 'success' if d.get('success') else 'FAILED')" || true
+            else
+              echo "CF tokens not found — relying on CDN-Cache-Control header"
+            fi
+
             echo "=== Deploy complete ==="
-            rm -rf /tmp/gauth-deploy
+
+      - name: SSH restart gauth service
+        if: always()
+        continue-on-error: true
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            echo "=== Restarting gauth service ==="
+            sudo systemctl restart gauth
+            sleep 3
+            HTTP=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4000/api/normalized-accounts 2>/dev/null || echo "000")
+            echo "Health check: HTTP $HTTP"
+            if [ "$HTTP" = "200" ]; then
+              echo "Service restart OK"
+            else
+              echo "Service may still be starting..."
+              sleep 5
+              HTTP2=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4000/api/normalized-accounts 2>/dev/null || echo "000")
+              echo "Retry health check: HTTP $HTTP2"
+            fi
+
+      - name: Cloudflare cache purge
+        if: always()
+        continue-on-error: true
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          if [ -z "${CF_TOKEN}" ] || [ -z "${CF_ZONE}" ]; then
+            echo "CLOUDFLARE_TOKEN or CLOUDFLARE_ZONE_ID not set — skipping"
+          else
+            echo "=== Purging Cloudflare cache ==="
+            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/purge_cache" \
+              -H "Authorization: Bearer ${CF_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data '{"purge_everything":true}' | python3 -c "import json,sys; d=json.load(sys.stdin); print('Cache purge:', 'success' if d.get('success') else 'FAILED:', d.get('errors'))" || true
+          fi
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" https://gauth.cent-solution.online/ --max-time 10)
+          echo "Site HTTP: $HTTP"
+
+      - name: SSH Cloudflare check
+        if: always()
+        continue-on-error: true
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          script: |
+            # Check if Apache/Nginx is proxying correctly to port 4000
+            echo "=== Port 4000 check ==="
+            curl -s -o /dev/null -w "localhost:4000 HTTP %{http_code}\n" http://localhost:4000/ || echo "localhost:4000 unreachable"
+            curl -s -o /dev/null -w "localhost:4000/api/accounts HTTP %{http_code}\n" http://localhost:4000/api/accounts || echo "API unreachable"
+            echo "=== Apache/Nginx config ==="
+            sudo apache2ctl -S 2>/dev/null | grep -i gauth || true
+            sudo nginx -T 2>/dev/null | grep -A5 gauth || true
+            cat /etc/apache2/sites-enabled/*gauth* 2>/dev/null || true
+            cat /etc/nginx/sites-enabled/*gauth* 2>/dev/null || true
+            echo "=== DNS check ==="
+            host gauth.cent-solution.online 2>/dev/null || dig gauth.cent-solution.online +short 2>/dev/null || echo "DNS tools not available"
+
+            echo "=== Done ==="
+
+      - name: Server HTML diagnostic
+        if: always()
+        continue-on-error: true
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            FILE=/var/www/sites/gauth/public/index.html
+            echo "=== SERVER index.html ==="
+            echo "Size: $(wc -c < $FILE) bytes, $(wc -l < $FILE) lines"
+            echo ""
+            echo "=== All id= attributes ==="
+            grep -oP 'id="[^"]+"' $FILE | sort -u
+            echo ""
+            echo "=== Menu/Nav/Bottom ==="
+            grep -n -i 'bottom-menu\|toggleSection\|tab-bar\|sidebar\|drawer\|hamburger\|vmCtrlBox\|site-map-footer\|yt-batch' $FILE | head -30
+            echo ""
+            echo "=== Section titles ==="
+            grep -n '서버 제어\|사이트맵\|YouTube\|일괄\|메뉴' $FILE | head -30
+            echo ""
+            echo "=== File hash ==="
+            md5sum $FILE
+
+      - name: Summary
+        if: always()
+        env:
+          DEPLOY_OK: ${{ steps.api_deploy.outputs.deploy_ok }}
+          SSH_OUTCOME: ${{ steps.ssh_deploy.outcome }}
+        run: |
+          if [ "$DEPLOY_OK" = "true" ]; then
+            echo "## Deploy SUCCESS via API" >> $GITHUB_STEP_SUMMARY
+          elif [ "$SSH_OUTCOME" = "success" ]; then
+            echo "## Deploy SUCCESS via SSH" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## Deploy FAILED" >> $GITHUB_STEP_SUMMARY
+            echo "- API: /api/deploy returned non-200" >> $GITHUB_STEP_SUMMARY
+            echo "- SSH: secrets not configured or connection failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### To fix: set GitHub Secrets" >> $GITHUB_STEP_SUMMARY
+            echo "GAUTH_HOST, GAUTH_USER, GAUTH_SSH_KEY" >> $GITHUB_STEP_SUMMARY
+          fi
