@@ -691,9 +691,7 @@ async function load(){
     var ad = a.account_date || _parseDateFromFilename(a.source_file) || null;
     return Object.assign({}, a, {has_session: sess.has(a.email), lock_reason: f.reason || null, account_date: ad});
   }).sort(function(x,y){
-    var xd = x.account_date || x.source_mtime || 0;
-    var yd = y.account_date || y.source_mtime || 0;
-    return yd - xd;
+    return (y.source_mtime||0) - (x.source_mtime||0);
   })
   var _fc = n.summary && n.summary.files_scanned;
   if(_fc == null){
@@ -724,9 +722,8 @@ function applyFilter(){
   if(sortOrder){
     var desc = sortOrder.value === 'desc'
     FILTERED.sort(function(x,y){
-      var xd = x.account_date || x.source_mtime || 0;
-      var yd = y.account_date || y.source_mtime || 0;
-      return desc ? yd - xd : xd - yd;
+      var xm = x.source_mtime||0, ym = y.source_mtime||0;
+      return desc ? ym - xm : xm - ym;
     })
   }
   PAGE = 1
