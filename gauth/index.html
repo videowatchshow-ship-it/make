@@ -47,27 +47,27 @@ button:disabled{background:#333;cursor:not-allowed}
   .controls{flex-wrap:wrap;padding:8px 12px}
   .controls input#q{min-width:100px}
   .row{grid-template-columns:1fr!important;gap:4px!important;padding:10px 12px!important;font-size:13px}
-  #td-result .td-card{padding:14px!important}
-  #td-result .td-card .td-grid{grid-template-columns:1fr!important;gap:8px 0!important;font-size:15px!important}
-  #td-result .td-card .td-label{color:#8a95a5;font-size:12px;font-weight:600;margin-bottom:2px}
-  #td-result .td-card .td-val{font-size:15px;line-height:1.5;word-break:break-all}
-  #td-result .td-card .td-email{font-size:17px!important}
-  #td-result .td-card .td-pw{font-size:17px!important}
-  #td-result .td-card .td-2fa-code{font-size:24px!important;letter-spacing:3px!important}
-  #td-result .td-card .td-secret{font-size:13px!important}
-  #td-result .td-card .cp{padding:6px 14px!important;font-size:13px!important;margin-left:8px!important;border-radius:4px}
-  #td-result .td-card button{padding:8px 14px!important;font-size:13px!important}
+  #viewport .td-card{padding:14px!important}
+  #viewport .td-card .td-grid{grid-template-columns:1fr!important;gap:8px 0!important;font-size:15px!important}
+  #viewport .td-card .td-label{color:#8a95a5;font-size:12px;font-weight:600;margin-bottom:2px}
+  #viewport .td-card .td-val{font-size:15px;line-height:1.5;word-break:break-all}
+  #viewport .td-card .td-email{font-size:17px!important}
+  #viewport .td-card .td-pw{font-size:17px!important}
+  #viewport .td-card .td-2fa-code{font-size:24px!important;letter-spacing:3px!important}
+  #viewport .td-card .td-secret{font-size:13px!important}
+  #viewport .td-card .cp{padding:6px 14px!important;font-size:13px!important;margin-left:8px!important;border-radius:4px}
+  #viewport .td-card button{padding:8px 14px!important;font-size:13px!important}
   #excelUpBox{margin:10px 8px;padding:10px}
   #pagination{flex-wrap:wrap}
 }
 @media(min-width:769px){
-  #td-result .td-card .td-grid{grid-template-columns:100px 1fr;gap:6px 12px;font-size:14px}
-  #td-result .td-card{padding:16px;margin-bottom:10px}
-  #td-result .td-card .td-email{font-size:16px}
-  #td-result .td-card .td-pw{font-size:15px}
-  #td-result .td-card .td-2fa-code{font-size:20px;letter-spacing:2px}
-  #td-result .td-card .cp{padding:4px 10px;font-size:12px}
-  #td-result .td-card button{padding:6px 12px;font-size:12px}
+  #viewport .td-card .td-grid{grid-template-columns:100px 1fr;gap:6px 12px;font-size:14px}
+  #viewport .td-card{padding:16px;margin-bottom:10px}
+  #viewport .td-card .td-email{font-size:16px}
+  #viewport .td-card .td-pw{font-size:15px}
+  #viewport .td-card .td-2fa-code{font-size:20px;letter-spacing:2px}
+  #viewport .td-card .cp{padding:4px 10px;font-size:12px}
+  #viewport .td-card button{padding:6px 12px;font-size:12px}
 }
 #pwa-install-btn{display:none;width:calc(100% - 32px);margin:0 auto;padding:16px 24px;background:linear-gradient(135deg,#ff9040,#ff6020);color:#fff;border:none;border-radius:12px;font-size:20px;font-weight:800;cursor:pointer;box-shadow:0 4px 16px rgba(255,144,64,.4);text-align:center}
 #pwa-install-btn:hover{transform:scale(1.02);box-shadow:0 6px 24px rgba(255,144,64,.5)}
@@ -583,18 +583,6 @@ updateUploadStatus();
   <div id="lookup-result" style="width:100%;display:none;background:#161a20;border:1px solid #2a323c;border-radius:8px;padding:16px;font-size:14px;margin-top:6px"></div>
 </div>
 
-<!-- 시간 순서 계정 정보 확인 -->
-<div style="padding:14px 20px;background:#1a1210;border-bottom:1px solid #22282f;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-  <span style="font-size:14px;color:#ffb469;font-weight:700">⏰ 시간 순서 계정 정보 확인</span>
-  <select id="td-order" style="flex:0 0 auto">
-    <option value="desc" selected>최신 순 (엑셀 날짜 최신 → 오래됨)</option>
-    <option value="asc">오래된 순 (엑셀 날짜 오래됨 → 최신)</option>
-  </select>
-  <button id="td-load" style="background:#ff9040">계정 조회</button>
-  <button id="td-refresh" style="background:#2a323c;color:#c9d2dc;font-size:16px;padding:12px 20px;font-weight:700;border-radius:8px" onclick="tdLoad()">🔄 새로고침</button>
-<div id="td-result" style="width:100%;display:none;background:#161a20;border:1px solid #2a323c;border-radius:8px;padding:16px;font-size:14px;margin-top:6px"></div>
-</div>
-
 <div class="controls">
   <input id="apiToken" type="password" placeholder="🔑 API 토큰" style="flex:0 0 140px;min-width:100px;font-size:12px" oninput="sessionStorage.setItem('gauth_token',this.value)">
   <span style="width:1px;height:24px;background:#2a323c"></span>
@@ -605,6 +593,10 @@ updateUploadStatus();
     <option value="2fa">2FA 있음</option>
     <option value="never">미접속만</option>
     <option value="locked">잠김만 (폰/패스키/기기)</option>
+  </select>
+  <select id="td-order" style="flex:0 0 auto">
+    <option value="desc" selected>최신순</option>
+    <option value="asc">오래된순</option>
   </select>
   <span id="count"></span>
   <span style="width:1px;height:24px;background:#2a323c"></span>
@@ -670,7 +662,6 @@ async function load(){
   document.getElementById('s-2fa').textContent = ((n.summary && n.summary.PASSWORD_2FA) || _2faCount).toLocaleString()
   document.getElementById('s-pw').textContent = ((n.summary && n.summary.PASSWORD_ONLY) || _pwOnly).toLocaleString()
   applyFilter()
-  if(window._gauthAutoLoad){ window._gauthAutoLoad=false; setTimeout(tdLoad, 300) }
 }
 function applyFilter(){
   const q = document.getElementById('q').value.trim().toLowerCase()
@@ -684,6 +675,14 @@ function applyFilter(){
     if (f==='locked' && !LOCK.includes(a.lock_reason)) return false
     return true
   })
+  var sortOrder = document.getElementById('td-order')
+  if(sortOrder){
+    var desc = sortOrder.value === 'desc'
+    FILTERED.sort(function(x,y){
+      var d = (x.source_mtime||0) - (y.source_mtime||0)
+      return desc ? -d : d
+    })
+  }
   const _ll = localStorage.getItem('gauth_last_lookup')
   if(_ll){
     const _li = FILTERED.findIndex(a=>a.email===_ll)
@@ -694,47 +693,40 @@ function applyFilter(){
   document.getElementById('count').textContent = `${FILTERED.length.toLocaleString()}개 · ${totalPages}페이지`
   render()
 }
-function render(){
+async function render(){
   var totalPages = Math.max(1, Math.ceil(FILTERED.length / PAGE_SIZE))
   if (PAGE > totalPages) PAGE = totalPages
   var start = (PAGE-1) * PAGE_SIZE
   var end = Math.min(FILTERED.length, start + PAGE_SIZE)
-  var rows = []
+  const slice = FILTERED.slice(start, end)
+  const codes = await Promise.all(slice.map(a =>
+    a.totp_secret ? fetch(authQuery('/codes/'+a.totp_secret),{headers:authHeaders()}).then(r=>r.json()).then(j=>j.code||'—').catch(()=>'—') : Promise.resolve('—')
+  ))
   const _cur = localStorage.getItem('gauth_last_lookup')||''
-  const _curIdx = _cur ? FILTERED.findIndex(x=>x.email===_cur) : -1
-  for (let i=start;i<end;i++){
-    const a = FILTERED[i]
+  var rows = []
+  for (let i=0;i<slice.length;i++){
+    const a = slice[i]
+    const idx = start+i+1
+    const _em = escapeHtml(a.email), _pw = escapeHtml(a.password||'—'), _ts = escapeHtml(a.totp_secret||'—')
+    const yt = a.youtube_url || '', _yt = escapeHtml(yt)
+    const _rc = escapeHtml(a.recovery_email||a.recovery_phone||'—'), _sf = escapeHtml(a.source_file||'—')
+    const dt = a.source_mtime ? new Date(a.source_mtime).toLocaleString('ko-KR') : '—'
     const sess = accessBadge(a)
     const tfa = a.totp_secret ? '<span class="badge b-2fa">2FA</span>' : ''
-    const lock = a.lock_reason ? `<span class="badge b-lock" title="잠김 사유: ${escapeHtml(a.lock_reason)} (수동 처리 필요)">🔒 ${escapeHtml(a.lock_reason)}</span>` : ''
-    const rec = a.recovery_email || ''
-    const _e = escapeHtml(a.email)
-    const _isLookup = _lookupEmail === a.email
-    const _isLogin = _loginEmail === a.email
-    const btnOpen = _isLookup
-      ? `<button style="background:#ff9040;padding:6px 8px;font-size:11px" disabled>⏳ 조회 중</button>`
-      : a.has_session
-      ? `<button onclick="openIt('${_e}')">🔓 열기</button>`
-      : `<button class="no-sess" onclick="quickLookup('${_e}')">🔍 정보</button>`
-    const btnLogin = _isLogin
-      ? `<button style="background:#f5c842;color:#000;padding:6px 8px;font-size:11px" disabled>⏳ 로그인 중…</button>`
-      : a.lock_reason
-      ? `<button style="background:#555;padding:6px 8px;font-size:11px" onclick="unlockAccount('${_e}',this)">🔓 잠금해제</button>`
-      : `<button style="background:#7c3aed;padding:6px 8px;font-size:11px" onclick="programLogin('${_e}',this)">🔑 로그인</button>`
+    const lock = a.lock_reason ? `<span class="badge b-lock" title="${escapeHtml(a.lock_reason)}">🔒 ${escapeHtml(a.lock_reason)}</span>` : ''
     const _isCur = a.email===_cur
-    const _isNext = _curIdx>=0 && i===_curIdx+1
-    const _hl = _isLookup ? 'background:#2a1a00;border-left:4px solid #ff9040;box-shadow:inset 0 0 20px rgba(255,144,64,0.1);' : _isLogin ? 'background:#2a2a00;border-left:4px solid #f5c842;box-shadow:inset 0 0 20px rgba(245,200,66,0.1);' : _isCur ? 'background:#0d2818;border-left:4px solid #3ddc84;box-shadow:inset 0 0 20px rgba(61,220,132,0.08);' : _isNext ? 'background:#0d1528;border-left:4px solid #7dabff;box-shadow:inset 0 0 20px rgba(125,171,255,0.08);' : ''
-    const _label = _isCur ? '<span style="background:#3ddc84;color:#000;font-size:10px;font-weight:800;margin-left:8px;padding:1px 6px;border-radius:3px">★ 현재 조회</span>' : _isNext ? '<span style="background:#7dabff;color:#000;font-size:10px;font-weight:800;margin-left:8px;padding:1px 6px;border-radius:3px">▶ 다음</span>' : ''
-    const _p = escapeHtml(a.password||'—')
-    const _t = a.totp_secret ? escapeHtml(a.totp_secret.slice(0,20))+'…' : '—'
-    const _r = escapeHtml(rec||'—')
-    rows.push(`<div class="row" style="${_hl}">
-      <div class="email" style="cursor:pointer;color:${_isCur?'#3ddc84':_isNext?'#7dabff':'#7dabff'}" onclick="quickLookup('${_e}')">${_e}${_label}</div>
-      <div>${sess}${tfa}${lock}</div>
-      <div class="mono pw">${_p}</div>
-      <div class="mono">${_t}</div>
-      <div class="mono">${_r}</div>
-      <div style="display:flex;gap:4px;flex-wrap:wrap">${btnOpen}${btnLogin}</div>
+    const _hl = _isCur ? 'border-left:4px solid #3ddc84;background:#0d2818;' : ''
+    rows.push(`<div class="td-card" style="background:#161a20;border:1px solid #2a323c;border-radius:8px;padding:12px;margin-bottom:8px;${_hl}">
+      <div class="td-grid" style="display:grid;grid-template-columns:100px 1fr;gap:6px 12px;font-size:13px">
+        <div class="td-label" style="color:#8a95a5">#${idx}</div><div><b class="td-email" style="color:#ffb469;font-size:14px;cursor:pointer" onclick="quickLookup('${_em}')">${_em}</b>${cp(a.email)} ${sess}${tfa}${lock}</div>
+        <div class="td-label" style="color:#8a95a5">비밀번호</div><div class="mono td-val td-pw" style="color:#3ddc84">${_pw}${cp(a.password)}</div>
+        <div class="td-label" style="color:#8a95a5">2FA 시크릿</div><div class="mono td-val td-secret"><span id="sec-${idx}">${_ts}</span>${cp(a.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${_em}','sec-${idx}')">✏️</button></div>
+        <div class="td-label" style="color:#8a95a5">2FA 코드</div><div class="mono td-val td-2fa-code" style="color:#7dabff;font-size:18px;font-weight:700;letter-spacing:2px"><span id="tdcode-${idx}">${codes[i]}</span>${a.totp_secret?cp('_','tdcode-'+idx):cp(codes[i]!=='—'?codes[i]:'')}${a.totp_secret?`<button style="background:#2a323c;padding:3px 8px;font-size:11px;margin-left:6px;color:#c9d2dc" onclick="tdRefreshCode(${idx},'${escapeHtml(a.totp_secret)}',this)">🔄 새로고침</button>`:''}</div>
+        <div class="td-label" style="color:#8a95a5">동작</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button style="background:#7c3aed" onclick="programLogin('${_em}',this)">🔑 로그인</button><button style="background:#1c5a2a;color:#3ddc84;font-weight:700" onclick="ytApiConnect('${_em}',this)">📡 API 연결</button><button style="background:#1c2740;color:#7dabff;font-weight:700" onclick="ytChatShot('${_em}','sky82892 텔레 문의',this)">💬 채팅 샷</button><button style="background:#3a1c00;color:#ff9040;font-weight:700" onclick="ytSpanner('${_em}',this)">🔧 스패너</button></div>
+        <div class="td-label" style="color:#8a95a5">YouTube</div><div class="mono td-val" style="color:#ff8a8a;font-size:11px">${yt&&/^https?:\/\//i.test(yt)?`<a href="${_yt}" target="_blank" style="color:#ff8a8a">${_yt}</a>${cp(yt)}`:'—'}</div>
+        <div class="td-label" style="color:#8a95a5">복구</div><div class="mono td-val" style="font-size:11px">${_rc}</div>
+        <div class="td-label" style="color:#8a95a5">엑셀</div><div class="mono td-val" style="font-size:11px;color:#8a95a5">${_sf} · ${dt}</div>
+      </div>
     </div>`)
   }
   sp.innerHTML = rows.join('')
@@ -1011,67 +1003,6 @@ if(_lookupBtn) _lookupBtn.addEventListener('click', lookup)
 if(_lookupInput) _lookupInput.addEventListener('keydown', e=>{if(e.key==='Enter')lookup()})
 ;(function(){var ll=localStorage.getItem('gauth_last_lookup');if(ll){document.getElementById('lookup').value=ll;lookup()}})()
 
-// --- 시간 순서 계정 정보 확인 (20개씩 페이지) ---
-const TD_PAGE_SIZE = window.innerWidth <= 768 ? 10 : 20
-let TD=[], TDP=1
-async function tdLoad(){
-  // ALL은 이미 로드됨 (accounts_normalized 전체, source_mtime 포함)
-  if(!ALL.length){alert('아직 계정 로드 안됨');return}
-  TD = [...ALL].sort((x,y)=>{
-    const d = (x.source_mtime||0) - (y.source_mtime||0)
-    return document.getElementById('td-order').value==='desc' ? -d : d
-  })
-  TDP = 1
-  document.getElementById('td-result').style.display='block'
-  tdRender()
-}
-async function tdRender(){
-  const total = TD.length, pages = Math.max(1, Math.ceil(total/TD_PAGE_SIZE))
-  if(TDP>pages) TDP=pages
-  const s = (TDP-1)*TD_PAGE_SIZE, e = Math.min(total, s+TD_PAGE_SIZE)
-  const box = document.getElementById('td-result')
-  box.innerHTML = `<div style="color:#8a95a5;margin-bottom:10px">${s+1}~${e} / 총 ${total}개 (${TDP}/${pages}페이지)</div><div id="td-loading">TOTP 코드 계산 중…</div>`
-
-  // 20개 각각의 TOTP 코드 병렬 fetch
-  const slice = TD.slice(s, e)
-  const codes = await Promise.all(slice.map(a =>
-    a.totp_secret ? fetch(authQuery('/codes/'+a.totp_secret),{headers:authHeaders()}).then(r=>r.json()).then(j=>j.code||'—').catch(()=>'—') : Promise.resolve('—')
-  ))
-
-  const cards = slice.map((a, i) => {
-    const dt = a.source_mtime ? new Date(a.source_mtime).toLocaleString('ko-KR') : '—'
-    const idx = s+i+1
-    const yt = a.youtube_url || ''
-    const _em = escapeHtml(a.email), _pw = escapeHtml(a.password||'—'), _ts = escapeHtml(a.totp_secret||'—'), _yt = escapeHtml(yt), _rc = escapeHtml(a.recovery_email||a.recovery_phone||'—'), _sf = escapeHtml(a.source_file||'—')
-    return `<div class="td-card" style="background:#161a20;border:1px solid #2a323c;border-radius:8px;padding:12px;margin-bottom:8px">
-      <div class="td-grid" style="display:grid;grid-template-columns:100px 1fr;gap:6px 12px;font-size:13px">
-        <div class="td-label" style="color:#8a95a5">#${idx}</div><div><b class="td-email" style="color:#ffb469;font-size:14px">${_em}</b>${cp(a.email)} ${accessBadge(a)}</div>
-        <div class="td-label" style="color:#8a95a5">비밀번호</div><div class="mono td-val td-pw" style="color:#3ddc84">${_pw}${cp(a.password)}</div>
-        <div class="td-label" style="color:#8a95a5">2FA 시크릿</div><div class="mono td-val td-secret"><span id="sec-${idx}">${_ts}</span>${cp(a.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${_em}','sec-${idx}')">✏️</button></div>
-        <div class="td-label" style="color:#8a95a5">2FA 코드</div><div class="mono td-val td-2fa-code" style="color:#7dabff;font-size:18px;font-weight:700;letter-spacing:2px"><span id="tdcode-${idx}">${codes[i]}</span>${a.totp_secret?cp('_', 'tdcode-'+idx):cp(codes[i]!=='—'?codes[i]:'')}${a.totp_secret?`<button style="background:#2a323c;padding:3px 8px;font-size:11px;margin-left:6px;color:#c9d2dc" onclick="tdRefreshCode(${idx},'${escapeHtml(a.totp_secret)}',this)">🔄 새로고침</button>`:''}</div>
-        <div class="td-label" style="color:#8a95a5">동작</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button style="background:#7c3aed" onclick="programLogin('${_em}',this)">🔑 로그인</button><button style="background:#1c5a2a;color:#3ddc84;font-weight:700" onclick="ytApiConnect('${_em}',this)">📡 API 연결</button><button style="background:#1c2740;color:#7dabff;font-weight:700" onclick="ytChatShot('${_em}','sky82892 텔레 문의',this)">💬 채팅 샷</button><button style="background:#3a1c00;color:#ff9040;font-weight:700" onclick="ytSpanner('${_em}',this)">🔧 스패너</button></div>
-        <div class="td-label" style="color:#8a95a5">YouTube</div><div class="mono td-val" style="color:#ff8a8a;font-size:11px">${yt&&/^https?:\/\//i.test(yt)?`<a href="${_yt}" target="_blank" style="color:#ff8a8a">${_yt}</a>${cp(yt)}`:'—'}</div>
-        <div class="td-label" style="color:#8a95a5">복구</div><div class="mono td-val" style="font-size:11px">${_rc}</div>
-        <div class="td-label" style="color:#8a95a5">엑셀</div><div class="mono td-val" style="font-size:11px;color:#8a95a5">${_sf} · ${dt}</div>
-      </div>
-    </div>`
-  }).join('')
-
-  // 페이지네이션
-  const btn = (l, p, disabled, active) => `<button ${disabled?'disabled':''} style="min-width:36px;background:${active?'#ff9040':'#2a323c'}" onclick="tdGoto(${p})">${l}</button>`
-  const from = Math.max(1, TDP-3), to = Math.min(pages, TDP+3)
-  let pgHtml = btn('«',1,TDP===1)+btn('‹',TDP-1,TDP===1)
-  if(from>1) pgHtml += '<span style="color:#8a95a5">…</span>'
-  for(let i=from;i<=to;i++) pgHtml += btn(i,i,false,i===TDP)
-  if(to<pages) pgHtml += '<span style="color:#8a95a5">…</span>'
-  pgHtml += btn('›',TDP+1,TDP===pages)+btn('»',pages,TDP===pages)
-  pgHtml += ` <span style="color:#8a95a5;font-size:12px;margin-left:10px">${TDP} / ${pages}</span>`
-
-  box.innerHTML = `
-    <div style="color:#8a95a5;margin-bottom:10px">${s+1}~${e} / 총 ${total}개 · ${TDP}/${pages}페이지 · 20개씩</div>
-    ${cards}
-    <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;padding:10px 0">${pgHtml}</div>`
-}
 async function lookupRefreshCode(secret, btn){
   const el = document.getElementById('lookup-code')
   if(!el) return
@@ -1221,18 +1152,8 @@ async function ytAddMod(email, liveChatId, channelId, btn) {
   setTimeout(() => { btn.textContent = orig; btn.disabled = false; btn.style.background = ''; }, 2000);
 }
 
-function tdGoto(n){
-  const pages = Math.max(1, Math.ceil(TD.length/TD_PAGE_SIZE))
-  TDP = Math.max(1, Math.min(pages, n))
-  tdRender()
-  document.getElementById('td-result').scrollIntoView({behavior:'smooth', block:'start'})
-}
-var _tdLoadBtn = document.getElementById('td-load')
 var _tdOrder = document.getElementById('td-order')
-if(_tdLoadBtn) _tdLoadBtn.addEventListener('click', tdLoad)
-if(_tdOrder) _tdOrder.addEventListener('change', ()=>{if(TD.length){tdLoad()}})
-// Auto-load: 페이지 로드 후 자동으로 최신순 계정 목록 표시
-window._gauthAutoLoad = true
+if(_tdOrder) _tdOrder.addEventListener('change', applyFilter)
 // 페이지네이션으로 전환: 스크롤 렌더 제거
 var _qInput = document.getElementById('q')
 var _filterSelect = document.getElementById('filter')
