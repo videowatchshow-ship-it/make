@@ -1257,7 +1257,7 @@ let _deferredPrompt;
 window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();_deferredPrompt=e;document.getElementById('pwa-install-btn').style.display='block'});
 document.getElementById('pwa-install-btn').addEventListener('click',function(){if(!_deferredPrompt)return;_deferredPrompt.prompt();_deferredPrompt.userChoice.then(function(r){if(r.outcome==='accepted'){_deferredPrompt=null;document.getElementById('pwa-install-btn').style.display='none'}}).catch(function(){})});
 window.addEventListener('appinstalled',function(){document.getElementById('pwa-install-btn').style.display='none'});
-if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(e){console.warn('SW registration failed:', e)})}
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').then(function(reg){reg.update();var refreshing=false;navigator.serviceWorker.addEventListener('controllerchange',function(){if(!refreshing){refreshing=true;window.location.reload()}})}).catch(function(e){console.warn('SW registration failed:', e)})}
 document.addEventListener('visibilitychange',function(){if(document.hidden){if(_spannerInterval){clearInterval(_spannerInterval);_spannerInterval=-1}}else{if(_spannerInterval===-1){_spannerInterval=null}}})
 </script>
 </body></html>
