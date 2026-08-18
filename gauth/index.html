@@ -118,11 +118,9 @@ button:disabled{background:#333;cursor:not-allowed}
 })();
 </script>
 
-<!-- 상단 메뉴 3개 -->
+<!-- 상단 메뉴 -->
 <div id="top-menu" style="display:flex;gap:0;background:#111418;border-bottom:1px solid #22282f">
-  <button onclick="toggleSection('excelUpBox',this)" style="flex:1;background:#111418;color:#3ddc84;border:none;padding:12px 8px;font-size:13px;font-weight:700;cursor:pointer;border-right:1px solid #22282f">📊 엑셀 업로드</button>
-  <button onclick="toggleSection('site-map-footer-inline',this)" style="flex:1;background:#111418;color:#f5c842;border:none;padding:12px 8px;font-size:13px;font-weight:700;cursor:pointer;border-right:1px solid #22282f">🌐 사이트맵</button>
-  <button onclick="toggleSection('yt-batch-box',this)" style="flex:1;background:#111418;color:#7dabff;border:none;padding:12px 8px;font-size:13px;font-weight:700;cursor:pointer">📡 YouTube 일괄</button>
+  <button onclick="toggleSection('excelUpBox',this)" style="flex:1;background:#111418;color:#3ddc84;border:none;padding:12px 8px;font-size:13px;font-weight:700;cursor:pointer">📊 엑셀 업로드</button>
 </div>
 
 <div style="padding:12px 16px;background:#0d1117"><button id="pwa-install-btn">📲 앱으로 설치</button></div>
@@ -1279,60 +1277,6 @@ function toggleSection(id, btn) {
 }
 </script>
 
-<div id="site-map-footer-inline" style="display:none;margin:0 10px;padding:14px;background:#0f1218;border:2px solid #2a323c;border-radius:0 0 10px 10px;font-size:12px;color:#8a95a5">
-<b style="color:#e8ecef">🌐 활성 사이트 (Cloudflare DNS 실측)</b>
-<details open><summary style="cursor:pointer;color:#7dabff;font-weight:700;margin:6px 0">🇯🇵 my-site-1 (도쿄)</summary>
-<ul style="margin:2px 0 4px 14px;padding:0;list-style:'▸ ';line-height:1.8">
-<li><a href="https://xn--9d0bw2fjtyymch7de9d.info" target="_blank" style="color:#f5c842"><b>참교육.info</b></a></li>
-<li><a href="https://cent-solutions.info" target="_blank" style="color:#3ddc84"><b>cent-solutions.info</b></a></li>
-</ul></details>
-<details open><summary style="cursor:pointer;color:#7dabff;font-weight:700;margin:6px 0">🇸🇬 gucci-yanolza (싱가포르) ← 이 서버</summary>
-<ul style="margin:2px 0 4px 14px;padding:0;list-style:'▸ ';line-height:1.8">
-<li><a href="https://cent-solution.online" target="_blank" style="color:#ffb469"><b>cent-solution.online</b></a> 메인</li>
-<li><a href="https://gauth.cent-solution.online" target="_blank" style="color:#ff9040"><b>gauth.cent-solution.online</b> ← 현재</a> :4000</li>
-<li><a href="https://win.cent-solution.online" target="_blank" style="color:#f9e79f"><b>win.cent-solution.online</b></a> :4001</li>
-<li><a href="https://romi.cent-solution.online" target="_blank" style="color:#ff6b9d"><b>romi.cent-solution.online</b></a> :3019</li>
-<li><a href="https://simmani.cent-solution.online" target="_blank" style="color:#82e0aa"><b>simmani.cent-solution.online</b></a> :3011</li>
-<li><a href="https://woodong.cent-solution.online" target="_blank" style="color:#abebc6"><b>woodong.cent-solution.online</b></a> :3012</li>
-<li><a href="https://sunbi.cent-solution.online" target="_blank" style="color:#d7bde2"><b>sunbi.cent-solution.online</b></a> :3013</li>
-<li><a href="https://misskim.cent-solution.online" target="_blank" style="color:#f0b27a"><b>misskim.cent-solution.online</b></a> :3014</li>
-<li><a href="https://camstouch.cent-solution.online" target="_blank" style="color:#a3e4d7"><b>camstouch.cent-solution.online</b></a> :3015</li>
-<li><a href="https://james.cent-solution.online" target="_blank" style="color:#aed6f1"><b>james.cent-solution.online</b></a> :3016</li>
-<li><a href="https://soktv.cent-solution.online" target="_blank" style="color:#85c1e9"><b>soktv.cent-solution.online</b></a> :3017</li>
-<li><a href="https://aura.cent-solution.online" target="_blank" style="color:#d2b4de"><b>aura.cent-solution.online</b></a> :3018</li>
-<li><a href="https://bacad.cent-solution.online" target="_blank" style="color:#f5b7b1"><b>bacad.cent-solution.online</b></a> :3020</li>
-<li><a href="https://naman.cent-solution.online" target="_blank" style="color:#a9dfbf"><b>naman.cent-solution.online</b></a> :3022</li>
-<li><a href="https://gauth01.cent-solution.online" target="_blank" style="color:#fad7a0"><b>gauth01.cent-solution.online</b></a></li>
-<li><a href="https://admin.cent-solution.online" target="_blank" style="color:#abb2b9"><b>admin.cent-solution.online</b></a></li>
-<li><a href="https://bot.cent-solution.online" target="_blank" style="color:#d5dbdb"><b>bot.cent-solution.online</b></a></li>
-<li><a href="https://cent-tools.cent-solution.online" target="_blank" style="color:#e8daef"><b>cent-tools.cent-solution.online</b></a></li>
-<li><a href="https://gucci-live.cc" target="_blank" style="color:#ff9dff"><b>gucci-live.cc</b></a></li>
-<li><a href="https://hoya-avata.cc" target="_blank" style="color:#c88fff"><b>hoya-avata.cc</b></a></li>
-</ul></details>
-<details><summary style="cursor:pointer;color:#7dabff;font-weight:700;margin:6px 0">🇮🇩 my-site-jkt (자카르타)</summary>
-<ul style="margin:2px 0 4px 14px;padding:0;list-style:'▸ ';line-height:1.8">
-<li><a href="https://panda-avata.cc" target="_blank" style="color:#aafa82"><b>panda-avata.cc</b></a></li>
-</ul></details>
-<div style="margin-top:8px;padding-top:6px;border-top:1px solid #22282f;font-size:10px;color:#5a6570">
-📊 <b>3 서버 · 19 사이트 · 21 도메인</b> · 🔒 Cloudflare 100% · ⚡ Origin IP 은닉
-</div>
-</div>
-
-<div id="yt-batch-box" style="display:none;margin:0 10px;padding:14px;background:#0f1218;border:2px solid #2a323c;border-radius:0 0 10px 10px">
-<h3 style="margin:0 0 10px;color:#7dabff;font-size:15px">📡 YouTube 일괄 작업</h3>
-<div style="display:flex;gap:8px;flex-wrap:wrap">
-  <button style="background:#1c5a2a;color:#3ddc84;font-weight:700;padding:10px 16px;font-size:13px" onclick="batchYtConnect(10)">📡 API 연결 (10개)</button>
-  <button style="background:#1c5a2a;color:#3ddc84;font-weight:700;padding:10px 16px;font-size:13px" onclick="batchYtConnect(20)">📡 API 연결 (20개)</button>
-  <button style="background:#1c2740;color:#7dabff;font-weight:700;padding:10px 16px;font-size:13px" onclick="batchChatShot(10)">💬 채팅 샷 (10개)</button>
-  <button style="background:#3a1c00;color:#ff9040;font-weight:700;padding:10px 16px;font-size:13px" onclick="batchSpanner(10)">🔧 스패너 (10개)</button>
-</div>
-<div id="yt-batch-log" style="margin-top:10px;padding:6px 10px;background:#0a0d13;border:1px solid #1a1f26;border-radius:4px;font-size:11px;color:#8a95a5;max-height:120px;overflow-y:auto;white-space:pre-wrap"></div>
-</div>
-<script>
-function batchYtConnect(n){var log=document.getElementById('yt-batch-log');log.textContent='📡 '+n+'개 계정 API 연결 시작…\n';var targets=ALL.filter(function(a){return a.email}).slice(0,n);targets.forEach(function(a,i){setTimeout(function(){log.textContent+='['+( i+1)+'/'+n+'] '+a.email+'\n';ytApiConnect(a.email,{textContent:'',disabled:false,set textContent(v){},set disabled(v){}})},i*2000)})}
-function batchChatShot(n){var log=document.getElementById('yt-batch-log');log.textContent='💬 '+n+'개 계정 채팅 샷 시작…\n';var targets=ALL.filter(function(a){return a.email}).slice(0,n);targets.forEach(function(a,i){setTimeout(function(){log.textContent+='['+(i+1)+'/'+n+'] '+a.email+'\n';ytChatShot(a.email,'sky82892 텔레 문의',{textContent:'',disabled:false,set textContent(v){},set disabled(v){}})},i*2000)})}
-function batchSpanner(n){var log=document.getElementById('yt-batch-log');log.textContent='🔧 '+n+'개 계정 스패너 시작…\n';var targets=ALL.filter(function(a){return a.email}).slice(0,n);targets.forEach(function(a,i){setTimeout(function(){log.textContent+='['+(i+1)+'/'+n+'] '+a.email+'\n';ytSpanner(a.email,{textContent:'',disabled:false,set textContent(v){},set disabled(v){}})},i*2000)})}
-</script>
 
 <script src="xlsx.core.min.js"></script>
 <script>
