@@ -673,9 +673,18 @@ async function load(){
   var _profiles = (p && p.profiles) || []
   var _accounts = (n && n.accounts) || []
   var sess = new Set(_profiles.map(function(x){ return x.email || x.folder.replace(/^([^_]+)_(.+)$/, function(_, u, d){ return u + '@' + d.replace(/_/g, '.') }) }))
+  function _parseDateFromFilename(name){
+    if(!name) return null;
+    var m=name.match(/(\d{4})[\.\-_](\d{1,2})[\.\-_](\d{1,2})/);
+    if(m) return new Date(parseInt(m[1]),parseInt(m[2])-1,parseInt(m[3])).getTime();
+    m=name.match(/(\d{8})/);
+    if(m){var y=parseInt(m[1].slice(0,4)),mo=parseInt(m[1].slice(4,6)),d=parseInt(m[1].slice(6,8));if(y>=2020&&y<=2030&&mo>=1&&mo<=12&&d>=1&&d<=31) return new Date(y,mo-1,d).getTime();}
+    return null;
+  }
   ALL = _accounts.map(function(a){
     var f = (FAILED[a.email] || {});
-    return Object.assign({}, a, {has_session: sess.has(a.email), lock_reason: f.reason || null});
+    var ad = a.account_date || _parseDateFromFilename(a.source_file) || null;
+    return Object.assign({}, a, {has_session: sess.has(a.email), lock_reason: f.reason || null, account_date: ad});
   }).sort(function(x,y){ return (y.account_date||y.source_mtime||0) - (x.account_date||x.source_mtime||0) })
   var _fc = n.summary && n.summary.files_scanned;
   if(_fc == null){
