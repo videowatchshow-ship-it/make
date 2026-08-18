@@ -7,57 +7,45 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: DNS and server scan
-        env:
-          SSH_KEY: ${{ secrets.GAUTH_SSH_KEY }}
-          SSH_HOST: ${{ secrets.GAUTH_HOST }}
-          SSH_USER: ${{ secrets.GAUTH_USER }}
+      - name: Check gain site
         run: |
-          echo "===== DNS lookup for gain.cent-solution.online ====="
-          dig gain.cent-solution.online +short 2>/dev/null || nslookup gain.cent-solution.online 2>/dev/null || host gain.cent-solution.online 2>/dev/null || echo "DNS tools failed"
+          echo "===== gain.cent-solution.online response ====="
+          curl -sI "https://gain.cent-solution.online/" --max-time 10 2>&1 || echo "FAILED"
 
           echo ""
-          echo "===== DNS lookup for gauth.cent-solution.online ====="
-          dig gauth.cent-solution.online +short 2>/dev/null || true
+          echo "===== gain.cent-solution.online HTML (first 200 lines) ====="
+          curl -sL "https://gain.cent-solution.online/" --max-time 10 2>/dev/null | head -200
 
           echo ""
-          echo "===== ALL subdomains via crt.sh ====="
-          curl -s "https://crt.sh/?q=%.cent-solution.online&output=json" 2>/dev/null | python3 -c "
-          import json,sys
-          try:
-            data=json.load(sys.stdin)
-            names=set()
-            for r in data:
-              for n in r.get('name_value','').split('\n'):
-                names.add(n.strip())
-            for n in sorted(names):
-              print(n)
-          except: print('crt.sh parse failed')
-          " || echo "crt.sh failed"
+          echo "===== gauth.cent-solution.online response ====="
+          curl -sI "https://gauth.cent-solution.online/" --max-time 10 2>&1 || echo "FAILED"
 
-          echo ""
-          echo "===== SSH setup ====="
-          mkdir -p ~/.ssh
-          echo "$SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+      - name: Server scan via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          script: |
+            echo "===== All sites ====="
+            ls -la /var/www/sites/ 2>/dev/null
 
-          echo ""
-          echo "===== All sites on server ====="
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 "${SSH_USER}@${SSH_HOST}" 'ls -la /var/www/sites/ 2>/dev/null; echo "---"; ls -la /opt/ 2>/dev/null | head -20'
+            echo ""
+            echo "===== Search gain everywhere ====="
+            grep -rl "gain" /var/www/ /opt/ /etc/apache2/ /etc/nginx/ 2>/dev/null | head -50 || echo "none"
 
-          echo ""
-          echo "===== Search gain everywhere on server ====="
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 "${SSH_USER}@${SSH_HOST}" 'grep -rl "gain" /var/www/ /opt/ /etc/apache2/ /etc/nginx/ 2>/dev/null | head -50; echo "---DONE---"'
+            echo ""
+            echo "===== Apache vhosts ====="
+            cat /etc/apache2/sites-enabled/*.conf 2>/dev/null || echo "no apache"
 
-          echo ""
-          echo "===== Apache/Nginx vhosts ====="
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 "${SSH_USER}@${SSH_HOST}" 'cat /etc/apache2/sites-enabled/*.conf 2>/dev/null; cat /etc/nginx/sites-enabled/* 2>/dev/null; echo "---DONE---"'
+            echo ""
+            echo "===== Nginx vhosts ====="
+            cat /etc/nginx/sites-enabled/* 2>/dev/null || echo "no nginx"
 
-          echo ""
-          echo "===== All listening ports ====="
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 "${SSH_USER}@${SSH_HOST}" 'ss -tlnp 2>/dev/null | head -30'
+            echo ""
+            echo "===== Ports ====="
+            ss -tlnp 2>/dev/null | head -30
 
-          echo ""
-          echo "===== Cloudflare token check ====="
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 "${SSH_USER}@${SSH_HOST}" 'cat /opt/gauth-full/.env 2>/dev/null | grep -i "cloud\|zone\|cf_\|domain" || echo "no CF vars in .env"'
+            echo ""
+            echo "===== .env domains ====="
+            cat /opt/gauth-full/.env 2>/dev/null | grep -i "domain\|host\|gain\|site" || echo "no relevant vars"
