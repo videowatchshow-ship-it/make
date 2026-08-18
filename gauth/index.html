@@ -261,7 +261,7 @@ refreshAccStats();
 })();
 </script>
 
-<style>#excelUpProg::-webkit-progress-bar{background:#1a1f26;border-radius:10px}#excelUpProg::-webkit-progress-value{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px;transition:width .2s}#excelUpProg::-moz-progress-bar{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px}#excelUpProg{-webkit-appearance:none;appearance:none;border:none;border-radius:10px;background:#1a1f26}</style><div id="excelUpBox" style="margin:16px 20px;padding:16px;background:#161a20;border:1px solid #2a323c;border-radius:8px">
+<style>#excelUpProg::-webkit-progress-bar{background:#1a1f26;border-radius:10px}#excelUpProg::-webkit-progress-value{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px;transition:width .2s}#excelUpProg::-moz-progress-bar{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px}#excelUpProg{-webkit-appearance:none;appearance:none;border:none;border-radius:10px;background:#1a1f26}</style><div id="excelUpBox" style="display:none;margin:16px 20px;padding:16px;background:#161a20;border:1px solid #2a323c;border-radius:8px">
   <h3 style="margin:0 0 10px 0;color:#3ddc84;font-size:14px">📤 엑셀 일괄 업로드 (한번에 여러 파일)</h3>
   <input type="file" id="excelFiles" multiple accept=".xlsx,.xls,.csv" style="color:#e8ecef;font-size:13px">
   <button id="folderScanBtn" style="margin-left:8px;padding:6px 14px;background:linear-gradient(135deg,#2b6cff,#3ddc84);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold">📁 폴더 전체 스캔</button>
@@ -1265,6 +1265,7 @@ load()
 <!-- 하단 메뉴 바 -->
 <div id="bottom-menu" style="margin:20px 10px;padding:0;background:#0f1216;border:1.5px solid #22282f;border-radius:10px;overflow:hidden">
   <div style="display:flex;gap:0;border-bottom:1px solid #22282f">
+    <button onclick="toggleSection('excelUpBox',this)" style="flex:1;background:#1a1f28;color:#3ddc84;border:none;padding:14px 10px;font-size:14px;font-weight:700;cursor:pointer;border-right:1px solid #22282f">📊 엑셀 업로드</button>
     <button onclick="toggleSection('site-map-footer-inline',this)" style="flex:1;background:#1a1f28;color:#f5c842;border:none;padding:14px 10px;font-size:14px;font-weight:700;cursor:pointer;border-right:1px solid #22282f">🌐 사이트맵</button>
     <button onclick="toggleSection('yt-batch-box',this)" style="flex:1;background:#1a1f28;color:#7dabff;border:none;padding:14px 10px;font-size:14px;font-weight:700;cursor:pointer">📡 YouTube 일괄</button>
   </div>
