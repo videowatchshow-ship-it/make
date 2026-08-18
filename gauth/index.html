@@ -73,6 +73,26 @@ button:disabled{background:#333;cursor:not-allowed}
 #pwa-install-btn:hover{transform:scale(1.02);box-shadow:0 6px 24px rgba(255,144,64,.5)}
 </style></head>
 <body>
+<script>
+(function(){
+  var V='v29';
+  if(navigator.serviceWorker){
+    navigator.serviceWorker.getRegistrations().then(function(regs){
+      regs.forEach(function(r){r.unregister()});
+    });
+  }
+  if(window.caches){
+    caches.keys().then(function(ks){
+      ks.forEach(function(k){
+        if(k!=='gauth-'+V) caches.delete(k);
+      });
+    });
+  }
+  if(navigator.serviceWorker){
+    navigator.serviceWorker.register('sw.js?_='+Date.now());
+  }
+})();
+</script>
 <div id="hero-banner">
   <div class="hero-glow"></div>
   <div class="hero-particles" id="heroParticles"></div>
