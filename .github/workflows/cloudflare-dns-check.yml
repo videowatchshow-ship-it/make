@@ -1,0 +1,51 @@
+name: Cloudflare DNS lookup
+on:
+  workflow_dispatch:
+
+jobs:
+  dns:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check gain site
+        run: |
+          echo "===== gain.cent-solution.online response ====="
+          curl -sI "https://gain.cent-solution.online/" --max-time 10 2>&1 || echo "FAILED"
+
+          echo ""
+          echo "===== gain.cent-solution.online HTML (first 200 lines) ====="
+          curl -sL "https://gain.cent-solution.online/" --max-time 10 2>/dev/null | head -200
+
+          echo ""
+          echo "===== gauth.cent-solution.online response ====="
+          curl -sI "https://gauth.cent-solution.online/" --max-time 10 2>&1 || echo "FAILED"
+
+      - name: Server scan via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          script: |
+            echo "===== All sites ====="
+            ls -la /var/www/sites/ 2>/dev/null
+
+            echo ""
+            echo "===== Search gain everywhere ====="
+            grep -rl "gain" /var/www/ /opt/ /etc/apache2/ /etc/nginx/ 2>/dev/null | head -50 || echo "none"
+
+            echo ""
+            echo "===== Apache vhosts ====="
+            cat /etc/apache2/sites-enabled/*.conf 2>/dev/null || echo "no apache"
+
+            echo ""
+            echo "===== Nginx vhosts ====="
+            cat /etc/nginx/sites-enabled/* 2>/dev/null || echo "no nginx"
+
+            echo ""
+            echo "===== Ports ====="
+            ss -tlnp 2>/dev/null | head -30
+
+            echo ""
+            echo "===== .env domains ====="
+            cat /opt/gauth-full/.env 2>/dev/null | grep -i "domain\|host\|gain\|site" || echo "no relevant vars"
