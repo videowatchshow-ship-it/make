@@ -5,7 +5,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: SSH scan server HTML for menus
+      - name: SSH extract server HTML files
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -13,43 +13,64 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 2m
           script: |
-            FILE=/var/www/sites/gauth/public/index.html
-            echo "=== FILE INFO ==="
-            wc -cl $FILE
-            md5sum $FILE
+            echo "========== index.html.bak =========="
+            FILE=/var/www/sites/gauth/public/index.html.bak
+            echo "Size: $(wc -cl $FILE)"
+            echo "--- menus/tabs/nav ---"
+            grep -n -iE 'menu|tab-bar|nav-bar|sidebar|toggle|메뉴|탭|섹션' $FILE 2>/dev/null | head -30
+            echo "--- buttons ---"
+            grep -noE '<button[^>]*>[^<]*</button>' $FILE 2>/dev/null | head -30
+            echo "--- h2/h3 ---"
+            grep -n '<h[23]' $FILE 2>/dev/null | head -20
+
             echo ""
-            echo "=== ALL MENUS/TABS/NAV (grep) ==="
-            grep -n -iE 'menu|tab-bar|nav-bar|sidebar|drawer|hamburger|toggle|섹션|메뉴|탭' $FILE | head -60
+            echo "========== dashboard.html =========="
+            for f in /opt/gauth-full/webroot/gauth/dashboard.html /opt/gauth-full/public/gauth/dashboard.html; do
+              echo "--- $f ---"
+              wc -cl "$f" 2>/dev/null
+              grep -n -iE 'menu|tab|nav|toggle|메뉴|탭|섹션' "$f" 2>/dev/null | head -20
+              grep -noE '<button[^>]*>[^<]*</button>' "$f" 2>/dev/null | head -20
+              grep -n '<h[23]' "$f" 2>/dev/null | head -10
+            done
+
             echo ""
-            echo "=== ALL BUTTONS ==="
-            grep -noE '<button[^>]*>[^<]*</button>' $FILE | head -80
+            echo "========== sessions.html =========="
+            for f in /opt/gauth-full/webroot/gauth/sessions.html /opt/gauth-full/public/gauth/sessions.html; do
+              echo "--- $f ---"
+              wc -cl "$f" 2>/dev/null
+              grep -n -iE 'menu|tab|nav|toggle|메뉴|탭|섹션' "$f" 2>/dev/null | head -20
+              grep -noE '<button[^>]*>[^<]*</button>' "$f" 2>/dev/null | head -20
+            done
+
             echo ""
-            echo "=== ALL display:none ==="
-            grep -n 'display:none\|display: none' $FILE | head -40
+            echo "========== admin/index.html =========="
+            f=/opt/gauth-full/webroot/admin/index.html
+            wc -cl "$f" 2>/dev/null
+            grep -n -iE 'menu|tab|nav|toggle|메뉴|탭|섹션' "$f" 2>/dev/null | head -20
+            grep -noE '<button[^>]*>[^<]*</button>' "$f" 2>/dev/null | head -20
+
             echo ""
-            echo "=== ALL id= ==="
-            grep -oP 'id="[^"]+"' $FILE | sort -u
+            echo "========== credential_manager.html =========="
+            f=/opt/gauth-full/public/credential_manager.html
+            wc -cl "$f" 2>/dev/null
+            grep -n -iE 'menu|tab|nav|toggle|메뉴|탭|섹션' "$f" 2>/dev/null | head -20
+
             echo ""
-            echo "=== ALL onclick= ==="
-            grep -oP 'onclick="[^"]+"' $FILE | sort -u
+            echo "========== real-browser.html =========="
+            f=/opt/gauth-full/public/real-browser.html
+            wc -cl "$f" 2>/dev/null
+            grep -n -iE 'menu|tab|nav|toggle|메뉴|탭|섹션' "$f" 2>/dev/null | head -20
+
             echo ""
-            echo "=== LINES AROUND bottom-menu ==="
-            grep -n -A5 -B2 'bottom-menu' $FILE || echo "NO bottom-menu FOUND"
+            echo "========== /tmp/gauth_index_fixed.html =========="
+            f=/tmp/gauth_index_fixed.html
+            wc -cl "$f" 2>/dev/null
+            grep -n -iE 'menu|tab-bar|nav-bar|toggle|메뉴|탭|섹션' "$f" 2>/dev/null | head -30
+            grep -noE '<button[^>]*>[^<]*</button>' "$f" 2>/dev/null | head -30
+
             echo ""
-            echo "=== FULL STRUCTURE: h2/h3 headings ==="
-            grep -n '<h[23]' $FILE | head -30
-            echo ""
-            echo "=== OTHER HTML FILES ==="
-            find /var/www/sites/gauth/public/ -name '*.html' -o -name '*.htm' | head -20
-            echo ""
-            echo "=== Check /opt/gauth-full/ for HTML ==="
-            find /opt/gauth-full/ -name '*.html' -o -name '*.htm' 2>/dev/null | head -20
-            echo ""
-            echo "=== Check home dirs for gauth HTML ==="
-            find /home/ /root/ -maxdepth 4 -name '*.html' -path '*gauth*' 2>/dev/null | head -20
-            echo ""
-            echo "=== Check /tmp for gauth ==="
-            find /tmp/ -name '*.html' -path '*gauth*' 2>/dev/null | head -20
-            echo ""
-            echo "=== Backup files ==="
-            find /var/www/sites/gauth/ /opt/gauth-full/ -name '*.bak' -o -name '*.backup' -o -name '*.old' -o -name '*_backup*' -o -name '*_old*' 2>/dev/null | head -20
+            echo "========== webroot/gauth/index.html =========="
+            f=/opt/gauth-full/webroot/gauth/index.html
+            wc -cl "$f" 2>/dev/null
+            grep -n -iE 'menu|tab|nav|toggle|메뉴|탭|섹션' "$f" 2>/dev/null | head -20
+            grep -noE '<button[^>]*>[^<]*</button>' "$f" 2>/dev/null | head -20
