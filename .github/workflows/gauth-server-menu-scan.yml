@@ -1,0 +1,55 @@
+name: Server menu scan
+on: workflow_dispatch
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: SSH scan server HTML for menus
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            FILE=/var/www/sites/gauth/public/index.html
+            echo "=== FILE INFO ==="
+            wc -cl $FILE
+            md5sum $FILE
+            echo ""
+            echo "=== ALL MENUS/TABS/NAV (grep) ==="
+            grep -n -iE 'menu|tab-bar|nav-bar|sidebar|drawer|hamburger|toggle|섹션|메뉴|탭' $FILE | head -60
+            echo ""
+            echo "=== ALL BUTTONS ==="
+            grep -noE '<button[^>]*>[^<]*</button>' $FILE | head -80
+            echo ""
+            echo "=== ALL display:none ==="
+            grep -n 'display:none\|display: none' $FILE | head -40
+            echo ""
+            echo "=== ALL id= ==="
+            grep -oP 'id="[^"]+"' $FILE | sort -u
+            echo ""
+            echo "=== ALL onclick= ==="
+            grep -oP 'onclick="[^"]+"' $FILE | sort -u
+            echo ""
+            echo "=== LINES 1-50 (head) ==="
+            head -50 $FILE
+            echo ""
+            echo "=== LINES AROUND bottom-menu ==="
+            grep -n -A5 -B2 'bottom-menu' $FILE || echo "NO bottom-menu FOUND"
+            echo ""
+            echo "=== FULL STRUCTURE: h2/h3 headings ==="
+            grep -n '<h[23]' $FILE | head -30
+            echo ""
+            echo "=== OTHER HTML FILES ==="
+            find /var/www/sites/gauth/public/ -name '*.html' -o -name '*.htm' | head -20
+            echo ""
+            echo "=== Check /opt/gauth-full/ for HTML ==="
+            find /opt/gauth-full/ -name '*.html' -o -name '*.htm' 2>/dev/null | head -20
+            echo ""
+            echo "=== Check home dirs for gauth HTML ==="
+            find /home/ /root/ -maxdepth 4 -name '*.html' -path '*gauth*' 2>/dev/null | head -20
+            echo ""
+            echo "=== Check /tmp for gauth HTML ==="
+            find /tmp/ -name '*.html' -path '*gauth*' 2>/dev/null | head -20
