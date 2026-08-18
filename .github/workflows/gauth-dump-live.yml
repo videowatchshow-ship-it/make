@@ -1,0 +1,53 @@
+name: Dump gauth live HTML
+on:
+  workflow_dispatch:
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        env:
+          SSH_KEY: ${{ secrets.GAUTH_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.GAUTH_SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          echo "Host gauth-server" >> ~/.ssh/config
+          echo "  HostName ${{ secrets.GAUTH_SSH_HOST }}" >> ~/.ssh/config
+          echo "  User ${{ secrets.GAUTH_SSH_USER }}" >> ~/.ssh/config
+          echo "  IdentityFile ~/.ssh/id_ed25519" >> ~/.ssh/config
+          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+
+      - name: Dump live files
+        run: |
+          echo "===== LIVE INDEX.HTML ====="
+          ssh gauth-server 'cat /var/www/sites/gauth/public/index.html' 2>/dev/null || echo "FAILED to read live index.html"
+
+          echo ""
+          echo "===== LIVE INDEX.HTML.BAK ====="
+          ssh gauth-server 'cat /var/www/sites/gauth/public/index.html.bak' 2>/dev/null || echo "NO BAK FILE"
+
+          echo ""
+          echo "===== ALL FILES IN /var/www/sites/gauth/public/ ====="
+          ssh gauth-server 'find /var/www/sites/gauth/public/ -type f -name "*.html" -o -name "*.js" -o -name "*.json" -o -name "*.css" 2>/dev/null | sort' || true
+
+          echo ""
+          echo "===== ALL FILES IN /opt/gauth-full/ ====="
+          ssh gauth-server 'find /opt/gauth-full/ -type f \( -name "*.html" -o -name "*.js" -o -name "*.json" \) 2>/dev/null | head -100 | sort' || true
+
+          echo ""
+          echo "===== ADMIN INDEX ====="
+          ssh gauth-server 'cat /opt/gauth-full/webroot/admin/index.html' 2>/dev/null || echo "NOT FOUND"
+
+          echo ""
+          echo "===== DASHBOARD (public) ====="
+          ssh gauth-server 'cat /opt/gauth-full/public/gauth/dashboard.html' 2>/dev/null || echo "NOT FOUND"
+
+          echo ""
+          echo "===== REBROWSER-LOGIN.JS ROUTES ====="
+          ssh gauth-server 'grep -n "app\.\(get\|post\|use\|put\|delete\)" /opt/gauth-full/rebrowser-login.js 2>/dev/null | head -50' || true
