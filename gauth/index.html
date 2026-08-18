@@ -121,6 +121,7 @@ button:disabled{background:#333;cursor:not-allowed}
 <!-- 상단 메뉴 -->
 <div id="top-menu" style="display:flex;gap:0;background:#111418;border-bottom:1px solid #22282f">
   <button onclick="toggleSection('excelUpBox',this)" style="flex:1;background:#111418;color:#3ddc84;border:none;padding:12px 8px;font-size:13px;font-weight:700;cursor:pointer">📊 엑셀 업로드</button>
+  <button onclick="document.getElementById('serverScanBox').scrollIntoView({behavior:'smooth',block:'start'});document.getElementById('serverScanBox').style.animation='glow-pulse 1s ease 3'" style="flex:1;background:#111418;color:#ff9040;border:none;padding:12px 8px;font-size:13px;font-weight:700;cursor:pointer;border-left:1px solid #22282f">📂 폴더 스캔</button>
 </div>
 
 <div style="padding:12px 16px;background:#0d1117"><button id="pwa-install-btn">📲 앱으로 설치</button></div>
