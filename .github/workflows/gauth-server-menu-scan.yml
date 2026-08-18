@@ -5,7 +5,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: SSH extract server HTML files
+      - name: Dump live server files
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -13,64 +13,39 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 2m
           script: |
-            echo "========== index.html.bak =========="
-            FILE=/var/www/sites/gauth/public/index.html.bak
-            echo "Size: $(wc -cl $FILE)"
-            echo "--- menus/tabs/nav ---"
-            grep -n -iE 'menu|tab-bar|nav-bar|sidebar|toggle|메뉴|탭|섹션' $FILE 2>/dev/null | head -30
-            echo "--- buttons ---"
-            grep -noE '<button[^>]*>[^<]*</button>' $FILE 2>/dev/null | head -30
-            echo "--- h2/h3 ---"
-            grep -n '<h[23]' $FILE 2>/dev/null | head -20
+            echo "===== LIVE INDEX.HTML TOP 200 LINES ====="
+            head -200 /var/www/sites/gauth/public/index.html
 
             echo ""
-            echo "========== dashboard.html =========="
-            for f in /opt/gauth-full/webroot/gauth/dashboard.html /opt/gauth-full/public/gauth/dashboard.html; do
-              echo "--- $f ---"
-              wc -cl "$f" 2>/dev/null
-              grep -n -iE 'menu|tab|nav|toggle|메뉴|탭|섹션' "$f" 2>/dev/null | head -20
-              grep -noE '<button[^>]*>[^<]*</button>' "$f" 2>/dev/null | head -20
-              grep -n '<h[23]' "$f" 2>/dev/null | head -10
-            done
+            echo "===== LIVE INDEX.HTML LINE COUNT ====="
+            wc -l /var/www/sites/gauth/public/index.html
 
             echo ""
-            echo "========== sessions.html =========="
-            for f in /opt/gauth-full/webroot/gauth/sessions.html /opt/gauth-full/public/gauth/sessions.html; do
-              echo "--- $f ---"
-              wc -cl "$f" 2>/dev/null
-              grep -n -iE 'menu|tab|nav|toggle|메뉴|탭|섹션' "$f" 2>/dev/null | head -20
-              grep -noE '<button[^>]*>[^<]*</button>' "$f" 2>/dev/null | head -20
-            done
+            echo "===== ALL HTML FILES UNDER /var/www/sites/gauth/ ====="
+            find /var/www/sites/gauth/ -name '*.html' -type f 2>/dev/null
 
             echo ""
-            echo "========== admin/index.html =========="
-            f=/opt/gauth-full/webroot/admin/index.html
-            wc -cl "$f" 2>/dev/null
-            grep -n -iE 'menu|tab|nav|toggle|메뉴|탭|섹션' "$f" 2>/dev/null | head -20
-            grep -noE '<button[^>]*>[^<]*</button>' "$f" 2>/dev/null | head -20
+            echo "===== ALL HTML FILES UNDER /opt/gauth-full/ ====="
+            find /opt/gauth-full/ -name '*.html' -type f 2>/dev/null
 
             echo ""
-            echo "========== credential_manager.html =========="
-            f=/opt/gauth-full/public/credential_manager.html
-            wc -cl "$f" 2>/dev/null
-            grep -n -iE 'menu|tab|nav|toggle|메뉴|탭|섹션' "$f" 2>/dev/null | head -20
+            echo "===== DIFF: live vs git-deployed (md5) ====="
+            md5sum /var/www/sites/gauth/public/index.html 2>/dev/null
+            md5sum /opt/gauth-full/webroot/gauth/index.html 2>/dev/null
+            md5sum /opt/gauth-full/public/gauth/dashboard.html 2>/dev/null
 
             echo ""
-            echo "========== real-browser.html =========="
-            f=/opt/gauth-full/public/real-browser.html
-            wc -cl "$f" 2>/dev/null
-            grep -n -iE 'menu|tab|nav|toggle|메뉴|탭|섹션' "$f" 2>/dev/null | head -20
+            echo "===== LIVE INDEX: ALL BUTTONS ====="
+            grep -noE '<button[^>]*>[^<]*</button>' /var/www/sites/gauth/public/index.html 2>/dev/null
 
             echo ""
-            echo "========== /tmp/gauth_index_fixed.html =========="
-            f=/tmp/gauth_index_fixed.html
-            wc -cl "$f" 2>/dev/null
-            grep -n -iE 'menu|tab-bar|nav-bar|toggle|메뉴|탭|섹션' "$f" 2>/dev/null | head -30
-            grep -noE '<button[^>]*>[^<]*</button>' "$f" 2>/dev/null | head -30
+            echo "===== LIVE INDEX: ALL DIV IDs ====="
+            grep -oE 'id="[^"]*"' /var/www/sites/gauth/public/index.html 2>/dev/null | sort -u
 
             echo ""
-            echo "========== webroot/gauth/index.html =========="
-            f=/opt/gauth-full/webroot/gauth/index.html
-            wc -cl "$f" 2>/dev/null
-            grep -n -iE 'menu|tab|nav|toggle|메뉴|탭|섹션' "$f" 2>/dev/null | head -20
-            grep -noE '<button[^>]*>[^<]*</button>' "$f" 2>/dev/null | head -20
+            echo "===== LIVE INDEX: ALL H2/H3 ====="
+            grep -n '<h[23]' /var/www/sites/gauth/public/index.html 2>/dev/null
+
+            echo ""
+            echo "===== LIVE INDEX: LINES 550-650 (controls area) ====="
+            sed -n '550,650p' /var/www/sites/gauth/public/index.html 2>/dev/null
