@@ -118,20 +118,7 @@ button:disabled{background:#333;cursor:not-allowed}
 })();
 </script>
 
-<!-- 상단 메뉴 -->
-<div id="top-menu" style="display:flex;gap:0;background:#111418;border-bottom:1px solid #22282f">
-  <button onclick="toggleSection('excelUpBox',this)" style="flex:1;background:#111418;color:#3ddc84;border:none;padding:12px 8px;font-size:13px;font-weight:700;cursor:pointer">📊 엑셀 업로드</button>
-  <button onclick="toggleSection('serverScanBox',this)" style="flex:1;background:#111418;color:#ff9040;border:none;padding:12px 8px;font-size:13px;font-weight:700;cursor:pointer;border-left:1px solid #22282f">📂 폴더 스캔</button>
-</div>
 
-<div id="serverScanBox" style="display:block;margin:0;padding:16px 20px;background:linear-gradient(135deg,#1a1200,#1f1800);border-bottom:2px solid #ff9040;box-shadow:0 0 12px rgba(255,144,64,.25)">
-  <h3 style="margin:0 0 10px 0;color:#ffb347;font-size:16px;font-weight:800">📂 서버 폴더 스캔</h3>
-  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-    <input type="text" id="serverFolderPath" placeholder="서버 폴더 경로 (예: /opt/gauth-full/excels)" style="background:#1a1f26;border:2px solid #ff9040;color:#e8ecef;padding:10px 14px;border-radius:8px;font-size:15px;flex:1;min-width:200px">
-    <button id="serverFolderScanBtn" style="padding:10px 22px;background:linear-gradient(135deg,#ff6b2b,#ffb347);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:15px;font-weight:bold;white-space:nowrap;box-shadow:0 2px 8px rgba(255,107,43,.4)">📂 폴더 스캔 시작</button>
-  </div>
-  <div id="serverScanResult" style="margin-top:10px;font-size:13px;color:#9fb3e0;font-family:monospace;white-space:pre-wrap"></div>
-</div>
 
 <div style="padding:12px 16px;background:#0d1117"><button id="pwa-install-btn">📲 앱으로 설치</button></div>
 <div id="stream-info-box">
@@ -276,7 +263,7 @@ refreshAccStats();
 })();
 </script>
 
-<style>#excelUpProg::-webkit-progress-bar{background:#1a1f26;border-radius:10px}#excelUpProg::-webkit-progress-value{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px;transition:width .2s}#excelUpProg::-moz-progress-bar{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px}#excelUpProg{-webkit-appearance:none;appearance:none;border:none;border-radius:10px;background:#1a1f26}</style><div id="excelUpBox" style="display:none;margin:16px 20px;padding:16px;background:#161a20;border:1px solid #2a323c;border-radius:8px">
+<style>#excelUpProg::-webkit-progress-bar{background:#1a1f26;border-radius:10px}#excelUpProg::-webkit-progress-value{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px;transition:width .2s}#excelUpProg::-moz-progress-bar{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px}#excelUpProg{-webkit-appearance:none;appearance:none;border:none;border-radius:10px;background:#1a1f26}</style><div id="excelUpBox" style="display:block;margin:16px 20px;padding:16px;background:#161a20;border:1px solid #2a323c;border-radius:8px">
   <h3 style="margin:0 0 10px 0;color:#3ddc84;font-size:14px">📤 엑셀 일괄 업로드 (한번에 여러 파일)</h3>
   <input type="file" id="excelFiles" multiple accept=".xlsx,.xls,.csv" style="color:#e8ecef;font-size:13px">
   <button id="folderScanBtn" style="margin-left:8px;padding:6px 14px;background:linear-gradient(135deg,#2b6cff,#3ddc84);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold">📁 로컬 폴더 선택</button>
@@ -339,28 +326,6 @@ function accessBadge(a){
       }
       renderList();
       if(count){ var o=document.getElementById('excelUpResult'); if(o) o.textContent='📁 폴더 스캔: 엑셀 '+count+'개 발견·추가 (총 '+window._picked.length+'개)'; }
-    });
-  }
-  var srvScanBtn = document.getElementById('serverFolderScanBtn');
-  var srvPathInput = document.getElementById('serverFolderPath');
-  var srvResult = document.getElementById('serverScanResult');
-  if(srvScanBtn && srvPathInput){
-    srvScanBtn.addEventListener('click', function(){
-      var folder = srvPathInput.value.trim();
-      if(!folder){ srvResult.textContent='⚠ 폴더 경로를 입력하세요'; return; }
-      srvScanBtn.disabled=true; srvScanBtn.textContent='⏳ 스캔 중...';
-      srvResult.textContent='서버 폴더 스캔 중: '+folder;
-      fetch(authQuery('/api/scan-folder'),{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({folder:folder})})
-      .then(function(r){ return r.json(); })
-      .then(function(d){
-        srvScanBtn.disabled=false; srvScanBtn.textContent='📂 서버 폴더 스캔';
-        if(!d.ok){ srvResult.textContent='❌ '+d.error; return; }
-        var lines = ['✅ 스캔 완료 — 총 '+d.total_parsed+'개 파싱, '+d.added+'개 추가, '+d.updated+'개 갱신 (마스터 '+d.total_master+'개)'];
-        if(d.files){d.files.forEach(function(f){ lines.push('  '+(f.error?'❌':'✅')+' '+f.name+': '+(f.error||f.accounts+'개'+(f.added?' (+'+f.added+')':''))); });}
-        srvResult.textContent=lines.join('\n');
-        load();
-      })
-      .catch(function(e){ srvScanBtn.disabled=false; srvScanBtn.textContent='📂 서버 폴더 스캔'; srvResult.textContent='❌ 오류: '+e.message; });
     });
   }
   fi.addEventListener('change', function(){
@@ -1248,13 +1213,6 @@ load()
 
 
 <script>
-function toggleSection(id, btn) {
-  var el = document.getElementById(id);
-  if (!el) return;
-  var isHidden = el.style.display === 'none' || el.style.display === '';
-  el.style.display = isHidden ? 'block' : 'none';
-  btn.style.background = isHidden ? '#2b6cff' : '#1a1f28';
-}
 </script>
 
 
