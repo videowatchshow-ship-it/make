@@ -688,7 +688,13 @@ async function load(){
     var f = (FAILED[a.email] || {});
     var ad = a.account_date || _parseDateFromFilename(a.source_file) || null;
     return Object.assign({}, a, {has_session: sess.has(a.email), lock_reason: f.reason || null, account_date: ad});
-  }).sort(function(x,y){ return (y.account_date||y.source_mtime||0) - (x.account_date||x.source_mtime||0) })
+  }).sort(function(x,y){
+    var xd = x.account_date, yd = y.account_date;
+    if(xd && !yd) return -1;
+    if(!xd && yd) return 1;
+    if(xd && yd) return yd - xd;
+    return (y.source_mtime||0) - (x.source_mtime||0);
+  })
   var _fc = n.summary && n.summary.files_scanned;
   if(_fc == null){
     try { var _rp = await fetch(authQuery('/api/parse-report'),{cache:'no-store',headers:authHeaders()}).then(r=>r.json()); _fc = _rp && _rp.last_run && _rp.last_run.files; } catch(_){}
@@ -718,8 +724,12 @@ function applyFilter(){
   if(sortOrder){
     var desc = sortOrder.value === 'desc'
     FILTERED.sort(function(x,y){
-      var d = (x.account_date||x.source_mtime||0) - (y.account_date||y.source_mtime||0)
-      return desc ? -d : d
+      var xd = x.account_date, yd = y.account_date;
+      if(xd && !yd) return desc ? -1 : 1;
+      if(!xd && yd) return desc ? 1 : -1;
+      if(xd && yd){ var d = xd - yd; return desc ? -d : d; }
+      var d2 = (x.source_mtime||0) - (y.source_mtime||0);
+      return desc ? -d2 : d2;
     })
   }
   const _ll = localStorage.getItem('gauth_last_lookup')
