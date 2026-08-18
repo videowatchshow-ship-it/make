@@ -849,6 +849,119 @@ function mountRoutes(app) {
     return _fileLock;
   }
 
+  app.post('/api/scan-folder', async (req, res) => {
+    req.setTimeout(600000);
+    res.setTimeout(600000);
+    let body = '';
+    req.on('data', c => { body += c; });
+    req.on('end', async () => {
+      try {
+        const params = JSON.parse(body);
+        const targetDir = params.folder || '';
+        if (!targetDir || !fs.existsSync(targetDir)) {
+          return res.status(400).json({ ok: false, error: 'folder not found: ' + targetDir });
+        }
+        const exts = ['.xlsx', '.xls', '.csv'];
+        function walkDir(dir) {
+          let results = [];
+          try {
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            for (const e of entries) {
+              const full = path.join(dir, e.name);
+              if (e.isDirectory()) { results = results.concat(walkDir(full)); }
+              else if (exts.includes(path.extname(e.name).toLowerCase())) { results.push(full); }
+            }
+          } catch (_) {}
+          return results;
+        }
+        const files = walkDir(targetDir);
+        if (!files.length) {
+          return res.json({ ok: true, total_master: 0, total_parsed: 0, added: 0, updated: 0, files: [], message: 'no excel files found in ' + targetDir });
+        }
+        console.log('[scan-folder] found', files.length, 'excel files in', targetDir);
+        const parsedFiles = [];
+        for (const fp of files) {
+          try {
+            const st = fs.statSync(fp);
+            const result = parseExcelFile(fp);
+            for (const a of result.accounts) {
+              a.source_file = path.basename(fp);
+              if (!a.source_mtime) a.source_mtime = st.mtimeMs;
+              if (!a.account_date) a.account_date = parseDateFromFilename(path.basename(fp)) || null;
+            }
+            parsedFiles.push({ name: path.basename(fp), accounts: result.accounts });
+          } catch (e) {
+            parsedFiles.push({ name: path.basename(fp), accounts: [], error: e.message });
+          }
+        }
+        await withFileLock(() => {
+          try {
+            const dataFile = '/opt/gauth-full/accounts_normalized.json';
+            let existing = [];
+            try {
+              const raw = fs.readFileSync(dataFile, 'utf8');
+              if (!raw.trim()) throw new Error('empty file');
+              const d = JSON.parse(raw);
+              existing = Array.isArray(d) ? d : (d.accounts || []);
+            } catch(e) {
+              if (e.message !== 'empty file' && e.code !== 'ENOENT') {
+                const backupPath = dataFile + '.corrupt.' + Date.now();
+                try { fs.copyFileSync(dataFile, backupPath); } catch (_) {}
+              }
+            }
+            const byEmail = {};
+            for (const a of existing) { if (a && a.email) byEmail[normalizeEmail(a.email)] = a; }
+            let totalParsed = 0, totalAdded = 0, totalUpdated = 0;
+            const fileResults = [];
+            for (const pf of parsedFiles) {
+              if (pf.error) { fileResults.push({ name: pf.name, accounts: 0, error: pf.error }); continue; }
+              let added = 0, updated = 0;
+              for (const a of pf.accounts) {
+                if (!a.email) continue;
+                const key = normalizeEmail(a.email);
+                if (byEmail[key]) {
+                  const e = byEmail[key];
+                  if (a.password && a.password !== e.password && !isTotpLike(a.password) && !isEmail(a.password) && !isUrlLike(a.password) && !isSixDigitCode(a.password) && !isPhoneNumber(a.password)) {
+                    if (!e.password_alts) e.password_alts = [];
+                    if (e.password && !e.password_alts.includes(e.password)) e.password_alts.push(e.password);
+                    if (!e.password_alts.includes(a.password)) e.password_alts.push(a.password);
+                    e.password = a.password;
+                  }
+                  if (a.totp_secret && isTotpLike(a.totp_secret)) e.totp_secret = normalizeTotp(a.totp_secret);
+                  if (a.recovery_email && isEmail(a.recovery_email) && normalizeEmail(a.recovery_email) !== key) e.recovery_email = a.recovery_email;
+                  if (a.youtube_url && isUrlLike(a.youtube_url)) e.youtube_url = a.youtube_url;
+                  if (a.account_date) e.account_date = a.account_date;
+                  e.source_mtime = a.source_mtime || Date.now();
+                  e.source_file = a.source_file || e.source_file;
+                  updated++;
+                } else {
+                  byEmail[key] = a;
+                  added++;
+                }
+              }
+              totalParsed += pf.accounts.length;
+              totalAdded += added;
+              totalUpdated += updated;
+              fileResults.push({ name: pf.name, accounts: pf.accounts.length, added, updated });
+            }
+            const allAccounts = Object.values(byEmail);
+            const tmpFile = dataFile + '.tmp.' + process.pid + '.' + Date.now();
+            fs.writeFileSync(tmpFile, JSON.stringify(allAccounts, null, 2));
+            fs.renameSync(tmpFile, dataFile);
+            console.log('[scan-folder] merge done: total_master=' + allAccounts.length + ' parsed=' + totalParsed + ' added=' + totalAdded + ' updated=' + totalUpdated);
+            res.json({ ok: true, total_master: allAccounts.length, total_parsed: totalParsed, added: totalAdded, updated: totalUpdated, files: fileResults });
+          } catch(e) {
+            console.error('[scan-folder] error:', e);
+            if (!res.headersSent) res.status(500).json({ ok: false, error: 'internal error' });
+          }
+        });
+      } catch(e) {
+        console.error('[scan-folder] parse error:', e);
+        if (!res.headersSent) res.status(400).json({ ok: false, error: e.message });
+      }
+    });
+  });
+
   app.post('/api/upload-excels', async (req, res) => {
     req.setTimeout(600000);
     res.setTimeout(600000);
