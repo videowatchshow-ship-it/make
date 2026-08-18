@@ -47,7 +47,7 @@ jobs:
           fi
 
       - name: Try SSH deploy
-        if: steps.api_deploy.outputs.deploy_ok != 'true'
+        if: always()
         id: ssh_deploy
         continue-on-error: true
         uses: appleboy/ssh-action@v1.0.3
