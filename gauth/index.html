@@ -271,11 +271,6 @@ refreshAccStats();
   <input type="file" id="excelFiles" multiple accept=".xlsx,.xls,.csv" style="color:#e8ecef;font-size:13px">
   <button id="folderScanBtn" style="margin-left:8px;padding:6px 14px;background:linear-gradient(135deg,#2b6cff,#3ddc84);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold">📁 로컬 폴더 선택</button>
   <input type="file" id="folderInput" webkitdirectory multiple style="display:none">
-  <div style="margin-top:10px;display:flex;gap:6px;align-items:center">
-    <input type="text" id="serverFolderPath" placeholder="서버 폴더 경로 (예: /opt/gauth-full/excels)" style="background:#161a20;border:1px solid #2a323c;color:#e8ecef;padding:7px 10px;border-radius:6px;font-size:13px;flex:1;min-width:180px">
-    <button id="serverFolderScanBtn" style="padding:6px 14px;background:linear-gradient(135deg,#ff6b2b,#ffb347);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold;white-space:nowrap">📂 서버 폴더 스캔</button>
-  </div>
-  <div id="serverScanResult" style="margin-top:6px;font-size:12px;color:#9fb3e0;font-family:monospace;white-space:pre-wrap"></div>
   <div id="excelFileList" style="margin-top:8px;font-size:12px;color:#9fb3e0;font-family:monospace"></div>
   <button id="excelUpBtn" style="margin-left:10px">▶ 업로드 &amp; 취합</button>
   <div id="excelUpProgWrap" style="margin-top:10px;display:none"><progress id="excelUpProg" value="0" max="100" style="width:100%;height:20px"></progress><div id="excelUpProgTxt" style="margin-top:4px;font-size:12px;color:#3ddc84;text-align:right;font-family:monospace">0%</div></div><div id="excelUpResult" style="margin-top:12px;font-size:12.5px;color:#c9d2dc;font-family:'SF Mono',monospace;white-space:pre-wrap"></div>
@@ -634,6 +629,14 @@ updateUploadStatus();
   <span style="width:1px;height:24px;background:#2a323c"></span>
   <button id="batch-run" style="background:#e0503a">▶ 미로그인만 로그인 (순서대로)</button>
   <button id="batch-stop" style="background:#666">■ 정지</button>
+</div>
+<div id="serverScanBox" style="margin:10px 20px;padding:12px 16px;background:#161a20;border:1px solid #2a323c;border-radius:8px">
+  <h3 style="margin:0 0 8px 0;color:#ffb347;font-size:14px">📂 서버 폴더 스캔</h3>
+  <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+    <input type="text" id="serverFolderPath" placeholder="서버 폴더 경로 (예: /opt/gauth-full/excels)" style="background:#1a1f26;border:1px solid #2a323c;color:#e8ecef;padding:8px 12px;border-radius:6px;font-size:14px;flex:1;min-width:200px">
+    <button id="serverFolderScanBtn" style="padding:8px 18px;background:linear-gradient(135deg,#ff6b2b,#ffb347);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:bold;white-space:nowrap">📂 폴더 스캔 시작</button>
+  </div>
+  <div id="serverScanResult" style="margin-top:8px;font-size:12px;color:#9fb3e0;font-family:monospace;white-space:pre-wrap"></div>
 </div>
 <div id="viewport"><div id="spacer"></div></div>
 <div id="pagination" style="padding:12px 20px;background:#0f1216;border-top:1px solid #22282f;display:flex;gap:6px;flex-wrap:wrap;justify-content:center;align-items:center"></div>
