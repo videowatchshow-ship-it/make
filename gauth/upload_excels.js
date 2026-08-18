@@ -701,10 +701,10 @@ function extractAccountsFromSheet(sheet, sourceFile, sourceMtime) {
   return accounts;
 }
 
-function parseExcelFile(filePath) {
+function parseExcelFile(filePath, originalName) {
   const wb = XLSX.readFile(filePath);
   const allAccounts = [];
-  const baseName = path.basename(filePath);
+  const baseName = originalName || path.basename(filePath);
   let fileMtime = Date.now();
   try { fileMtime = fs.statSync(filePath).mtimeMs; } catch (_) {}
 
@@ -977,7 +977,7 @@ function mountRoutes(app) {
     const parsedFiles = [];
     for (const f of files) {
       try {
-        const accounts = parseExcelFile(f.path);
+        const accounts = parseExcelFile(f.path, f.originalname);
         parsedFiles.push({ name: f.originalname, accounts });
       } catch(e) {
         parsedFiles.push({ name: f.originalname, accounts: [], error: e.message });
