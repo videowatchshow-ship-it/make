@@ -58,9 +58,7 @@ button:disabled{background:#333;cursor:not-allowed}
   #td-result .td-card .cp{padding:6px 14px!important;font-size:13px!important;margin-left:8px!important;border-radius:4px}
   #td-result .td-card button{padding:8px 14px!important;font-size:13px!important}
   #excelUpBox{margin:10px 8px;padding:10px}
-  #vmCtrlBox{margin:10px 8px;padding:10px}
   #pagination{flex-wrap:wrap}
-  #site-map-footer{max-width:calc(100vw - 16px)}
 }
 @media(min-width:769px){
   #td-result .td-card .td-grid{grid-template-columns:100px 1fr;gap:6px 12px;font-size:14px}
@@ -1266,119 +1264,12 @@ load()
 </script><!-- GCP VM 제어 패널 (하단, 모바일 반응형)
      ref: MDN CSS Grid https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout
      ref: MDN CSS @media https://developer.mozilla.org/en-US/docs/Web/CSS/@media -->
-<style>
-#vmCtrlBox{margin:20px 10px;padding:14px;background:#0f1218;border:2px solid #2a323c;border-radius:10px;font-family:'SF Mono',monospace}
-#vmCtrlBox h3{margin:0 0 12px;color:#3ddc84;font-size:15px}
-#vmCtrlBox .vmPw{display:flex;gap:6px;margin-bottom:10px}
-#vmCtrlBox .vmPw input{flex:1;background:#fff;border:3px solid #ffcc00;color:#000;padding:14px;border-radius:5px;font-size:18px;font-weight:700}
-#vmCtrlBox .vmPw input::placeholder{color:#666;font-weight:600}
-#vmCtrlBox .vmPw button{background:#2b6cff;color:#fff;border:0;padding:8px 14px;border-radius:5px;cursor:pointer;font-size:12px;white-space:nowrap}
-#vmList{display:grid;grid-template-columns:1fr;gap:8px}
-@media (min-width:640px){#vmList{grid-template-columns:1fr 1fr}}
-.vmCard{background:#161a20;border:1px solid #2a323c;border-radius:6px;padding:10px;font-size:12px}
-.vmCard b{color:#e8ecef;font-size:13px}
-.vmSt{display:inline-block;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:600;margin-left:6px}
-.st-RUNNING{background:#0d3222;color:#3ddc84}
-.st-TERMINATED,.st-STOPPED{background:#3a1c1c;color:#f47070}
-.st-STOPPING,.st-STARTING{background:#2a2a1a;color:#ffd400}
-.st-UNKNOWN{background:#252525;color:#888}
-.vmBtns{display:flex;gap:6px;margin-top:8px}
-.vmBtns button{flex:1;padding:8px;border:0;border-radius:5px;cursor:pointer;font-weight:600;font-size:12px}
-.btnStart{background:#0a8f3c;color:#fff}
-.btnStop{background:#e0503a;color:#fff}
-.btnSsh{background:#5b21b6;color:#fff}
-.btnRefresh{background:#2b6cff;color:#fff;padding:8px 12px}
-#vmLog{margin-top:10px;padding:6px 10px;background:#0a0d13;border:1px solid #1a1f26;border-radius:4px;font-size:11px;color:#8a95a5;max-height:80px;overflow-y:auto;white-space:pre-wrap}
-</style>
-<div id="vmCtrlBox" style="display:none;margin:0 10px;padding:14px;background:#0f1218;border:2px solid #2a323c;border-radius:0 0 10px 10px">
-  <h3>🖥 GCP 서버 제어 (관리자)</h3>
-  <div class="vmPw">
-    <input type="password" id="vmPw" placeholder="관리자 비밀번호" autocomplete="off">
-    <button id="vmRefresh" class="btnRefresh">🔄 상태 새로고침</button>
-  </div>
-  <div id="vmList">불러오는 중…</div>
-  <div id="vmLog"></div>
-</div>
-<script>
-(function(){
-  var listEl = document.getElementById('vmList');
-  var pwEl = document.getElementById('vmPw');
-  var logEl = document.getElementById('vmLog');
-  var refreshBtn = document.getElementById('vmRefresh');
-  /* MDN sessionStorage: 탭 닫으면 소멸 — https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage */
-  try { pwEl.value = sessionStorage.getItem('vm_admin_pw') || ''; } catch(_) {}
-  pwEl.addEventListener('change', function(){ try{ sessionStorage.setItem('vm_admin_pw', pwEl.value); }catch(_){} });
-
-  function log(msg){
-    var t = new Date().toLocaleTimeString();
-    logEl.textContent = ('[' + t + '] ' + msg + String.fromCharCode(10) + logEl.textContent).slice(0, 2000);
-  }
-
-  function render(vms){
-    if (!vms.length) { listEl.textContent = 'VM 없음'; return; }
-    listEl.innerHTML = vms.map(function(v){
-      var st = v.status || 'UNKNOWN';
-      var canStart = st !== 'RUNNING' && st !== 'STARTING';
-      var canStop = st === 'RUNNING' && v.name !== 'gucci-yanolza';
-      return '<div class="vmCard">'
-        + '<b>' + escapeHtml(v.name) + '</b>'
-        + '<span class="vmSt st-' + escapeHtml(st) + '">' + escapeHtml(st) + '</span>'
-        + '<div style="color:#8a95a5;margin-top:4px">' + escapeHtml(v.label || '') + '</div>'
-        + '<div style="color:#666;font-size:10px;margin-top:2px">' + escapeHtml(v.zone) + '</div>'
-        + '<div class="vmBtns">'
-        + '<button class="btnStart" ' + (canStart?'':'disabled') + ' data-action="start" data-name="' + escapeHtml(v.name) + '" data-project="' + escapeHtml(v.project) + '" data-zone="' + escapeHtml(v.zone) + '">▶ 시작</button>'
-        + '<button class="btnStop"  ' + (canStop?'':'disabled')  + ' data-action="stop"  data-name="' + escapeHtml(v.name) + '" data-project="' + escapeHtml(v.project) + '" data-zone="' + escapeHtml(v.zone) + '">■ 정지</button>'
-        + '<button class="btnSsh" data-action="ssh" data-name="' + escapeHtml(v.name) + '" data-project="' + escapeHtml(v.project) + '" data-zone="' + escapeHtml(v.zone) + '">🖥 SSH</button>'
-        + '</div>'
-        + (v.error ? '<div style="color:#f47070;font-size:10px;margin-top:4px">' + escapeHtml(v.error) + '</div>' : '')
-        + '</div>';
-    }).join('');
-    /* 버튼 이벤트 위임 */
-    [].forEach.call(listEl.querySelectorAll('button[data-action]'), function(btn){
-      btn.addEventListener('click', function(){
-        var action = btn.getAttribute('data-action');
-        if (action === 'ssh') {
-          /* GCP 공식 SSH-in-browser: https://cloud.google.com/compute/docs/ssh-in-browser */
-          var url = 'https://console.cloud.google.com/compute/instancesDetail/zones/' + encodeURIComponent(btn.getAttribute('data-zone')) + '/instances/' + encodeURIComponent(btn.getAttribute('data-name')) + '?project=' + encodeURIComponent(btn.getAttribute('data-project'));
-          window.open(url, '_blank');
-          return;
-        }
-        var body = { pw: pwEl.value, name: btn.getAttribute('data-name'), project: btn.getAttribute('data-project'), zone: btn.getAttribute('data-zone') };
-        if (!body.pw) { log('❌ 비번 먼저 입력'); return; }
-        if (action === 'stop' && !confirm(body.name + ' 정지할까요?')) return;
-        btn.disabled = true;
-        log(action + ' → ' + body.name);
-        fetch(authQuery('/api/vm/' + action), { method:'POST', headers:authHeaders({'Content-Type':'application/json'}), body: JSON.stringify(body) })
-          .then(function(r){ return r.json().then(function(j){ return {status:r.status, j:j}; }); })
-          .then(function(x){
-            if (x.status === 200 && x.j.ok) log('✅ ' + action + ' 요청 접수: ' + body.name);
-            else log('❌ ' + (x.j.error || 'HTTP ' + x.status));
-            setTimeout(loadList, 3000);
-          })
-          .catch(function(e){ log('❌ ' + e.message); btn.disabled = false; });
-      });
-    });
-  }
-  function loadList(){
-    listEl.textContent = '⏳ 로딩…';
-    fetch(authQuery('/api/vm/list'), {cache:'no-store', headers:authHeaders()})
-      .then(function(r){ return r.json(); })
-      .then(function(d){ if (d.ok) render(d.vms); else { listEl.textContent = '❌ ' + (d.error||'실패'); } })
-      .catch(function(e){ listEl.textContent = '❌ ' + e.message; });
-  }
-  refreshBtn.addEventListener('click', loadList);
-  /* 초기 로드 + 30초마다 자동 새로고침 */
-  loadList();
-  /* auto-refresh disabled */
-})();
-</script>
 
 
 
 <!-- 하단 메뉴 바 -->
 <div id="bottom-menu" style="margin:20px 10px;padding:0;background:#0f1216;border:1.5px solid #22282f;border-radius:10px;overflow:hidden">
   <div style="display:flex;gap:0;border-bottom:1px solid #22282f">
-    <button onclick="toggleSection('vmCtrlBox',this)" style="flex:1;background:#1a1f28;color:#3ddc84;border:none;padding:14px 10px;font-size:14px;font-weight:700;cursor:pointer;border-right:1px solid #22282f">🖥 서버 제어</button>
     <button onclick="toggleSection('site-map-footer-inline',this)" style="flex:1;background:#1a1f28;color:#f5c842;border:none;padding:14px 10px;font-size:14px;font-weight:700;cursor:pointer;border-right:1px solid #22282f">🌐 사이트맵</button>
     <button onclick="toggleSection('yt-batch-box',this)" style="flex:1;background:#1a1f28;color:#7dabff;border:none;padding:14px 10px;font-size:14px;font-weight:700;cursor:pointer">📡 YouTube 일괄</button>
   </div>
@@ -1392,61 +1283,6 @@ function toggleSection(id, btn) {
   btn.style.background = isHidden ? '#2b6cff' : '#1a1f28';
 }
 </script>
-
-<button id="site-map-open" title="활성 사이트" style="display:none;position:fixed;right:8px;bottom:8px;z-index:9998;width:44px;height:44px;border-radius:50%;background:rgba(15,22,32,.97);border:1.5px solid #22282f;color:#f5c842;font-size:20px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.5);" onclick="var f=document.getElementById('site-map-footer'); if(f){f.style.display='block';this.style.display='none';}">🌐</button>
-<div id="site-map-footer" style="position:fixed;right:8px;bottom:8px;max-width:380px;max-height:78vh;overflow-y:auto;background:rgba(15,22,32,0.97);border:1.5px solid #22282f;border-radius:8px;padding:10px 12px;z-index:9999;font-size:11px;color:#8a95a5;font-family:-apple-system,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.5);display:none">
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-  <b style="color:#e8ecef">🌐 활성 사이트 (Cloudflare DNS 실측)</b>
-  <span id="site-map-close" style="cursor:pointer;color:#666;font-size:13px" onclick="this.parentNode.parentNode.style.display='none';document.getElementById('site-map-open').style.display='block';">✕</span>
-</div>
-
-<details><summary style="cursor:pointer;color:#7dabff;font-weight:700;margin:4px 0">🇯🇵 my-site-1 (도쿄)</summary>
-<ul style="margin:2px 0 4px 14px;padding:0;list-style:'▸ ';line-height:1.6">
-<li><a href="https://xn--9d0bw2fjtyymch7de9d.info" target="_blank" style="color:#f5c842"><b>참교육카지노.info</b></a></li>
-<li><a href="https://www.xn--9d0bw2fjtyymch7de9d.info" target="_blank" style="color:#f5c842">www.참교육카지노.info</a></li>
-<li><a href="https://invest.xn--9d0bw2fjtyymch7de9d.info" target="_blank" style="color:#f5c842">invest.참교육카지노.info</a></li>
-<li><a href="https://studio.xn--9d0bw2fjtyymch7de9d.info" target="_blank" style="color:#f5c842">studio.참교육카지노.info</a></li>
-<li><a href="https://cent-solutions.info" target="_blank" style="color:#3ddc84"><b>cent-solutions.info</b></a></li>
-<li><a href="https://www.cent-solutions.info" target="_blank" style="color:#3ddc84">www.cent-solutions.info</a></li>
-<li><a href="https://mail.cent-solutions.info" target="_blank" style="color:#3ddc84">mail.cent-solutions.info</a></li>
-<li><a href="https://ns1.cent-solutions.info" target="_blank" style="color:#3ddc84">ns1.cent-solutions.info</a></li>
-<li><a href="https://ns2.cent-solutions.info" target="_blank" style="color:#3ddc84">ns2.cent-solutions.info</a></li>
-<li><a href="https://studio.cent-solutions.info" target="_blank" style="color:#3ddc84">studio.cent-solutions.info</a></li>
-</ul></details>
-
-<details><summary style="cursor:pointer;color:#7dabff;font-weight:700;margin:4px 0">🇸🇬 gucci-yanolza (싱가포르) ← 이 서버</summary>
-<ul style="margin:2px 0 4px 14px;padding:0;list-style:'▸ ';line-height:1.6">
-<li><a href="https://cent-solution.online" target="_blank" style="color:#ffb469"><b>cent-solution.online</b></a></li>
-<li><a href="https://www.cent-solution.online" target="_blank" style="color:#ffb469">www.cent-solution.online</a></li>
-<li><a href="https://admin.cent-solution.online" target="_blank" style="color:#ffb469">admin.cent-solution.online</a></li>
-<li><a href="https://gauth.cent-solution.online" target="_blank" style="color:#ff9040"><b>gauth.cent-solution.online</b> ← 현재</a></li>
-<li><a href="https://gucci-live.cc" target="_blank" style="color:#ff9dff"><b>gucci-live.cc</b></a></li>
-<li><a href="https://www.gucci-live.cc" target="_blank" style="color:#ff9dff">www.gucci-live.cc</a></li>
-<li><a href="https://hoya-avata.cc" target="_blank" style="color:#c88fff"><b>hoya-avata.cc</b></a></li>
-<li><a href="https://www.hoya-avata.cc" target="_blank" style="color:#c88fff">www.hoya-avata.cc</a></li>
-<li><a href="https://api.hoya-avata.cc" target="_blank" style="color:#c88fff">api.hoya-avata.cc</a></li>
-<li><a href="https://auth.hoya-avata.cc" target="_blank" style="color:#c88fff">auth.hoya-avata.cc</a></li>
-<li><a href="https://relay.hoya-avata.cc" target="_blank" style="color:#c88fff">relay.hoya-avata.cc</a></li>
-</ul></details>
-
-<details><summary style="cursor:pointer;color:#7dabff;font-weight:700;margin:4px 0">🇮🇩 my-site-jkt (자카르타)</summary>
-<ul style="margin:2px 0 4px 14px;padding:0;list-style:'▸ ';line-height:1.6">
-<li><a href="https://panda-avata.cc" target="_blank" style="color:#aafa82"><b>panda-avata.cc</b></a></li>
-<li><a href="https://www.panda-avata.cc" target="_blank" style="color:#aafa82">www.panda-avata.cc</a></li>
-</ul></details>
-
-<details><summary style="cursor:pointer;color:#f59090;font-weight:700;margin:4px 0">⏳ 초기화 중</summary>
-<ul style="margin:2px 0 4px 14px;padding:0;list-style:'▸ ';line-height:1.6">
-<li><span style="color:#7a7a7a">로망아바타.info (DNS 프록시 OFF, 네임서버 변경 대기)</span></li>
-</ul></details>
-
-<div style="margin-top:8px;padding-top:6px;border-top:1px solid #22282f;font-size:9.5px;color:#5a6570;line-height:1.5">
-📊 <b>3 서버 · 7 도메인 · 20 서브도메인</b> · 4 브랜드<br>
-🔒 Cloudflare 프록시 100% · SSL Google Trust Services (WE1)<br>
-⚡ Origin IP 은닉 · DDoS/WAF 보호
-</div>
-</div>
-
 
 <div id="site-map-footer-inline" style="display:none;margin:0 10px;padding:14px;background:#0f1218;border:2px solid #2a323c;border-radius:0 0 10px 10px;font-size:12px;color:#8a95a5">
 <b style="color:#e8ecef">🌐 활성 사이트 (Cloudflare DNS 실측)</b>
