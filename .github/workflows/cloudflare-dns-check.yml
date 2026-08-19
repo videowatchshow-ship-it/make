@@ -7,45 +7,52 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check gain site
-        run: |
-          echo "===== gain.cent-solution.online response ====="
-          curl -sI "https://gain.cent-solution.online/" --max-time 10 2>&1 || echo "FAILED"
-
-          echo ""
-          echo "===== gain.cent-solution.online HTML (first 200 lines) ====="
-          curl -sL "https://gain.cent-solution.online/" --max-time 10 2>/dev/null | head -200
-
-          echo ""
-          echo "===== gauth.cent-solution.online response ====="
-          curl -sI "https://gauth.cent-solution.online/" --max-time 10 2>&1 || echo "FAILED"
-
-      - name: Server scan via SSH
-        uses: appleboy/ssh-action@v1
+      - name: Add wildcard A record via gauth server
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 3m
           script: |
-            echo "===== All sites ====="
-            ls -la /var/www/sites/ 2>/dev/null
-
-            echo ""
-            echo "===== Search gain everywhere ====="
-            grep -rl "gain" /var/www/ /opt/ /etc/apache2/ /etc/nginx/ 2>/dev/null | head -50 || echo "none"
-
-            echo ""
-            echo "===== Apache vhosts ====="
-            cat /etc/apache2/sites-enabled/*.conf 2>/dev/null || echo "no apache"
-
-            echo ""
-            echo "===== Nginx vhosts ====="
-            cat /etc/nginx/sites-enabled/* 2>/dev/null || echo "no nginx"
-
-            echo ""
-            echo "===== Ports ====="
-            ss -tlnp 2>/dev/null | head -30
-
-            echo ""
-            echo "===== .env domains ====="
-            cat /opt/gauth-full/.env 2>/dev/null | grep -i "domain\|host\|gain\|site" || echo "no relevant vars"
+            CF_TOKEN=$(sudo grep -oP 'dns_cloudflare_api_token\s*=\s*\K\S+' /root/.secrets/cloudflare.ini 2>/dev/null)
+            [ -z "$CF_TOKEN" ] && echo "ERROR: token not found" && exit 1
+            echo "Token: ${CF_TOKEN:0:10}..."
+            echo "=== Zones ==="
+            curl -s "https://api.cloudflare.com/client/v4/zones?per_page=50" \
+              -H "Authorization: Bearer $CF_TOKEN" | python3 -c "
+import sys,json; d=json.load(sys.stdin)
+for z in d.get('result',[]): print(z['id'], z['name'])
+print('success='+str(d.get('success')))
+"
+            ZONE_ID=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=xn--9d0bw2fjtyymch7de9d.info" \
+              -H "Authorization: Bearer $CF_TOKEN" | python3 -c "
+import sys,json; d=json.load(sys.stdin)
+print((d.get('result') or [{}])[0].get('id',''))
+")
+            echo "Zone ID: '$ZONE_ID'"
+            [ -z "$ZONE_ID" ] && echo "Zone not found!" && exit 1
+            EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=A&name=*.xn--9d0bw2fjtyymch7de9d.info" \
+              -H "Authorization: Bearer $CF_TOKEN" | python3 -c "
+import sys,json; d=json.load(sys.stdin)
+print((d.get('result') or [{}])[0].get('id',''))
+")
+            if [ -n "$EXISTING" ]; then
+              echo "Updating existing $EXISTING"
+              RESULT=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$EXISTING" \
+                -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+                -d "{\"type\":\"A\",\"name\":\"*\",\"content\":\"34.104.233.35\",\"ttl\":1,\"proxied\":true}")
+            else
+              echo "Creating wildcard A record"
+              RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
+                -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+                -d "{\"type\":\"A\",\"name\":\"*\",\"content\":\"34.104.233.35\",\"ttl\":1,\"proxied\":true}")
+            fi
+            echo "=== Result ==="
+            echo "$RESULT" | python3 -c "
+import sys,json; d=json.load(sys.stdin)
+if d.get('success'):
+    r=d['result']; print('SUCCESS:', r.get('name'), '->', r.get('content'), 'proxied='+str(r.get('proxied')))
+else:
+    print('FAIL:', json.dumps(d.get('errors'))); sys.exit(1)
+"
