@@ -1,4 +1,4 @@
-name: photo CAH/CAW/SNW 3개 URL 파일 실체 + https 응답 비교
+name: denny 계정 삭제 (photo + photo2 실체)
 
 on:
   workflow_dispatch:
@@ -9,25 +9,10 @@ on:
       - '.github/workflows/photo-check-abc-urls.yml'
 
 jobs:
-  check:
+  delete_denny:
     runs-on: ubuntu-latest
     steps:
-      - name: 로컬 HTTPS 로 실제 3개 URL 응답 비교
-        run: |
-          set +e
-          BASE="https://xn--9d0bw2fjtyymch7de9d.info/photo"
-          TS=$(date +%s)
-          echo "===== 실제 HTTPS (Cloudflare 경유) 3개 URL sha256 + size ====="
-          for F in CAH_1.html CAW_1.html SNW_1.html; do
-            R=$(curl -sS --max-time 15 "$BASE/$F?ch=cent&_t=$TS")
-            SZ=$(echo -n "$R" | wc -c)
-            SHA=$(echo -n "$R" | sha256sum | cut -c1-16)
-            TITLE=$(echo "$R" | grep -oE '<title>[^<]+</title>' | head -1)
-            echo "$F?ch=cent: size=${SZ}B sha256=${SHA} title=$TITLE"
-          done
-
-      - name: SSH - 서버측 3개 파일 실체 확인
-        uses: appleboy/ssh-action@v1.0.3
+      - uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
@@ -41,41 +26,57 @@ jobs:
               --quiet \
               --command='bash -s' << "REMOTE"
             set -uo pipefail
-            P1="/var/www/sites/chamgyo/public/photo"
+            TS=$(date +%s)
 
-            echo "===== [A] 서버 파일 실체 크기 + inode + sha256 ====="
-            for F in CAH_1.html CAW_1.html SNW_1.html CAW_2.html CAW_3.html CAW_4.html; do
-              [ -f "$P1/$F" ] || { echo "$F: MISSING"; continue; }
-              INODE=$(sudo stat -c "%i" "$P1/$F")
-              SIZE=$(sudo stat -c "%s" "$P1/$F")
-              MT=$(sudo stat -c "%y" "$P1/$F" | cut -d. -f1)
-              SHA=$(sudo sha256sum "$P1/$F" | cut -c1-16)
-              printf "%-15s inode=%d size=%-7d sha256=%s mtime=%s\n" "$F" "$INODE" "$SIZE" "$SHA" "$MT"
+            echo "===== BEFORE ====="
+            for D in photo photo2; do
+              F="/var/www/sites/chamgyo/public/$D/data/sel_denny.json"
+              if [ -f "$F" ]; then
+                sudo ls -la "$F"
+                sudo cat "$F"; echo ""
+              else
+                echo "$D/data/sel_denny.json: 이미 없음"
+              fi
             done
 
             echo ""
-            echo "===== [B] 각 파일 첫 5줄 (title 태그 확인 - 다른 페이지인지) ====="
-            for F in CAH_1.html CAW_1.html SNW_1.html; do
-              echo "--- $F ---"
-              sudo head -5 "$P1/$F"
-              echo "  --- title ---"
-              sudo grep -oE '<title>[^<]+</title>' "$P1/$F" | head -1
+            echo "===== 백업 후 삭제 ====="
+            for D in photo photo2; do
+              F="/var/www/sites/chamgyo/public/$D/data/sel_denny.json"
+              if [ -f "$F" ]; then
+                sudo cp "$F" "/tmp/sel_denny_${D}_${TS}.bak"
+                echo "backup: /tmp/sel_denny_${D}_${TS}.bak"
+                sudo rm -f "$F"
+                echo "$D/data/sel_denny.json 삭제 완료"
+              fi
             done
 
             echo ""
-            echo "===== [C] Apache vhost - photo 경로 rewrite 규칙 확인 ====="
-            sudo cat "$P1/.htaccess" 2>/dev/null || echo "(none)"
-            sudo grep -rn "RewriteRule\|Alias\|photo/" /etc/apache2/sites-enabled/ 2>/dev/null | head -20
+            echo "===== heartbeat_denny.info 도 있으면 삭제 ====="
+            for D in photo photo2; do
+              HB="/var/www/sites/chamgyo/public/$D/data/heartbeat_denny.info"
+              if [ -f "$HB" ]; then
+                sudo rm -f "$HB"
+                echo "$D/data/heartbeat_denny.info 삭제"
+              fi
+            done
 
             echo ""
-            echo "===== [D] 실제 로컬 HTTP 로 3개 파일 응답 (Host 헤더 명시) ====="
-            for F in CAH_1.html CAW_1.html SNW_1.html; do
-              R=$(curl -sS -H "Host: xn--9d0bw2fjtyymch7de9d.info" "http://127.0.0.1/photo/$F?ch=cent")
-              SZ=$(echo -n "$R" | wc -c)
-              SHA=$(echo -n "$R" | sha256sum | cut -c1-16)
-              TITLE=$(echo "$R" | grep -oE "<title>[^<]+</title>" | head -1)
-              printf "%-15s size=%-7d sha256=%s title=%s\n" "$F" "$SZ" "$SHA" "$TITLE"
+            echo "===== AFTER — denny 완전 사라짐 확인 ====="
+            for D in photo photo2; do
+              F="/var/www/sites/chamgyo/public/$D/data/sel_denny.json"
+              [ -f "$F" ] && echo "$D: 아직 있음!" || echo "$D: 삭제됨 ✓"
             done
+
+            echo ""
+            echo "===== photo/data 남은 계정 리스트 ====="
+            sudo ls "/var/www/sites/chamgyo/public/photo/data/"sel_*.json 2>/dev/null | xargs -I {} basename {} .json | sed "s/^sel_//"
+            echo "총: $(sudo ls "/var/www/sites/chamgyo/public/photo/data/"sel_*.json 2>/dev/null | wc -l) 개"
+
+            echo ""
+            echo "===== photo2/data 남은 계정 리스트 ====="
+            sudo ls "/var/www/sites/chamgyo/public/photo2/data/"sel_*.json 2>/dev/null | xargs -I {} basename {} .json | sed "s/^sel_//"
+            echo "총: $(sudo ls "/var/www/sites/chamgyo/public/photo2/data/"sel_*.json 2>/dev/null | wc -l) 개"
 
             echo ""
             echo "===== DONE ====="
