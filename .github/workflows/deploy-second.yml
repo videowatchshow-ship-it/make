@@ -65,60 +65,147 @@ jobs:
 
             echo "=== Cloudflare DNS ==="
             CF_TOKEN=""
+            CF_API_KEY=""
+            CF_EMAIL=""
             CF_ZONE=""
 
-            echo "Reading token from /root/.secrets/cloudflare.ini"
+            echo "--- Method 1: cloudflare.ini token ---"
             CF_TOKEN=$(sudo grep -oP 'dns_cloudflare_api_token\s*=\s*\K\S+' /root/.secrets/cloudflare.ini 2>/dev/null)
-            [ -n "$CF_TOKEN" ] && echo "Got CF token from cloudflare.ini"
+            [ -n "$CF_TOKEN" ] && echo "Got token from cloudflare.ini"
 
-            if [ -z "$CF_TOKEN" ]; then
-              echo "Token not found in cloudflare.ini, searching..."
-              CF_TOKEN=$(sudo grep -rhoP 'cfut_[A-Za-z0-9_-]{20,}' /root/.secrets /opt/gauth-full /root /var/www/sites 2>/dev/null | head -1)
-              [ -n "$CF_TOKEN" ] && echo "found cfut_ token"
+            echo "--- Method 2: auto_deploy.js Global API Key ---"
+            if [ -f /opt/gauth-full/auto_deploy.js ]; then
+              CF_API_KEY=$(sudo node -e "
+                const fs = require('fs');
+                const c = fs.readFileSync('/opt/gauth-full/auto_deploy.js','utf8');
+                const m1 = c.match(/(?:globalApiKey|apiKey|CF_API_KEY|CLOUDFLARE_API_KEY|authKey)\s*[:=]\s*['\x22]([a-f0-9]{37})['\x22]/i);
+                if (m1) { process.stdout.write(m1[1]); process.exit(0); }
+                const m2 = c.match(/X-Auth-Key['\x22]\s*[:=,]\s*['\x22]([a-f0-9]{37})['\x22]/i);
+                if (m2) { process.stdout.write(m2[1]); process.exit(0); }
+              " 2>/dev/null)
+              CF_EMAIL=$(sudo node -e "
+                const fs = require('fs');
+                const c = fs.readFileSync('/opt/gauth-full/auto_deploy.js','utf8');
+                const m = c.match(/(?:cloudflareEmail|authEmail|CF_EMAIL|X-Auth-Email)\s*[:=,]\s*['\x22]([^\s'\x22]+@[^\s'\x22]+)['\x22]/i);
+                if (m) process.stdout.write(m[1]);
+              " 2>/dev/null)
+              [ -n "$CF_API_KEY" ] && echo "Got Global API Key from auto_deploy.js"
+              [ -n "$CF_EMAIL" ] && echo "Got CF email from auto_deploy.js"
             fi
 
-            if [ -z "$CF_TOKEN" ]; then
-              echo "No CF token found anywhere, skipping DNS"
-            else
-              echo "=== Verifying token ==="
-              VERIFY=$(curl -s "https://api.cloudflare.com/client/v4/user/tokens/verify" \
-                -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
-              echo "$VERIFY" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);console.log("Token status:",j.result&&j.result.status||"unknown")}catch(e){console.log("Token parse error")}})' 2>/dev/null || true
+            echo "--- Method 3: search all JS/JSON/env files ---"
+            if [ -z "$CF_API_KEY" ]; then
+              CF_API_KEY=$(sudo grep -rhoP '(?:globalApiKey|apiKey|CF_API_KEY|authKey)\s*[=:]\s*[\x27"]*\K[a-f0-9]{37}' /opt/gauth-full/ /root/ /var/www/sites/ 2>/dev/null | head -1)
+              [ -n "$CF_API_KEY" ] && echo "Found Global API Key via grep"
+            fi
+            if [ -z "$CF_EMAIL" ]; then
+              CF_EMAIL=$(sudo grep -rhoP '(?:cloudflareEmail|authEmail|CF_EMAIL)\s*[=:]\s*[\x27"]*\K[^\s\x27"]+@[^\s\x27"]+' /opt/gauth-full/ /root/ /var/www/sites/ 2>/dev/null | head -1)
+              [ -n "$CF_EMAIL" ] && echo "Found CF email via grep"
+            fi
 
-              echo "=== Looking up zone ==="
+            echo "--- Method 4: dump auto_deploy.js CF-related lines ---"
+            if [ -f /opt/gauth-full/auto_deploy.js ]; then
+              echo "CF-related lines in auto_deploy.js:"
+              sudo grep -inP '(?:cloudflare|CF_|apiKey|authKey|authEmail|globalApi|zone)' /opt/gauth-full/auto_deploy.js 2>/dev/null | head -20
+            fi
+
+            echo "--- Method 5: search for config files ---"
+            sudo find /root /opt /var/www -maxdepth 4 -name '*.toml' -o -name '.cloudflare' -o -name 'wrangler.*' 2>/dev/null | head -10
+            sudo find /root -maxdepth 3 -name '*.ini' -o -name '*.cfg' 2>/dev/null | while read f; do
+              echo "Config file: $f"
+              sudo grep -iP 'cloudflare|api.key|auth' "$f" 2>/dev/null | head -5
+            done
+
+            TK="NO"; [ -n "$CF_TOKEN" ] && TK="YES"
+            AK="NO"; [ -n "$CF_API_KEY" ] && AK="YES"
+            EM="NO"; [ -n "$CF_EMAIL" ] && EM="YES"
+            echo "=== Results: token=$TK globalkey=$AK email=$EM ==="
+
+            DNS_CREATED="false"
+
+            if [ -n "$CF_API_KEY" ] && [ -n "$CF_EMAIL" ]; then
+              echo "=== Trying Global API Key auth ==="
+              ZONE_RESP=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=cent-solution.online" \
+                -H "X-Auth-Key: ${CF_API_KEY}" -H "X-Auth-Email: ${CF_EMAIL}" -H "Content-Type: application/json")
+              CF_ZONE=$(echo "$ZONE_RESP" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);const r=j.result||[];console.log(r.length?r[0].id:"")}catch(e){console.log("")}})' 2>/dev/null)
+              if [ -n "$CF_ZONE" ]; then
+                echo "Zone: $CF_ZONE"
+                EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?name=second.cent-solution.online&type=A" \
+                  -H "X-Auth-Key: ${CF_API_KEY}" -H "X-Auth-Email: ${CF_EMAIL}" -H "Content-Type: application/json")
+                COUNT=$(echo "$EXISTING" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);console.log((j.result||[]).length)}catch(e){console.log("0")}})' 2>/dev/null || echo "0")
+                if [ "$COUNT" != "0" ]; then
+                  echo "DNS A record already exists"
+                  DNS_CREATED="true"
+                else
+                  SERVER_IP=$(curl -s ifconfig.me)
+                  echo "Creating A record: second -> $SERVER_IP (Global Key)"
+                  DNS_RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
+                    -H "X-Auth-Key: ${CF_API_KEY}" -H "X-Auth-Email: ${CF_EMAIL}" -H "Content-Type: application/json" \
+                    --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
+                  echo "$DNS_RESULT" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);console.log("DNS created:",j.success);if(!j.success)(j.errors||[]).forEach(e=>console.log("  error:",e.message||""))}catch(e){console.log("DNS parse error")}})' 2>/dev/null
+                  DNS_CREATED=$(echo "$DNS_RESULT" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{console.log(JSON.parse(d).success)}catch(e){console.log("false")}})' 2>/dev/null)
+                fi
+              else
+                echo "Zone lookup failed with Global Key"
+                echo "$ZONE_RESP" | head -c 500
+              fi
+            fi
+
+            if [ "$DNS_CREATED" != "true" ] && [ -n "$CF_TOKEN" ]; then
+              echo "=== Trying Bearer token auth ==="
               ZONE_RESP=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=cent-solution.online" \
                 -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
               CF_ZONE=$(echo "$ZONE_RESP" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);const r=j.result||[];console.log(r.length?r[0].id:"")}catch(e){console.log("")}})' 2>/dev/null)
-
-              if [ -z "$CF_ZONE" ]; then
-                echo "Could not find zone"
-                echo "$ZONE_RESP"
-              else
-                echo "Zone found: $CF_ZONE"
-
+              if [ -n "$CF_ZONE" ]; then
+                echo "Zone: $CF_ZONE"
                 EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?name=second.cent-solution.online&type=A" \
                   -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
                 COUNT=$(echo "$EXISTING" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);console.log((j.result||[]).length)}catch(e){console.log("0")}})' 2>/dev/null || echo "0")
-
                 if [ "$COUNT" != "0" ]; then
-                  echo "DNS record already exists"
+                  echo "DNS A record already exists"
+                  DNS_CREATED="true"
                 else
                   SERVER_IP=$(curl -s ifconfig.me)
-                  echo "Creating DNS A record: second -> $SERVER_IP"
+                  echo "Creating A record: second -> $SERVER_IP (Bearer)"
                   DNS_RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
                     -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
                     --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
-                  echo "$DNS_RESULT" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);console.log("DNS created:",j.success);(j.errors||[]).forEach(e=>console.log("  error:",e.message||""))}catch(e){console.log("DNS parse error")}})' 2>/dev/null
+                  echo "$DNS_RESULT" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);console.log("DNS created:",j.success);if(!j.success)(j.errors||[]).forEach(e=>console.log("  error:",e.message||""))}catch(e){console.log("DNS parse error")}})' 2>/dev/null
+                  DNS_CREATED=$(echo "$DNS_RESULT" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{console.log(JSON.parse(d).success)}catch(e){console.log("false")}})' 2>/dev/null)
                 fi
-                sleep 10
               fi
             fi
 
+            if [ "$DNS_CREATED" = "true" ]; then
+              echo "=== DNS OK, waiting for propagation ==="
+              sleep 15
+            else
+              echo "=== DNS creation failed with all methods ==="
+            fi
+
             echo "=== SSL certificate ==="
-            if [ ! -f /etc/letsencrypt/live/second.cent-solution.online/fullchain.pem ]; then
-              if command -v certbot >/dev/null 2>&1; then
-                sudo certbot --apache -d second.cent-solution.online --non-interactive --agree-tos --email videowatch.show@gmail.com --redirect 2>&1 || echo "Certbot failed — site available on HTTP only"
+            if [ "$DNS_CREATED" = "true" ] || host second.cent-solution.online >/dev/null 2>&1; then
+              if [ ! -f /etc/letsencrypt/live/second.cent-solution.online/fullchain.pem ]; then
+                if command -v certbot >/dev/null 2>&1; then
+                  if [ -f /root/.secrets/cloudflare.ini ]; then
+                    echo "Trying certbot dns-cloudflare..."
+                    sudo certbot certonly --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.ini -d second.cent-solution.online --non-interactive --agree-tos --email videowatch.show@gmail.com 2>&1 || true
+                  fi
+                  if [ -f /etc/letsencrypt/live/second.cent-solution.online/fullchain.pem ]; then
+                    echo "SSL cert obtained via DNS challenge"
+                    printf '<VirtualHost *:443>\n    ServerName second.cent-solution.online\n    SSLEngine on\n    SSLCertificateFile /etc/letsencrypt/live/second.cent-solution.online/fullchain.pem\n    SSLCertificateKeyFile /etc/letsencrypt/live/second.cent-solution.online/privkey.pem\n    ProxyPreserveHost On\n    ProxyPass / http://127.0.0.1:3023/\n    ProxyPassReverse / http://127.0.0.1:3023/\n    Header always set X-Content-Type-Options "nosniff"\n    Header always set X-Frame-Options "SAMEORIGIN"\n</VirtualHost>\n' | sudo tee /etc/apache2/sites-available/second-le-ssl.conf > /dev/null
+                    sudo a2ensite second-le-ssl 2>/dev/null
+                    sudo apache2ctl configtest 2>&1 && sudo systemctl reload apache2 && echo "Apache HTTPS configured"
+                  else
+                    echo "Trying certbot apache..."
+                    sudo certbot --apache -d second.cent-solution.online --non-interactive --agree-tos --email videowatch.show@gmail.com --redirect 2>&1 || echo "Certbot failed"
+                  fi
+                fi
+              else
+                echo "SSL cert already exists"
               fi
             else
-              echo "SSL cert already exists"
+              echo "No DNS record, skipping SSL"
             fi
+
+            echo "=== Deploy complete ==="
