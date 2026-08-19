@@ -12,6 +12,42 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Cloudflare DNS
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          if [ -z "${CF_TOKEN}" ] || [ -z "${CF_ZONE}" ]; then
+            echo "Cloudflare secrets not set, skipping DNS"
+            exit 0
+          fi
+
+          echo "=== Checking existing DNS records ==="
+          EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?name=second.cent-solution.online&type=A" \
+            -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
+          COUNT=$(echo "$EXISTING" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('result',[])))" 2>/dev/null || echo "0")
+
+          if [ "$COUNT" != "0" ]; then
+            echo "DNS record already exists"
+          else
+            echo "=== Getting server IP from gauth record ==="
+            GAUTH_REC=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?name=gauth.cent-solution.online&type=A" \
+              -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
+            SERVER_IP=$(echo "$GAUTH_REC" | python3 -c "import json,sys; d=json.load(sys.stdin); r=d.get('result',[]); print(r[0]['content'] if r else '')" 2>/dev/null)
+
+            if [ -z "$SERVER_IP" ]; then
+              echo "Could not find gauth IP, skipping DNS"
+              exit 0
+            fi
+
+            echo "=== Creating DNS A record: second -> $SERVER_IP ==="
+            DNS_RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
+              -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+              --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
+            echo "$DNS_RESULT" | python3 -c "import json,sys; d=json.load(sys.stdin); print('DNS created:', d.get('success',False)); [print('  error:', e.get('message','')) for e in d.get('errors',[])]" 2>/dev/null
+          fi
+          sleep 10
+
       - name: Copy files to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -62,38 +98,6 @@ jobs:
             printf '<VirtualHost *:80>\n    ServerName second.cent-solution.online\n    ProxyPreserveHost On\n    ProxyPass / http://127.0.0.1:3023/\n    ProxyPassReverse / http://127.0.0.1:3023/\n    Header always set X-Content-Type-Options "nosniff"\n    Header always set X-Frame-Options "SAMEORIGIN"\n</VirtualHost>\n' | sudo tee /etc/apache2/sites-available/second.conf > /dev/null
             sudo a2ensite second 2>/dev/null
             sudo apache2ctl configtest 2>&1 && sudo systemctl reload apache2 && echo "Apache configured (HTTP)" || echo "Apache config test failed"
-
-            echo "=== Cloudflare DNS (from server env) ==="
-            CF_TOKEN=""
-            CF_ZONE=""
-            for f in /opt/gauth-full/.env /etc/environment /var/www/sites/gauth/.env /root/.env; do
-              [ -f "$f" ] || continue
-              [ -z "$CF_TOKEN" ] && CF_TOKEN=$(sudo grep -oP '(?:CLOUDFLARE_TOKEN|CF_TOKEN)=\K\S+' "$f" 2>/dev/null | head -1)
-              [ -z "$CF_ZONE" ] && CF_ZONE=$(sudo grep -oP '(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID|CF_ZONE)=\K\S+' "$f" 2>/dev/null | head -1)
-            done
-            if [ -z "$CF_TOKEN" ]; then CF_TOKEN=$(sudo grep -oP 'CLOUDFLARE_TOKEN=\K\S+' /etc/systemd/system/gauth.service 2>/dev/null | head -1); fi
-            if [ -z "$CF_ZONE" ]; then CF_ZONE=$(sudo grep -oP 'CLOUDFLARE_ZONE_ID=\K\S+' /etc/systemd/system/gauth.service 2>/dev/null | head -1); fi
-            if [ -z "$CF_TOKEN" ]; then CF_TOKEN=$(sudo grep -roPh '(?:CLOUDFLARE_TOKEN|CF_TOKEN)=\K\S+' /opt/gauth-full/ 2>/dev/null | head -1); fi
-            if [ -z "$CF_ZONE" ]; then CF_ZONE=$(sudo grep -roPh '(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID|CF_ZONE)=\K\S+' /opt/gauth-full/ 2>/dev/null | head -1); fi
-
-            if [ -n "$CF_TOKEN" ] && [ -n "$CF_ZONE" ]; then
-              EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?name=second.cent-solution.online&type=A" \
-                -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
-              COUNT=$(echo "$EXISTING" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('result',[])))" 2>/dev/null || echo "0")
-              if [ "$COUNT" != "0" ]; then
-                echo "DNS record already exists"
-              else
-                SERVER_IP=$(curl -s ifconfig.me)
-                echo "Creating DNS A record: second -> $SERVER_IP"
-                DNS_RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
-                  -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
-                  --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
-                echo "$DNS_RESULT" | python3 -c "import json,sys; d=json.load(sys.stdin); print('DNS created:', d.get('success',False)); [print('  error:', e.get('message','')) for e in d.get('errors',[])]" 2>/dev/null || echo "DNS response: $DNS_RESULT"
-              fi
-              sleep 5
-            else
-              echo "CF credentials not found on server, skipping DNS"
-            fi
 
             echo "=== SSL certificate ==="
             if [ ! -f /etc/letsencrypt/live/second.cent-solution.online/fullchain.pem ]; then
