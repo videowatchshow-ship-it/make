@@ -1,4 +1,4 @@
-name: Find CF credentials v3
+name: Find CF credentials v4 - GCP
 on:
   workflow_dispatch:
 
@@ -9,7 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Read CF-related files for tokens
+      - name: Check GCP and server for CF credentials
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -17,43 +17,58 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 4m
           script: |
-            echo "=== 1. auto_deploy.js cloudflare lines ==="
-            sudo grep -in 'cloudflare\|CF_TOKEN\|CF_API\|dns_cloud\|api_token\|apitoken\|api.cloudflare\|cfut_' /opt/gauth-full/auto_deploy.js 2>/dev/null | head -20
+            echo "=== 1. GCP metadata - project info ==="
+            curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/project/project-id" 2>/dev/null || echo "not GCP or metadata unavailable"
 
             echo ""
-            echo "=== 2. auto_deploy.js.bak2 cloudflare lines ==="
-            sudo grep -in 'cloudflare\|CF_TOKEN\|CF_API\|dns_cloud\|api_token\|apitoken\|api.cloudflare\|cfut_' /opt/gauth-full/auto_deploy.js.bak2 2>/dev/null | head -20
+            echo "=== 2. GCP metadata - attributes ==="
+            curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/project/attributes/" 2>/dev/null || echo "no project attributes"
 
             echo ""
-            echo "=== 3. claude-mem-sync files ==="
-            sudo grep -rn 'cloudflare\|CF_TOKEN\|CF_API\|api_token\|cfut_' /opt/claude-mem-sync/ 2>/dev/null | grep -iv 'node_modules\|\.git' | head -30
+            echo "=== 3. GCP metadata - instance attributes ==="
+            curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/attributes/" 2>/dev/null || echo "no instance attributes"
 
             echo ""
-            echo "=== 4. SERVER_README.md cloudflare lines ==="
-            sudo grep -in 'cloudflare\|CF_TOKEN\|CF_API\|dns\|token\|api_key\|zone' /root/SERVER_README.md 2>/dev/null | head -20
-
-            echo ""
-            echo "=== 5. All .env files ==="
-            for f in $(sudo find / -maxdepth 5 -name '.env' -o -name '*.env' 2>/dev/null | grep -v node_modules | head -20); do
-              MATCH=$(sudo grep -i 'cloudflare\|CF_\|dns_cloud\|api_token\|zone_id' "$f" 2>/dev/null)
-              [ -n "$MATCH" ] && echo "--- $f ---" && echo "$MATCH"
+            echo "=== 4. List all GCP metadata instance attributes ==="
+            for attr in $(curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/attributes/" 2>/dev/null); do
+              echo "  $attr = $(curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$attr" 2>/dev/null)"
             done
 
             echo ""
-            echo "=== 6. migrate_udongka.sh ==="
-            sudo grep -in 'cloudflare\|CF_\|dns\|token\|zone' /opt/gauth-full/scripts/migrate_udongka.sh 2>/dev/null | head -10
+            echo "=== 5. List all GCP project attributes ==="
+            for attr in $(curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/project/attributes/" 2>/dev/null); do
+              echo "  $attr = $(curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/project/attributes/$attr" 2>/dev/null)"
+            done
 
             echo ""
-            echo "=== 7. letsencrypt renewal configs ==="
-            sudo cat /etc/letsencrypt/renewal/*.conf 2>/dev/null | grep -i 'cloudflare\|dns_\|authenticator\|credential' | head -10
+            echo "=== 6. gcloud CLI check ==="
+            which gcloud 2>/dev/null && echo "gcloud found" || echo "gcloud not installed"
 
             echo ""
-            echo "=== 8. Search for ANY token pattern cfut_ or 37-hex anywhere ==="
-            sudo grep -rhoP 'cfut_[A-Za-z0-9_-]{20,}' /root /opt/gauth-full /var/www/sites /etc/letsencrypt 2>/dev/null | sort -u
+            echo "=== 7. GCP Secret Manager (if gcloud available) ==="
+            if command -v gcloud >/dev/null 2>&1; then
+              gcloud secrets list 2>/dev/null || echo "no secrets access"
+              gcloud secrets versions access latest --secret=CLOUDFLARE_TOKEN 2>/dev/null || echo "no CLOUDFLARE_TOKEN secret"
+              gcloud secrets versions access latest --secret=cloudflare-token 2>/dev/null || echo "no cloudflare-token secret"
+              gcloud secrets versions access latest --secret=cf-token 2>/dev/null || echo "no cf-token secret"
+            fi
 
             echo ""
-            echo "=== 9. Check DOCS/md files for zone/token info ==="
-            sudo grep -rn 'zone_id\|api_token\|CF_TOKEN\|CLOUDFLARE' /opt/claude-mem-sync/proj1/*.md 2>/dev/null | head -20
+            echo "=== 8. cent-solution-on-gcp.md ==="
+            sudo cat /opt/claude-mem-sync/proj1/cent-solution-on-gcp.md 2>/dev/null || echo "file not found"
+
+            echo ""
+            echo "=== 9. auto_deploy.js CF lines ==="
+            sudo grep -in 'cloudflare\|CF_TOKEN\|CF_API\|dns\|zone\|cfut_' /opt/gauth-full/auto_deploy.js 2>/dev/null | head -20
+
+            echo ""
+            echo "=== 10. systemd gauth service env ==="
+            sudo grep -i 'cloudflare\|CF_\|zone' /etc/systemd/system/gauth.service 2>/dev/null || echo "no CF in gauth service"
+
+            echo ""
+            echo "=== 11. All environment variables with CF ==="
+            sudo env 2>/dev/null | grep -i 'cloudflare\|CF_' || echo "none"
+            sudo cat /etc/environment 2>/dev/null | grep -i 'cloudflare\|CF_' || echo "none in /etc/environment"
 
             echo ""
             echo "=== DONE ==="
