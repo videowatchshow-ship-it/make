@@ -65,15 +65,16 @@ jobs:
 
             echo "=== Cloudflare DNS ==="
             CF_CREDS=$(sudo node -e "
-              const fs=require('fs');
+              const fs=require('fs'),path=require('path'),{execSync}=require('child_process');
               let t='',z='';
-              ['/opt/gauth-full/.env','/etc/environment','/var/www/sites/gauth/.env','/root/.env'].forEach(f=>{
+              const envFiles=['/opt/gauth-full/.env','/etc/environment','/etc/default/gauth','/var/www/sites/gauth/.env','/root/.env'];
+              for(const f of envFiles){
                 try{
                   const c=fs.readFileSync(f,'utf8');
                   if(!t){const m=c.match(/(?:CLOUDFLARE_TOKEN|CF_TOKEN)=(\S+)/);if(m)t=m[1]}
                   if(!z){const m=c.match(/(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID)=(\S+)/);if(m)z=m[1]}
                 }catch(e){}
-              });
+              }
               if(!t||!z){
                 try{
                   const svc=fs.readFileSync('/etc/systemd/system/gauth.service','utf8');
@@ -81,10 +82,21 @@ jobs:
                   if(!z){const m=svc.match(/CLOUDFLARE_ZONE_ID=(\S+)/);if(m)z=m[1]}
                 }catch(e){}
               }
+              if(!t||!z){
+                try{
+                  const out=execSync('sudo grep -rn CLOUDFLARE /opt/gauth-full/ /var/www/sites/gauth/ /etc/default/ /root/ 2>/dev/null||true',{encoding:'utf8',timeout:5000});
+                  const lines=out.split('\\n');
+                  for(const l of lines){
+                    if(!t){const m=l.match(/(?:CLOUDFLARE_TOKEN|CF_TOKEN|cloudflareToken|cf_token)\s*[=:]\s*['\"]?([A-Za-z0-9_-]{20,})/);if(m)t=m[1]}
+                    if(!z){const m=l.match(/(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID|cloudflareZone|cf_zone)\s*[=:]\s*['\"]?([a-f0-9]{32})/);if(m)z=m[1]}
+                  }
+                  if(!t||!z)console.error('grep results:\\n'+out.slice(0,2000));
+                }catch(e){console.error('grep error:',e.message)}
+              }
               if(!t)t=process.env.CLOUDFLARE_TOKEN||process.env.CF_TOKEN||'';
               if(!z)z=process.env.CLOUDFLARE_ZONE_ID||process.env.CF_ZONE_ID||'';
               console.log(t+'|'+z);
-            " 2>/dev/null)
+            " 2>&1 | tee /dev/stderr | tail -1)
             CF_TOKEN=$(echo "$CF_CREDS" | cut -d'|' -f1)
             CF_ZONE=$(echo "$CF_CREDS" | cut -d'|' -f2)
 
