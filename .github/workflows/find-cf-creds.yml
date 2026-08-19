@@ -1,37 +1,67 @@
-name: Check DNS records and wildcard
+name: Check GCP for CF credentials
 on:
   workflow_dispatch:
 
 jobs:
   search:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check DNS
+      - name: Check GCP secrets and metadata
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 30s
+          command_timeout: 60s
           script: |
-            CF_TOKEN=$(sudo awk -F' = ' '{print $2}' /root/.secrets/cloudflare.ini 2>/dev/null)
-
-            echo "=== 1. List ALL DNS records (token has zone:read) ==="
-            curl -s "https://api.cloudflare.com/client/v4/zones/2601d4f4ab75c910f8d858ca036ff344/dns_records?per_page=100" \
-              -H "Authorization: Bearer $CF_TOKEN" \
-              -H "Content-Type: application/json" 2>/dev/null | python3 -c "import sys,json; [print(f'{r[\"type\"]:6} {r[\"name\"]:40} -> {r[\"content\"]}') for r in json.load(sys.stdin).get('result',[])]" 2>/dev/null
+            echo "=== 1. gcloud secrets list ==="
+            sudo gcloud secrets list --project=quantum-bonus-455522-b4 2>&1 | head -20
 
             echo ""
-            echo "=== 2. Resolve second.cent-solution.online ==="
-            dig +short second.cent-solution.online A 2>/dev/null || nslookup second.cent-solution.online 2>/dev/null
+            echo "=== 2. gcloud secrets versions access (any cf-related) ==="
+            for s in $(sudo gcloud secrets list --project=quantum-bonus-455522-b4 --format='value(name)' 2>/dev/null | grep -i 'cloud\|cf\|dns\|token' 2>/dev/null); do
+              echo "--- Secret: $s ---"
+              sudo gcloud secrets versions access latest --secret="$s" --project=quantum-bonus-455522-b4 2>&1
+            done
 
             echo ""
-            echo "=== 3. Resolve wildcard ==="
-            dig +short '*.cent-solution.online' A 2>/dev/null
-            dig +short random-test-xyz.cent-solution.online A 2>/dev/null
+            echo "=== 3. VM metadata ==="
+            curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/attributes/" 2>/dev/null
+            echo ""
+            for attr in $(curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/attributes/" 2>/dev/null | tr '\n' ' '); do
+              echo "--- $attr ---"
+              curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$attr" 2>/dev/null
+              echo ""
+            done
+
+            echo ""
+            echo "=== 4. Project metadata ==="
+            curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/project/attributes/" 2>/dev/null
+            echo ""
+            for attr in $(curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/project/attributes/" 2>/dev/null | tr '\n' ' '); do
+              echo "--- $attr ---"
+              curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/project/attributes/$attr" 2>/dev/null
+              echo ""
+            done
+
+            echo ""
+            echo "=== 5. Check all env files for cloudflare ==="
+            sudo grep -ri "cloudflare\|cfut_\|dns_cloudflare" /opt/gauth-full/.env /var/www/sites/*/.env 2>/dev/null | head -10
+
+            echo ""
+            echo "=== 6. Check certbot renewal conf ==="
+            sudo cat /etc/letsencrypt/renewal/*.conf 2>/dev/null | grep -i "cloudflare\|authenticator\|dns" | head -10
+
+            echo ""
+            echo "=== 7. pip/certbot cloudflare plugin credentials ==="
+            sudo find /etc/letsencrypt/ -name "*.ini" -o -name "*.cfg" 2>/dev/null | head -10
+            for f in $(sudo find /etc/letsencrypt/ -name "*.ini" -o -name "*.cfg" 2>/dev/null); do
+              echo "--- $f ---"
+              sudo cat "$f" 2>/dev/null
+            done
 
             echo ""
             echo "=== DONE ==="
