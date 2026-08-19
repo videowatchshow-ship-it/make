@@ -24,11 +24,15 @@ jobs:
 
       - name: Setup and start second sub-site
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          CF_TOKEN_SECRET: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE_SECRET: ${{ secrets.CLOUDFLARE_ZONE_ID }}
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 5m
+          envs: CF_TOKEN_SECRET,CF_ZONE_SECRET
           script: |
             SITE_DIR="/var/www/sites/second"
             echo "=== Deploying second sub-site ==="
@@ -64,24 +68,33 @@ jobs:
             sudo apache2ctl configtest 2>&1 && sudo systemctl reload apache2 && echo "Apache configured (HTTP)" || echo "Apache config test failed"
 
             echo "=== Cloudflare DNS ==="
-            CF_TOKEN=""
-            CF_ZONE=""
-            for f in /opt/gauth-full/.env /etc/environment /etc/default/gauth /var/www/sites/gauth/.env /root/.env /etc/systemd/system/gauth.service; do
-              [ -f "$f" ] || continue
-              [ -z "$CF_TOKEN" ] && CF_TOKEN=$(sudo grep -oP '(?:CLOUDFLARE_TOKEN|CF_TOKEN)=\K[A-Za-z0-9_-]{20,}' "$f" 2>/dev/null | head -1)
-              [ -z "$CF_ZONE" ] && CF_ZONE=$(sudo grep -oP '(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID)=\K[a-f0-9]{32}' "$f" 2>/dev/null | head -1)
-            done
+            CF_TOKEN="${CF_TOKEN_SECRET}"
+            CF_ZONE="${CF_ZONE_SECRET}"
+            if [ -n "$CF_TOKEN" ]; then
+              echo "CF_TOKEN from GitHub secrets"
+            else
+              for f in /opt/gauth-full/.env /etc/environment /etc/default/gauth /var/www/sites/gauth/.env /root/.env /etc/systemd/system/gauth.service; do
+                [ -f "$f" ] || continue
+                [ -z "$CF_TOKEN" ] && CF_TOKEN=$(sudo grep -oP '(?:CLOUDFLARE_TOKEN|CF_TOKEN)=\K\S+' "$f" 2>/dev/null | head -1)
+                [ -z "$CF_ZONE" ] && CF_ZONE=$(sudo grep -oP '(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID)=\K\S+' "$f" 2>/dev/null | head -1)
+              done
+            fi
             if [ -z "$CF_TOKEN" ]; then
               echo "searching JS files for CF token..."
               for f in /opt/gauth-full/auto_deploy.js /opt/gauth-full/auto_deploy.js.bak2 /opt/gauth-full/auto_deploy.js.bak-; do
                 [ -f "$f" ] || continue
-                T=$(sudo grep -oP "(?:CLOUDFLARE_TOKEN|CF_TOKEN|cfToken|cloudflareToken)\s*[=:]\s*['\"]?\K[A-Za-z0-9_-]{20,}" "$f" 2>/dev/null | head -1)
-                [ -n "$T" ] && CF_TOKEN="$T" && echo "found token in $f" && break
+                T=$(sudo grep -oP "(?:CLOUDFLARE_TOKEN|CF_TOKEN|cfToken|cloudflareToken)\s*[=:]\s*['\"]?\K\S+" "$f" 2>/dev/null | head -1)
+                [ -n "$T" ] && T=$(echo "$T" | tr -d "\"',;") && CF_TOKEN="$T" && echo "found token in $f" && break
               done
             fi
             if [ -z "$CF_TOKEN" ]; then
-              echo "broad search for CF token..."
-              CF_TOKEN=$(sudo grep -rhoP '(?:CLOUDFLARE_TOKEN|CF_TOKEN|cfToken)\s*[=:]\s*['"'"'"]*\K[A-Za-z0-9_-]{20,}' /opt/gauth-full/*.js 2>/dev/null | head -1)
+              echo "broad search for cfut_ token..."
+              CF_TOKEN=$(sudo grep -rhoP 'cfut_[A-Za-z0-9_-]{20,}' /opt/gauth-full/ 2>/dev/null | head -1)
+              [ -n "$CF_TOKEN" ] && echo "found cfut_ token"
+            fi
+            if [ -z "$CF_TOKEN" ]; then
+              echo "searching all token patterns..."
+              CF_TOKEN=$(sudo grep -rhoP '(?:CLOUDFLARE_TOKEN|CF_TOKEN|cfToken)\s*[=:]\s*['"'"'"]*\K[A-Za-z0-9_-]{20,}' /opt/gauth-full/ 2>/dev/null | head -1)
             fi
             echo "CF_TOKEN found: $([ -n "$CF_TOKEN" ] && echo YES || echo NO)"
             if [ -n "$CF_TOKEN" ] && [ -z "$CF_ZONE" ]; then
