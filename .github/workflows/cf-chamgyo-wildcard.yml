@@ -1,0 +1,39 @@
+name: Chamgyo 와일드카드 DNS
+on:
+  workflow_dispatch:
+jobs:
+  dns:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 와일드카드 A 레코드 추가
+        run: |
+          ZONE_ID="${{ secrets.CLOUDFLARE_ZONE_ID }}"
+          TOKEN="${{ secrets.CLOUDFLARE_TOKEN }}"
+          IP="34.104.233.35"
+
+          echo "ZONE_ID length: ${#ZONE_ID}"
+          echo "TOKEN length: ${#TOKEN}"
+
+          # 기존 와일드카드 레코드 확인
+          EXISTING=$(curl -s -X GET \
+            "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=A&name=*" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json")
+          echo "Existing: $EXISTING"
+
+          COUNT=$(echo "$EXISTING" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('result_info',{}).get('count',0))" 2>/dev/null || echo 0)
+          echo "Count: $COUNT"
+
+          if [ "$COUNT" -gt 0 ]; then
+            echo "와일드카드 레코드 이미 존재"
+            echo "$EXISTING" | python3 -c "import sys,json; [print(r['name'],r['content'],r['proxied']) for r in json.load(sys.stdin).get('result',[])]"
+          else
+            echo "와일드카드 레코드 없음 — 생성 중"
+            RESULT=$(curl -s -X POST \
+              "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              --data '{"type":"A","name":"*","content":"34.104.233.35","ttl":1,"proxied":true}')
+            echo "Result: $RESULT"
+            echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print('SUCCESS' if d.get('success') else 'FAILED: '+str(d.get('errors')))" 2>/dev/null || echo "$RESULT"
+          fi
