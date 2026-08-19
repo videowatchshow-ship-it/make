@@ -449,7 +449,7 @@ function tryLabelValueExtract(rows, maxCols, sourceFile, sourceMtime) {
         totp_secret: isTotpLike(totpVal) ? normalizeTotp(totpVal) : totpVal,
         recovery_email: rec,
         youtube_url: cur.youtube || '',
-        account_date: (cur.date && parseDateValue(cur.date)) || parseDateFromFilename(sourceFile) || null,
+        account_date: (cur.date && parseDateValue(cur.date)) || null,
         extra: [],
         source_file: sourceFile || 'unknown',
         source_mtime: sourceMtime || Date.now(),
@@ -527,7 +527,7 @@ function tryStackedExtract(rows, maxCols, sourceFile, sourceMtime) {
         continue;
       }
       if (cur && cur.email) accounts.push(cur);
-      cur = { email: v, password: '', totp: '', recovery: '', youtube: '', account_date: parseDateFromFilename(sourceFile) || null, extra: [], source_file: sourceFile || 'unknown', source_mtime: sourceMtime || Date.now() };
+      cur = { email: v, password: '', totp: '', recovery: '', youtube: '', account_date: null, extra: [], source_file: sourceFile || 'unknown', source_mtime: sourceMtime || Date.now() };
       afterBlank = false;
       continue;
     }
@@ -614,7 +614,7 @@ function bruteForceExtract(rows, sourceFile, sourceMtime) {
       }
       let _dateVal = null;
       for (const _rv of rest) { if (isDateLike(_rv)) { _dateVal = parseDateValue(_rv); break; } }
-      accounts.push({ email: v, password, totp_secret, recovery_email: recovery, youtube_url: youtube, account_date: _dateVal || parseDateFromFilename(sourceFile) || null, extra: extraValues, source_file: sourceFile || 'unknown', source_mtime: sourceMtime || Date.now() });
+      accounts.push({ email: v, password, totp_secret, recovery_email: recovery, youtube_url: youtube, account_date: _dateVal || null, extra: extraValues, source_file: sourceFile || 'unknown', source_mtime: sourceMtime || Date.now() });
     }
   }
   return accounts;
@@ -714,7 +714,7 @@ function extractAccountsFromSheet(sheet, sourceFile, sourceMtime) {
       totp_secret: isTotpLike(totpRaw) ? normalizeTotp(totpRaw) : totpRaw,
       recovery_email: recovery,
       youtube_url: youtube,
-      account_date: (dateRaw && parseDateValue(dateRaw)) || parseDateFromFilename(sourceFile) || null,
+      account_date: (dateRaw && parseDateValue(dateRaw)) || null,
       extra,
       source_file: sourceFile || 'unknown',
       source_mtime: sourceMtime || Date.now(),
@@ -909,7 +909,7 @@ function mountRoutes(app) {
             for (const a of result.accounts) {
               a.source_file = path.basename(fp);
               if (!a.source_mtime) a.source_mtime = st.mtimeMs;
-              if (!a.account_date) a.account_date = parseDateFromFilename(path.basename(fp)) || null;
+              /* account_date는 엑셀 셀에 적힌 날짜만 사용 — 파일명/다운로드 날짜 무관 */
             }
             parsedFiles.push({ name: path.basename(fp), accounts: result.accounts });
           } catch (e) {
