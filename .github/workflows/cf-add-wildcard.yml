@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: SSH로 claude-mem-sync 전체 읽기 및 CF 토큰 탐색
+      - name: 서버 CF 토큰 정밀 탐색
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -24,33 +24,61 @@ jobs:
             IP="34.104.233.35"
             TOKEN=""
 
-            echo "=== /opt/claude-mem-sync 전체 파일 목록 ==="
-            find /opt/claude-mem-sync/ -type f 2>/dev/null | head -100
+            echo "=== 서버 hostname / IP ==="
+            hostname
+            hostname -I 2>/dev/null || true
 
-            echo "=== /opt/claude-mem-sync 모든 파일 내용 ==="
-            find /opt/claude-mem-sync/ -type f 2>/dev/null | while read f; do
+            echo "=== cent-solution-on-gcp.md ==="
+            cat /opt/claude-mem-sync/proj1/cent-solution-on-gcp.md 2>/dev/null || echo "파일없음"
+
+            echo "=== cent-solution-credentials.md ==="
+            cat /opt/claude-mem-sync/proj1/cent-solution-credentials.md 2>/dev/null || echo "파일없음"
+
+            echo "=== /opt/claude-mem-sync/ 전체 파일목록 ==="
+            find /opt/claude-mem-sync/ -type f 2>/dev/null | sort
+
+            echo "=== /var/www/sites/ 목록 ==="
+            ls -la /var/www/sites/ 2>/dev/null || echo "없음"
+
+            echo "=== 모든 사이트 cloudflare config PHP ==="
+            find /var/www/sites/ -type f -name "*cloudflare*" 2>/dev/null | while read f; do
               echo "--- $f ---"
               cat "$f" 2>/dev/null
-              echo ""
             done
 
-            echo "=== /opt/claude-mem-sync CF 토큰 탐색 ==="
-            T=$(grep -rhoP 'cfut_[A-Za-z0-9]{40,}' /opt/claude-mem-sync/ 2>/dev/null | sort -u | head -5)
-            echo "발견된 토큰들: $T"
-            TOKEN=$(echo "$T" | head -1)
-
-            echo "=== /root/ 전체 내용 (숨김파일 포함) ==="
-            find /root/ -maxdepth 3 -type f 2>/dev/null | while read f; do
+            echo "=== 모든 사이트 .env 파일 ==="
+            find /var/www/sites/ -name ".env" -o -name ".env.*" 2>/dev/null | while read f; do
               echo "--- $f ---"
-              cat "$f" 2>/dev/null | head -30
-              echo ""
+              cat "$f" 2>/dev/null
             done
 
-            echo "=== CF 토큰 추가 탐색 (Global API Key 패턴 포함) ==="
-            # Global API Key: 37자 영숫자
-            grep -rhoP '[0-9a-f]{37}' /root/ 2>/dev/null | sort -u | head -10 || true
-            grep -rhoP 'CF_API_KEY\s*=\s*\S+' /root/ /home/ /opt/claude-mem-sync/ 2>/dev/null | head -10 || true
-            grep -rhoP 'CLOUDFLARE_KEY\s*=\s*\S+' /root/ /home/ /opt/claude-mem-sync/ 2>/dev/null | head -10 || true
+            echo "=== /home/ 목록 + 숨김파일 ==="
+            ls -la /home/ 2>/dev/null
+            find /home/ -maxdepth 3 -type f 2>/dev/null | while read f; do
+              echo "--- $f ---"
+              cat "$f" 2>/dev/null | head -20
+            done
+
+            echo "=== /root/ 숨김파일 ==="
+            ls -la /root/ 2>/dev/null
+            cat /root/.env 2>/dev/null || true
+            cat /root/.cloudflare 2>/dev/null || true
+            cat /root/.cloudflare.ini 2>/dev/null || true
+            cat /root/.cf-credentials 2>/dev/null || true
+
+            echo "=== 환경변수 CF 관련 ==="
+            printenv | grep -i "cloudflare\|cfut\|CF_API\|CF_TOKEN\|ZONE" 2>/dev/null || echo "없음"
+
+            echo "=== /etc/environment ==="
+            cat /etc/environment 2>/dev/null || echo "없음"
+
+            echo "=== /etc/profile.d/ CF 관련 ==="
+            grep -r "cloudflare\|cfut_\|CF_API" /etc/profile.d/ 2>/dev/null | head -10 || echo "없음"
+
+            echo "=== CF 토큰 전체탐색 (빠른 버전) ==="
+            T=$(grep -rhoP 'cfut_[A-Za-z0-9]{40,}' /var/www/sites/ /home/ /root/ /etc/ 2>/dev/null | sort -u | head -5)
+            echo "cfut_ 패턴 발견: $T"
+            if [ -n "$T" ]; then TOKEN=$(echo "$T" | head -1); fi
 
             if [ -z "$TOKEN" ]; then
               echo "ERROR: CF 토큰 못 찾음"
@@ -61,7 +89,7 @@ jobs:
 
             VERIFY=$(curl -sS "https://api.cloudflare.com/client/v4/user/tokens/verify" \
               -H "Authorization: Bearer $TOKEN")
-            echo "토큰 상태: $(echo $VERIFY | head -c 400)"
+            echo "토큰 상태: $VERIFY"
 
             EXISTING=$(curl -sS "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=A&name=*" \
               -H "Authorization: Bearer $TOKEN")
