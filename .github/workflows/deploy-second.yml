@@ -107,7 +107,7 @@ jobs:
             [ -n "$CF_TOKEN" ] || [ -n "$CF_API_KEY" ] && HAS_CF="yes"
             TK_STATUS="NO"; [ -n "$CF_TOKEN" ] && TK_STATUS="YES"
             AK_STATUS="NO"; [ -n "$CF_API_KEY" ] && AK_STATUS="YES"
-            echo "CF credentials found: $HAS_CF (token=$TK_STATUS apikey=$AK_STATUS)"
+            echo "CF credentials found: $HAS_CF token=$TK_STATUS apikey=$AK_STATUS"
 
             if [ "$HAS_CF" = "yes" ] && [ -n "$CF_TOKEN" ]; then
               echo "=== Verifying token permissions ==="
