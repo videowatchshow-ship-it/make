@@ -77,9 +77,14 @@ function isTotpLike(s) {
   if (/^https?:\/\//i.test(s)) return false;
   if (isPhoneNumber(s)) return false;
   if (/[\/\\:;!#$%^&*()+=\[\]{}|<>?]/.test(s) && !/^[A-Z2-7]+=*$/i.test(s)) return false;
-  if (/^[a-z0-9]{16,}$/.test(s) && /[089]/.test(s)) return false;
-  if (/^[A-Za-z0-9]{16,}$/.test(s) && /[a-z]/.test(s) && /[089]/.test(s)) return false;
   if (/\s/.test(s) && !/^[A-Z2-7\s]+$/i.test(s)) return false;
+  const upper = s.toUpperCase().replace(/[\s\-_=]/g, '');
+  /* Base32: A-Z, 2-7 only (RFC 4648 Section 6)
+   * ref: https://datatracker.ietf.org/doc/html/rfc4648#section-6 */
+  const b32only = upper.replace(/[^A-Z2-7]/g, '');
+  if (b32only.length >= 16 && b32only.length <= 128) {
+    if (upper.length > 0 && b32only.length / upper.length >= 0.7) return true;
+  }
   const n = normalizeTotp(s);
   /* RFC 4226 Section 4: HMAC-SHA1 최소 128-bit = 20 Base32 문자
    * ref: https://datatracker.ietf.org/doc/html/rfc4226#section-4
@@ -87,8 +92,7 @@ function isTotpLike(s) {
   if (n.length < 16) return false;
   if (n.length > 128) return false;
   const raw = String(s).replace(/[\s\-_=]/g, '');
-  if (raw.length > 0 && n.length / raw.length < 0.8) return false;
-  if (raw.length > 0 && /[a-z]/.test(raw) && /[A-Z]/.test(raw) && n.length / raw.length < 0.95) return false;
+  if (raw.length > 0 && n.length / raw.length < 0.6) return false;
   return true;
 }
 
@@ -232,8 +236,8 @@ function analyzeColumns(rows) {
   for (const s of stats) {
     if (used.has(s.col) || s.nonEmpty === 0) continue;
     const ratio = s.totps / s.nonEmpty;
-    /* 10% 임계값: TOTP 열 판정 — 엑셀 형식이 비표준이므로 경험적 임계값, 공식 규격 없음 */
-    if (ratio > bestTotpRatio && ratio > 0.1) {
+    /* 3% 임계값: TOTP 열 판정 — 일부 계정만 TOTP가 있는 경우도 감지 */
+    if (ratio > bestTotpRatio && ratio > 0.03) {
       bestTotpRatio = ratio;
       bestTotp = s.col;
     }
@@ -416,7 +420,6 @@ function tryLabelValueExtract(rows, maxCols, sourceFile, sourceMtime) {
       }
       if (pw && !totpVal && isTotpLike(pw)) { totpVal = pw; pw = ''; }
       if (pw && isEmail(pw)) { if (!rec) rec = pw; pw = ''; }
-      if (pw && (isPhoneNumber(pw) || isSixDigitCode(pw))) { pw = ''; }
       if (rec && !isEmail(rec)) rec = '';
       if (rec && normalizeEmail(rec) === normalizeEmail(cur.email)) rec = '';
       accounts.push({
@@ -531,7 +534,6 @@ function tryStackedExtract(rows, maxCols, sourceFile, sourceMtime) {
     let rec = a.recovery || '';
     if (pw && !totp && isTotpLike(pw)) { totp = pw; pw = ''; }
     if (pw && isEmail(pw)) { if (!rec) rec = pw; pw = ''; }
-    if (pw && (isPhoneNumber(pw) || isSixDigitCode(pw))) { pw = ''; }
     if (rec && !isEmail(rec)) rec = '';
     if (rec && normalizeEmail(rec) === normalizeEmail(a.email)) rec = '';
     return {
@@ -670,7 +672,6 @@ function extractAccountsFromSheet(sheet, sourceFile, sourceMtime) {
       if (!recovery) { recovery = password; }
       password = '';
     }
-    if (password && (isPhoneNumber(password) || isSixDigitCode(password))) { password = ''; }
     if (password && isUrlLike(password)) { password = ''; }
     if (recovery && !isEmail(recovery)) recovery = '';
     if (recovery && normalizeEmail(recovery) === normalizeEmail(email)) recovery = '';
@@ -982,7 +983,11 @@ function mountRoutes(app) {
       } catch(e) {
         parsedFiles.push({ name: f.originalname, accounts: [], error: e.message });
       }
-      try { fs.unlinkSync(f.path); } catch(e) { console.warn('[upload_excels] temp file cleanup failed:', f.path, e.message); }
+      const archiveDir = path.join(__dirname, 'uploads', 'archive');
+      try { fs.mkdirSync(archiveDir, { recursive: true }); } catch (_) {}
+      const archiveName = (f.originalname || path.basename(f.path)).replace(/[^a-zA-Z0-9가-힣._\-]/g, '_');
+      const archivePath = path.join(archiveDir, Date.now() + '_' + archiveName);
+      try { fs.renameSync(f.path, archivePath); } catch (_) { try { fs.unlinkSync(f.path); } catch (_) {} }
       if (global.gc) global.gc();
     }
 
@@ -1055,6 +1060,80 @@ function mountRoutes(app) {
         res.json({ ok: true, total_master: allAccounts.length, total_parsed: totalParsed, added: totalAdded, updated: totalUpdated, files: fileResults, conflicts_count: 0, conflicts: [] });
       } catch(e) {
         console.error('[upload-excels] error:', e);
+        if (!res.headersSent) res.status(500).json({ ok: false, error: 'internal error' });
+      }
+    });
+  });
+
+  app.post('/api/rescan-uploads', async (req, res) => {
+    req.setTimeout(600000);
+    res.setTimeout(600000);
+    const archiveDir = path.join(__dirname, 'uploads', 'archive');
+    if (!fs.existsSync(archiveDir)) {
+      return res.json({ ok: true, message: 'no archive directory', files: [] });
+    }
+    const exts = ['.xlsx', '.xls', '.csv'];
+    const allFiles = [];
+    try {
+      for (const name of fs.readdirSync(archiveDir)) {
+        const full = path.join(archiveDir, name);
+        const ext = path.extname(name).toLowerCase();
+        if (exts.includes(ext) || !ext) {
+          allFiles.push(full);
+        }
+      }
+    } catch (_) {}
+    if (!allFiles.length) {
+      return res.json({ ok: true, message: 'no archived files found', files: [] });
+    }
+    console.log('[rescan-uploads] found', allFiles.length, 'archived files');
+    const parsedFiles = [];
+    for (const fp of allFiles) {
+      try {
+        const accounts = parseExcelFile(fp, path.basename(fp));
+        parsedFiles.push({ name: path.basename(fp), accounts });
+      } catch (e) {
+        parsedFiles.push({ name: path.basename(fp), accounts: [], error: e.message });
+      }
+    }
+    await withFileLock(() => {
+      try {
+        const dataFile = '/opt/gauth-full/accounts_normalized.json';
+        let existing = [];
+        try {
+          const raw = fs.readFileSync(dataFile, 'utf8');
+          if (!raw.trim()) throw new Error('empty file');
+          const d = JSON.parse(raw);
+          existing = Array.isArray(d) ? d : (d.accounts || []);
+        } catch (_) {}
+        const byEmail = {};
+        for (const a of existing) { if (a && a.email) byEmail[normalizeEmail(a.email)] = a; }
+        let totalParsed = 0, totalUpdated = 0;
+        const fileResults = [];
+        for (const pf of parsedFiles) {
+          if (pf.error) { fileResults.push({ name: pf.name, accounts: 0, error: pf.error }); continue; }
+          let updated = 0;
+          for (const a of pf.accounts) {
+            if (!a.email) continue;
+            const key = normalizeEmail(a.email);
+            const e = byEmail[key];
+            if (!e) continue;
+            if (a.totp_secret && isTotpLike(a.totp_secret) && !e.totp_secret) { e.totp_secret = normalizeTotp(a.totp_secret); updated++; }
+            if (a.recovery_email && isEmail(a.recovery_email) && !e.recovery_email && normalizeEmail(a.recovery_email) !== key) { e.recovery_email = a.recovery_email; updated++; }
+            if (a.youtube_url && isUrlLike(a.youtube_url) && !e.youtube_url) { e.youtube_url = a.youtube_url; updated++; }
+            if (a.password && !e.password) { e.password = a.password; updated++; }
+          }
+          totalParsed += pf.accounts.length;
+          totalUpdated += updated;
+          fileResults.push({ name: pf.name, accounts: pf.accounts.length, updated });
+        }
+        const allAccounts = Object.values(byEmail);
+        const tmpFile = dataFile + '.tmp.' + process.pid + '.' + Date.now();
+        fs.writeFileSync(tmpFile, JSON.stringify(allAccounts, null, 2));
+        fs.renameSync(tmpFile, dataFile);
+        res.json({ ok: true, total_master: allAccounts.length, total_parsed: totalParsed, updated: totalUpdated, files: fileResults });
+      } catch (e) {
+        console.error('[rescan-uploads] error:', e);
         if (!res.headersSent) res.status(500).json({ ok: false, error: 'internal error' });
       }
     });
