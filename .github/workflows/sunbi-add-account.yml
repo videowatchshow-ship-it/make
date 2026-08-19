@@ -3,16 +3,20 @@ on:
   workflow_dispatch:
     inputs:
       email:
-        description: 'Email to look up in gauth DB and add to sunbi'
+        description: 'Email to add to sunbi'
         required: true
         default: 'dun23315@gmail.com'
+      action:
+        description: 'inspect (check server) or add (add account)'
+        required: false
+        default: 'inspect'
 
 jobs:
   add-account:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Query gauth DB and add to sunbi
+      - name: Inspect or add account to sunbi
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -21,55 +25,58 @@ jobs:
           command_timeout: 5m
           script: |
             EMAIL="${{ github.event.inputs.email }}"
+            ACTION="${{ github.event.inputs.action }}"
 
-            echo "=== STEP 1: Query account from gauth DB ==="
-            ACCOUNT_JSON=$(node -e "
-              const fs = require('fs');
-              const d = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
-              const accs = Array.isArray(d) ? d : (d.accounts || []);
-              const t = accs.find(a => (a.email||'').toLowerCase() === '$EMAIL'.toLowerCase());
-              if (!t) { console.log('NOT_FOUND'); process.exit(0); }
-              console.log(JSON.stringify(t));
-            ")
-
-            if [ "$ACCOUNT_JSON" = "NOT_FOUND" ]; then
-              echo "Account not found in gauth DB: $EMAIL"
-              exit 1
+            if [ "$ACTION" = "inspect" ]; then
+              echo "=== Checking rebrowser-login.js for sunbi routes ==="
+              grep -n -i 'sunbi' /opt/gauth-full/rebrowser-login.js 2>/dev/null | head -50
+              echo ""
+              echo "=== Checking for sunbi data files ==="
+              find /opt/gauth-full -name '*sunbi*' 2>/dev/null
+              find /var/www/sites/sunbi -type f 2>/dev/null
+              echo ""
+              echo "=== Checking sunbi API route code ==="
+              grep -n -A 20 'sunbi/accounts' /opt/gauth-full/rebrowser-login.js 2>/dev/null | head -60
+              echo ""
+              echo "=== Checking for sunbi allocation/assign logic ==="
+              grep -n -A 10 'sunbi' /opt/gauth-full/rebrowser-login.js 2>/dev/null | head -100
+              echo ""
+              echo "=== Check if there is a sunbi JSON data file ==="
+              ls -la /opt/gauth-full/sunbi* 2>/dev/null || echo "No sunbi files in /opt/gauth-full/"
+              ls -la /opt/gauth-full/data/sunbi* 2>/dev/null || echo "No sunbi files in /opt/gauth-full/data/"
+              echo ""
+              echo "=== Test API endpoint ==="
+              curl -s http://localhost:4000/api/sunbi/accounts 2>/dev/null | head -500
             fi
 
-            echo "Found account:"
-            echo "$ACCOUNT_JSON" | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log(JSON.stringify(d,null,2))"
-
-            echo ""
-            echo "=== STEP 2: Check sunbi site structure ==="
-            SUNBI_DIR="/var/www/sites/sunbi/public"
-            echo "Files in sunbi:"
-            ls -la "$SUNBI_DIR/" 2>/dev/null || echo "Directory not found"
-            echo ""
-
-            # Check for data files
-            echo "Data files:"
-            find "$SUNBI_DIR" -name "*.json" -o -name "*.js" -o -name "*.html" 2>/dev/null | head -20
-            echo ""
-
-            # Check index.html for data structure hints
-            if [ -f "$SUNBI_DIR/index.html" ]; then
-              echo "=== index.html structure (first 100 lines) ==="
-              head -100 "$SUNBI_DIR/index.html"
+            if [ "$ACTION" = "add" ]; then
+              echo "=== Adding $EMAIL to sunbi ==="
+              # First get account data from gauth DB
+              ACCOUNT_JSON=$(node -e "
+                const fs = require('fs');
+                const d = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+                const accs = Array.isArray(d) ? d : (d.accounts || []);
+                const t = accs.find(a => (a.email||'').toLowerCase() === '$EMAIL'.toLowerCase());
+                if (!t) { console.log('NOT_FOUND'); process.exit(0); }
+                console.log(JSON.stringify(t));
+              ")
+              if [ "$ACCOUNT_JSON" = "NOT_FOUND" ]; then
+                echo "Account not found in gauth DB: $EMAIL"
+                exit 1
+              fi
+              echo "Account found: $ACCOUNT_JSON"
               echo ""
-              echo "=== Looking for data/accounts references ==="
-              grep -n -i "account\|data\|json\|email\|fetch\|api" "$SUNBI_DIR/index.html" | head -30
+              # Try adding via API
+              curl -s -X POST http://localhost:4000/api/sunbi/add \
+                -H 'Content-Type: application/json' \
+                -d "{\"email\":\"$EMAIL\"}" 2>/dev/null || echo "POST /api/sunbi/add failed"
+              echo ""
+              # Verify
+              echo "=== Verify ==="
+              curl -s http://localhost:4000/api/sunbi/accounts 2>/dev/null | node -e "
+                const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+                const accs = d.accounts || d || [];
+                const found = accs.find(a => (a.email||'').toLowerCase() === '$EMAIL'.toLowerCase());
+                console.log(found ? 'FOUND in sunbi: ' + JSON.stringify(found, null, 2) : 'NOT in sunbi yet');
+              " 2>/dev/null
             fi
-
-            # Check for any JS data files
-            for f in $(find "$SUNBI_DIR" -name "*.json" 2>/dev/null); do
-              echo "=== JSON file: $f ==="
-              head -50 "$f"
-              echo ""
-            done
-
-            for f in $(find "$SUNBI_DIR" -name "*.js" 2>/dev/null | grep -v node_modules); do
-              echo "=== JS file: $f ==="
-              head -50 "$f"
-              echo ""
-            done
