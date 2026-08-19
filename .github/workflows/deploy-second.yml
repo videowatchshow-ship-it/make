@@ -64,15 +64,20 @@ jobs:
             sudo apache2ctl configtest 2>&1 && sudo systemctl reload apache2 && echo "Apache configured (HTTP)" || echo "Apache config test failed"
 
             echo "=== Cloudflare DNS (from server env) ==="
+            echo "DEBUG: searching for CF credentials..."
+            sudo grep -rl 'CLOUDFLARE\|CF_TOKEN\|CF_ZONE' /opt/gauth-full/ /etc/systemd/system/gauth* /var/www/sites/gauth/ /etc/environment /root/.env 2>/dev/null | head -20 || echo "no files found"
+            sudo grep -h 'CLOUDFLARE\|CF_TOKEN\|CF_ZONE' /opt/gauth-full/.env /opt/gauth-full/*.env /etc/systemd/system/gauth.service /var/www/sites/gauth/.env /etc/environment /root/.env 2>/dev/null | sed 's/=.\{6\}/=REDACT.../' || echo "no matches"
             CF_TOKEN=""
             CF_ZONE=""
-            for f in /opt/gauth-full/.env /etc/environment /var/www/sites/gauth/.env; do
+            for f in /opt/gauth-full/.env /etc/environment /var/www/sites/gauth/.env /root/.env; do
               [ -f "$f" ] || continue
-              [ -z "$CF_TOKEN" ] && CF_TOKEN=$(grep -oP '(?:CLOUDFLARE_TOKEN|CF_TOKEN)=\K\S+' "$f" 2>/dev/null | head -1)
-              [ -z "$CF_ZONE" ] && CF_ZONE=$(grep -oP '(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID|CF_ZONE)=\K\S+' "$f" 2>/dev/null | head -1)
+              [ -z "$CF_TOKEN" ] && CF_TOKEN=$(sudo grep -oP '(?:CLOUDFLARE_TOKEN|CF_TOKEN)=\K\S+' "$f" 2>/dev/null | head -1)
+              [ -z "$CF_ZONE" ] && CF_ZONE=$(sudo grep -oP '(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID|CF_ZONE)=\K\S+' "$f" 2>/dev/null | head -1)
             done
-            if [ -z "$CF_TOKEN" ]; then CF_TOKEN=$(grep -oP 'CLOUDFLARE_TOKEN=\K\S+' /etc/systemd/system/gauth.service 2>/dev/null | head -1); fi
-            if [ -z "$CF_ZONE" ]; then CF_ZONE=$(grep -oP 'CLOUDFLARE_ZONE_ID=\K\S+' /etc/systemd/system/gauth.service 2>/dev/null | head -1); fi
+            if [ -z "$CF_TOKEN" ]; then CF_TOKEN=$(sudo grep -oP 'CLOUDFLARE_TOKEN=\K\S+' /etc/systemd/system/gauth.service 2>/dev/null | head -1); fi
+            if [ -z "$CF_ZONE" ]; then CF_ZONE=$(sudo grep -oP 'CLOUDFLARE_ZONE_ID=\K\S+' /etc/systemd/system/gauth.service 2>/dev/null | head -1); fi
+            if [ -z "$CF_TOKEN" ]; then CF_TOKEN=$(sudo grep -roPh '(?:CLOUDFLARE_TOKEN|CF_TOKEN)=\K\S+' /opt/gauth-full/ 2>/dev/null | head -1); fi
+            if [ -z "$CF_ZONE" ]; then CF_ZONE=$(sudo grep -roPh '(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID|CF_ZONE)=\K\S+' /opt/gauth-full/ 2>/dev/null | head -1); fi
 
             if [ -n "$CF_TOKEN" ] && [ -n "$CF_ZONE" ]; then
               EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?name=second.cent-solution.online&type=A" \
