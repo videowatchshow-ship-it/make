@@ -1,55 +1,84 @@
-name: Create DNS record for second
-on:  
+name: Setup second DNS + SSL
+on:
   workflow_dispatch:
+    inputs:
+      cf_token:
+        description: 'Cloudflare API Token (DNS:Edit 권한 필요)'
+        required: true
+        type: string
 
 jobs:
-  dns:
+  setup:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
-      - name: Final DNS attempt
+      - name: Create DNS and SSL
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          CF_DNS_TOKEN: ${{ github.event.inputs.cf_token }}
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 60s
+          envs: CF_DNS_TOKEN
+          command_timeout: 180s
           script: |
-            echo "=== 1. Certbot renewal configs ==="
-            sudo find /etc/letsencrypt/ -name '*.conf' -path '*/renewal/*' 2>/dev/null | while read f; do
-              echo "--- $f ---"
-              sudo grep -i 'cloudflare\|authenticator\|credential' "$f" 2>/dev/null
-            done
-
-            echo ""
-            echo "=== 2. All credential files referenced by certbot ==="
-            sudo grep -rh 'credentials' /etc/letsencrypt/renewal/ 2>/dev/null
-
-            echo ""
-            echo "=== 3. Wrangler and .cloudflare configs ==="
-            sudo find /root/ /home/ -name 'wrangler.toml' -o -name '.cloudflare' -o -name 'cloudflare.toml' 2>/dev/null | head -10
-            sudo ls -la /root/.cloudflare/ 2>/dev/null || echo "no /root/.cloudflare/"
-
-            echo ""
-            echo "=== 4. Try direct DNS creation with token from file ==="
             SERVER_IP=$(curl -s ifconfig.me)
-            TOKEN_RAW=$(sudo cat /root/.secrets/cloudflare.ini 2>/dev/null | grep -oP '=\s*\K\S+')
-            echo "Token starts with: $(echo $TOKEN_RAW | cut -c1-10)"
-            echo "Token length: ${#TOKEN_RAW}"
+            echo "Server IP: $SERVER_IP"
+
+            echo "=== 1. Verify token ==="
+            VERIFY=$(curl -s "https://api.cloudflare.com/client/v4/user/tokens/verify" \
+              -H "Authorization: Bearer $CF_DNS_TOKEN" -H "Content-Type: application/json")
+            echo "$VERIFY" | python3 -c "import sys,json; d=json.load(sys.stdin); print('Token status:', d.get('result',{}).get('status','unknown'))" 2>&1
 
             echo ""
-            echo "=== 5. Create via curl ==="
-            RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/2601d4f4ab75c910f8d858ca036ff344/dns_records" \
-              -H "Authorization: Bearer $TOKEN_RAW" \
-              -H "Content-Type: application/json" \
-              -d "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
-            echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print('success:', d.get('success')); [print('err:', e) for e in d.get('errors',[])]" 2>&1
+            echo "=== 2. Create DNS A record ==="
+            ZONE="2601d4f4ab75c910f8d858ca036ff344"
+            EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records?name=second.cent-solution.online&type=A" \
+              -H "Authorization: Bearer $CF_DNS_TOKEN" -H "Content-Type: application/json")
+            HAS=$(echo "$EXISTING" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('result',[])))" 2>/dev/null)
+
+            if [ "$HAS" = "0" ]; then
+              echo "Creating A record..."
+              RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records" \
+                -H "Authorization: Bearer $CF_DNS_TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
+              echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print('Success:', d.get('success'), d.get('result',{}).get('name',''))" 2>&1
+            else
+              echo "DNS record already exists"
+            fi
 
             echo ""
-            echo "=== 6. Check all tokens in ALL ini/cfg/env files ==="
-            sudo grep -rh 'cfut_\|cloudflare.*token\|CF_API' /root/ /opt/ /etc/ /home/ /var/www/ --include='*.ini' --include='*.cfg' --include='*.env' --include='*.conf' --include='*.php' --include='*.json' --include='*.toml' 2>/dev/null | grep -v node_modules | sort -u | head -20
+            echo "=== 3. Save token to server ==="
+            echo "dns_cloudflare_api_token = $CF_DNS_TOKEN" | sudo tee /root/.secrets/cloudflare-dns.ini > /dev/null
+            sudo chmod 600 /root/.secrets/cloudflare-dns.ini
+            echo "Token saved to /root/.secrets/cloudflare-dns.ini"
+
+            echo ""
+            echo "=== 4. Wait for DNS propagation ==="
+            sleep 10
+            RESOLVE=$(dig +short second.cent-solution.online 2>/dev/null || nslookup second.cent-solution.online 2>/dev/null | grep -oP 'Address:\\s*\\K[0-9.]+' | tail -1)
+            echo "DNS resolve: $RESOLVE"
+
+            echo ""
+            echo "=== 5. SSL certificate ==="
+            if [ ! -f /etc/letsencrypt/live/second.cent-solution.online/fullchain.pem ]; then
+              if [ -n "$RESOLVE" ]; then
+                echo "Getting SSL cert via certbot..."
+                sudo certbot --apache -d second.cent-solution.online --non-interactive --agree-tos --email videowatch.show@gmail.com --redirect 2>&1 || echo "Certbot failed - DNS may need more time"
+              else
+                echo "DNS not propagated yet, skipping SSL"
+              fi
+            else
+              echo "SSL cert already exists"
+            fi
+
+            echo ""
+            echo "=== 6. Final check ==="
+            curl -sI "https://second.cent-solution.online/" --max-time 5 2>&1 | head -5 || echo "Site not reachable yet (DNS may need more time)"
 
             echo ""
             echo "=== DONE ==="
