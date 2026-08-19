@@ -1,5 +1,5 @@
 /**
- * second sub-site server v2.0
+ * second sub-site server v2.1
  * Google OAuth + YouTube channel lookup
  */
 
