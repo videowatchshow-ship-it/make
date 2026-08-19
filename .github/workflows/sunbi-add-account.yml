@@ -81,9 +81,9 @@ jobs:
               sudo node -e "
                 const fs = require('fs');
                 const acctFile = '$SUNBI_DIR/accounts.json';
-                let accounts = [];
-                try { accounts = JSON.parse(fs.readFileSync(acctFile, 'utf8')); } catch(e) { console.log('Creating new file'); }
-                if (!Array.isArray(accounts)) accounts = accounts.accounts || [];
+                let data = {};
+                try { data = JSON.parse(fs.readFileSync(acctFile, 'utf8')); } catch(e) { console.log('Creating new file'); }
+                let accounts = Array.isArray(data) ? data : (data.accounts || []);
                 const newAcct = JSON.parse(fs.readFileSync('/tmp/sunbi_new_account.json', 'utf8'));
                 const exists = accounts.find(a => (a.email||'').toLowerCase() === (newAcct.email||'').toLowerCase());
                 if (exists) {
@@ -93,7 +93,7 @@ jobs:
                   console.log('Adding new account to sunbi...');
                   accounts.push(newAcct);
                 }
-                fs.writeFileSync(acctFile, JSON.stringify(accounts, null, 2));
+                fs.writeFileSync(acctFile, JSON.stringify({accounts: accounts}, null, 2));
                 console.log('Done. Total accounts in sunbi:', accounts.length);
                 console.log('Verify:', accounts.find(a => (a.email||'').toLowerCase() === (newAcct.email||'').toLowerCase()).email);
               "
