@@ -1,4 +1,4 @@
-name: photo 13계정 x 3뷰 URL 백엔드 체인 검증
+name: photo write.php 경고 안내문 반짝 삽입
 
 on:
   workflow_dispatch:
@@ -9,11 +9,10 @@ on:
       - '.github/workflows/photo-check-abc-urls.yml'
 
 jobs:
-  verify_chain:
+  add_notice:
     runs-on: ubuntu-latest
     steps:
-      - name: 13계정 x 3뷰 = 39 URL 프론트 HTTP + 백엔드 sel/room 체인 검증
-        uses: appleboy/ssh-action@v1.0.3
+      - uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
@@ -28,102 +27,28 @@ jobs:
               --command='bash -s' << "REMOTE"
             set -uo pipefail
             P1="/var/www/sites/chamgyo/public/photo"
-            BASE="https://xn--9d0bw2fjtyymch7de9d.info/photo"
             TS=$(date +%s)
-            NOW=$(date +%s)
 
-            ACCOUNTS="aass0707 abc01 abc02 abc03 abc04 abc05 abc06 abc07 cent gain jay otuki tak"
-
-            echo "===== [A] 13 계정 sel_*.json → 각 계정이 선택한 room_id ====="
-            declare -A ROOM
-            for U in $ACCOUNTS; do
-              F="$P1/data/sel_${U}.json"
-              if [ -f "$F" ]; then
-                CONTENT=$(sudo cat "$F")
-                RID=$(echo "$CONTENT" | grep -oE "room_id[^0-9]*[0-9]+" | grep -oE "[0-9]+" | head -1)
-                MT=$(stat -c "%y" "$F" | cut -d. -f1)
-                ROOM[$U]=$RID
-                printf "  %-10s → room_id=%-4s  sel_mtime=%s  content=%s\n" "$U" "$RID" "$MT" "$CONTENT"
-              else
-                printf "  %-10s → sel_ 파일 MISSING\n" "$U"
-              fi
-            done
+            echo "===== [1] "프리즘에 넣을 URL" 문구가 있는 파일 찾기 ====="
+            sudo grep -rln "프리즘에 넣을\|프리즘 넣을\|프리즘에 넣는\|cent 님\|님 — 프리즘\|님 - 프리즘\|세로 URL 복사\|가로 URL 복사\|싱지뉴 URL 복사" "$P1" 2>/dev/null | head -10
 
             echo ""
-            echo "===== [B] 각 계정 room_<id>.json 존재/신선도 (백엔드 데이터 실체) ====="
-            printf "  %-10s %-6s %-6s %-8s %-8s %s\n" "계정" "room" "http" "age_s" "nums_len" "server_time"
-            echo "  -----------------------------------------------------------------"
-            for U in $ACCOUNTS; do
-              RID=${ROOM[$U]:-}
-              if [ -z "$RID" ]; then
-                printf "  %-10s SKIP (sel_ 없음)\n" "$U"; continue
-              fi
-              F="$P1/data/room_${RID}.json"
-              if [ -f "$F" ]; then
-                MT=$(stat -c "%Y" "$F")
-                AGE=$((NOW - MT))
-                CONTENT=$(sudo cat "$F")
-                NL=$(echo "$CONTENT" | python3 -c "import json,sys;d=json.load(sys.stdin);print(len(d.get('nums',[])))" 2>/dev/null || echo "?")
-                ST=$(echo "$CONTENT" | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('server_time','?'))" 2>/dev/null || echo "?")
-                printf "  %-10s %-6s %-6s %-8s %-8s %s\n" "$U" "$RID" "OK" "$AGE" "$NL" "$ST"
-              else
-                printf "  %-10s %-6s %-6s room_%s.json MISSING\n" "$U" "$RID" "-" "$RID"
-              fi
-            done
+            echo "===== [2] write.php 안의 텍스트 grep ====="
+            sudo grep -n "프리즘\|세로 URL\|가로 URL\|싱지뉴 URL\|님\s*—" "$P1/write.php" 2>/dev/null | head -30
 
             echo ""
-            echo "===== [C] 3뷰 파일 실체 (CAH_1/CAW_1/SNW_1) 서버 존재 ====="
-            for F in CAH_1.html CAW_1.html SNW_1.html; do
-              if [ -f "$P1/$F" ]; then
-                SZ=$(sudo stat -c "%s" "$P1/$F")
-                TITLE=$(sudo grep -oE "<title>[^<]+</title>" "$P1/$F" | head -1)
-                printf "  %-12s size=%-6sB title=%s\n" "$F" "$SZ" "$TITLE"
-              else
-                echo "  $F: MISSING"
-              fi
-            done
+            echo "===== [3] write.php 파일 크기 + 첫 15줄 ====="
+            sudo ls -la "$P1/write.php"
+            sudo head -15 "$P1/write.php"
 
             echo ""
-            echo "===== [D] 39개 URL 프론트엔드 HTTP (Cloudflare 경유 HTTPS) ====="
-            printf "  %-10s %-6s %-6s %-6s\n" "계정" "세로" "가로" "싱지뉴"
-            echo "  -------------------------------------"
-            for U in $ACCOUNTS; do
-              CAH=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 "$BASE/CAH_1.html?ch=$U&_t=$TS")
-              CAW=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 "$BASE/CAW_1.html?ch=$U&_t=$TS")
-              SNW=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 "$BASE/SNW_1.html?ch=$U&_t=$TS")
-              printf "  %-10s %-6s %-6s %-6s\n" "$U" "$CAH" "$CAW" "$SNW"
-            done
+            echo "===== [4] write.php에서 "님 — 프리즘" 패턴 정확 위치 ====="
+            sudo grep -nE "님\s*—|님\s*-|프리즘|세로 URL 복사" "$P1/write.php" 2>/dev/null | head -20
+            echo ""
+            echo "===== [5] write_url.php (있으면) ====="
+            [ -f "$P1/write_url.php" ] && sudo ls -la "$P1/write_url.php" && sudo grep -n "프리즘\|세로 URL\|가로 URL" "$P1/write_url.php" | head -20 || echo "write_url.php 없음"
 
             echo ""
-            echo "===== [E] 백엔드 api_selected_room.php → 각 계정 응답 실체 ====="
-            for U in $ACCOUNTS; do
-              R=$(curl -sS --max-time 10 "$BASE/api_selected_room.php?ch=$U&_t=$TS")
-              printf "  api_selected_room?ch=%-10s → %s\n" "$U" "$R"
-            done
-
-            echo ""
-            echo "===== [F] 총 계정 x 뷰 매트릭스 종합 판정 ====="
-            OK=0; FAIL=0
-            for U in $ACCOUNTS; do
-              RID=${ROOM[$U]:-}
-              if [ -z "$RID" ] || [ ! -f "$P1/data/room_${RID}.json" ]; then
-                echo "  $U: ❌ (sel 또는 room 없음)"
-                FAIL=$((FAIL+1))
-                continue
-              fi
-              MT=$(stat -c "%Y" "$P1/data/room_${RID}.json")
-              AGE=$((NOW - MT))
-              if [ "$AGE" -gt 600 ]; then
-                echo "  $U (방$RID): ⚠️ stale ${AGE}s (10분+)"
-                FAIL=$((FAIL+1))
-              else
-                echo "  $U (방$RID): ✅ 신선 ${AGE}s"
-                OK=$((OK+1))
-              fi
-            done
-            echo ""
-            echo "정상: $OK / 문제: $FAIL"
-
-            echo ""
-            echo "===== DONE ====="
+            echo "===== [6] photo/ 폴더 안에 있는 모든 PHP 파일 (관리자 페이지 후보) ====="
+            sudo ls -la "$P1/"*.php | awk "{print \$5, \$6, \$7, \$8, \$9}" | head -30
             REMOTE
