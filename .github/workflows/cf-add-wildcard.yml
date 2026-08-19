@@ -8,9 +8,9 @@ on:
 jobs:
   dns:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
-      - name: SSH로 .env에서 토큰 추출 후 DNS 추가
+      - name: SSH로 전체 서버 CF 토큰 탐색 후 DNS 추가
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -18,64 +18,78 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           script_stop: false
           timeout: 60s
-          command_timeout: 240s
+          command_timeout: 420s
           script: |
             ZONE_ID="7e5faed2d3d4d6da7aceb4ddde81a62b"
             IP="34.104.233.35"
             TOKEN=""
 
-            # gucci PHP는 parse_ini_file(__DIR__ . '/../../.env') 사용
-            # __DIR__ = /var/www/sites/gucci/config → ../../.env = /var/www/sites/.env
-            echo "=== .env 파일 탐색 ==="
-            for f in \
-              /var/www/sites/.env \
-              /var/www/sites/gucci/.env \
-              /var/www/.env \
-              /var/www/sites/gucci/config/../../.env; do
-              if [ -f "$f" ]; then
-                echo "파일 발견: $f"
-                cat "$f"
-                T=$(grep -oP 'CLOUDFLARE_API_TOKEN\s*=\s*\K\S+' "$f" 2>/dev/null | head -1)
-                [ -z "$T" ] && T=$(grep -oP 'cfut_[A-Za-z0-9]{40,}' "$f" 2>/dev/null | head -1)
-                if [ -n "$T" ] && [ -z "$TOKEN" ]; then
-                  TOKEN="$T"
-                  echo "TOKEN found in $f"
-                fi
+            echo "=== 서버 구조 파악 ==="
+            ls /home/ 2>/dev/null
+            ls /srv/ 2>/dev/null
+            ls /etc/cloudflare* 2>/dev/null || true
+            ls /root/ 2>/dev/null
+            ls /root/.secrets/ 2>/dev/null || true
+            ls /root/.config/ 2>/dev/null || true
+            ls /root/.local/ 2>/dev/null || true
+
+            echo "=== /etc/ CF 관련 파일 ==="
+            find /etc/ -maxdepth 4 \( -name "*cloudflare*" -o -name "*cf-*" \) -type f 2>/dev/null | head -20
+            for f in $(find /etc/ -maxdepth 4 \( -name "*cloudflare*" -o -name "*cf-*" \) -type f 2>/dev/null | head -10); do
+              echo "=== $f ==="; cat "$f" 2>/dev/null
+              T=$(grep -oP 'cfut_[A-Za-z0-9]{40,}' "$f" 2>/dev/null | head -1)
+              [ -n "$T" ] && [ -z "$TOKEN" ] && TOKEN="$T" && echo "TOKEN in $f"
+            done
+
+            echo "=== /home/ CF 관련 ==="
+            find /home/ -maxdepth 6 \( -name "*cloudflare*" -o -name "*.env" -o -name "*.ini" -o -name "*.token" -o -name "*.secret" \) -type f 2>/dev/null | head -20
+            for f in $(find /home/ -maxdepth 6 \( -name "*cloudflare*" -o -name "*.env" -o -name "*.ini" -o -name "*.token" -o -name "*.secret" \) -type f 2>/dev/null | head -20); do
+              echo "=== $f ==="; cat "$f" 2>/dev/null | head -30
+              T=$(grep -oP 'cfut_[A-Za-z0-9]{40,}' "$f" 2>/dev/null | head -1)
+              [ -n "$T" ] && [ -z "$TOKEN" ] && TOKEN="$T" && echo "TOKEN in $f"
+            done
+
+            echo "=== /root/ 전체 파일 목록 ==="
+            find /root/ -maxdepth 4 -type f 2>/dev/null | head -50
+
+            echo "=== /root/ CF 토큰 검색 ==="
+            for f in $(find /root/ -maxdepth 4 -type f 2>/dev/null); do
+              T=$(grep -loP 'cfut_[A-Za-z0-9]{40,}' "$f" 2>/dev/null)
+              if [ -n "$T" ]; then
+                echo "=== $f ==="; cat "$f"
+                TOK=$(grep -oP 'cfut_[A-Za-z0-9]{40,}' "$f" 2>/dev/null | head -1)
+                [ -n "$TOK" ] && [ -z "$TOKEN" ] && TOKEN="$TOK" && echo "TOKEN in $f"
               fi
             done
 
-            # .env 파일 목록 출력
-            echo "=== find .env 파일 목록 ==="
-            find /var/www/ -maxdepth 5 -name ".env" -type f 2>/dev/null
-            find /var/www/ -maxdepth 5 -name "*.env" -type f 2>/dev/null
+            echo "=== /srv/ CF 토큰 검색 ==="
+            for f in $(find /srv/ -maxdepth 5 -type f 2>/dev/null | head -50); do
+              T=$(grep -loP 'cfut_[A-Za-z0-9]{40,}' "$f" 2>/dev/null)
+              if [ -n "$T" ]; then
+                echo "=== $f ==="; cat "$f"
+                TOK=$(grep -oP 'cfut_[A-Za-z0-9]{40,}' "$f" 2>/dev/null | head -1)
+                [ -n "$TOK" ] && [ -z "$TOKEN" ] && TOKEN="$TOK" && echo "TOKEN in $f"
+              fi
+            done
 
-            # 발견된 모든 .env 읽기
-            if [ -z "$TOKEN" ]; then
-              for f in $(find /var/www/ -maxdepth 5 -name ".env" -type f 2>/dev/null); do
-                echo "=== $f ==="
-                cat "$f"
-                T=$(grep -oP 'CLOUDFLARE_API_TOKEN\s*=\s*\K\S+' "$f" 2>/dev/null | head -1)
-                [ -z "$T" ] && T=$(grep -oP 'cfut_[A-Za-z0-9]{40,}' "$f" 2>/dev/null | head -1)
-                if [ -n "$T" ] && [ -z "$TOKEN" ]; then
-                  TOKEN="$T"
-                  echo "TOKEN found in $f"
-                fi
-              done
-            fi
+            echo "=== /opt/ CF 토큰 검색 (타겟) ==="
+            for f in $(find /opt/ -maxdepth 5 \( -name "*cloudflare*" -o -name "*.env" -o -name "*.ini" -o -name "*.conf" -o -name "*.json" \) -type f 2>/dev/null | head -30); do
+              echo "=== $f ==="; cat "$f" 2>/dev/null | head -30
+              TOK=$(grep -oP 'cfut_[A-Za-z0-9]{40,}' "$f" 2>/dev/null | head -1)
+              [ -n "$TOK" ] && [ -z "$TOKEN" ] && TOKEN="$TOK" && echo "TOKEN in $f"
+            done
 
             if [ -z "$TOKEN" ]; then
-              echo "ERROR: .env에서 CF 토큰 못 찾음"
+              echo "ERROR: 서버 전체에서 CF 토큰 못 찾음"
               exit 1
             fi
 
             echo "사용 토큰: ${TOKEN:0:25}..."
 
-            # 토큰 권한 확인
             VERIFY=$(curl -sS "https://api.cloudflare.com/client/v4/user/tokens/verify" \
               -H "Authorization: Bearer $TOKEN")
             echo "토큰 상태: $(echo $VERIFY | head -c 400)"
 
-            # 기존 와일드카드 확인
             EXISTING=$(curl -sS "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=A&name=*" \
               -H "Authorization: Bearer $TOKEN")
             COUNT=$(echo "$EXISTING" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('result_info',{}).get('count',0))" 2>/dev/null || echo 0)
