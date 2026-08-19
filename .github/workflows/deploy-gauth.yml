@@ -758,21 +758,21 @@ jobs:
             ACC_RESP=$(curl -s -o /tmp/acc_test.txt -w "%{http_code}" http://localhost:4000/api/normalized-accounts 2>/dev/null || echo "000")
             echo "normalized-accounts HTTP: $ACC_RESP"
             if [ "$ACC_RESP" = "200" ]; then
-              python3 -c "
-import json
-d=json.load(open('/tmp/acc_test.txt'))
-accs=d.get('accounts',[])
-print('accounts:', len(accs), 'summary:', d.get('summary',{}).get('total',0))
-files=d.get('summary',{}).get('file_details',[])
-print('=== file_details (source_file names) ===')
-for f in files[:20]:
-    print(' ', f.get('name','?'), '→', f.get('count',0))
-print('=== account_date samples (first 10 with date) ===')
-dated=[a for a in accs if a.get('account_date')]
-for a in dated[:10]:
-    print(' ', a.get('email','?')[:30], 'date:', a.get('account_date'), 'file:', a.get('source_file','?')[:50])
-print('=== accounts WITHOUT account_date:', len([a for a in accs if not a.get('account_date')]), '===')
-" 2>/dev/null || echo "JSON parse failed"
+              python3 << 'DIAGEOF'
+            import json
+            d=json.load(open('/tmp/acc_test.txt'))
+            accs=d.get('accounts',[])
+            print('accounts:', len(accs), 'summary:', d.get('summary',{}).get('total',0))
+            files=d.get('summary',{}).get('file_details',[])
+            print('=== file_details (source_file names) ===')
+            for f in files[:20]:
+                print(' ', f.get('name','?'), '→', f.get('count',0))
+            print('=== account_date samples (first 10 with date) ===')
+            dated=[a for a in accs if a.get('account_date')]
+            for a in dated[:10]:
+                print(' ', a.get('email','?')[:30], 'date:', a.get('account_date'), 'file:', a.get('source_file','?')[:50])
+            print('=== accounts WITHOUT account_date:', len([a for a in accs if not a.get('account_date')]), '===')
+            DIAGEOF
             fi
             echo ""
             echo "=== Browser render test (first 3 lines of spacer content check) ==="
