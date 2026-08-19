@@ -1,4 +1,4 @@
-name: Create DNS record for second
+name: Read gucci CF config
 on:
   workflow_dispatch:
 
@@ -9,7 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create DNS A record
+      - name: Read Cloudflare configs from gucci
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -17,48 +17,36 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 30s
           script: |
-            CF_TOKEN=$(sudo awk -F' = ' '{print $2}' /root/.secrets/cloudflare.ini 2>/dev/null)
-            ZONE_ID="2601d4f4ab75c910f8d858ca036ff344"
-            SERVER_IP=$(curl -s ifconfig.me)
-            echo "Server IP: $SERVER_IP"
-            echo "Token length: ${#CF_TOKEN}"
-
-            echo "=== 1. Check token permissions on this zone ==="
-            curl -s "https://api.cloudflare.com/client/v4/zones/$ZONE_ID" \
-              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" 2>/dev/null | python3 -c "
-            import json,sys
-            d=json.load(sys.stdin)
-            if d.get('success'):
-              r=d['result']
-              print(f'Zone: {r[\"name\"]}')
-              print(f'Permissions: {r.get(\"permissions\",\"N/A\")}')
-            else:
-              print(f'Error: {d.get(\"errors\")}')
-            " 2>/dev/null
+            echo "=== 1. cloudflare-config.php ==="
+            cat /var/www/sites/gucci/config/cloudflare-config.php 2>/dev/null || echo "NOT FOUND"
 
             echo ""
-            echo "=== 2. List existing DNS for second ==="
-            curl -s "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?name=second.cent-solution.online&type=A" \
-              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" 2>/dev/null
+            echo "=== 2. cloudflare-waf-config.php ==="
+            cat /var/www/sites/gucci/config/cloudflare-waf-config.php 2>/dev/null || echo "NOT FOUND"
 
             echo ""
-            echo "=== 3. Create A record ==="
-            RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
-              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
-              --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
-            echo "$RESULT"
+            echo "=== 3. gucci .env ==="
+            cat /var/www/sites/gucci/.env 2>/dev/null || echo "NOT FOUND"
 
             echo ""
-            echo "=== 4. Verify ==="
-            echo "$RESULT" | python3 -c "
-            import json,sys
-            d=json.load(sys.stdin)
-            if d.get('success'):
-              print('SUCCESS! DNS record created.')
-              print(f'Record ID: {d[\"result\"][\"id\"]}')
-            else:
-              print(f'FAILED: {d.get(\"errors\")}')
-            " 2>/dev/null
+            echo "=== 4. All .env files under /var/www/ with CF vars ==="
+            find /var/www/ -name ".env" -type f 2>/dev/null | while read f; do
+              echo "--- $f ---"
+              grep -i "cloudflare\|cf_\|CF_" "$f" 2>/dev/null || echo "(no CF vars)"
+            done
+
+            echo ""
+            echo "=== 5. cloudflare.ini ==="
+            sudo cat /root/.secrets/cloudflare.ini 2>/dev/null || echo "NOT FOUND"
+
+            echo ""
+            echo "=== 6. All CF tokens in gucci ==="
+            sudo grep -r "cfut_\|cloudflare_api\|CLOUDFLARE" /var/www/sites/gucci/ 2>/dev/null | head -30 || echo "none"
+
+            echo ""
+            echo "=== 7. Check /root/.secrets/ for other tokens ==="
+            sudo ls -la /root/.secrets/ 2>/dev/null || echo "NOT FOUND"
+            sudo cat /root/.secrets/*.ini /root/.secrets/*.conf /root/.secrets/*.env /root/.secrets/*.txt 2>/dev/null || echo "no extra files"
 
             echo ""
             echo "=== DONE ==="
