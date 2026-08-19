@@ -13,20 +13,7 @@
 Express :4000 (rebrowser-login.js)
   ├── upload_excels.js    ─ 엑셀 업로드/파싱
   ├── auto_deploy.js      ─ 배포/검색/로그인 API
-  ├── youtube-oauth-auto.js ─ YouTube OAuth 자동 연결
-  ├── lib/
-  │   ├── login/
-  │   │   ├── google.js    ─ Puppeteer Google 로그인 엔진 (모듈화)
-  │   │   ├── selectors.js ─ Google 로그인 페이지 CSS 셀렉터
-  │   │   └── urls.js      ─ Google 인증 URL 상수
-  │   ├── captcha/
-  │   │   ├── index.js     ─ CAPTCHA 솔버 메인
-  │   │   ├── audio_solver.js ─ 오디오 CAPTCHA (Gemini STT)
-  │   │   └── gemini_visual.js ─ 이미지 CAPTCHA (Gemini Vision)
-  │   └── providers/
-  │       ├── proxy/       ─ 프록시 풀 관리
-  │       └── captcha/     ─ CAPTCHA 프로바이더
-  ├── advanced-google-login-v2.js ─ Puppeteer 로그인 (레거시)
+  ├── advanced-google-login-v2.js ─ Puppeteer 로그인 엔진
   └── accounts_normalized.json    ─ 계정 데이터 (마스터)
 ```
 
@@ -42,64 +29,85 @@ Express :4000 (rebrowser-login.js)
 | 가상 디스플레이 | Xvfb :99 (Puppeteer용) |
 | 서버 IP | (마스킹) |
 
-### 동일 서버(gucci-yanolza) 서브도메인
+### 동일 서버(gucci-yanolza) 전체 사이트 구조
 
-| 사이트 | 포트 | DocumentRoot |
-|--------|------|-------------|
-| gauth.cent-solution.online | 4000 | `/var/www/sites/gauth/public` |
-| gain.cent-solution.online | 3021 | `/var/www/sites/gain/public` |
-| win.cent-solution.online | 4001 | `/var/www/sites/win/public` |
-| romi.cent-solution.online | 3019 | `/var/www/sites/romi/public` |
-| simmani.cent-solution.online | 3011 | `/var/www/sites/simmani/public` |
-| woodong.cent-solution.online | 3012 | `/var/www/sites/woodong/public` |
-| sunbi.cent-solution.online | 3013 | `/var/www/sites/sunbi/public` |
-| soktv.cent-solution.online | 3017 | `/var/www/sites/soktv/public` |
+#### 상위 사이트 (마스터)
+
+| 사이트 | 포트 | 경로 | 역할 |
+|--------|------|------|------|
+| gauth.cent-solution.online | 4000 | `/var/www/sites/gauth/public` | 마스터 계정 관리 (엑셀 업로드, 로그인, TOTP) |
+
+- Express 서버: `/opt/gauth-full/rebrowser-login.js`
+- 데이터 원본: `/opt/gauth-full/accounts_normalized.json`
+- 모든 하위 사이트는 gauth DB에서 계정을 가져감
+
+#### 하위 사이트 (서브사이트, 7개)
+
+gauth에서 계정을 받아 독립 운영. 각 사이트는 자체 `server.js` + `accounts.json` + 프론트엔드 보유.
+
+| 사이트 | 포트 | 서버 경로 | accounts.json 형식 | systemd 서비스 |
+|--------|------|-----------|-------------------|---------------|
+| gain.cent-solution.online | 3021 | `/var/www/sites/gain` | `{accounts: [...]}` | `gain` |
+| sunbi.cent-solution.online | 3013 | `/var/www/sites/sunbi` | `{accounts: [...]}` | `sunbi` |
+| woodong.cent-solution.online | 3012 | `/var/www/sites/woodong` | `{accounts: [...]}` | `woodong` |
+| win.cent-solution.online | 4001 | `/var/www/sites/win` | `{accounts: [...]}` | `win` |
+| simmani.cent-solution.online | 3011 | `/var/www/sites/simmani` | `{accounts: [...]}` | `simmani` |
+| romi.cent-solution.online | 3019 | `/var/www/sites/romi` | `{accounts: [...]}` | `romi` |
+| soktv.cent-solution.online | 3017 | `/var/www/sites/soktv` | `{accounts: [...]}` | `soktv` |
+
+#### 기타 사이트 (계정 관리 대상 아님)
+
+admin, aura, bacad, camstouch, cent-tools, gauth01, gucci, james, misskim, naman
+
+#### 서브사이트 계정 데이터 구조
+
+```json
+{
+  "accounts": [
+    {
+      "email": "user@gmail.com",
+      "password": "...",
+      "totp_secret": "BASE32...",
+      "twofa_secret": "BASE32...",
+      "status": "active",
+      "allocated_date": "2026-08-19",
+      "recovery_email": "backup@gmail.com",
+      "source_file": "원본.xlsx"
+    }
+  ]
+}
+```
+
+- `status`: `"active"` = 활성 (초록 배지), 그 외 = 비활성 (빨간 배지)
+- `twofa_secret`: 서브사이트 TOTP 필드명 (gauth의 `totp_secret`에서 복사)
+- `allocated_date`: 계정 할당 일자 (서브사이트 정렬 기준)
+
+#### 서브사이트 계정 추가 방법
+
+GitHub Actions `add-account-all-sites.yml`:
+- `email`: gauth DB에서 조회할 이메일
+- `sites`: `all` (전체) 또는 쉼표 구분 (예: `sunbi,gain,woodong`)
+- `action`: `add` (추가) / `fix-status` (기존 계정 활성화) / `inspect` (조회)
 
 ## 파일 구조
 
 ```
 make/
 ├── gauth/
-│   ├── index.html              # 대시보드 프론트엔드 (SPA, 1330줄)
-│   ├── sw.js                   # Service Worker (캐시 gauth-v7)
-│   ├── manifest.json           # PWA 매니페스트
-│   ├── upload_excels.js        # 엑셀 파서 + 업로드 API (905줄)
-│   ├── auto_deploy.js          # 배포/검색/로그인 API (666줄)
-│   ├── youtube-oauth-auto.js   # YouTube OAuth 자동 연결 (372줄)
-│   ├── diagnose.sh             # 서버 진단 스크립트
-│   ├── search-email.sh         # 이메일 검색 스크립트
+│   ├── index.html              # 대시보드 프론트엔드 (SPA)
+│   ├── upload_excels.js        # 엑셀 파서 + 업로드 API
+│   ├── auto_deploy.js          # 배포/검색/로그인 API
 │   ├── xlsx.core.min.js        # SheetJS (클라이언트용)
-│   └── lib/
-│       ├── login/
-│       │   ├── google.js       # 모듈화된 Google 로그인 (738줄)
-│       │   ├── selectors.js    # CSS 셀렉터 정의 (149줄)
-│       │   └── urls.js         # 인증 URL 상수 (110줄)
-│       ├── captcha/
-│       │   ├── index.js        # CAPTCHA 솔버 메인 (79줄)
-│       │   ├── audio_solver.js # 오디오 CAPTCHA 솔버 (366줄)
-│       │   └── gemini_visual.js # 이미지 CAPTCHA 솔버 (122줄)
-│       └── providers/
-│           ├── proxy/
-│           │   ├── index.js    # 프록시 풀 매니저
-│           │   └── fetch_free.js # 무료 프록시 수집
-│           └── captcha/
-│               ├── index.js    # CAPTCHA 프로바이더
-│               └── gemini_text.js # Gemini 텍스트 CAPTCHA
-├── advanced-google-login-v2.js # Puppeteer 로그인 엔진 (레거시, 739줄)
+│   └── lib/                    # 모듈화된 라이브러리
+├── advanced-google-login-v2.js # Puppeteer 로그인 엔진 (레거시)
 ├── package.json
-├── trigger/
-│   └── render-fix.txt          # photo3 렌더 수정 트리거
 ├── .github/workflows/
-│   ├── deploy-gauth.yml        # gauth CI/CD 파이프라인
-│   ├── gauth-api-test.yml      # gauth API 테스트 (300항목)
-│   ├── gauth-diagnose.yml      # 서버 진단
-│   ├── gauth-server-diagnose.yml # 서버 SSH 진단
-│   ├── gauth-server-html-check.yml # 서버 HTML 검증
-│   ├── fix-photo3-*.yml        # 참교육 photo3 수정 (7개)
-│   ├── diag-photo3-html.yml    # photo3 HTML 진단
-│   ├── test-photo3-verify.yml  # photo3 검증
-│   └── yt-portrait-test-push.yml # YouTube 세로 테스트
-├── CLAUDE.md
+│   ├── deploy-gauth.yml            # gauth CI/CD 배포
+│   ├── add-account-all-sites.yml   # 전체 서브사이트 계정 추가
+│   ├── sunbi-add-account.yml       # sunbi 단독 계정 관리
+│   ├── list-all-sites.yml          # 서버 전체 사이트 조회
+│   ├── query-accounts.yml          # gauth 계정 조회
+│   └── cloudflare-dns-check.yml    # DNS 확인
 └── README.md
 ```
 
@@ -113,7 +121,7 @@ make/
 |------|-----------|----------|-----------|
 | `fs` | upload_excels.js, auto_deploy.js, login-v2.js | `readFileSync`, `writeFileSync`, `renameSync`, `unlinkSync`, `mkdirSync`, `existsSync`, `copyFileSync` | https://github.com/nodejs/node/blob/main/doc/api/fs.md |
 | `path` | 전체 | `join`, `basename`, `resolve` | https://github.com/nodejs/node/blob/main/doc/api/path.md |
-| `crypto` | auto_deploy.js | `createHmac`, `timingSafeEqual` | https://nodejs.org/api/crypto.html#cryptotimingsafeequala-b |
+| `crypto` | auto_deploy.js | `timingSafeEqual` | https://github.com/nodejs/node/blob/main/doc/api/crypto.md#cryptotimingsafeequala-b |
 | `child_process` | auto_deploy.js | `execSync`, `execFileSync` | https://github.com/nodejs/node/blob/main/doc/api/child_process.md#child_processexecfilesyncfile-args-options |
 
 ### npm 패키지
@@ -124,9 +132,9 @@ make/
 | multer | ^1.4.5-lts.1 | upload_excels.js | multipart 파일 업로드 | https://github.com/expressjs/multer#readme |
 | xlsx (SheetJS) | ^0.18.5 | upload_excels.js, index.html | 엑셀 파싱 (`.xlsx`, `.xls`, `.csv`) | https://github.com/SheetJS/sheetjs |
 | otplib | ^12.0.1 | login-v2.js, rebrowser-login.js | TOTP 코드 생성 (RFC 6238) | https://github.com/yeojz/otplib |
-| hi-base32 | ^0.5.1 | (otplib 내부) | Base32 인코딩/디코딩 (RFC 4648) | https://github.com/emn178/hi-base32 |
-| rebrowser-puppeteer | ^24.8.1 | login-v2.js | 봇 감지 회피 Puppeteer | https://github.com/rebrowser/rebrowser-puppeteer |
-| puppeteer | ^25.0.0 | login-v2.js | 브라우저 자동화 | https://github.com/puppeteer/puppeteer (공식: https://pptr.dev) |
+| hi-base32 | ^0.5.1 | (otplib 내부) | Base32 인코딩/디코딩 (RFC 4648) | https://github.com/nicosResworWorking/hi-base32 |
+| rebrowser-puppeteer | ^24.8.1 | login-v2.js | 봇 감지 회피 Puppeteer | https://github.com/nicosResworWorking/rebrowser-puppeteer |
+| puppeteer | ^25.0.0 | login-v2.js | 브라우저 자동화 | https://github.com/nicosResworWorking/puppeteer (공식: https://pptr.dev) |
 | puppeteer-extra | ^3.3.6 | login-v2.js | Puppeteer 플러그인 프레임워크 | https://github.com/berstend/puppeteer-extra |
 | puppeteer-extra-plugin-stealth | ^2.11.2 | login-v2.js | Stealth 플러그인 (봇 감지 회피) | https://github.com/berstend/puppeteer-extra/tree/master/packages/puppeteer-extra-plugin-stealth |
 | archiver | ^7.0.1 | rebrowser-login.js | ZIP 파일 생성 (엑셀 내보내기) | https://github.com/archiverjs/node-archiver |
@@ -147,46 +155,69 @@ make/
 
 | 메서드 | 경로 | 인증 | 핸들러 | 공식 문서 참조 |
 |--------|------|------|--------|---------------|
-| POST | `/api/upload-excels` | 없음 | multer `.array('files', 50)` → `parseExcelFile()` → atomic write | multer: https://github.com/expressjs/multer#arrayfieldname-maxcount |
+| POST | `/api/upload-excels` | `Authorization: Bearer <token>` (`crypto.timingSafeEqual`) | multer `.array('files', 50)` → `parseExcelFile()` → atomic write | multer: https://github.com/expressjs/multer#arrayfieldname-maxcount, crypto: https://github.com/nodejs/node/blob/main/doc/api/crypto.md#cryptotimingsafeequala-b |
+
+사용하는 SheetJS API:
+- `XLSX.readFile(path)` — https://github.com/SheetJS/sheetjs (README "Parsing Workbooks")
+- `XLSX.utils.sheet_to_json(sheet, {header:1, defval:'', raw:false})` — `raw:false`는 포맷된 텍스트 반환, 선행 0 보존 (types/index.d.ts `Sheet2JSONOpts.raw`)
+- `XLSX.utils.encode_cell({r, c})` — 셀 주소 인코딩 (A1 형식)
+- `XLSX.utils.encode_range({s, e})` — 범위 인코딩
+- `worksheet['!merges']` — 병합 셀 배열 (README "Worksheet Object")
+- `cell.l.Target` — 하이퍼링크 (README "Cell Object" `.l` property)
 
 ### `auto_deploy.js` — 5개 라우트 (전부 `authMiddleware` 적용)
 
-| 메서드 | 경로 | 핸들러 | 설명 |
-|--------|------|--------|------|
-| POST | `/api/deploy` | git clone → 파일 복사 → npm install → systemctl restart | 코드 배포 |
-| POST | `/api/update-secret` | JSON 읽기 → TOTP 수정 → atomic write | 개별 TOTP 시크릿 수정 |
-| GET | `/api/search-account?q=` | 이메일/extra 부분 검색 (최소 3글자) | 계정 검색 |
-| GET | `/api/deploy-status` | Chrome/Xvfb/Node/Display 상태 | 서버 진단 |
-| POST | `/api/login-one` | `advancedGoogleLogin()` 호출 (최대 3 동시) | 개별 Puppeteer 로그인 |
+| 메서드 | 경로 | 핸들러 | 설명 | 참조 |
+|--------|------|--------|------|------|
+| POST | `/api/deploy` | git clone → 파일 복사 → npm install → systemctl restart | 코드 배포 | child_process.execFileSync: https://github.com/nodejs/node/blob/main/doc/api/child_process.md |
+| POST | `/api/update-secret` | JSON 읽기 → TOTP 수정 → atomic write | 개별 TOTP 시크릿 수정 | crypto.timingSafeEqual: https://github.com/nodejs/node/blob/main/doc/api/crypto.md |
+| GET | `/api/search-account?q=` | 이메일/extra 부분 검색 (최소 3글자) | 계정 검색 | |
+| GET | `/api/deploy-status` | Chrome/Xvfb/Node/Display 상태 | 서버 진단 | |
+| POST | `/api/login-one` | `advancedGoogleLogin()` 호출 (최대 3 동시) | 개별 Puppeteer 로그인 | |
+
+**authMiddleware 동작** (공식 문서 기반):
+```javascript
+// crypto.timingSafeEqual은 버퍼 길이가 같아야 함 (다르면 RangeError)
+// 공식: https://github.com/nodejs/node/blob/main/doc/api/crypto.md#cryptotimingsafeequala-b
+const tokenBuf = Buffer.from(token);
+const expectedBuf = Buffer.from(expected);
+if (tokenBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(tokenBuf, expectedBuf))
+```
 
 ### `rebrowser-login.js` (서버 전용, 이 저장소에 없음) — 추정 라우트
 
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| GET | `/api/accounts` | 전체 계정 (세션 정보 포함) |
-| GET | `/api/normalized-accounts` | 정규화 계정 목록 |
-| GET | `/api/profiles` | Puppeteer 프로필 디렉토리 목록 |
-| GET | `/api/failed-accounts` | 실패 계정 목록 |
-| DELETE | `/api/failed-accounts/:email` | 잠금 해제 |
-| GET | `/api/lookup/:email` | 개별 계정 조회 |
-| GET | `/api/parse-report` | 마지막 파싱 결과 |
-| POST | `/api/open-profile` | Chrome 프로필 열기 |
-| POST | `/api/login` | 기본 로그인 |
-| POST | `/api/start` | 배치 로그인 시작 |
-| POST | `/api/stop` | 배치 로그인 정지 |
-| POST | `/api/export-split` | N분할 엑셀 ZIP 내보내기 |
-| GET | `/codes/:secret` | TOTP 코드 실시간 생성 |
-
-**authMiddleware 동작** (HMAC 고정 길이 비교):
-```javascript
-const key = process.env.GAUTH_API_TOKEN || 'gauth';
-const hmac = (s) => crypto.createHmac('sha256', key).update(s).digest();
-if (!crypto.timingSafeEqual(hmac(token), hmac(expected)))
-```
+| 메서드 | 경로 | 설명 | 프론트엔드 호출 위치 |
+|--------|------|------|---------------------|
+| GET | `/api/accounts` | 전체 계정 (세션 정보 포함) | index.html:46 |
+| GET | `/api/normalized-accounts` | 정규화 계정 목록 | index.html:47,468 |
+| GET | `/api/profiles` | Puppeteer 프로필 디렉토리 목록 | index.html:469 |
+| GET | `/api/failed-accounts` | 실패 계정 목록 | index.html:470 |
+| DELETE | `/api/failed-accounts/:email` | 잠금 해제 | index.html:642 |
+| GET | `/api/lookup/:email` | 개별 계정 조회 | index.html:695 |
+| GET | `/api/parse-report` | 마지막 파싱 결과 | index.html:45 |
+| POST | `/api/open-profile` | Chrome 프로필 열기 | index.html:594 |
+| POST | `/api/login` | 기본 로그인 | index.html:600 |
+| POST | `/api/start` | 배치 로그인 시작 | index.html:937 |
+| POST | `/api/stop` | 배치 로그인 정지 | index.html:942 |
+| POST | `/api/export-split` | N분할 엑셀 ZIP 내보내기 | index.html:948 |
+| GET | `/codes/:secret` | TOTP 코드 실시간 생성 | index.html:706,840 |
+| GET | `/api/vm/list` | GCP VM 목록 | index.html:1054 |
+| POST | `/api/vm/start` | VM 시작 | index.html:1038 |
+| POST | `/api/vm/stop` | VM 정지 | index.html:1040 |
 
 ---
 
-## 프론트엔드 구성 (index.html)
+## 프론트엔드 인증
+
+| 항목 | 값 | 공식 문서 |
+|------|-----|-----------|
+| 저장소 | `sessionStorage` 키 `gauth_token` | https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage |
+| UI | `<input id="apiToken">` — 🔑 API 토큰 입력 필드 | — |
+| 전송 | `Authorization: Bearer <token>` 헤더 (`authHeaders()`) 또는 `?token=` 쿼리 (`authQuery()`) | https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch |
+
+---
+
+## 프론트엔드 버튼/기능 전체 매핑
 
 ### 상단 통계 바
 | UI 요소 | 기능 | JS 함수 | API |
@@ -228,119 +259,206 @@ if (!crypto.timingSafeEqual(hmac(token), hmac(expected)))
 | ■ 정지 | 배치 정지 | click handler | POST `/api/stop` |
 
 ### 시간 순서 뷰
-| 버튼 | 기능 | JS 함수 |
-|------|------|---------|
-| 계정 조회 | 시간순 정렬 로드 | `tdLoad()` |
-| 오래된순/최신순 | 정렬 방향 | select → `tdLoad()` |
-| 페이지네이션 «‹›» | 20개씩 페이지 | `tdGoto()` |
-| ✏️ / 🔄 / 🔑 | 시크릿 수정/코드 새로고침/로그인 | `editSecret()`, `tdRefreshCode()`, `programLogin()` |
+| 버튼 | 기능 | JS 함수 | API |
+|------|------|---------|-----|
+| 계정 조회 | 시간순 정렬 로드 | `tdLoad()` | 없음 (인메모리 `ALL` 사용) |
+| 오래된순/최신순 | 정렬 방향 | select change → `tdLoad()` | 없음 |
+| 페이지네이션 «‹›» | 20개씩 페이지 | `tdGoto()` | 없음 |
+| ✏️ / 🔄 / 🔑 | 개별 시크릿 수정/코드 새로고침/로그인 | `editSecret()`, `tdRefreshCode()`, `programLogin()` | 동일 |
 
-### 하단 메뉴 (bottom-menu)
+### GCP VM 제어
+| 버튼 | 기능 | JS 함수 | API |
+|------|------|---------|-----|
+| 🔄 상태 새로고침 | VM 목록 로드 | `loadList()` | GET `/api/vm/list` |
+| ▶ 시작 | VM 시작 | delegated click | POST `/api/vm/start` |
+| ■ 정지 | VM 정지 (confirm 필요) | delegated click | POST `/api/vm/stop` |
+| 🖥 SSH | GCP Cloud Shell SSH | delegated click | 없음 (외부 URL 이동) |
+
+### 사이트맵 (하단)
 | 버튼 | 기능 |
 |------|------|
-| 🌐 사이트맵 | 사이트맵 패널 토글 (site-map-footer-inline) |
-| 📡 YouTube 일괄 | YouTube 일괄 연결 패널 토글 (yt-batch-box) |
+| 🌐 | 사이트맵 팝업 열기 |
+| ✕ | 사이트맵 닫기 |
 
-### 프론트엔드 인증
+### localStorage 사용
 
-| 항목 | 값 | 공식 문서 |
-|------|-----|-----------|
-| 저장소 | `sessionStorage` 키 `gauth_token` | https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage |
-| 전송 | `Authorization: Bearer <token>` 헤더 또는 `?token=` 쿼리 | https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch |
+| 키 | 용도 | 읽기 위치 | 쓰기 위치 |
+|----|------|-----------|-----------|
+| `gauth_uploading` | 업로드 진행 타임스탬프 | 84-111 (폴링) | 271 (업로드 시작) |
+| `gauth_last_upload` | 마지막 업로드 결과 JSON | 391-415 (`updateUploadStatus`) | 354-361 (업로드 완료) |
+| `gauth_last_lookup` | 마지막 조회 이메일 | 521, 816 (자동 복원) | 693, 704 (조회 시) |
+| `vm_admin_pw` | VM 관리 비밀번호 | 998 (읽기) | 997 (변경 시) |
 
-### localStorage / sessionStorage
+### 키보드 이벤트
 
-| 키 | 저장소 | 용도 |
-|----|--------|------|
-| `gauth_uploading` | localStorage | 업로드 진행 타임스탬프 |
-| `gauth_last_upload` | localStorage | 마지막 업로드 결과 JSON |
-| `gauth_last_lookup` | localStorage | 마지막 조회 이메일 |
-| `gauth_token` | sessionStorage | API 인증 토큰 |
+| 키 | 요소 | 동작 |
+|----|------|------|
+| Enter | `#lookup` 입력창 | `lookup()` 실행 |
+| input | `#q` 필터 입력창 | `applyFilter()` 실행 |
 
 ---
 
-## 엑셀 파싱 로직
+## 엑셀 파싱 로직 (공식 문서 기반)
+
+### 사용하는 SheetJS API와 공식 출처
+
+| API | 용도 | 공식 문서 위치 |
+|-----|------|---------------|
+| `XLSX.readFile(path)` | 엑셀 파일 읽기 | https://github.com/SheetJS/sheetjs — "Parsing Workbooks" |
+| `XLSX.utils.sheet_to_json(sheet, opts)` | 시트 → 2D 배열 변환 | https://github.com/SheetJS/sheetjs — "Utility Functions" |
+| `opts.header: 1` | 첫 행을 데이터로 취급 (헤더 사용 안 함) | types/index.d.ts `Sheet2JSONOpts` |
+| `opts.raw: false` | 포맷된 텍스트 반환 → 선행 0 보존 (`0812345` → `"0812345"`, `true`면 `812345`) | types/index.d.ts `Sheet2JSONOpts.raw` |
+| `opts.defval: ''` | 빈 셀을 빈 문자열로 | types/index.d.ts `Sheet2JSONOpts.defval` |
+| `XLSX.utils.encode_cell({r, c})` | `{r:0, c:0}` → `"A1"` | types/index.d.ts `encode_cell` |
+| `sheet['!merges']` | 병합 셀 범위 배열 `[{s:{r,c}, e:{r,c}}]` | README "Worksheet Object" |
+| `cell.l.Target` | 셀 하이퍼링크 (mailto:, http:) | README "Cell Object" |
+| `cell.v` | 셀 raw 값 | README "Cell Object" |
+| `cell.w` | 셀 formatted 텍스트 | README "Cell Object" |
 
 ### 파싱 전략 (4단계 폴백)
 
 ```
 엑셀 파일 입력
   │
-  ├─ 0) 전처리: 병합 셀 확장 + mailto 하이퍼링크 복구
-  ├─ 1) 헤더 행 감지 (detectHeaderMapping) — 한/영 헤더 자동 매핑
-  ├─ 2) 세로/라벨-값 레이아웃 (tryVerticalExtract)
-  ├─ 3) 컬럼 통계 분석 (analyzeColumns) — @비율, Base32비율 등
-  └─ 4) 브루트포스 (bruteForceExtract) — 전체 셀 무차별 스캔
+  ├─ 0) 전처리
+  │     ├─ expandMergedCells: sheet['!merges'] 배열에서 병합된 셀 값 복제
+  │     │   (공식: SheetJS "Worksheet Object" — !merges property)
+  │     └─ mailto 하이퍼링크 복구: cell.l.Target이 "mailto:"면 cell.v에 이메일 복원
+  │         (공식: SheetJS "Cell Object" — .l hyperlink property)
+  │
+  ├─ 1) 헤더 행 감지 (detectHeaderMapping)
+  │     처음 10행 스캔, 정규식으로 email/password/totp/recovery/youtube 컬럼 매핑
+  │     한국어(이메일/비밀번호/시크릿/복구/채널) + 영어 헤더 모두 지원
+  │     조건: 2개 이상 필드 매칭 + email 필드 필수
+  │     bare "id"는 email로 매핑하지 않음 (오탐 방지)
+  │
+  ├─ 2) 헤더 없음 → 세로/라벨-값 레이아웃 (tryVerticalExtract)
+  │     ├─ 라벨-값: "이메일: xxx@gmail.com" / 2열 키-값 시트
+  │     │   구분자: `:`, `：` (전각), `=`
+  │     └─ 스택형: 1~4열 시트에서 이메일→비밀번호→TOTP 순서 추정
+  │
+  ├─ 3) 헤더 없음 → 컬럼 통계 분석 (analyzeColumns)
+  │     각 컬럼의 전체 셀을 샘플링:
+  │     - @포함 10%+ → email (비율 높은 컬럼이 메인, 두번째는 recovery)
+  │     - Base32 10%+ → TOTP
+  │     - URL 20%+ → YouTube
+  │     - 순번 컬럼(1,2,3,...) 건너뜀
+  │     - 나머지 첫 번째 미할당 컬럼 → password
+  │
+  └─ 4) 최후 수단 → 브루트포스 (bruteForceExtract)
+        모든 셀 무차별 스캔, 이메일 발견 시 같은 행의 나머지 셀을 자동 분류
+        중복 이메일은 normalizeEmail()로 소문자 비교하여 건너뜀
 ```
 
-### TOTP 시크릿 검증
+### TOTP 시크릿 검증 (공식 기준)
 
 ```
-RFC 4648 Base32: A-Z, 2-7만 허용
-RFC 6238 TOTP: 30초 스텝, SHA-1, 6자리
+RFC 4648 Base32: A-Z, 2-7 문자만 허용
+RFC 6238 TOTP: 30초 스텝, SHA-1, 6자리 코드
+
+정규화 (normalizeTotp):
+  1. 대문자 변환: .toUpperCase()
+  2. 공백/하이픈/패딩 제거: /[\s\-_=]/g → ''
+  3. 비-Base32 문자 제거: /[^A-Z2-7]/g → ''
 
 검증 (isTotpLike):
-  - @포함 → 거부 (이메일)
-  - 숫자만 → 거부 (전화번호)
-  - http:// → 거부 (URL)
-  - 특수문자 → 거부 (비밀번호)
-  - 정규화 후 16자 미만 / 128자 초과 → 거부
-  - Base32 비율 80% 미만 → 거부
+  - @ 포함 → 이메일이므로 거부
+  - 숫자만 → 전화번호/순번이므로 거부
+  - http:// → URL이므로 거부
+  - 특수문자 포함 → 비밀번호이므로 거부
+  - 정규화 후 16자 미만 → 너무 짧아 거부
+  - 정규화 후 128자 초과 → 너무 길어 거부
+  - Base32 비율 80% 미만 → 비밀번호 오인 방지
 
-otpauth:// URL: secret= 파라미터 추출 지원
+otpauth:// URL 지원:
+  - otpauth://totp/...?secret=XXXX&issuer=...
+  - secret= 파라미터 추출: /[?&]secret=([A-Z2-7]+)/i
+
+공식 문서:
+  - RFC 4648 (Base32): https://www.rfc-editor.org/rfc/rfc4648#section-6
+  - RFC 6238 (TOTP): https://www.rfc-editor.org/rfc/rfc6238
+  - otplib: https://github.com/yeojz/otplib
 ```
 
 ### 데이터 머지 규칙
 
 ```
 기존 계정 발견 시 (normalizeEmail로 소문자 비교):
-  password     → 항상 덮어쓰기
-  totp_secret  → isTotpLike 통과한 값만 덮어쓰기
+  password     → 항상 덮어쓰기 (새 값이 있으면)
+  totp_secret  → 유효한 Base32만 덮어쓰기 (isTotpLike 통과한 값만)
   recovery_email → 항상 덮어쓰기
   youtube_url  → 항상 덮어쓰기
+새 계정 → 그대로 추가
 
-저장: atomic write (tmp+rename)
-동시 접근: withFileLock() Promise 체인 뮤텍스
+저장: atomic write (tmp+rename) → accounts_normalized.json
+공식 문서: fs.renameSync — https://github.com/nodejs/node/blob/main/doc/api/fs.md#fsrenamesyncoldpath-newpath
 ```
 
 ---
 
-## Puppeteer 로그인 엔진
+## Puppeteer 로그인 엔진 (공식 문서 기반)
+
+### 사용하는 API와 공식 출처
+
+| API | 용도 | 공식 문서 |
+|-----|------|-----------|
+| `puppeteer.launch(opts)` | 브라우저 시작 | https://pptr.dev/api/puppeteer.puppeteernode.launch |
+| `page.goto(url)` | 페이지 이동 | https://pptr.dev/api/puppeteer.page.goto |
+| `page.waitForSelector(sel)` | DOM 요소 대기 | https://pptr.dev/api/puppeteer.page.waitforselector |
+| `page.type(sel, text, {delay})` | 키보드 입력 (지연 포함) | https://pptr.dev/api/puppeteer.page.type |
+| `page.click(sel)` | 요소 클릭 | https://pptr.dev/api/puppeteer.page.click |
+| `page.evaluate(fn)` | 페이지 내 JS 실행 | https://pptr.dev/api/puppeteer.page.evaluate |
+| `page.screenshot({path})` | 스크린샷 저장 | https://pptr.dev/api/puppeteer.page.screenshot |
+| `page.url()` | 현재 URL | https://pptr.dev/api/puppeteer.page.url |
+| `page.content()` | 페이지 HTML | https://pptr.dev/api/puppeteer.page.content |
+| `browser.close()` | 브라우저 종료 | https://pptr.dev/api/puppeteer.browser.close |
+| `StealthPlugin()` | 봇 감지 회피 | https://github.com/berstend/puppeteer-extra/tree/master/packages/puppeteer-extra-plugin-stealth |
+| `authenticator.generate(secret)` | TOTP 6자리 코드 생성 | https://github.com/yeojz/otplib |
 
 ### 로그인 흐름
 
 ```
-1. 브라우저 실행 (headed + stealth) → userDataDir: ./profiles/<email>/
-2. myaccount.google.com 접속 → 이미 로그인 시 즉시 반환
-3. 이메일 입력 (5개 셀렉터, 50-150ms 딜레이)
-4. 2FA 조기 감지 (Google이 비밀번호 건너뛸 때)
-5. 비밀번호 입력
-6. 2FA 처리 (otplib TOTP 6자리)
-7. 보안 챌린지 감지 (패스키/전화/reCAPTCHA/기기인증)
-8. 결과 반환
+1. 브라우저 실행 (headed 모드 + stealth 플러그인)
+   └─ userDataDir: ./profiles/<email>/ (세션 유지)
+       sanitizeEmail()로 경로 안전하게 처리
+
+2. myaccount.google.com 접속
+   └─ 이미 로그인됨 → 즉시 반환
+
+3. 이메일 입력 (5개 셀렉터 시도, 50-150ms 딜레이)
+
+4. ★ 2FA 페이지 조기 감지
+   └─ Google이 비밀번호 건너뛸 때 대응
+   └─ TWO_FA 셀렉터 + 페이지 텍스트 확인
+   └─ 감지 시 비밀번호 입력 건너뛰고 바로 TOTP 입력
+
+5. 비밀번호 입력 (조기 2FA가 아닌 경우)
+
+6. 2FA 처리 (TOTP)
+   └─ authenticator.generate(secret) — otplib
+   └─ 6자리 코드 생성 → 150ms 딜레이로 입력
+
+7. 보안 챌린지 감지
+   └─ PASSKEY_REQUIRED / PHONE_REQUIRED
+   └─ RECAPTCHA (120초 수동 대기)
+   └─ DEVICE_PROMPT
+
+8. 결과 반환 → {success, result, browser, page}
 ```
 
-### CAPTCHA 솔버 (lib/captcha/)
+### 결과 타입 (LoginResult)
 
-| 솔버 | 파일 | 방식 |
-|------|------|------|
-| 오디오 CAPTCHA | audio_solver.js | Gemini STT API |
-| 이미지 CAPTCHA | gemini_visual.js | Gemini Vision API |
-| Gemini 키 로테이션 | — | GEMINI_API_KEY ~ GEMINI_API_KEY_8 |
-
-### 결과 타입
-
-| 값 | 의미 |
-|----|------|
-| `SUCCESS` | 로그인 성공 |
-| `ALREADY_LOGGED` | 이미 로그인 상태 |
-| `WRONG_PASSWORD` | 비밀번호 틀림 |
-| `WRONG_2FA` | 2FA 코드 틀림 |
-| `PHONE_REQUIRED` | 전화 인증 요구 |
-| `CAPTCHA_REQUIRED` | CAPTCHA 발생 |
-| `UNUSUAL_ACTIVITY` | 비정상 활동 감지 |
-| `TIMEOUT` | 시간 초과 |
-| `UNKNOWN_ERROR` | 알 수 없는 오류 |
+| 값 | 의미 | 자동 재시도 |
+|----|------|------------|
+| `SUCCESS` | 로그인 성공 | - |
+| `ALREADY_LOGGED` | 이미 로그인 상태 | - |
+| `WRONG_PASSWORD` | 비밀번호 틀림 | 수동 처리 필요 |
+| `WRONG_2FA` | 2FA 코드 틀림 | 수동 처리 필요 |
+| `PHONE_REQUIRED` | 전화 인증 요구 | 수동 처리 필요 |
+| `CAPTCHA_REQUIRED` | CAPTCHA 발생 | 120초 대기 |
+| `UNUSUAL_ACTIVITY` | 비정상 활동 감지 | 수동 처리 필요 |
+| `TIMEOUT` | 시간 초과 | 자동 재시도 가능 |
+| `UNKNOWN_ERROR` | 알 수 없는 오류 | 자동 재시도 가능 |
 
 ---
 
@@ -349,12 +467,14 @@ otpauth:// URL: secret= 파라미터 추출 지원
 ### 트리거
 
 - `push` → `claude/gauth-frontend-backend-fixes-cg2icv` 브랜치
+- 특정 파일 변경 시만
 - `workflow_dispatch` (수동)
 
 ### 배포 순서
 
 ```
 1. API 배포 시도 (POST /api/deploy)
+   └─ python3 assert d.get('ok') 통과 후에만 deploy_ok=true
    └─ 실패 시 SSH 배포 폴백
 
 2. SSH 배포 (6단계)
@@ -362,48 +482,33 @@ otpauth:// URL: secret= 파라미터 추출 지원
    ├─ [2] 가상 디스플레이 (Xvfb :99)
    ├─ [2.5] NTP 시간 동기화 (TOTP 필수)
    ├─ [3] Node.js 확인
-   ├─ [4] 코드 다운로드 (프론트엔드 + 백엔드 파일)
+   ├─ [4] 코드 다운로드 (6개 파일)
    ├─ [5] npm install + 모듈 등록 + TOTP 패치
    └─ [6] 서비스 재시작 + 헬스체크
 
-3. 서버 HTML 진단 (SSH)
-   └─ id 목록, 핵심 키워드 검색, md5sum 확인
-
-4. Cloudflare 보안 레벨 설정
-5. Apache 프록시 + DNS 확인
+3. Cloudflare 보안 레벨 설정
+4. Apache 프록시 + DNS 확인
 ```
-
-### 배포 대상 파일
-
-| 서버 경로 | 소스 |
-|-----------|------|
-| `/var/www/sites/gauth/public/index.html` | gauth/index.html |
-| `/var/www/sites/gauth/public/sw.js` | gauth/sw.js |
-| `/var/www/sites/gauth/public/manifest.json` | gauth/manifest.json |
-| `/var/www/sites/gauth/public/xlsx.core.min.js` | gauth/xlsx.core.min.js |
-| `/opt/gauth-full/upload_excels.js` | gauth/upload_excels.js |
-| `/opt/gauth-full/auto_deploy.js` | gauth/auto_deploy.js |
-| `/opt/gauth-full/youtube-oauth-auto.js` | gauth/youtube-oauth-auto.js |
-| `/opt/gauth-full/lib/` | gauth/lib/ (전체) |
 
 ---
 
-## 보안 구현
+## 보안 구현 (공식 문서 기반)
 
 | 보안 항목 | 구현 | 공식 문서 |
 |-----------|------|-----------|
-| 타이밍 공격 방지 | HMAC SHA-256 + `timingSafeEqual` | https://nodejs.org/api/crypto.html#cryptotimingsafeequala-b |
-| 셸 인젝션 방지 | `execFileSync` (인자 배열) | https://github.com/nodejs/node/blob/main/doc/api/child_process.md |
+| 타이밍 공격 방지 | `crypto.timingSafeEqual` (버퍼 길이 먼저 비교) | https://github.com/nodejs/node/blob/main/doc/api/crypto.md#cryptotimingsafeequala-b |
+| 셸 인젝션 방지 | `execFileSync` (인자 배열, 셸 미사용) | https://github.com/nodejs/node/blob/main/doc/api/child_process.md#child_processexecfilesyncfile-args-options |
 | XSS 방지 | `escapeHtml()` — `& < > " '` 이스케이프 | https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html |
-| 경로 탐색 방지 | `sanitizeEmail()` — POSIX/Windows 금지 문자 제거 | https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap03.html#tag_03_170 |
-| Atomic write | `writeFileSync(tmp)` + `renameSync(tmp, target)` | https://github.com/nodejs/node/blob/main/doc/api/fs.md |
-| Race condition 방지 | `withFileLock()` Promise 체인 뮤텍스 | 자체 구현 |
-| 동시 로그인 제한 | `MAX_CONCURRENT_LOGINS = 3` | Express 자체 구현 |
-| 토큰 미설정 차단 | `GAUTH_API_TOKEN` 없으면 503 | 자체 구현 |
+| 경로 탐색 방지 | `sanitizeEmail()` — `/[^a-z0-9]/gi` → `_` | OWASP Path Traversal |
+| Atomic write | `writeFileSync(tmp)` + `renameSync(tmp, target)` | https://github.com/nodejs/node/blob/main/doc/api/fs.md#fsrenamesyncoldpath-newpath |
+| 동시 로그인 제한 | `MAX_CONCURRENT_LOGINS = 3` + `loginQueue` Map | Express 자체 구현 |
+| 토큰 미설정 차단 | `GAUTH_API_TOKEN` 없으면 503 반환 | 자체 구현 |
 
 ---
 
-## 데이터 형식 (accounts_normalized.json)
+## 데이터 형식
+
+### accounts_normalized.json
 
 ```json
 [
@@ -414,82 +519,66 @@ otpauth:// URL: secret= 파라미터 추출 지원
     "recovery_email": "backup@gmail.com",
     "youtube_url": "https://youtube.com/@channel",
     "extra": [],
-    "source_file": "원본파일.xlsx"
+    "source_file": "원본파일.xlsx",
+    "account_date": "2024-03-15"
   }
 ]
 ```
 
+### account_date 정렬 규칙
+
+`account_date`는 **엑셀 셀에 적힌 날짜 정보만** 사용한다.
+
+- 엑셀 파일의 셀에 날짜가 기록되어 있으면 그 값을 `account_date`로 저장
+- 엑셀 셀에 날짜가 없으면 `account_date`는 `null` (정렬 최하위)
+- 다운로드 날짜, 파일명에 포함된 날짜, 파일 수정일은 `account_date`와 **무관**
+- `source_mtime`(파일 수정일)은 별도 필드로, 정렬에 사용하지 않음
+- 최신순/오래된순 정렬은 오직 `account_date` 기준
+
 ---
 
-## 참조 공식 문서
+## 참조 공식 문서 (전체)
 
-### Node.js
+### Node.js 공식 (GitHub 원본)
 | 주제 | URL |
 |------|-----|
-| fs | https://github.com/nodejs/node/blob/main/doc/api/fs.md |
-| path | https://github.com/nodejs/node/blob/main/doc/api/path.md |
-| crypto | https://github.com/nodejs/node/blob/main/doc/api/crypto.md |
-| child_process | https://github.com/nodejs/node/blob/main/doc/api/child_process.md |
+| fs 모듈 | https://github.com/nodejs/node/blob/main/doc/api/fs.md |
+| path 모듈 | https://github.com/nodejs/node/blob/main/doc/api/path.md |
+| crypto.timingSafeEqual | https://github.com/nodejs/node/blob/main/doc/api/crypto.md#cryptotimingsafeequala-b |
+| child_process.execFileSync | https://github.com/nodejs/node/blob/main/doc/api/child_process.md#child_processexecfilesyncfile-args-options |
+| Buffer.from | https://github.com/nodejs/node/blob/main/doc/api/buffer.md#static-method-bufferfromstring-encoding |
+| --max-old-space-size | https://github.com/nodejs/node/blob/main/doc/api/cli.md#--max-old-space-sizesize-in-mib |
 
-### npm 패키지
+### npm 패키지 (GitHub 원본)
 | 패키지 | URL |
 |--------|-----|
 | express | https://github.com/expressjs/express |
 | multer | https://github.com/expressjs/multer |
-| SheetJS | https://github.com/SheetJS/sheetjs |
+| SheetJS (xlsx) | https://github.com/SheetJS/sheetjs |
 | otplib | https://github.com/yeojz/otplib |
-| puppeteer | https://pptr.dev |
+| puppeteer | https://pptr.dev / https://github.com/nicosResworWorking/puppeteer |
 | puppeteer-extra | https://github.com/berstend/puppeteer-extra |
-| stealth | https://github.com/berstend/puppeteer-extra/tree/master/packages/puppeteer-extra-plugin-stealth |
+| puppeteer-extra-plugin-stealth | https://github.com/berstend/puppeteer-extra/tree/master/packages/puppeteer-extra-plugin-stealth |
 | archiver | https://github.com/archiverjs/node-archiver |
+| ws | https://github.com/websockets/ws |
+| dotenv | https://github.com/motdotla/dotenv |
 
 ### RFC 표준
 | 표준 | URL |
 |------|-----|
 | RFC 4648 (Base32) | https://www.rfc-editor.org/rfc/rfc4648#section-6 |
 | RFC 6238 (TOTP) | https://www.rfc-editor.org/rfc/rfc6238 |
-| RFC 4226 (HOTP) | https://datatracker.ietf.org/doc/html/rfc4226#section-4 |
+| RFC 5321 (SMTP/이메일) | https://www.rfc-editor.org/rfc/rfc5321 |
 
----
-
-## 변경 이력
-
-### 프론트엔드 수정 (13건)
-
-| # | 항목 | 변경 내용 |
-|---|------|----------|
-| 1 | XSS 방지 | innerHTML → `escapeHtml()` 전처리 |
-| 2 | 클립보드 | `execCommand` → `navigator.clipboard.writeText()` + Selection API 폴백 |
-| 3 | VM 비밀번호 | localStorage → sessionStorage |
-| 4 | 프로필 폴더 변환 | 2-part 도메인 → multi-dot 도메인 대응 |
-| 5 | Optional chaining | `?.` `??` → `&&` 체인 (ES5 호환) |
-| 6 | `@gmail.com` 자동 추가 | 제거 (데이터 오염 방지) |
-| 7-11 | 고스트 필드 | `login_method`, `recovery_phone`, `source_row` 삭제 |
-| 12 | CSS 이중 세미콜론 | `;;` → `;` |
-| 13 | 스크롤 정렬 | `position:absolute` → 자연 문서 흐름 |
-
-### 백엔드 수정 (42건)
-
-| 영역 | 주요 변경 |
-|------|----------|
-| auto_deploy.js | HMAC 타이밍 공격 방지, 브랜치 sanitize, TOTP 길이 RFC 준수 |
-| upload_excels.js | otpauth URL 파싱 개선, Race condition 방지 (withFileLock) |
-| login-v2.js | sanitizeEmail POSIX 준수, TOTP 마스킹, reCAPTCHA 유료 코드 삭제 |
-| deploy-gauth.yml | 테스트 이메일 삭제, 로그 축소, 일회성 정리 블록 삭제 |
-
-### 삭제된 기능
-
-| 기능 | 사유 |
-|------|------|
-| GCP 서버 제어 (vmCtrlBox) | 불필요 — HTML + CSS + JS 164줄 삭제 |
-| 자동연결 배치 (startBatchConnect) | 불필요 — HTML 버튼 + JS 함수 삭제 |
-| 중복 사이트맵 (floating) | 인라인 버전과 중복 — floating 버전 삭제 |
-
----
+### 보안 가이드
+| 주제 | URL |
+|------|-----|
+| XSS 방지 | https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html |
+| 명령어 인젝션 방지 | https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html |
 
 ## 제약사항
 
 - Google 보안 챌린지 (패스키/기기인증/전화인증) 자동화 불가
-- CAPTCHA 발생 시 Gemini API 솔버 시도 → 실패 시 120초 대기
+- CAPTCHA 발생 시 120초 수동 대기 필요
 - headed 모드 전용 (headless 감지됨)
-- Xvfb 가상 디스플레이 필수
+- Xvfb 가상 디스플레이 필수 (서버에 모니터 없음)

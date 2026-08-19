@@ -3,20 +3,16 @@ on:
   workflow_dispatch:
     inputs:
       email:
-        description: 'Email to add to sunbi'
+        description: 'Email to look up in gauth DB and add to sunbi'
         required: true
         default: 'dun23315@gmail.com'
-      action:
-        description: 'inspect, add, or fix-status'
-        required: false
-        default: 'inspect'
 
 jobs:
   add-account:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Sunbi operation
+      - name: Query gauth DB and add to sunbi
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -25,133 +21,55 @@ jobs:
           command_timeout: 5m
           script: |
             EMAIL="${{ github.event.inputs.email }}"
-            ACTION="${{ github.event.inputs.action }}"
-            SUNBI_DIR="/var/www/sites/sunbi"
 
-            if [ "$ACTION" = "inspect" ]; then
-              echo "=== sunbi server.js (full) ==="
-              cat -n "$SUNBI_DIR/server.js"
-              echo ""
-              echo "=== sunbi public/index.html ==="
-              cat "$SUNBI_DIR/public/index.html" 2>/dev/null | head -200
-              echo ""
-              echo "=== sunbi accounts.json (first 100 lines) ==="
-              sudo head -100 "$SUNBI_DIR/accounts.json" 2>/dev/null || echo "file not found"
-              echo ""
-              echo "=== sunbi accounts.json line count ==="
-              sudo wc -l "$SUNBI_DIR/accounts.json" 2>/dev/null || echo "0"
-              echo ""
-              echo "=== systemctl status ==="
-              systemctl status sunbi 2>/dev/null | head -20 || echo "no sunbi service"
-              echo ""
-              echo "=== journalctl sunbi errors (last 50 lines) ==="
-              sudo journalctl -u sunbi --no-pager -n 50 2>/dev/null || echo "no journal"
-              echo ""
-              echo "=== sunbi service unit file ==="
-              cat /etc/systemd/system/sunbi.service 2>/dev/null || echo "not found"
-              echo ""
-              echo "=== ls sunbi dir ==="
-              ls -la "$SUNBI_DIR/" 2>/dev/null
-              echo ""
-              echo "=== node modules check ==="
-              ls "$SUNBI_DIR/node_modules/" 2>/dev/null | head -20 || echo "no node_modules"
-              echo ""
-              echo "=== Test start sunbi manually ==="
-              cd "$SUNBI_DIR" && timeout 5 node server.js 2>&1 || echo "exit code: $?"
+            echo "=== STEP 1: Query account from gauth DB ==="
+            ACCOUNT_JSON=$(node -e "
+              const fs = require('fs');
+              const d = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+              const accs = Array.isArray(d) ? d : (d.accounts || []);
+              const t = accs.find(a => (a.email||'').toLowerCase() === '$EMAIL'.toLowerCase());
+              if (!t) { console.log('NOT_FOUND'); process.exit(0); }
+              console.log(JSON.stringify(t));
+            ")
+
+            if [ "$ACCOUNT_JSON" = "NOT_FOUND" ]; then
+              echo "Account not found in gauth DB: $EMAIL"
+              exit 1
             fi
 
-            if [ "$ACTION" = "add" ]; then
-              echo "=== Getting account from gauth DB ==="
-              ACCOUNT_JSON=$(node -e "
-                const fs = require('fs');
-                const d = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
-                const accs = Array.isArray(d) ? d : (d.accounts || []);
-                const t = accs.find(a => (a.email||'').toLowerCase() === process.argv[1].toLowerCase());
-                if (!t) { console.log('NOT_FOUND'); process.exit(0); }
-                if (!t.status) t.status = 'active';
-                if (!t.allocated_date) t.allocated_date = new Date().toISOString().slice(0,10);
-                if (t.totp_secret && !t.twofa_secret) t.twofa_secret = t.totp_secret;
-                console.log(JSON.stringify(t));
-              " "$EMAIL")
+            echo "Found account:"
+            echo "$ACCOUNT_JSON" | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log(JSON.stringify(d,null,2))"
 
-              if [ "$ACCOUNT_JSON" = "NOT_FOUND" ]; then
-                echo "Account not found: $EMAIL"
-                exit 1
-              fi
-              echo "Found in gauth: $ACCOUNT_JSON"
+            echo ""
+            echo "=== STEP 2: Check sunbi site structure ==="
+            SUNBI_DIR="/var/www/sites/sunbi/public"
+            echo "Files in sunbi:"
+            ls -la "$SUNBI_DIR/" 2>/dev/null || echo "Directory not found"
+            echo ""
 
+            # Check for data files
+            echo "Data files:"
+            find "$SUNBI_DIR" -name "*.json" -o -name "*.js" -o -name "*.html" 2>/dev/null | head -20
+            echo ""
+
+            # Check index.html for data structure hints
+            if [ -f "$SUNBI_DIR/index.html" ]; then
+              echo "=== index.html structure (first 100 lines) ==="
+              head -100 "$SUNBI_DIR/index.html"
               echo ""
-              echo "=== Adding to sunbi accounts.json ==="
-              echo "$ACCOUNT_JSON" > /tmp/sunbi_new_account.json
-
-              sudo node -e "
-                const fs = require('fs');
-                const acctFile = '$SUNBI_DIR/accounts.json';
-                let data = {};
-                try { data = JSON.parse(fs.readFileSync(acctFile, 'utf8')); } catch(e) { console.log('Creating new file'); }
-                let accounts = Array.isArray(data) ? data : (data.accounts || []);
-                const newAcct = JSON.parse(fs.readFileSync('/tmp/sunbi_new_account.json', 'utf8'));
-                const exists = accounts.find(a => (a.email||'').toLowerCase() === (newAcct.email||'').toLowerCase());
-                if (exists) {
-                  console.log('Already exists in sunbi, updating...');
-                  Object.assign(exists, newAcct);
-                } else {
-                  console.log('Adding new account to sunbi...');
-                  accounts.push(newAcct);
-                }
-                fs.writeFileSync(acctFile, JSON.stringify({accounts: accounts}, null, 2));
-                console.log('Done. Total accounts in sunbi:', accounts.length);
-                console.log('Verify:', accounts.find(a => (a.email||'').toLowerCase() === (newAcct.email||'').toLowerCase()).email);
-              "
-              rm -f /tmp/sunbi_new_account.json
-
-              echo ""
-              echo "=== Restarting sunbi service ==="
-              sudo systemctl restart sunbi 2>/dev/null || sudo pm2 restart sunbi 2>/dev/null || echo "No sunbi service manager found"
-              sleep 2
-
-              echo ""
-              echo "=== Verify on sunbi API ==="
-              curl -s http://localhost:3013/api/sunbi/accounts 2>/dev/null | node -e "
-                let d = '';
-                process.stdin.on('data', c => d += c);
-                process.stdin.on('end', () => {
-                  try {
-                    const j = JSON.parse(d);
-                    const accs = j.accounts || j || [];
-                    const found = accs.find(a => (a.email||'').toLowerCase() === process.argv[1].toLowerCase());
-                    console.log(found ? 'VERIFIED in sunbi API' : 'Not found in API - may need server restart');
-                  } catch(e) { console.log('API parse error:', e.message); }
-                });
-              " "$EMAIL"
+              echo "=== Looking for data/accounts references ==="
+              grep -n -i "account\|data\|json\|email\|fetch\|api" "$SUNBI_DIR/index.html" | head -30
             fi
 
-            if [ "$ACTION" = "fix-status" ]; then
-              echo "=== Fixing all sunbi accounts: adding status/allocated_date/twofa_secret ==="
-              sudo node -e "
-                const fs = require('fs');
-                const f = '$SUNBI_DIR/accounts.json';
-                const data = JSON.parse(fs.readFileSync(f,'utf8'));
-                const accounts = Array.isArray(data) ? data : (data.accounts || []);
-                let fixed = 0;
-                const today = new Date().toISOString().slice(0,10);
-                accounts.forEach(a => {
-                  if (!a.status) { a.status = 'active'; fixed++; }
-                  if (!a.allocated_date) { a.allocated_date = today; }
-                  if (a.totp_secret && !a.twofa_secret) { a.twofa_secret = a.totp_secret; }
-                });
-                fs.writeFileSync(f, JSON.stringify({accounts}, null, 2));
-                console.log('Fixed ' + fixed + '/' + accounts.length + ' accounts');
-                accounts.forEach(a => console.log(a.email + ': status=' + a.status));
-              "
-              sudo systemctl restart sunbi 2>/dev/null || echo "restart failed"
-              sleep 2
-              echo "=== Verify ==="
-              curl -s http://localhost:3013/api/sunbi/accounts | node -e "
-                let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
-                  const j=JSON.parse(d);const a=j.accounts||j||[];
-                  const active=a.filter(x=>x.status==='active').length;
-                  console.log('Total:',a.length,'Active:',active);
-                });
-              "
-            fi
+            # Check for any JS data files
+            for f in $(find "$SUNBI_DIR" -name "*.json" 2>/dev/null); do
+              echo "=== JSON file: $f ==="
+              head -50 "$f"
+              echo ""
+            done
+
+            for f in $(find "$SUNBI_DIR" -name "*.js" 2>/dev/null | grep -v node_modules); do
+              echo "=== JS file: $f ==="
+              head -50 "$f"
+              echo ""
+            done
