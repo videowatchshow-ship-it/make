@@ -105,7 +105,9 @@ jobs:
 
             HAS_CF="no"
             [ -n "$CF_TOKEN" ] || [ -n "$CF_API_KEY" ] && HAS_CF="yes"
-            echo "CF credentials found: $HAS_CF (token=$([ -n \"$CF_TOKEN\" ] && echo YES || echo NO) apikey=$([ -n \"$CF_API_KEY\" ] && echo YES || echo NO))"
+            TK_STATUS="NO"; [ -n "$CF_TOKEN" ] && TK_STATUS="YES"
+            AK_STATUS="NO"; [ -n "$CF_API_KEY" ] && AK_STATUS="YES"
+            echo "CF credentials found: $HAS_CF (token=$TK_STATUS apikey=$AK_STATUS)"
 
             if [ "$HAS_CF" = "yes" ] && [ -n "$CF_TOKEN" ]; then
               echo "=== Verifying token permissions ==="
@@ -124,7 +126,8 @@ jobs:
                   -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
               fi
               CF_ZONE=$(echo "$ZONE_RESP" | python3 -c "import json,sys;d=json.load(sys.stdin);r=d.get('result',[]);print(r[0]['id'] if r else '')" 2>/dev/null)
-              echo "CF_ZONE from API: $([ -n \"$CF_ZONE\" ] && echo YES || echo NO)"
+              ZN_STATUS="NO"; [ -n "$CF_ZONE" ] && ZN_STATUS="YES"
+              echo "CF_ZONE from API: $ZN_STATUS"
               [ -z "$CF_ZONE" ] && echo "zone response: $ZONE_RESP"
             fi
 
