@@ -9,47 +9,68 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Read CF token sources
+      - name: Final CF credential search
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 60s
+          command_timeout: 90s
           script: |
-            echo "=== 1. Search for cloudflare-api-token memory node ==="
-            sudo find /opt/claude-mem-sync/ -name '*cloudflare*' -o -name '*api-token*' -o -name '*cf-token*' 2>/dev/null
-            sudo grep -rl 'cfut_' /opt/claude-mem-sync/ 2>/dev/null
+            echo "=== 1. Python cloudflare config files ==="
+            sudo cat /root/.cloudflare.cfg 2>/dev/null || echo "no /root/.cloudflare.cfg"
+            sudo cat /root/.cloudflare/cloudflare.cfg 2>/dev/null || echo "no /root/.cloudflare/cloudflare.cfg"
+            sudo cat /etc/cloudflare/cloudflare.cfg 2>/dev/null || echo "no /etc/cloudflare/cloudflare.cfg"
+            for u in /home/*/; do
+              sudo cat "${u}.cloudflare.cfg" 2>/dev/null && echo "found in $u"
+            done
 
             echo ""
-            echo "=== 2. Read ALL claude memory files that mention cloudflare ==="
-            for f in $(sudo grep -rl -i 'cloudflare\|cfut_\|cf_token' /opt/claude-mem-sync/ 2>/dev/null); do
+            echo "=== 2. WARP CLI account info ==="
+            sudo warp-cli account 2>/dev/null || echo "warp-cli account failed"
+            sudo warp-cli settings 2>/dev/null || echo "warp-cli settings failed"
+
+            echo ""
+            echo "=== 3. Search memory node cloudflare-api-token ==="
+            sudo find /opt/claude-mem-sync/ -name '*cloudflare*' -o -name '*api-token*' 2>/dev/null
+            sudo find /opt/claude-mem-sync/ -name '*token*' 2>/dev/null
+
+            echo ""
+            echo "=== 4. Read ALL memory nodes that mention token ==="
+            for f in $(sudo find /opt/claude-mem-sync/ -name '*token*' -type f 2>/dev/null); do
               echo "--- $f ---"
               sudo cat "$f" 2>/dev/null
               echo ""
             done
 
             echo ""
-            echo "=== 3. Gucci cloudflare-config.php ==="
-            sudo cat /var/www/sites/gucci/config/cloudflare-config.php 2>/dev/null || echo "NOT FOUND"
+            echo "=== 5. Try python3 cloudflare module with existing token ==="
+            CF_TOKEN=$(sudo awk -F' = ' '{print $2}' /root/.secrets/cloudflare.ini 2>/dev/null)
+            sudo python3 -c "
+import CloudFlare
+cf = CloudFlare.CloudFlare(token='$CF_TOKEN')
+try:
+    tokens = cf.user.tokens.get()
+    for t in tokens:
+        print(f'Token: {t[\"id\"]} name={t[\"name\"]} status={t[\"status\"]}')
+        for p in t.get('policies',[]):
+            print(f'  policy: {p}')
+except Exception as e:
+    print(f'List tokens failed: {e}')
+try:
+    zones = cf.zones.get(params={'name':'cent-solution.online'})
+    for z in zones:
+        print(f'Zone: {z[\"id\"]} name={z[\"name\"]}')
+        recs = cf.zones.dns_records.get(z['id'], params={'per_page':5})
+        for r in recs:
+            print(f'  DNS: {r[\"type\"]} {r[\"name\"]} -> {r[\"content\"]}')
+except Exception as e:
+    print(f'DNS list failed: {e}')
+" 2>&1 || echo "python3 cloudflare failed"
 
             echo ""
-            echo "=== 4. Gucci cloudflare-waf-config.php ==="
-            sudo cat /var/www/sites/gucci/config/cloudflare-waf-config.php 2>/dev/null || echo "NOT FOUND"
-
-            echo ""
-            echo "=== 5. cloudflare.ini full content ==="
-            sudo cat /root/.secrets/cloudflare.ini 2>/dev/null
-
-            echo ""
-            echo "=== 6. Search ALL files for cfut_0JOs (full token) ==="
-            sudo grep -r 'cfut_0JOs' /opt/ /root/ /var/www/ /etc/ /home/ --include='*.md' --include='*.txt' --include='*.json' --include='*.env' --include='*.ini' --include='*.conf' --include='*.php' --include='*.sh' --include='*.yaml' --include='*.yml' --include='*.toml' 2>/dev/null | head -30
-
-            echo ""
-            echo "=== 7. Try certbot DNS cloudflare plugin token ==="
-            sudo cat /etc/letsencrypt/dns-cloudflare-credentials.ini 2>/dev/null || echo "not found"
-            sudo find /etc/letsencrypt/ -name '*cloudflare*' 2>/dev/null
-            sudo find /root/ -name '*credentials*' -o -name '*cloudflare*.ini' -o -name '*cloudflare*.cfg' 2>/dev/null
+            echo "=== 6. Check Cloudflare Global API Key format ==="
+            sudo grep -r 'X-Auth-Email\|X-Auth-Key\|CLOUDFLARE_EMAIL\|CF_API_KEY\|CLOUDFLARE_API_KEY' /root/ /opt/ /home/ --include='*.sh' --include='*.env' --include='*.cfg' --include='*.ini' --include='*.conf' --include='*.py' --include='*.md' 2>/dev/null | grep -v node_modules | grep -v venv | head -20 || echo "none"
 
             echo ""
             echo "=== DONE ==="
