@@ -1,4 +1,4 @@
-name: photo write.php 반짝 경고 안내문 삽입
+name: photo write.php 이미지 슬롯 구조 확인
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ on:
       - '.github/workflows/photo-check-abc-urls.yml'
 
 jobs:
-  insert:
+  imgs:
     runs-on: ubuntu-latest
     steps:
       - uses: appleboy/ssh-action@v1.0.3
@@ -17,7 +17,7 @@ jobs:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 180s
+          command_timeout: 120s
           script: |
             /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
               --zone=asia-northeast1-a \
@@ -26,93 +26,38 @@ jobs:
               --quiet \
               --command='bash -s' << "REMOTE"
             set -uo pipefail
-            F="/var/www/sites/chamgyo/public/photo/write.php"
-            TS=$(date +%s)
+            P1="/var/www/sites/chamgyo/public/photo"
 
-            echo "===== [1] 백업 ====="
-            sudo cp "$F" "$F.bak.notice.$TS"
-            echo "backup: $F.bak.notice.$TS"
+            echo "===== [1] photo/images 폴더 (공용 이미지 슬롯) ====="
+            sudo ls -la "$P1/images/" 2>/dev/null | head -50
 
             echo ""
-            echo "===== [2] 이미 삽입돼 있는지 확인 (중복 방지) ====="
-            if sudo grep -q "warn-blink-user-guide" "$F"; then
-              echo "이미 삽입됨. 삭제 후 재삽입."
-              sudo TARGET="$F" python3 -c "
-            import re, os
-            p = os.environ[\"TARGET\"]
-            s = open(p).read()
-            s = re.sub(r\"<style id=\\\"warn-blink-css\\\">.*?</style>\\s*\", \"\", s, flags=re.DOTALL)
-            s = re.sub(r\"<div class=\\\"warn-blink-user-guide\\\".*?</div>\\s*\", \"\", s, flags=re.DOTALL)
-            open(p, \"w\").write(s)
-            "
-            fi
+            echo "===== [2] 아바타 가인 관련 이미지 파일 검색 ====="
+            sudo find "$P1" -type f \( -iname "*gain*" -o -iname "*아바타*" -o -iname "*side*banner*" -o -iname "*h_side*" \) 2>/dev/null | head -20
 
             echo ""
-            echo "===== [3] line 116 (제목 라인) 위치 확인 ====="
-            sudo grep -n "님 — 프리즘에 넣을 URL" "$F"
+            echo "===== [3] write.php 이미지 슬롯 정의 ($slots_shared) ====="
+            sudo grep -nA20 "slots_shared\|slots_b_only\|slots_all\|slots_by_user" "$P1/write.php" | head -60
 
             echo ""
-            echo "===== [4] Python으로 line 116 뒤에 <style> + <div> 삽입 ====="
-            sudo TARGET="$F" python3 <<'PYEOF'
-            import os
-            p = os.environ["TARGET"]
-            with open(p, "r", encoding="utf-8") as f:
-                s = f.read()
-
-            # blink CSS + 경고 박스
-            css = """<style id="warn-blink-css">
-            @keyframes warnBlink {
-              0%,100% { background:#ff2b2b; color:#fff; box-shadow:0 0 24px #ff2b2b; border-color:#fff; }
-              50%     { background:#ffdb2b; color:#000; box-shadow:0 0 34px #ffdb2b; border-color:#000; }
-            }
-            .warn-blink-user-guide {
-              animation: warnBlink 1.4s ease-in-out infinite;
-              padding: 18px 22px;
-              margin: 16px 0 20px;
-              border-radius: 12px;
-              font-size: 1.05rem;
-              font-weight: 700;
-              line-height: 1.75;
-              border: 4px solid #fff;
-              letter-spacing: -0.3px;
-            }
-            .warn-blink-user-guide .warn-title {
-              display:block;
-              font-size:1.35rem;
-              margin-bottom:8px;
-              text-shadow: 0 2px 4px rgba(0,0,0,.55);
-            }
-            .warn-blink-user-guide .warn-step {
-              display:block;
-              margin-top:4px;
-            }
-            </style>"""
-
-            box = """<div class="warn-blink-user-guide">
-              <span class="warn-title">⚠️ 경고 — 반드시 두 기기 모두 로그인해 주세요!</span>
-              프리즘이 연결된 모바일과 픽을 올리는 모바일, 이렇게 <b>두 기기 모두</b> 이 계정으로 로그인하신 뒤,
-              <span class="warn-step">① 프리즘 웹(Web)에 넣을 URL을 골라 복사하여 삽입해 주시고,</span>
-              <span class="warn-step">② 반대편(픽을 올리는 기기)에서는 같은 계정으로 로그인해 주시고,</span>
-              <span class="warn-step">③ 아래 테이블을 골라 <b>&#39;선택&#39;</b> 버튼을 눌러 주시면 해당 테이블이 화면에 실시간으로 활성화됩니다.</span>
-            </div>"""
-
-            # 제목 라인 뒤에 삽입 - `님 — 프리즘에 넣을 URL</div>` 다음
-            marker = "님 — 프리즘에 넣을 URL</div>"
-            if marker not in s:
-                print("marker NOT FOUND — 삽입 못 함")
-                exit(1)
-            new = s.replace(marker, marker + "\n" + css + "\n" + box, 1)
-            with open(p, "w", encoding="utf-8") as f:
-                f.write(new)
-            print(f"before={len(s)}B  after={len(new)}B  diff={len(new)-len(s)}B")
-            PYEOF
-
-            sudo chown www-data:www-data "$F"
-            sudo chmod 644 "$F"
+            echo "===== [4] 각 계정별 이미지 있는지 - 계정별 slot 구조? ====="
+            sudo grep -nE "sel_[a-z]|per.user|user.image|이미지.*계정|계정.*이미지|slot.*ch|ch.*slot|__id.*image" "$P1/write.php" | head -20
 
             echo ""
-            echo "===== [5] 삽입 후 확인 (line 116 근처 30줄) ====="
-            sudo grep -n "warn-blink-user-guide\|warnBlink\|경고 — 반드시" "$F" | head -10
+            echo "===== [5] 지금 cent 화면에 뜨는 h_side_banner.png 이미지 위치 + 파일 실체 ====="
+            sudo ls -la "$P1/images/h_side_banner"* 2>/dev/null
+
+            echo ""
+            echo "===== [6] cent 계정의 CAH_1.html이 참조하는 실제 이미지 (box_R, side banner) ====="
+            sudo grep -oE "images/[a-zA-Z0-9_.-]+" "$P1/CAH_1.html" 2>/dev/null | sort -u | head -20
+
+            echo ""
+            echo "===== [7] SNW_1.html (파랑 메신저 화면) 이 참조하는 이미지 ====="
+            sudo grep -oE "images/[a-zA-Z0-9_.-]+" "$P1/SNW_1.html" 2>/dev/null | sort -u | head -20
+
+            echo ""
+            echo "===== [8] write.php - 아바타 가인 배너 표시하는 로직 grep ====="
+            sudo grep -nE "gain|아바타|casino7942|ccm7979|가인" "$P1/"*.php "$P1/"*.html 2>/dev/null | head -20
 
             echo ""
             echo "===== DONE ====="
