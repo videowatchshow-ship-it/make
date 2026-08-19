@@ -10,41 +10,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Search all CF tokens on server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.GAUTH_HOST }}
-          username: ${{ secrets.GAUTH_USER }}
-          key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 4m
-          script: |
-            echo "=== List /opt/claude-mem-sync structure ==="
-            sudo find /opt/claude-mem-sync -type f 2>/dev/null | head -50
+      - name: Add wildcard A record via Cloudflare API
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          echo "=== Check existing wildcard DNS records ==="
+          curl -sS "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?type=A&name=*" \
+            -H "Authorization: Bearer ${CF_TOKEN}" | python3 -m json.tool
 
-            echo ""
-            echo "=== Search ALL cfut_ tokens everywhere ==="
-            sudo grep -rhoP 'cfut_[A-Za-z0-9_-]{20,}' /opt/claude-mem-sync/ /root/ /home/ /etc/ 2>/dev/null | sort -u
+          echo ""
+          echo "=== Add wildcard * A record → 34.104.233.35 (proxied) ==="
+          RESULT=$(curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records" \
+            -H "Authorization: Bearer ${CF_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data '{"type":"A","name":"*","content":"34.104.233.35","ttl":1,"proxied":true}')
+          echo "$RESULT" | python3 -m json.tool
 
-            echo ""
-            echo "=== Search for Global API Key (37-char hex) in known files ==="
-            for f in /root/.secrets/* /opt/claude-mem-sync/proj1/* /opt/claude-mem-sync/proj1/**/* /root/.cloudflare 2>/dev/null; do
-              [ -f "$f" ] || continue
-              sudo grep -iP 'global|api.?key|email|X-Auth' "$f" 2>/dev/null | head -3 && echo "(in $f)"
-            done
-
-            echo ""
-            echo "=== /root/.secrets/ contents ==="
-            sudo ls -la /root/.secrets/ 2>/dev/null
-            sudo cat /root/.secrets/cloudflare.ini 2>/dev/null
-
-            echo ""
-            echo "=== deploy-gauth.yml CF section (from server) ==="
-            sudo grep -A5 -i 'cloudflare\|CF_TOKEN\|cf_zone\|ZONE_ID' /opt/gauth-full/.env 2>/dev/null || echo "no .env match"
-            sudo grep -rhoP 'cfut_[A-Za-z0-9_-]{20,}' /opt/gauth-full/ 2>/dev/null | sort -u || echo "no cfut in gauth-full"
-
-            echo ""
-            echo "=== Check certbot renewal hooks for CF token ==="
-            sudo grep -rhoP 'cfut_[A-Za-z0-9_-]{20,}' /etc/letsencrypt/ 2>/dev/null | sort -u || echo "none in letsencrypt"
-            sudo find /etc/letsencrypt -name '*.ini' -exec sudo cat {} \; 2>/dev/null | grep -i cloudflare | head -5
-
-            echo "=== DONE ==="
+          SUCCESS=$(echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('success',''))")
+          echo "success=$SUCCESS"
+          if [ "$SUCCESS" != "True" ]; then
+            echo "FAILED — check errors above"
+            exit 1
+          fi
+          echo "=== Wildcard DNS added successfully ==="
