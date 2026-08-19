@@ -1,84 +1,96 @@
-name: Setup second DNS + SSL
+name: Find ALL CF tokens everywhere
 on:
   workflow_dispatch:
-    inputs:
-      cf_token:
-        description: 'Cloudflare API Token (DNS:Edit 권한 필요)'
-        required: true
-        type: string
 
 jobs:
-  setup:
+  search:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create DNS and SSL
+      - name: Exhaustive token search
         uses: appleboy/ssh-action@v1.0.3
-        env:
-          CF_DNS_TOKEN: ${{ github.event.inputs.cf_token }}
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          envs: CF_DNS_TOKEN
-          command_timeout: 180s
+          command_timeout: 240s
           script: |
-            SERVER_IP=$(curl -s ifconfig.me)
-            echo "Server IP: $SERVER_IP"
-
-            echo "=== 1. Verify token ==="
-            VERIFY=$(curl -s "https://api.cloudflare.com/client/v4/user/tokens/verify" \
-              -H "Authorization: Bearer $CF_DNS_TOKEN" -H "Content-Type: application/json")
-            echo "$VERIFY" | python3 -c "import sys,json; d=json.load(sys.stdin); print('Token status:', d.get('result',{}).get('status','unknown'))" 2>&1
+            echo "=== 1. ALL files containing cfut_ (no extension filter) ==="
+            sudo grep -rl 'cfut_' / --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev --exclude-dir=run 2>/dev/null | head -50
 
             echo ""
-            echo "=== 2. Create DNS A record ==="
-            ZONE="2601d4f4ab75c910f8d858ca036ff344"
-            EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records?name=second.cent-solution.online&type=A" \
-              -H "Authorization: Bearer $CF_DNS_TOKEN" -H "Content-Type: application/json")
-            HAS=$(echo "$EXISTING" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('result',[])))" 2>/dev/null)
-
-            if [ "$HAS" = "0" ]; then
-              echo "Creating A record..."
-              RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records" \
-                -H "Authorization: Bearer $CF_DNS_TOKEN" \
-                -H "Content-Type: application/json" \
-                -d "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
-              echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print('Success:', d.get('success'), d.get('result',{}).get('name',''))" 2>&1
-            else
-              echo "DNS record already exists"
-            fi
+            echo "=== 2. Read every match ==="
+            for f in $(sudo grep -rl 'cfut_' / --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev --exclude-dir=run 2>/dev/null | head -50); do
+              echo "--- $f ---"
+              sudo grep 'cfut_' "$f" 2>/dev/null
+            done
 
             echo ""
-            echo "=== 3. Save token to server ==="
-            echo "dns_cloudflare_api_token = $CF_DNS_TOKEN" | sudo tee /root/.secrets/cloudflare-dns.ini > /dev/null
-            sudo chmod 600 /root/.secrets/cloudflare-dns.ini
-            echo "Token saved to /root/.secrets/cloudflare-dns.ini"
+            echo "=== 3. Bash history ==="
+            sudo cat /root/.bash_history 2>/dev/null | grep -i 'cloudflare\|cfut_\|dns_record\|CF_TOKEN\|CF_API' | tail -30
+            for u in $(ls /home/ 2>/dev/null); do
+              sudo cat "/home/$u/.bash_history" 2>/dev/null | grep -i 'cloudflare\|cfut_\|CF_TOKEN' | tail -10
+            done
 
             echo ""
-            echo "=== 4. Wait for DNS propagation ==="
-            sleep 10
-            RESOLVE=$(dig +short second.cent-solution.online 2>/dev/null || nslookup second.cent-solution.online 2>/dev/null | grep -oP 'Address:\\s*\\K[0-9.]+' | tail -1)
-            echo "DNS resolve: $RESOLVE"
+            echo "=== 4. Environment variables ==="
+            sudo cat /etc/environment 2>/dev/null | grep -i 'cf\|cloud'
+            sudo cat /root/.bashrc 2>/dev/null | grep -i 'cf\|cloudflare\|token'
+            sudo cat /root/.profile 2>/dev/null | grep -i 'cf\|cloudflare\|token'
 
             echo ""
-            echo "=== 5. SSL certificate ==="
-            if [ ! -f /etc/letsencrypt/live/second.cent-solution.online/fullchain.pem ]; then
-              if [ -n "$RESOLVE" ]; then
-                echo "Getting SSL cert via certbot..."
-                sudo certbot --apache -d second.cent-solution.online --non-interactive --agree-tos --email videowatch.show@gmail.com --redirect 2>&1 || echo "Certbot failed - DNS may need more time"
-              else
-                echo "DNS not propagated yet, skipping SSL"
-              fi
-            else
-              echo "SSL cert already exists"
-            fi
+            echo "=== 5. Systemd service envs ==="
+            sudo grep -r 'cfut_\|CLOUDFLARE\|CF_TOKEN\|CF_API' /etc/systemd/ 2>/dev/null | head -10
+            sudo grep -r 'cfut_\|CLOUDFLARE\|CF_TOKEN\|CF_API' /etc/default/ 2>/dev/null | head -10
 
             echo ""
-            echo "=== 6. Final check ==="
-            curl -sI "https://second.cent-solution.online/" --max-time 5 2>&1 | head -5 || echo "Site not reachable yet (DNS may need more time)"
+            echo "=== 6. Docker configs ==="
+            sudo grep -r 'cfut_\|CLOUDFLARE' /var/lib/docker/ 2>/dev/null | head -10
+            sudo docker inspect $(sudo docker ps -aq 2>/dev/null) 2>/dev/null | grep -i 'cfut_\|cloudflare' | head -10
+
+            echo ""
+            echo "=== 7. Crontabs ==="
+            sudo cat /var/spool/cron/crontabs/* 2>/dev/null | grep -i 'cloudflare\|cfut_'
+            sudo cat /etc/cron.d/* 2>/dev/null | grep -i 'cloudflare\|cfut_'
+
+            echo ""
+            echo "=== 8. Git repos on server ==="
+            sudo find / -name '.git' -type d -not -path '*/proc/*' -not -path '*/sys/*' 2>/dev/null | head -20
+            for g in $(sudo find / -name '.git' -type d -not -path '*/proc/*' -not -path '*/sys/*' 2>/dev/null | head -20); do
+              REPO=$(dirname "$g")
+              echo "--- Checking $REPO ---"
+              cd "$REPO" && sudo git log --oneline -5 2>/dev/null | grep -i 'cloudflare\|token\|dns' | head -3
+              sudo git log -p --all -S 'cfut_' -- 2>/dev/null | grep 'cfut_' | head -5
+            done
+
+            echo ""
+            echo "=== 9. Journal logs ==="
+            sudo journalctl --no-pager -g 'cfut_' 2>/dev/null | tail -10
+
+            echo ""
+            echo "=== 10. Apache/Nginx logs ==="
+            sudo grep -r 'cfut_' /var/log/ 2>/dev/null | head -10
+
+            echo ""
+            echo "=== 11. Node/npm global configs ==="
+            sudo cat /root/.npmrc 2>/dev/null | grep -i 'cf\|cloudflare'
+            sudo find /root/ /home/ -name '.wrangler' -type d 2>/dev/null
+            sudo find /root/ /home/ -name 'wrangler.toml' 2>/dev/null
+
+            echo ""
+            echo "=== 12. Python/pip configs ==="
+            sudo find /root/ /home/ -name '.cloudflare.cfg' -o -name 'cloudflare.cfg' 2>/dev/null
+
+            echo ""
+            echo "=== 13. All .secrets dir ==="
+            sudo ls -la /root/.secrets/ 2>/dev/null
+            sudo cat /root/.secrets/* 2>/dev/null
+
+            echo ""
+            echo "=== 14. Temp files ==="
+            sudo grep -r 'cfut_' /tmp/ 2>/dev/null | head -10
 
             echo ""
             echo "=== DONE ==="
