@@ -75,7 +75,7 @@ button:disabled{background:#333;cursor:not-allowed}
 <body>
 <script>
 (function(){
-  var V='v32';
+  var V='v33';
   if(localStorage.getItem('gauth_sw')===V) return;
   if(window.caches){
     caches.keys().then(function(ks){
@@ -623,6 +623,24 @@ function authHeaders(extra){var h=extra||{};var t=getApiToken();if(t)h['Authoriz
 function authQuery(url){var t=getApiToken();if(!t)return url;return url+(url.indexOf('?')>=0?'&':'?')+'token='+encodeURIComponent(t)}
 function noCacheQuery(url){var u=authQuery(url);return u+(u.includes('?')?'&':'?')+'_t='+Date.now()}
 
+var escapeHtml = _esc
+function _interleaveByFile(arr){
+  var files = {}, order = [];
+  arr.forEach(function(a){
+    var k = a.source_file || '_';
+    if(!files[k]){ files[k] = []; order.push(k); }
+    files[k].push(a);
+  });
+  if(order.length <= 1) return arr;
+  var result = [], maxLen = 0;
+  order.forEach(function(k){ if(files[k].length > maxLen) maxLen = files[k].length; });
+  for(var i = 0; i < maxLen; i++){
+    for(var j = 0; j < order.length; j++){
+      if(i < files[order[j]].length) result.push(files[order[j]][i]);
+    }
+  }
+  return result;
+}
 let FAILED = {}
 async function load(){
   var n, p, f
@@ -664,23 +682,6 @@ async function load(){
       if(d!==s&&d.indexOf('�')<0) return d;
     }catch(e){}
     return s;
-  }
-  function _interleaveByFile(arr){
-    var files = {}, order = [];
-    arr.forEach(function(a){
-      var k = a.source_file || '_';
-      if(!files[k]){ files[k] = []; order.push(k); }
-      files[k].push(a);
-    });
-    if(order.length <= 1) return arr;
-    var result = [], maxLen = 0;
-    order.forEach(function(k){ if(files[k].length > maxLen) maxLen = files[k].length; });
-    for(var i = 0; i < maxLen; i++){
-      for(var j = 0; j < order.length; j++){
-        if(i < files[order[j]].length) result.push(files[order[j]][i]);
-      }
-    }
-    return result;
   }
   ALL = _accounts.map(function(a){
     var f = (FAILED[a.email] || {});
