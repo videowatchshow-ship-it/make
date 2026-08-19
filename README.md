@@ -29,19 +29,85 @@ Express :4000 (rebrowser-login.js)
 | 가상 디스플레이 | Xvfb :99 (Puppeteer용) |
 | 서버 IP | (마스킹) |
 
+### 동일 서버(gucci-yanolza) 전체 사이트 구조
+
+#### 상위 사이트 (마스터)
+
+| 사이트 | 포트 | 경로 | 역할 |
+|--------|------|------|------|
+| gauth.cent-solution.online | 4000 | `/var/www/sites/gauth/public` | 마스터 계정 관리 (엑셀 업로드, 로그인, TOTP) |
+
+- Express 서버: `/opt/gauth-full/rebrowser-login.js`
+- 데이터 원본: `/opt/gauth-full/accounts_normalized.json`
+- 모든 하위 사이트는 gauth DB에서 계정을 가져감
+
+#### 하위 사이트 (서브사이트, 7개)
+
+gauth에서 계정을 받아 독립 운영. 각 사이트는 자체 `server.js` + `accounts.json` + 프론트엔드 보유.
+
+| 사이트 | 포트 | 서버 경로 | accounts.json 형식 | systemd 서비스 |
+|--------|------|-----------|-------------------|---------------|
+| gain.cent-solution.online | 3021 | `/var/www/sites/gain` | `{accounts: [...]}` | `gain` |
+| sunbi.cent-solution.online | 3013 | `/var/www/sites/sunbi` | `{accounts: [...]}` | `sunbi` |
+| woodong.cent-solution.online | 3012 | `/var/www/sites/woodong` | `{accounts: [...]}` | `woodong` |
+| win.cent-solution.online | 4001 | `/var/www/sites/win` | `{accounts: [...]}` | `win` |
+| simmani.cent-solution.online | 3011 | `/var/www/sites/simmani` | `{accounts: [...]}` | `simmani` |
+| romi.cent-solution.online | 3019 | `/var/www/sites/romi` | `{accounts: [...]}` | `romi` |
+| soktv.cent-solution.online | 3017 | `/var/www/sites/soktv` | `{accounts: [...]}` | `soktv` |
+
+#### 기타 사이트 (계정 관리 대상 아님)
+
+admin, aura, bacad, camstouch, cent-tools, gauth01, gucci, james, misskim, naman
+
+#### 서브사이트 계정 데이터 구조
+
+```json
+{
+  "accounts": [
+    {
+      "email": "user@gmail.com",
+      "password": "...",
+      "totp_secret": "BASE32...",
+      "twofa_secret": "BASE32...",
+      "status": "active",
+      "allocated_date": "2026-08-19",
+      "recovery_email": "backup@gmail.com",
+      "source_file": "원본.xlsx"
+    }
+  ]
+}
+```
+
+- `status`: `"active"` = 활성 (초록 배지), 그 외 = 비활성 (빨간 배지)
+- `twofa_secret`: 서브사이트 TOTP 필드명 (gauth의 `totp_secret`에서 복사)
+- `allocated_date`: 계정 할당 일자 (서브사이트 정렬 기준)
+
+#### 서브사이트 계정 추가 방법
+
+GitHub Actions `add-account-all-sites.yml`:
+- `email`: gauth DB에서 조회할 이메일
+- `sites`: `all` (전체) 또는 쉼표 구분 (예: `sunbi,gain,woodong`)
+- `action`: `add` (추가) / `fix-status` (기존 계정 활성화) / `inspect` (조회)
+
 ## 파일 구조
 
 ```
 make/
 ├── gauth/
-│   ├── index.html           # 대시보드 프론트엔드 (SPA)
-│   ├── upload_excels.js     # 엑셀 파서 + 업로드 API
-│   ├── auto_deploy.js       # 배포/검색/로그인 API (5개 라우트)
-│   └── xlsx.core.min.js     # SheetJS (클라이언트용)
-├── advanced-google-login-v2.js  # Puppeteer Google 로그인 엔진
+│   ├── index.html              # 대시보드 프론트엔드 (SPA)
+│   ├── upload_excels.js        # 엑셀 파서 + 업로드 API
+│   ├── auto_deploy.js          # 배포/검색/로그인 API
+│   ├── xlsx.core.min.js        # SheetJS (클라이언트용)
+│   └── lib/                    # 모듈화된 라이브러리
+├── advanced-google-login-v2.js # Puppeteer 로그인 엔진 (레거시)
 ├── package.json
 ├── .github/workflows/
-│   └── deploy-gauth.yml    # CI/CD 파이프라인
+│   ├── deploy-gauth.yml            # gauth CI/CD 배포
+│   ├── add-account-all-sites.yml   # 전체 서브사이트 계정 추가
+│   ├── sunbi-add-account.yml       # sunbi 단독 계정 관리
+│   ├── list-all-sites.yml          # 서버 전체 사이트 조회
+│   ├── query-accounts.yml          # gauth 계정 조회
+│   └── cloudflare-dns-check.yml    # DNS 확인
 └── README.md
 ```
 
