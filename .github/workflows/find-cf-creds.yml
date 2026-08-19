@@ -1,106 +1,83 @@
-name: Find ALL CF tokens fast
+name: Setup second DNS + SSL
 on:
   workflow_dispatch:
+    inputs:
+      cf_token:
+        description: 'Cloudflare API Token (DNS:Edit permission required)'
+        required: true
+        type: string
 
 jobs:
-  search:
+  setup:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fast targeted search
+      - name: Create DNS and setup SSL
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          CF_DNS_TOKEN: ${{ github.event.inputs.cf_token }}
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 240s
+          envs: CF_DNS_TOKEN
+          command_timeout: 180s
           script: |
-            echo "=== 1. /root/ ==="
-            sudo grep -rl --binary-files=without-match 'cfut_' /root/ 2>/dev/null | head -20
-            echo "---matches---"
-            for f in $(sudo grep -rl --binary-files=without-match 'cfut_' /root/ 2>/dev/null | head -20); do
-              echo "FILE: $f"
-              sudo grep 'cfut_' "$f" 2>/dev/null
-            done
+            SERVER_IP=$(curl -s ifconfig.me)
+            echo "Server IP: $SERVER_IP"
+
+            echo "=== 1. Verify token ==="
+            VERIFY=$(curl -s "https://api.cloudflare.com/client/v4/user/tokens/verify" \
+              -H "Authorization: Bearer $CF_DNS_TOKEN" -H "Content-Type: application/json")
+            echo "$VERIFY" | python3 -c "import sys,json; d=json.load(sys.stdin); print('Token status:', d.get('result',{}).get('status','unknown'))" 2>&1
 
             echo ""
-            echo "=== 2. /opt/ ==="
-            sudo grep -rl --binary-files=without-match 'cfut_' /opt/ 2>/dev/null | head -20
-            echo "---matches---"
-            for f in $(sudo grep -rl --binary-files=without-match 'cfut_' /opt/ 2>/dev/null | head -20); do
-              echo "FILE: $f"
-              sudo grep 'cfut_' "$f" 2>/dev/null
-            done
+            echo "=== 2. Create DNS A record ==="
+            ZONE="2601d4f4ab75c910f8d858ca036ff344"
+            EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records?name=second.cent-solution.online&type=A" \
+              -H "Authorization: Bearer $CF_DNS_TOKEN" -H "Content-Type: application/json")
+            HAS=$(echo "$EXISTING" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('result',[])))" 2>/dev/null)
+
+            if [ "$HAS" = "0" ]; then
+              echo "Creating A record..."
+              RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records" \
+                -H "Authorization: Bearer $CF_DNS_TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
+              echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print('Success:', d.get('success'), d.get('result',{}).get('name',''))" 2>&1
+            else
+              echo "DNS record already exists"
+            fi
 
             echo ""
-            echo "=== 3. /home/ ==="
-            sudo grep -rl --binary-files=without-match 'cfut_' /home/ 2>/dev/null | head -20
-            echo "---matches---"
-            for f in $(sudo grep -rl --binary-files=without-match 'cfut_' /home/ 2>/dev/null | head -20); do
-              echo "FILE: $f"
-              sudo grep 'cfut_' "$f" 2>/dev/null
-            done
+            echo "=== 3. Save token to server ==="
+            echo "dns_cloudflare_api_token = $CF_DNS_TOKEN" | sudo tee /root/.secrets/cloudflare-dns.ini > /dev/null
+            sudo chmod 600 /root/.secrets/cloudflare-dns.ini
+            echo "Saved to /root/.secrets/cloudflare-dns.ini"
 
             echo ""
-            echo "=== 4. /var/www/ ==="
-            sudo grep -rl --binary-files=without-match 'cfut_' /var/www/ 2>/dev/null | head -20
-            echo "---matches---"
-            for f in $(sudo grep -rl --binary-files=without-match 'cfut_' /var/www/ 2>/dev/null | head -20); do
-              echo "FILE: $f"
-              sudo grep 'cfut_' "$f" 2>/dev/null
-            done
+            echo "=== 4. Wait for DNS ==="
+            sleep 15
+            RESOLVE=$(dig +short second.cent-solution.online 2>/dev/null)
+            echo "DNS resolve: $RESOLVE"
 
             echo ""
-            echo "=== 5. /etc/ ==="
-            sudo grep -rl --binary-files=without-match 'cfut_' /etc/ 2>/dev/null | head -10
-            echo "---matches---"
-            for f in $(sudo grep -rl --binary-files=without-match 'cfut_' /etc/ 2>/dev/null | head -10); do
-              echo "FILE: $f"
-              sudo grep 'cfut_' "$f" 2>/dev/null
-            done
-
-            echo ""
-            echo "=== 6. /tmp/ and /var/tmp/ ==="
-            sudo grep -rl --binary-files=without-match 'cfut_' /tmp/ /var/tmp/ 2>/dev/null | head -10
-            for f in $(sudo grep -rl --binary-files=without-match 'cfut_' /tmp/ /var/tmp/ 2>/dev/null | head -10); do
-              echo "FILE: $f"
-              sudo grep 'cfut_' "$f" 2>/dev/null
-            done
-
-            echo ""
-            echo "=== 7. Bash history (all users) ==="
-            sudo cat /root/.bash_history 2>/dev/null | grep -i 'cloudflare\|cfut_\|dns_record\|CF_TOKEN\|CF_API' | tail -30
-            for u in $(ls /home/ 2>/dev/null); do
-              H="/home/$u/.bash_history"
-              if sudo test -f "$H"; then
-                echo "--- $H ---"
-                sudo cat "$H" 2>/dev/null | grep -i 'cloudflare\|cfut_\|CF_TOKEN' | tail -10
+            echo "=== 5. SSL certificate ==="
+            if [ ! -f /etc/letsencrypt/live/second.cent-solution.online/fullchain.pem ]; then
+              if [ -n "$RESOLVE" ]; then
+                echo "Getting SSL cert..."
+                sudo certbot --apache -d second.cent-solution.online --non-interactive --agree-tos --email videowatch.show@gmail.com --redirect 2>&1 || echo "Certbot failed"
+              else
+                echo "DNS not ready, skip SSL"
               fi
-            done
+            else
+              echo "SSL cert exists"
+            fi
 
             echo ""
-            echo "=== 8. All .secrets files ==="
-            sudo ls -la /root/.secrets/ 2>/dev/null
-            for f in $(sudo ls /root/.secrets/ 2>/dev/null); do
-              echo "--- /root/.secrets/$f ---"
-              sudo cat "/root/.secrets/$f" 2>/dev/null
-            done
+            echo "=== 6. Final check ==="
+            curl -sI "https://second.cent-solution.online/" --max-time 5 2>&1 | head -5 || echo "Not reachable yet"
 
-            echo ""
-            echo "=== 9. Systemd + env ==="
-            sudo grep -rl --binary-files=without-match 'CLOUDFLARE\|CF_TOKEN\|cfut_' /etc/systemd/ /etc/default/ /etc/environment 2>/dev/null | head -10
-            sudo cat /etc/environment 2>/dev/null
-
-            echo ""
-            echo "=== 10. Git history on server ==="
-            for d in /opt/gauth-full /var/www/sites/gucci /var/www/sites/chamgyo; do
-              if sudo test -d "$d/.git"; then
-                echo "--- $d git log ---"
-                cd "$d" && sudo git log -p --all -S 'cfut_' 2>/dev/null | grep -A1 -B1 'cfut_' | head -20
-              fi
-            done
-
-            echo ""
             echo "=== DONE ==="
