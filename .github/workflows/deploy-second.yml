@@ -64,9 +64,6 @@ jobs:
             sudo apache2ctl configtest 2>&1 && sudo systemctl reload apache2 && echo "Apache configured (HTTP)" || echo "Apache config test failed"
 
             echo "=== Cloudflare DNS (from server env) ==="
-            echo "DEBUG: searching for CF credentials..."
-            sudo grep -rl 'CLOUDFLARE\|CF_TOKEN\|CF_ZONE' /opt/gauth-full/ /etc/systemd/system/gauth* /var/www/sites/gauth/ /etc/environment /root/.env 2>/dev/null | head -20 || echo "no files found"
-            sudo grep -h 'CLOUDFLARE\|CF_TOKEN\|CF_ZONE' /opt/gauth-full/.env /opt/gauth-full/*.env /etc/systemd/system/gauth.service /var/www/sites/gauth/.env /etc/environment /root/.env 2>/dev/null | sed 's/=.\{6\}/=REDACT.../' || echo "no matches"
             CF_TOKEN=""
             CF_ZONE=""
             for f in /opt/gauth-full/.env /etc/environment /var/www/sites/gauth/.env /root/.env; do
@@ -88,10 +85,10 @@ jobs:
               else
                 SERVER_IP=$(curl -s ifconfig.me)
                 echo "Creating DNS A record: second -> $SERVER_IP"
-                curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
+                DNS_RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
                   -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
-                  --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}" \
-                  | python3 -c "import json,sys; d=json.load(sys.stdin); print('DNS created:', d.get('success',False))" 2>/dev/null
+                  --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
+                echo "$DNS_RESULT" | python3 -c "import json,sys; d=json.load(sys.stdin); print('DNS created:', d.get('success',False)); [print('  error:', e.get('message','')) for e in d.get('errors',[])]" 2>/dev/null || echo "DNS response: $DNS_RESULT"
               fi
               sleep 5
             else
