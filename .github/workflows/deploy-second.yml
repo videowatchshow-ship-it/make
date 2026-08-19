@@ -46,24 +46,7 @@ jobs:
             fi
 
             echo "=== Creating systemd service ==="
-            sudo tee /etc/systemd/system/second.service > /dev/null << 'SVCEOF'
-[Unit]
-Description=second sub-site
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/var/www/sites/second
-Environment=YOUTUBE_OAUTH_CLIENT_ID=
-EnvironmentFile=-/var/www/sites/second/.env
-ExecStart=/usr/bin/node server.js
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-SVCEOF
+            printf '[Unit]\nDescription=second sub-site\nAfter=network.target\n\n[Service]\nType=simple\nUser=root\nWorkingDirectory=/var/www/sites/second\nEnvironment=YOUTUBE_OAUTH_CLIENT_ID=\nEnvironmentFile=-/var/www/sites/second/.env\nExecStart=/usr/bin/node server.js\nRestart=always\nRestartSec=5\n\n[Install]\nWantedBy=multi-user.target\n' | sudo tee /etc/systemd/system/second.service > /dev/null
 
             sudo systemctl daemon-reload
             sudo systemctl enable second
@@ -72,43 +55,21 @@ SVCEOF
             systemctl is-active second && echo "=== second is running ===" || echo "=== second FAILED ==="
             curl -s --max-time 3 http://localhost:3023/api/second/accounts || echo "API not reachable yet"
 
-            echo "=== Configuring Apache reverse proxy for second.cent-solution.online ==="
+            echo "=== Configuring Apache reverse proxy ==="
             if [ ! -f /etc/apache2/sites-available/second.conf ]; then
               sudo a2enmod proxy proxy_http ssl rewrite headers 2>/dev/null || true
-              sudo tee /etc/apache2/sites-available/second.conf > /dev/null << 'APACHEEOF'
-<VirtualHost *:80>
-    ServerName second.cent-solution.online
-    RewriteEngine On
-    RewriteCond %{HTTPS} off
-    RewriteRule ^(.*)$ https://%{HTTP_HOST}$1 [R=301,L]
-</VirtualHost>
-
-<VirtualHost *:443>
-    ServerName second.cent-solution.online
-
-    SSLEngine on
-    SSLCertificateFile /etc/letsencrypt/live/cent-solution.online/fullchain.pem
-    SSLCertificateKeyFile /etc/letsencrypt/live/cent-solution.online/privkey.pem
-
-    ProxyPreserveHost On
-    ProxyPass / http://127.0.0.1:3023/
-    ProxyPassReverse / http://127.0.0.1:3023/
-
-    Header always set X-Content-Type-Options "nosniff"
-    Header always set X-Frame-Options "SAMEORIGIN"
-</VirtualHost>
-APACHEEOF
+              printf '<VirtualHost *:80>\n    ServerName second.cent-solution.online\n    RewriteEngine On\n    RewriteCond %%{HTTPS} off\n    RewriteRule ^(.*)$ https://%%{HTTP_HOST}$1 [R=301,L]\n</VirtualHost>\n\n<VirtualHost *:443>\n    ServerName second.cent-solution.online\n    SSLEngine on\n    SSLCertificateFile /etc/letsencrypt/live/cent-solution.online/fullchain.pem\n    SSLCertificateKeyFile /etc/letsencrypt/live/cent-solution.online/privkey.pem\n    ProxyPreserveHost On\n    ProxyPass / http://127.0.0.1:3023/\n    ProxyPassReverse / http://127.0.0.1:3023/\n    Header always set X-Content-Type-Options "nosniff"\n    Header always set X-Frame-Options "SAMEORIGIN"\n</VirtualHost>\n' | sudo tee /etc/apache2/sites-available/second.conf > /dev/null
               sudo a2ensite second 2>/dev/null
-              sudo apache2ctl configtest 2>&1 && sudo systemctl reload apache2 && echo "Apache configured for second.cent-solution.online" || echo "Apache config test failed"
+              sudo apache2ctl configtest 2>&1 && sudo systemctl reload apache2 && echo "Apache configured" || echo "Apache config test failed"
             else
               echo "Apache vhost already exists"
               sudo systemctl reload apache2
             fi
 
-            echo "=== Requesting SSL certificate if needed ==="
+            echo "=== SSL certificate ==="
             if [ ! -f /etc/letsencrypt/live/second.cent-solution.online/fullchain.pem ]; then
               if command -v certbot >/dev/null 2>&1; then
-                sudo certbot --apache -d second.cent-solution.online --non-interactive --agree-tos --email videowatch.show@gmail.com 2>&1 || echo "Certbot failed — using wildcard cert if available"
+                sudo certbot --apache -d second.cent-solution.online --non-interactive --agree-tos --email videowatch.show@gmail.com 2>&1 || echo "Certbot failed, using wildcard cert"
               fi
             else
               echo "SSL cert already exists"
@@ -120,7 +81,7 @@ APACHEEOF
           CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
         run: |
           if [ -z "${CF_TOKEN}" ] || [ -z "${CF_ZONE}" ]; then
-            echo "Cloudflare secrets not set — skipping DNS"
+            echo "Cloudflare secrets not set, skipping DNS"
             exit 0
           fi
 
@@ -130,7 +91,7 @@ APACHEEOF
           COUNT=$(echo "$EXISTING" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('result',[])))" 2>/dev/null || echo "0")
 
           if [ "$COUNT" != "0" ]; then
-            echo "DNS record already exists for second.cent-solution.online"
+            echo "DNS record already exists"
           else
             echo "=== Getting server IP from gauth record ==="
             GAUTH_REC=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?name=gauth.cent-solution.online&type=A" \
@@ -138,11 +99,11 @@ APACHEEOF
             SERVER_IP=$(echo "$GAUTH_REC" | python3 -c "import json,sys; d=json.load(sys.stdin); r=d.get('result',[]); print(r[0]['content'] if r else '')" 2>/dev/null)
 
             if [ -z "$SERVER_IP" ]; then
-              echo "Could not find gauth IP — skipping DNS"
+              echo "Could not find gauth IP, skipping DNS"
               exit 0
             fi
 
-            echo "=== Creating DNS A record: second.cent-solution.online → $SERVER_IP ==="
+            echo "=== Creating DNS A record: second -> $SERVER_IP ==="
             curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
               -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
               --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}" \
