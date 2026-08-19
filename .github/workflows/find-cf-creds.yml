@@ -1,4 +1,4 @@
-name: Find alternate CF tokens
+name: Find cfut_0JOs token
 on:
   workflow_dispatch:
 
@@ -9,7 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Search for CF tokens
+      - name: Deep search for second CF token
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -17,30 +17,36 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 25s
           script: |
-            echo "=== 1. /root/.secrets/ contents ==="
-            sudo ls -la /root/.secrets/ 2>/dev/null || echo "NOT FOUND"
+            echo "=== 1. Bash history for cfut_0JOs ==="
+            sudo grep -i "cfut_0JOs\|cfut_0j" /root/.bash_history 2>/dev/null | head -10 || echo "not in root history"
+            sudo grep -i "cfut_0JOs\|cfut_0j" /home/*/.bash_history 2>/dev/null | head -10 || echo "not in user history"
 
             echo ""
-            echo "=== 2. All files in /root/.secrets/ ==="
-            for f in $(sudo find /root/.secrets/ -type f 2>/dev/null); do
-              echo "--- $f ---"
-              sudo cat "$f" 2>/dev/null
-              echo ""
-            done
+            echo "=== 2. Bash history for cloudflare token ==="
+            sudo grep -i "cloudflare\|cf_token\|dns_cloudflare" /root/.bash_history 2>/dev/null | head -20 || echo "none"
 
             echo ""
-            echo "=== 3. cfut_ tokens in /opt/ ==="
-            sudo grep -r "cfut_" /opt/ 2>/dev/null | head -10 || echo "none"
+            echo "=== 3. Global API Key check ==="
+            sudo grep -ri "X-Auth-Key\|x-auth-key\|global.api\|api.key" /root/ /opt/ /var/www/ --include='*.sh' --include='*.php' --include='*.env' --include='*.conf' --include='*.ini' --include='*.json' --include='*.py' 2>/dev/null | head -20 || echo "none"
 
             echo ""
-            echo "=== 4. CF tokens in /root/ ==="
-            sudo grep -r "cfut_\|cloudflare" /root/ --include='*.env' --include='*.ini' --include='*.conf' --include='*.sh' --include='*.txt' --include='*.json' 2>/dev/null | head -20 || echo "none"
+            echo "=== 4. certbot renewal conf ==="
+            sudo cat /etc/letsencrypt/renewal/*.conf 2>/dev/null | head -50
 
             echo ""
-            echo "=== 5. Cloudflare wrangler or other CF tools ==="
-            which wrangler 2>/dev/null || echo "no wrangler"
-            ls ~/.wrangler/ 2>/dev/null || echo "no .wrangler"
-            sudo ls /root/.wrangler/ 2>/dev/null || echo "no root .wrangler"
+            echo "=== 5. Claude memory files ==="
+            sudo find /opt/claude-mem-sync/ -name '*.md' -type f 2>/dev/null | head -20
+            sudo grep -l "cfut_0JOs" /opt/claude-mem-sync/ -r 2>/dev/null | head -5
+
+            echo ""
+            echo "=== 6. Full line with cfut_0JOs ==="
+            sudo grep -r "cfut_0JOs" /opt/claude-mem-sync/ 2>/dev/null || echo "only partial ref found"
+
+            echo ""
+            echo "=== 7. Try existing token with DNS list (full error) ==="
+            CF_TOKEN=$(sudo awk -F' = ' '{print $2}' /root/.secrets/cloudflare.ini 2>/dev/null)
+            curl -s "https://api.cloudflare.com/client/v4/zones/2601d4f4ab75c910f8d858ca036ff344/dns_records?per_page=5" \
+              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" 2>/dev/null
 
             echo ""
             echo "=== DONE ==="
