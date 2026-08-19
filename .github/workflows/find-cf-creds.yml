@@ -1,47 +1,44 @@
-name: Find second CF token everywhere
+name: Fast CF token search
 on:
   workflow_dispatch:
 
 jobs:
   search:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deep search for second CF token
+      - name: Fast search
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 3m
+          command_timeout: 90s
           script: |
-            echo "=== 1. All files in claude-mem-sync ==="
+            echo "=== 1. All claude-mem-sync files ==="
             sudo find /opt/claude-mem-sync/ -type f 2>/dev/null
 
             echo ""
-            echo "=== 2. Search 0JOs anywhere ==="
-            sudo grep -r "0JOs" /opt/ /root/ /home/ /etc/ /var/www/ 2>/dev/null | head -20
+            echo "=== 2. Search 0JOs in opt and root only ==="
+            sudo grep -r "0JOs" /opt/claude-mem-sync/ 2>/dev/null
+            sudo grep -r "0JOs" /root/.secrets/ /root/.cloudflare/ /root/.config/ 2>/dev/null
 
             echo ""
-            echo "=== 3. All memory files content ==="
-            for f in $(sudo find /opt/claude-mem-sync/ -type f -name '*.md' 2>/dev/null); do
-              echo "--- $f ---"
-              sudo head -5 "$f" 2>/dev/null
-              echo ""
-            done
-
-            echo ""
-            echo "=== 4. List CF tokens via existing token ==="
+            echo "=== 3. CF token list via API ==="
             CF_TOKEN=$(sudo awk -F' = ' '{print $2}' /root/.secrets/cloudflare.ini 2>/dev/null)
-            curl -s -X GET "https://api.cloudflare.com/client/v4/user/tokens" \
+            curl -s "https://api.cloudflare.com/client/v4/user/tokens" \
               -H "Authorization: Bearer $CF_TOKEN" \
               -H "Content-Type: application/json" 2>/dev/null
 
             echo ""
-            echo "=== 5. Check Cloudflare configs everywhere ==="
-            sudo grep -r "cloudflare" /root/ /opt/ /etc/ 2>/dev/null | grep -iv "node_modules\|.git\|Binary\|certbot\|snap" | head -30
+            echo "=== 4. CF Global API Key search ==="
+            sudo grep -ri "global.*api.*key\|x-auth-key\|api_key" /root/ /opt/claude-mem-sync/ 2>/dev/null | grep -v node_modules | head -10
+
+            echo ""
+            echo "=== 5. Cloudflare email search ==="
+            sudo grep -ri "x-auth-email\|cloudflare.*email\|cf.*email" /root/ /opt/ 2>/dev/null | grep -v node_modules | grep -v .git | head -10
 
             echo ""
             echo "=== DONE ==="
