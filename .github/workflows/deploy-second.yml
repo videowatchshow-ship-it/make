@@ -22,13 +22,27 @@ jobs:
           target: "/tmp/second-deploy"
           strip_components: 2
 
-      - name: Setup and start second sub-site
+      - name: Debug GitHub Secrets availability
+        run: |
+          echo "CLOUDFLARE_TOKEN length: ${#CF_TK}"
+          echo "CLOUDFLARE_ZONE_ID length: ${#CF_ZN}"
+          if [ -n "$CF_TK" ]; then echo "CLOUDFLARE_TOKEN is SET"; else echo "CLOUDFLARE_TOKEN is EMPTY"; fi
+          if [ -n "$CF_ZN" ]; then echo "CLOUDFLARE_ZONE_ID is SET"; else echo "CLOUDFLARE_ZONE_ID is EMPTY"; fi
+        env:
+          CF_TK: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZN: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+
+      - name: Setup server, DNS, SSL
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          CF_TOKEN_SECRET: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE_SECRET: ${{ secrets.CLOUDFLARE_ZONE_ID }}
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 8m
+          envs: CF_TOKEN_SECRET,CF_ZONE_SECRET
           script: |
             SITE_DIR="/var/www/sites/second"
             echo "=== Deploying second sub-site ==="
@@ -38,6 +52,10 @@ jobs:
             sudo cp /tmp/second-deploy/public/index.html "$SITE_DIR/public/index.html"
             rm -rf /tmp/second-deploy
 
+            echo "=== Setting YouTube OAuth in .env ==="
+            echo "YOUTUBE_OAUTH_CLIENT_ID=623586529607-j8o758hs32rn669o2v6bsr02us1jn6rm.apps.googleusercontent.com" | sudo tee "$SITE_DIR/.env" > /dev/null
+            echo ".env written"
+
             echo "=== Installing express if needed ==="
             cd "$SITE_DIR"
             if [ ! -d "node_modules/express" ]; then
@@ -46,7 +64,7 @@ jobs:
             fi
 
             echo "=== Creating systemd service ==="
-            printf '[Unit]\nDescription=second sub-site\nAfter=network.target\n\n[Service]\nType=simple\nUser=root\nWorkingDirectory=/var/www/sites/second\nEnvironment=YOUTUBE_OAUTH_CLIENT_ID=\nEnvironmentFile=-/var/www/sites/second/.env\nExecStart=/usr/bin/node server.js\nRestart=always\nRestartSec=5\n\n[Install]\nWantedBy=multi-user.target\n' | sudo tee /etc/systemd/system/second.service > /dev/null
+            printf '[Unit]\nDescription=second sub-site\nAfter=network.target\n\n[Service]\nType=simple\nUser=root\nWorkingDirectory=/var/www/sites/second\nEnvironmentFile=-/var/www/sites/second/.env\nExecStart=/usr/bin/node server.js\nRestart=always\nRestartSec=5\n\n[Install]\nWantedBy=multi-user.target\n' | sudo tee /etc/systemd/system/second.service > /dev/null
 
             sudo systemctl daemon-reload
             sudo systemctl enable second
@@ -64,105 +82,61 @@ jobs:
             sudo apache2ctl configtest 2>&1 && sudo systemctl reload apache2 && echo "Apache configured (HTTP)" || echo "Apache config test failed"
 
             echo "=== Cloudflare DNS ==="
-            CF_TOKEN=$(sudo grep -oP 'dns_cloudflare_api_token\s*=\s*\K\S+' /root/.secrets/cloudflare.ini 2>/dev/null)
-            CF_ZONE=""
-            DNS_CREATED="false"
-            NEW_DNS_TOKEN=""
+            CF_TOKEN="${CF_TOKEN_SECRET}"
+            CF_ZONE="${CF_ZONE_SECRET}"
+            echo "CF_TOKEN_SECRET length: ${#CF_TOKEN}"
+            echo "CF_ZONE_SECRET length: ${#CF_ZONE}"
 
-            if [ -n "$CF_TOKEN" ]; then
-              echo "Got certbot token"
-              ZONE_RESP=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=cent-solution.online" \
-                -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
-              CF_ZONE=$(echo "$ZONE_RESP" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);const r=j.result||[];console.log(r.length?r[0].id:"")}catch(e){console.log("")}})' 2>/dev/null)
-              echo "Zone: $CF_ZONE"
-
-              if [ -n "$CF_ZONE" ]; then
-                EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?name=second.cent-solution.online&type=A" \
-                  -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
-                COUNT=$(echo "$EXISTING" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);console.log((j.result||[]).length)}catch(e){console.log("0")}})' 2>/dev/null || echo "0")
-
-                if [ "$COUNT" != "0" ]; then
-                  echo "DNS A record already exists"
-                  DNS_CREATED="true"
-                else
-                  SERVER_IP=$(curl -s ifconfig.me)
-                  echo "Server IP: $SERVER_IP"
-
-                  echo "--- Creating new CF token with DNS Edit permission ---"
-                  ACCT_RESP=$(curl -s "https://api.cloudflare.com/client/v4/accounts" \
-                    -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
-                  ACCT_ID=$(echo "$ACCT_RESP" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);const r=j.result||[];console.log(r.length?r[0].id:"")}catch(e){console.log("")}})' 2>/dev/null)
-                  echo "Account ID: $ACCT_ID"
-
-                  DNS_EDIT_PG="4755a26eedb94da69e1066d98aa820be"
-                  ZONE_READ_PG="c8fed203ed3043cba015a93ad1616f1f"
-
-                  NEW_TOKEN_BODY="{\"name\":\"dns-edit-auto\",\"policies\":[{\"effect\":\"allow\",\"resources\":{\"com.cloudflare.api.account.zone.${CF_ZONE}\":\"*\"},\"permission_groups\":[{\"id\":\"${DNS_EDIT_PG}\"},{\"id\":\"${ZONE_READ_PG}\"}]}]}"
-                  echo "Token request body: $NEW_TOKEN_BODY"
-
-                  NEW_RESP=$(curl -s -X POST "https://api.cloudflare.com/client/v4/user/tokens" \
-                    -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
-                    --data "$NEW_TOKEN_BODY")
-                  echo "New token response: $NEW_RESP"
-
-                  NEW_DNS_TOKEN=$(echo "$NEW_RESP" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const v=JSON.parse(d).result.value;if(v)console.log(v);else console.log("")}catch(e){console.log("")}})' 2>/dev/null)
-
-                  if [ -n "$NEW_DNS_TOKEN" ]; then
-                    echo "New DNS token created!"
-                    DNS_R=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
-                      -H "Authorization: Bearer ${NEW_DNS_TOKEN}" -H "Content-Type: application/json" \
-                      --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
-                    echo "DNS result: $DNS_R"
-                    DNS_OK=$(echo "$DNS_R" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{console.log(JSON.parse(d).success)}catch(e){console.log("false")}})' 2>/dev/null)
-                    [ "$DNS_OK" = "true" ] && DNS_CREATED="true" && echo "DNS A record created!"
-
-                    sudo sh -c "echo 'dns_cloudflare_api_token = '${NEW_DNS_TOKEN} > /root/.secrets/cloudflare_dns.ini"
-                    sudo chmod 600 /root/.secrets/cloudflare_dns.ini
-                    echo "Saved new token to /root/.secrets/cloudflare_dns.ini"
-                  else
-                    echo "Cannot create new token - trying direct with original token"
-                    DNS_R=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
-                      -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
-                      --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
-                    echo "DNS result: $DNS_R"
-                    DNS_OK=$(echo "$DNS_R" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{console.log(JSON.parse(d).success)}catch(e){console.log("false")}})' 2>/dev/null)
-                    [ "$DNS_OK" = "true" ] && DNS_CREATED="true"
-                  fi
-                fi
-              fi
+            if [ -z "$CF_TOKEN" ]; then
+              echo "GitHub secret CLOUDFLARE_TOKEN is empty, falling back to server token"
+              CF_TOKEN=$(sudo cat /root/.secrets/cloudflare.ini 2>/dev/null | grep -oP 'dns_cloudflare_api_token\s*=\s*\K\S+' | head -1)
+              echo "Server token length: ${#CF_TOKEN}"
             fi
 
-            if [ "$DNS_CREATED" = "true" ]; then
-              echo "=== DNS created, waiting ==="
-              sleep 15
+            if [ -z "$CF_ZONE" ]; then
+              CF_ZONE="2601d4f4ab75c910f8d858ca036ff344"
+              echo "Using hardcoded zone ID"
+            fi
+
+            if [ -n "$CF_TOKEN" ]; then
+              echo "=== Verifying token ==="
+              VERIFY=$(curl -s "https://api.cloudflare.com/client/v4/user/tokens/verify" \
+                -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
+              echo "Verify: $VERIFY"
+
+              echo "=== Checking existing DNS ==="
+              EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?name=second.cent-solution.online&type=A" \
+                -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
+              HAS_RECORD=$(echo "$EXISTING" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{console.log((JSON.parse(d).result||[]).length)}catch(e){console.log("0")}})' 2>/dev/null)
+              echo "Existing records: $HAS_RECORD"
+
+              if [ "$HAS_RECORD" = "0" ]; then
+                SERVER_IP=$(curl -s ifconfig.me)
+                echo "Creating DNS A record: second -> $SERVER_IP"
+                DNS_RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
+                  -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+                  --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
+                echo "DNS result: $DNS_RESULT"
+              else
+                echo "DNS record already exists"
+              fi
             else
-              echo "=== DNS not created ==="
+              echo "No CF token available, skipping DNS"
             fi
 
             echo "=== SSL certificate ==="
-            if sudo test -f /etc/letsencrypt/live/second.cent-solution.online/fullchain.pem; then
-              echo "SSL cert already exists"
+            if [ ! -f /etc/letsencrypt/live/second.cent-solution.online/fullchain.pem ]; then
+              echo "Checking if second.cent-solution.online resolves..."
+              RESOLVE=$(dig +short second.cent-solution.online 2>/dev/null || nslookup second.cent-solution.online 2>/dev/null | grep -oP 'Address:\s*\K[0-9.]+' | tail -1)
+              echo "DNS resolve: $RESOLVE"
+              if [ -n "$RESOLVE" ]; then
+                echo "Domain resolves, trying certbot --apache (HTTP challenge)..."
+                sudo certbot --apache -d second.cent-solution.online --non-interactive --agree-tos --email videowatch.show@gmail.com --redirect 2>&1 || echo "Certbot failed"
+              else
+                echo "Domain does not resolve yet, skipping SSL"
+              fi
             else
-              SSL_CREDS="/root/.secrets/cloudflare.ini"
-              if [ -n "$NEW_DNS_TOKEN" ]; then
-                SSL_CREDS="/root/.secrets/cloudflare_dns.ini"
-              fi
-              if command -v certbot >/dev/null 2>&1 && sudo test -f "$SSL_CREDS"; then
-                echo "Running certbot dns-cloudflare with $SSL_CREDS..."
-                sudo certbot certonly --dns-cloudflare \
-                  --dns-cloudflare-credentials "$SSL_CREDS" \
-                  -d second.cent-solution.online \
-                  --non-interactive --agree-tos \
-                  --email videowatch.show@gmail.com 2>&1
-                if sudo test -f /etc/letsencrypt/live/second.cent-solution.online/fullchain.pem; then
-                  echo "SSL cert obtained!"
-                  printf '<VirtualHost *:443>\n    ServerName second.cent-solution.online\n    SSLEngine on\n    SSLCertificateFile /etc/letsencrypt/live/second.cent-solution.online/fullchain.pem\n    SSLCertificateKeyFile /etc/letsencrypt/live/second.cent-solution.online/privkey.pem\n    ProxyPreserveHost On\n    ProxyPass / http://127.0.0.1:3023/\n    ProxyPassReverse / http://127.0.0.1:3023/\n    Header always set X-Content-Type-Options "nosniff"\n    Header always set X-Frame-Options "SAMEORIGIN"\n</VirtualHost>\n' | sudo tee /etc/apache2/sites-available/second-le-ssl.conf > /dev/null
-                  sudo a2ensite second-le-ssl 2>/dev/null
-                  sudo apache2ctl configtest 2>&1 && sudo systemctl reload apache2 && echo "Apache HTTPS configured"
-                else
-                  echo "Certbot failed"
-                fi
-              fi
+              echo "SSL cert already exists"
             fi
 
-            echo "=== Deploy complete ==="
+            echo "=== DONE ==="
