@@ -1,49 +1,51 @@
-name: Deep search chamgyo server for CF token
+name: Read gucci cloudflare config files
 on:
   workflow_dispatch:
 
 jobs:
   search:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 2
     steps:
       - uses: actions/checkout@v4
 
-      - name: Search chamgyo and all sites for CF tokens
+      - name: Read CF config files
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 90s
+          command_timeout: 30s
           script: |
-            echo "=== 1. All cfut_ tokens on server (excluding node_modules) ==="
-            sudo grep -r "cfut_" /var/www/ /opt/ /etc/ /root/ --include="*.js" --include="*.json" --include="*.env" --include="*.ini" --include="*.cfg" --include="*.conf" --include="*.md" --include="*.txt" --include="*.sh" --include="*.yaml" --include="*.yml" 2>/dev/null | grep -v node_modules | head -30
+            echo "=== 1. cloudflare-config.php ==="
+            sudo cat /var/www/sites/gucci/config/cloudflare-config.php 2>/dev/null
 
             echo ""
-            echo "=== 2. Cloudflare config files anywhere ==="
-            sudo find /var/www/ /opt/ /root/ /home/ -name "*.cloudflare*" -o -name "*cloudflare*" -o -name ".cf" 2>/dev/null | grep -v node_modules | head -20
+            echo "=== 2. cloudflare-waf-config.php ==="
+            sudo cat /var/www/sites/gucci/config/cloudflare-waf-config.php 2>/dev/null
 
             echo ""
-            echo "=== 3. chamgyo site structure ==="
-            ls -la /var/www/sites/chamgyo/ 2>/dev/null
-            ls -la /var/www/sites/chamgyo/public/ 2>/dev/null | head -10
+            echo "=== 3. All config files in gucci/config/ ==="
+            ls -la /var/www/sites/gucci/config/ 2>/dev/null
 
             echo ""
-            echo "=== 4. All .env and config files in /var/www/sites/ ==="
-            sudo find /var/www/sites/ -maxdepth 3 -name ".env" -o -name "*.ini" -o -name "*.cfg" 2>/dev/null | head -20
-            for f in $(sudo find /var/www/sites/ -maxdepth 3 -name ".env" 2>/dev/null); do
-              echo "--- $f ---"
-              sudo cat "$f" 2>/dev/null
-            done
+            echo "=== 4. gucci .env full ==="
+            sudo cat /var/www/sites/gucci/.env 2>/dev/null
 
             echo ""
-            echo "=== 5. Cloudflare in bash history ==="
-            sudo grep -i "cloudflare\|cfut_\|dns_record" /root/.bash_history /home/*/.bash_history 2>/dev/null | tail -20
+            echo "=== 5. migrate_udongka.sh CF section ==="
+            sudo cat /opt/gauth-full/scripts/migrate_udongka.sh 2>/dev/null | grep -A2 -B2 "CF_TOKEN\|ZONE\|cloudflare\|cfut_"
 
             echo ""
-            echo "=== 6. All tokens in claude-mem-sync cent-solution file ==="
-            sudo cat /opt/claude-mem-sync/proj1/cent-solution-on-gcp.md 2>/dev/null
+            echo "=== 6. Token permissions check ==="
+            CF_TOKEN=$(sudo awk -F' = ' '{print $2}' /root/.secrets/cloudflare.ini 2>/dev/null)
+            curl -s "https://api.cloudflare.com/client/v4/user/tokens/verify" \
+              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" 2>/dev/null
+
+            echo ""
+            echo "=== 7. List all Cloudflare API tokens (account level) ==="
+            curl -s "https://api.cloudflare.com/client/v4/user/tokens" \
+              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" 2>/dev/null
 
             echo ""
             echo "=== DONE ==="
