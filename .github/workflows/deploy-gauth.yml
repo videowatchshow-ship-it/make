@@ -27,7 +27,7 @@ jobs:
         env:
           GAUTH_API_TOKEN: ${{ secrets.GAUTH_API_TOKEN }}
         run: |
-          BRANCH="${GITHUB_REF_NAME}"
+          BRANCH="claude/gauth-frontend-backend-fixes-cg2icv"
           PAYLOAD=$(python3 -c "import json; print(json.dumps({'branch': '$BRANCH'}))")
           HTTP_CODE=$(curl -s -o /tmp/resp.txt -w "%{http_code}" \
             -X POST https://gauth.cent-solution.online/api/deploy \
@@ -47,7 +47,7 @@ jobs:
           fi
 
       - name: Try SSH deploy
-        if: steps.api_deploy.outputs.deploy_ok != 'true'
+        if: always()
         id: ssh_deploy
         continue-on-error: true
         uses: appleboy/ssh-action@v1.0.3
@@ -746,6 +746,38 @@ jobs:
             echo ""
             echo "=== File hash ==="
             md5sum $FILE
+            echo ""
+            echo "=== JS function defs ==="
+            grep -n 'function escapeHtml\|var escapeHtml\|function _esc\|function _sortByExcelDate\|function render\|function applyFilter\|function load\b\|async function render\|async function load' $FILE | head -20
+            echo ""
+            echo "=== SW version ==="
+            grep -n "var V=" $FILE | head -5
+            grep -n "var CACHE=" /var/www/sites/gauth/public/sw.js 2>/dev/null | head -3
+            echo ""
+            echo "=== API test ==="
+            ACC_RESP=$(curl -s -o /tmp/acc_test.txt -w "%{http_code}" http://localhost:4000/api/normalized-accounts 2>/dev/null || echo "000")
+            echo "normalized-accounts HTTP: $ACC_RESP"
+            if [ "$ACC_RESP" = "200" ]; then
+              python3 -c "
+import json
+d=json.load(open('/tmp/acc_test.txt'))
+accs=d.get('accounts',[])
+print('accounts:', len(accs), 'summary:', d.get('summary',{}).get('total',0))
+files=d.get('summary',{}).get('file_details',[])
+print('=== file_details (source_file names) ===')
+for f in files[:20]:
+    print(' ', f.get('name','?'), '→', f.get('count',0))
+print('=== account_date samples (first 10 with date) ===')
+dated=[a for a in accs if a.get('account_date')]
+for a in dated[:10]:
+    print(' ', a.get('email','?')[:30], 'date:', a.get('account_date'), 'file:', a.get('source_file','?')[:50])
+print('=== accounts WITHOUT account_date:', len([a for a in accs if not a.get('account_date')]), '===')
+" 2>/dev/null || echo "JSON parse failed"
+            fi
+            echo ""
+            echo "=== Browser render test (first 3 lines of spacer content check) ==="
+            grep -c 'td-card' $FILE || echo "0 td-card refs"
+            grep -c 'sp.innerHTML' $FILE || echo "0 sp.innerHTML refs"
 
       - name: Summary
         if: always()

@@ -14,7 +14,7 @@ input{background:#161a20;border:1px solid #2a323c;color:#e8ecef;padding:9px 12px
 input:focus{outline:0;border-color:#2b6cff}
 select{background:#161a20;border:1px solid #2a323c;color:#e8ecef;padding:9px 10px;border-radius:6px;font-size:13px}
 #count{color:#8a95a5;font-size:12px;white-space:nowrap}
-#viewport{overflow-y:auto;height:calc(100vh - 220px)}
+#viewport{overflow-y:visible;min-height:200px}
 #spacer{}
 .row{padding:10px 20px;border-bottom:1px solid #1a1f26;display:grid;grid-template-columns:280px 100px 1fr 1fr 180px 170px;gap:10px;align-items:center;font-size:12.5px}
 .row:hover{background:#141821}
@@ -73,6 +73,27 @@ button:disabled{background:#333;cursor:not-allowed}
 #pwa-install-btn:hover{transform:scale(1.02);box-shadow:0 6px 24px rgba(255,144,64,.5)}
 </style></head>
 <body>
+<script>
+(function(){
+  var V='v36';
+  if(localStorage.getItem('gauth_sw')===V) return;
+  if(window.caches){
+    caches.keys().then(function(ks){
+      ks.forEach(function(k){ if(k!=='gauth-'+V) caches.delete(k); });
+    });
+  }
+  if(navigator.serviceWorker){
+    navigator.serviceWorker.getRegistrations().then(function(regs){
+      regs.forEach(function(r){r.unregister()});
+      navigator.serviceWorker.register('sw.js?v='+V).then(function(){
+        localStorage.setItem('gauth_sw',V);
+      });
+    });
+  } else {
+    localStorage.setItem('gauth_sw',V);
+  }
+})();
+</script>
 <div id="hero-banner">
   <div class="hero-glow"></div>
   <div class="hero-particles" id="heroParticles"></div>
@@ -118,10 +139,7 @@ button:disabled{background:#333;cursor:not-allowed}
 })();
 </script>
 
-<!-- 상단 메뉴 -->
-<div id="top-menu" style="display:flex;gap:0;background:#111418;border-bottom:1px solid #22282f">
-  <button onclick="toggleSection('excelUpBox',this)" style="flex:1;background:#111418;color:#3ddc84;border:none;padding:12px 8px;font-size:13px;font-weight:700;cursor:pointer">📊 엑셀 업로드</button>
-</div>
+
 
 <div style="padding:12px 16px;background:#0d1117"><button id="pwa-install-btn">📲 앱으로 설치</button></div>
 <div id="stream-info-box">
@@ -266,11 +284,9 @@ refreshAccStats();
 })();
 </script>
 
-<style>#excelUpProg::-webkit-progress-bar{background:#1a1f26;border-radius:10px}#excelUpProg::-webkit-progress-value{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px;transition:width .2s}#excelUpProg::-moz-progress-bar{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px}#excelUpProg{-webkit-appearance:none;appearance:none;border:none;border-radius:10px;background:#1a1f26}</style><div id="excelUpBox" style="display:none;margin:16px 20px;padding:16px;background:#161a20;border:1px solid #2a323c;border-radius:8px">
+<style>#excelUpProg::-webkit-progress-bar{background:#1a1f26;border-radius:10px}#excelUpProg::-webkit-progress-value{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px;transition:width .2s}#excelUpProg::-moz-progress-bar{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px}#excelUpProg{-webkit-appearance:none;appearance:none;border:none;border-radius:10px;background:#1a1f26}</style><div id="excelUpBox" style="display:block;margin:16px 20px;padding:16px;background:#161a20;border:1px solid #2a323c;border-radius:8px">
   <h3 style="margin:0 0 10px 0;color:#3ddc84;font-size:14px">📤 엑셀 일괄 업로드 (한번에 여러 파일)</h3>
   <input type="file" id="excelFiles" multiple accept=".xlsx,.xls,.csv" style="color:#e8ecef;font-size:13px">
-  <button id="folderScanBtn" style="margin-left:8px;padding:6px 14px;background:linear-gradient(135deg,#2b6cff,#3ddc84);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold">📁 로컬 폴더 선택</button>
-  <input type="file" id="folderInput" webkitdirectory multiple style="display:none">
   <div id="excelFileList" style="margin-top:8px;font-size:12px;color:#9fb3e0;font-family:monospace"></div>
   <button id="excelUpBtn" style="margin-left:10px">▶ 업로드 &amp; 취합</button>
   <div id="excelUpProgWrap" style="margin-top:10px;display:none"><progress id="excelUpProg" value="0" max="100" style="width:100%;height:20px"></progress><div id="excelUpProgTxt" style="margin-top:4px;font-size:12px;color:#3ddc84;text-align:right;font-family:monospace">0%</div></div><div id="excelUpResult" style="margin-top:12px;font-size:12.5px;color:#c9d2dc;font-family:'SF Mono',monospace;white-space:pre-wrap"></div>
@@ -314,44 +330,6 @@ function accessBadge(a){
     list.innerHTML = '📎 <b>' + window._picked.length + '개 선택됨:</b> <button id="_clearFiles" style="padding:2px 8px;font-size:11px">🗑 초기화</button><br>' + arr.join('<br>');
     var cb = document.getElementById('_clearFiles');
     if(cb) cb.onclick = function(){ window._picked=[]; try{fi.value='';}catch(_){} renderList(); };
-  }
-  var folderBtn = document.getElementById('folderScanBtn');
-  var folderInput = document.getElementById('folderInput');
-  if(folderBtn && folderInput){
-    folderBtn.addEventListener('click', function(){ folderInput.click(); });
-    folderInput.addEventListener('change', function(){
-      var count = 0;
-      for(var i=0;i<folderInput.files.length;i++){
-        var f = folderInput.files[i];
-        if(!/\.(xlsx|xls|csv)$/i.test(f.name)) continue;
-        var dup = window._picked.some(function(x){ return x.name===f.name && x.size===f.size; });
-        if(!dup){ window._picked.push(f); count++; }
-      }
-      renderList();
-      if(count){ var o=document.getElementById('excelUpResult'); if(o) o.textContent='📁 폴더 스캔: 엑셀 '+count+'개 발견·추가 (총 '+window._picked.length+'개)'; }
-    });
-  }
-  var srvScanBtn = document.getElementById('serverFolderScanBtn');
-  var srvPathInput = document.getElementById('serverFolderPath');
-  var srvResult = document.getElementById('serverScanResult');
-  if(srvScanBtn && srvPathInput){
-    srvScanBtn.addEventListener('click', function(){
-      var folder = srvPathInput.value.trim();
-      if(!folder){ srvResult.textContent='⚠ 폴더 경로를 입력하세요'; return; }
-      srvScanBtn.disabled=true; srvScanBtn.textContent='⏳ 스캔 중...';
-      srvResult.textContent='서버 폴더 스캔 중: '+folder;
-      fetch(authQuery('/api/scan-folder'),{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({folder:folder})})
-      .then(function(r){ return r.json(); })
-      .then(function(d){
-        srvScanBtn.disabled=false; srvScanBtn.textContent='📂 서버 폴더 스캔';
-        if(!d.ok){ srvResult.textContent='❌ '+d.error; return; }
-        var lines = ['✅ 스캔 완료 — 총 '+d.total_parsed+'개 파싱, '+d.added+'개 추가, '+d.updated+'개 갱신 (마스터 '+d.total_master+'개)'];
-        if(d.files){d.files.forEach(function(f){ lines.push('  '+(f.error?'❌':'✅')+' '+f.name+': '+(f.error||f.accounts+'개'+(f.added?' (+'+f.added+')':''))); });}
-        srvResult.textContent=lines.join('\n');
-        load();
-      })
-      .catch(function(e){ srvScanBtn.disabled=false; srvScanBtn.textContent='📂 서버 폴더 스캔'; srvResult.textContent='❌ 오류: '+e.message; });
-    });
   }
   fi.addEventListener('change', function(){
     /* 새 선택된 파일을 누적 (같은 이름 중복은 이름+size로 dedup) */
@@ -630,14 +608,6 @@ updateUploadStatus();
   <button id="batch-run" style="background:#e0503a">▶ 미로그인만 로그인 (순서대로)</button>
   <button id="batch-stop" style="background:#666">■ 정지</button>
 </div>
-<div id="serverScanBox" style="margin:10px 20px;padding:12px 16px;background:#161a20;border:1px solid #2a323c;border-radius:8px">
-  <h3 style="margin:0 0 8px 0;color:#ffb347;font-size:14px">📂 서버 폴더 스캔</h3>
-  <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-    <input type="text" id="serverFolderPath" placeholder="서버 폴더 경로 (예: /opt/gauth-full/excels)" style="background:#1a1f26;border:1px solid #2a323c;color:#e8ecef;padding:8px 12px;border-radius:6px;font-size:14px;flex:1;min-width:200px">
-    <button id="serverFolderScanBtn" style="padding:8px 18px;background:linear-gradient(135deg,#ff6b2b,#ffb347);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:bold;white-space:nowrap">📂 폴더 스캔 시작</button>
-  </div>
-  <div id="serverScanResult" style="margin-top:8px;font-size:12px;color:#9fb3e0;font-family:monospace;white-space:pre-wrap"></div>
-</div>
 <div id="viewport"><div id="spacer"></div></div>
 <div id="pagination" style="padding:12px 20px;background:#0f1216;border-top:1px solid #22282f;display:flex;gap:6px;flex-wrap:wrap;justify-content:center;align-items:center"></div>
 
@@ -653,6 +623,15 @@ function authHeaders(extra){var h=extra||{};var t=getApiToken();if(t)h['Authoriz
 function authQuery(url){var t=getApiToken();if(!t)return url;return url+(url.indexOf('?')>=0?'&':'?')+'token='+encodeURIComponent(t)}
 function noCacheQuery(url){var u=authQuery(url);return u+(u.includes('?')?'&':'?')+'_t='+Date.now()}
 
+var escapeHtml = _esc
+function _sortByExcelDate(arr){
+  var withDate = arr.filter(function(a){ return a.account_date })
+  var noDate   = arr.filter(function(a){ return !a.account_date })
+  withDate.sort(function(a, b){ return b.account_date - a.account_date })
+  if(!withDate.length) return noDate.slice()
+  var mid = Math.ceil(withDate.length / 2)
+  return withDate.slice(0, mid).concat(noDate).concat(withDate.slice(mid))
+}
 let FAILED = {}
 async function load(){
   var n, p, f
@@ -684,11 +663,23 @@ async function load(){
     if(m){var y=parseInt(m[1].slice(0,4)),mo=parseInt(m[1].slice(4,6)),d=parseInt(m[1].slice(6,8));if(y>=2020&&y<=2030&&mo>=1&&mo<=12&&d>=1&&d<=31) return new Date(y,mo-1,d).getTime();}
     return null;
   }
+  function _fixMojibake(s){
+    if(!s) return s;
+    try{
+      var b=new Uint8Array(s.length),ok=true;
+      for(var i=0;i<s.length;i++){var c=s.charCodeAt(i);if(c>255){ok=false;break;}b[i]=c;}
+      if(!ok) return s;
+      var d=new TextDecoder('utf-8').decode(b);
+      if(d!==s&&d.indexOf('�')<0) return d;
+    }catch(e){}
+    return s;
+  }
   ALL = _accounts.map(function(a){
     var f = (FAILED[a.email] || {});
     var ad = a.account_date || _parseDateFromFilename(a.source_file) || null;
-    return Object.assign({}, a, {has_session: sess.has(a.email), lock_reason: f.reason || null, account_date: ad});
-  }).sort(function(x,y){ return (y.account_date||y.source_mtime||0) - (x.account_date||x.source_mtime||0) })
+    return Object.assign({}, a, {has_session: sess.has(a.email), lock_reason: f.reason || null, account_date: ad, source_file: _fixMojibake(a.source_file)});
+  })
+  ALL = _sortByExcelDate(ALL)
   var _fc = n.summary && n.summary.files_scanned;
   if(_fc == null){
     try { var _rp = await fetch(authQuery('/api/parse-report'),{cache:'no-store',headers:authHeaders()}).then(r=>r.json()); _fc = _rp && _rp.last_run && _rp.last_run.files; } catch(_){}
@@ -714,33 +705,19 @@ function applyFilter(){
     if (f==='locked' && !LOCK.includes(a.lock_reason)) return false
     return true
   })
-  var sortOrder = document.getElementById('td-order')
-  if(sortOrder){
-    var desc = sortOrder.value === 'desc'
-    FILTERED.sort(function(x,y){
-      var d = (x.account_date||x.source_mtime||0) - (y.account_date||y.source_mtime||0)
-      return desc ? -d : d
-    })
-  }
-  const _ll = localStorage.getItem('gauth_last_lookup')
-  if(_ll){
-    const _li = FILTERED.findIndex(a=>a.email===_ll)
-    if(_li>0){ FILTERED.unshift(FILTERED.splice(_li,1)[0]) }
-  }
+  FILTERED = _sortByExcelDate(FILTERED)
   PAGE = 1
   const totalPages = Math.max(1, Math.ceil(FILTERED.length / PAGE_SIZE))
   document.getElementById('count').textContent = `${FILTERED.length.toLocaleString()}개 · ${totalPages}페이지`
   render()
 }
 async function render(){
+  try{
   var totalPages = Math.max(1, Math.ceil(FILTERED.length / PAGE_SIZE))
   if (PAGE > totalPages) PAGE = totalPages
   var start = (PAGE-1) * PAGE_SIZE
   var end = Math.min(FILTERED.length, start + PAGE_SIZE)
   const slice = FILTERED.slice(start, end)
-  const codes = await Promise.all(slice.map(a =>
-    a.totp_secret ? fetch(authQuery('/codes/'+a.totp_secret),{headers:authHeaders()}).then(r=>r.json()).then(j=>j.code||'—').catch(()=>'—') : Promise.resolve('—')
-  ))
   const _cur = localStorage.getItem('gauth_last_lookup')||''
   var rows = []
   for (let i=0;i<slice.length;i++){
@@ -761,7 +738,7 @@ async function render(){
         <div class="td-label" style="color:#8a95a5">#${idx}</div><div><b class="td-email" style="color:#ffb469;font-size:14px;cursor:pointer" onclick="quickLookup('${_em}')">${_em}</b>${cp(a.email)} ${sess}${tfa}${lock}</div>
         <div class="td-label" style="color:#8a95a5">비밀번호</div><div class="mono td-val td-pw" style="color:#3ddc84">${_pw}${cp(a.password)}</div>
         <div class="td-label" style="color:#8a95a5">2FA 시크릿</div><div class="mono td-val td-secret"><span id="sec-${idx}">${_ts}</span>${cp(a.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${_em}','sec-${idx}')">✏️</button></div>
-        <div class="td-label" style="color:#8a95a5">2FA 코드</div><div class="mono td-val td-2fa-code" style="color:#7dabff;font-size:18px;font-weight:700;letter-spacing:2px"><span id="tdcode-${idx}">${codes[i]}</span>${a.totp_secret?cp('_','tdcode-'+idx):cp(codes[i]!=='—'?codes[i]:'')}${a.totp_secret?`<button style="background:#2a323c;padding:3px 8px;font-size:11px;margin-left:6px;color:#c9d2dc" onclick="tdRefreshCode(${idx},'${escapeHtml(a.totp_secret)}',this)">🔄 새로고침</button>`:''}</div>
+        <div class="td-label" style="color:#8a95a5">2FA 코드</div><div class="mono td-val td-2fa-code" style="color:#7dabff;font-size:18px;font-weight:700;letter-spacing:2px"><span id="tdcode-${idx}">…</span>${a.totp_secret?cp('_','tdcode-'+idx):''}${a.totp_secret?`<button style="background:#2a323c;padding:3px 8px;font-size:11px;margin-left:6px;color:#c9d2dc" onclick="tdRefreshCode(${idx},'${escapeHtml(a.totp_secret)}',this)">🔄 새로고침</button>`:''}</div>
         <div class="td-label" style="color:#8a95a5">동작</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button style="background:#7c3aed" onclick="programLogin('${_em}',this)">🔑 로그인</button><button style="background:#1c5a2a;color:#3ddc84;font-weight:700" onclick="ytApiConnect('${_em}',this)">📡 API 연결</button><button style="background:#1c2740;color:#7dabff;font-weight:700" onclick="ytChatShot('${_em}','sky82892 텔레 문의',this)">💬 채팅 샷</button><button style="background:#3a1c00;color:#ff9040;font-weight:700" onclick="ytSpanner('${_em}',this)">🔧 스패너</button></div>
         <div class="td-label" style="color:#8a95a5">YouTube</div><div class="mono td-val" style="color:#ff8a8a;font-size:11px">${yt&&/^https?:\/\//i.test(yt)?`<a href="${_yt}" target="_blank" style="color:#ff8a8a">${_yt}</a>${cp(yt)}`:'—'}</div>
         <div class="td-label" style="color:#8a95a5">복구</div><div class="mono td-val" style="font-size:11px">${_rc}</div>
@@ -771,6 +748,19 @@ async function render(){
   }
   sp.innerHTML = rows.join('')
   renderPagination(totalPages)
+  // TOTP 코드는 카드 렌더링 후 비동기로 채움
+  slice.forEach(function(a, i){
+    if(!a.totp_secret) return
+    var idx = start+i+1
+    var ctrl = new AbortController()
+    setTimeout(function(){ctrl.abort()},5000)
+    fetch(authQuery('/codes/'+a.totp_secret),{headers:authHeaders(),signal:ctrl.signal}).then(function(r){return r.json()}).then(function(j){
+      var el=document.getElementById('tdcode-'+idx); if(el) el.textContent=j.code||'—'
+    }).catch(function(){
+      var el=document.getElementById('tdcode-'+idx); if(el) el.textContent='—'
+    })
+  })
+  }catch(e){console.error('render error:',e);sp.innerHTML='<div style="padding:20px;color:#f47070">렌더링 오류: '+e.message+'</div>'}
 }
 function renderPagination(totalPages){
   const pg = document.getElementById('pagination')
@@ -1229,13 +1219,6 @@ load()
 
 
 <script>
-function toggleSection(id, btn) {
-  var el = document.getElementById(id);
-  if (!el) return;
-  var isHidden = el.style.display === 'none' || el.style.display === '';
-  el.style.display = isHidden ? 'block' : 'none';
-  btn.style.background = isHidden ? '#2b6cff' : '#1a1f28';
-}
 </script>
 
 
@@ -1245,7 +1228,6 @@ let _deferredPrompt;
 window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();_deferredPrompt=e;document.getElementById('pwa-install-btn').style.display='block'});
 document.getElementById('pwa-install-btn').addEventListener('click',function(){if(!_deferredPrompt)return;_deferredPrompt.prompt();_deferredPrompt.userChoice.then(function(r){if(r.outcome==='accepted'){_deferredPrompt=null;document.getElementById('pwa-install-btn').style.display='none'}}).catch(function(){})});
 window.addEventListener('appinstalled',function(){document.getElementById('pwa-install-btn').style.display='none'});
-if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(e){console.warn('SW registration failed:', e)})}
 document.addEventListener('visibilitychange',function(){if(document.hidden){if(_spannerInterval){clearInterval(_spannerInterval);_spannerInterval=-1}}else{if(_spannerInterval===-1){_spannerInterval=null}}})
 </script>
 </body></html>
