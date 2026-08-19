@@ -7,7 +7,7 @@ on:
         required: true
         default: 'dun23315@gmail.com'
       action:
-        description: 'inspect or add'
+        description: 'inspect, add, or fix-status'
         required: false
         default: 'inspect'
 
@@ -68,6 +68,9 @@ jobs:
                 const accs = Array.isArray(d) ? d : (d.accounts || []);
                 const t = accs.find(a => (a.email||'').toLowerCase() === process.argv[1].toLowerCase());
                 if (!t) { console.log('NOT_FOUND'); process.exit(0); }
+                if (!t.status) t.status = 'active';
+                if (!t.allocated_date) t.allocated_date = new Date().toISOString().slice(0,10);
+                if (t.totp_secret && !t.twofa_secret) t.twofa_secret = t.totp_secret;
                 console.log(JSON.stringify(t));
               " "$EMAIL")
 
@@ -121,4 +124,34 @@ jobs:
                   } catch(e) { console.log('API parse error:', e.message); }
                 });
               " "$EMAIL"
+            fi
+
+            if [ "$ACTION" = "fix-status" ]; then
+              echo "=== Fixing all sunbi accounts: adding status/allocated_date/twofa_secret ==="
+              sudo node -e "
+                const fs = require('fs');
+                const f = '$SUNBI_DIR/accounts.json';
+                const data = JSON.parse(fs.readFileSync(f,'utf8'));
+                const accounts = Array.isArray(data) ? data : (data.accounts || []);
+                let fixed = 0;
+                const today = new Date().toISOString().slice(0,10);
+                accounts.forEach(a => {
+                  if (!a.status) { a.status = 'active'; fixed++; }
+                  if (!a.allocated_date) { a.allocated_date = today; }
+                  if (a.totp_secret && !a.twofa_secret) { a.twofa_secret = a.totp_secret; }
+                });
+                fs.writeFileSync(f, JSON.stringify({accounts}, null, 2));
+                console.log('Fixed ' + fixed + '/' + accounts.length + ' accounts');
+                accounts.forEach(a => console.log(a.email + ': status=' + a.status));
+              "
+              sudo systemctl restart sunbi 2>/dev/null || echo "restart failed"
+              sleep 2
+              echo "=== Verify ==="
+              curl -s http://localhost:3013/api/sunbi/accounts | node -e "
+                let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
+                  const j=JSON.parse(d);const a=j.accounts||j||[];
+                  const active=a.filter(x=>x.status==='active').length;
+                  console.log('Total:',a.length,'Active:',active);
+                });
+              "
             fi
