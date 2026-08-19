@@ -24,15 +24,11 @@ jobs:
 
       - name: Setup and start second sub-site
         uses: appleboy/ssh-action@v1.0.3
-        env:
-          CF_TOKEN_SECRET: ${{ secrets.CLOUDFLARE_TOKEN }}
-          CF_ZONE_SECRET: ${{ secrets.CLOUDFLARE_ZONE_ID }}
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 8m
-          envs: CF_TOKEN_SECRET,CF_ZONE_SECRET
           script: |
             SITE_DIR="/var/www/sites/second"
             echo "=== Deploying second sub-site ==="
@@ -68,129 +64,54 @@ jobs:
             sudo apache2ctl configtest 2>&1 && sudo systemctl reload apache2 && echo "Apache configured (HTTP)" || echo "Apache config test failed"
 
             echo "=== Cloudflare DNS ==="
-            CF_TOKEN="${CF_TOKEN_SECRET}"
-            CF_ZONE="${CF_ZONE_SECRET}"
-            CF_API_KEY=""
-            CF_EMAIL=""
-            if [ -n "$CF_TOKEN" ]; then
-              echo "CF_TOKEN from GitHub secrets"
-            else
-              for f in /opt/gauth-full/.env /etc/environment /etc/default/gauth /var/www/sites/gauth/.env /root/.env; do
-                [ -f "$f" ] || continue
-                [ -z "$CF_TOKEN" ] && CF_TOKEN=$(sudo grep -oP '(?:CLOUDFLARE_TOKEN|CF_TOKEN)=\K[A-Za-z0-9_-]{20,}' "$f" 2>/dev/null | head -1)
-                [ -z "$CF_ZONE" ] && CF_ZONE=$(sudo grep -oP '(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID)=\K[a-f0-9]{32}' "$f" 2>/dev/null | head -1)
-                [ -z "$CF_API_KEY" ] && CF_API_KEY=$(sudo grep -oP '(?:CLOUDFLARE_API_KEY|CF_API_KEY|CF_GLOBAL_KEY)=\K[a-f0-9]{37}' "$f" 2>/dev/null | head -1)
-                [ -z "$CF_EMAIL" ] && CF_EMAIL=$(sudo grep -oP '(?:CLOUDFLARE_EMAIL|CF_EMAIL)=\K\S+' "$f" 2>/dev/null | head -1)
-              done
-            fi
-            if [ -z "$CF_TOKEN" ] && [ -z "$CF_API_KEY" ]; then
-              echo "searching for CF Global API Key..."
-              for sd in /opt/gauth-full /root /var/www/sites /etc/default /etc/environment; do
-                [ -d "$sd" ] || [ -f "$sd" ] || continue
-                [ -z "$CF_API_KEY" ] && CF_API_KEY=$(sudo grep -rlP --include='*.env' --include='*.js' --include='*.json' --include='*.cfg' --include='*.conf' -m1 '[a-f0-9]{37}' "$sd" 2>/dev/null | head -1 | xargs -r sudo grep -oP '(?:globalApiKey|CF_API_KEY|CLOUDFLARE_API_KEY|CF_GLOBAL_KEY)\s*[=:]\s*[\x27"]*\K[a-f0-9]{37}' 2>/dev/null | head -1)
-                [ -z "$CF_EMAIL" ] && CF_EMAIL=$(sudo grep -rhoP --include='*.env' --include='*.js' --include='*.json' '(?:cloudflareEmail|CF_EMAIL|CLOUDFLARE_EMAIL|authEmail)\s*[=:]\s*[\x27"]*\K[^\s\x27"]+@[^\s\x27"]+' "$sd" 2>/dev/null | head -1)
-              done
-              [ -n "$CF_API_KEY" ] && echo "found Global API Key"
-              [ -n "$CF_EMAIL" ] && echo "found CF email: $CF_EMAIL"
-            fi
-            if [ -z "$CF_TOKEN" ] && [ -z "$CF_API_KEY" ]; then
-              echo "searching for CF API tokens..."
-              CF_TOKEN=$(sudo grep -rhoP --include='*.env' --include='*.js' --include='*.json' 'cfut_[A-Za-z0-9_-]{20,}' /opt/gauth-full /root /var/www/sites 2>/dev/null | head -1)
+            CF_TOKEN=""
+            CF_ZONE=""
+
+            echo "Reading token from /root/.secrets/cloudflare.ini"
+            CF_TOKEN=$(sudo grep -oP 'dns_cloudflare_api_token\s*=\s*\K\S+' /root/.secrets/cloudflare.ini 2>/dev/null)
+            [ -n "$CF_TOKEN" ] && echo "Got CF token from cloudflare.ini"
+
+            if [ -z "$CF_TOKEN" ]; then
+              echo "Token not found in cloudflare.ini, searching..."
+              CF_TOKEN=$(sudo grep -rhoP 'cfut_[A-Za-z0-9_-]{20,}' /root/.secrets /opt/gauth-full /root /var/www/sites 2>/dev/null | head -1)
               [ -n "$CF_TOKEN" ] && echo "found cfut_ token"
             fi
-            if [ -f /root/.cloudflare/cf-token ] && [ -z "$CF_TOKEN" ] && [ -z "$CF_API_KEY" ]; then
-              CF_TOKEN=$(sudo cat /root/.cloudflare/cf-token 2>/dev/null | tr -d '[:space:]')
-              [ -n "$CF_TOKEN" ] && echo "found token in /root/.cloudflare/cf-token"
-            fi
 
-            HAS_CF="no"
-            [ -n "$CF_TOKEN" ] || [ -n "$CF_API_KEY" ] && HAS_CF="yes"
-            TK_STATUS="NO"; [ -n "$CF_TOKEN" ] && TK_STATUS="YES"
-            AK_STATUS="NO"; [ -n "$CF_API_KEY" ] && AK_STATUS="YES"
-            echo "CF credentials found: $HAS_CF token=$TK_STATUS apikey=$AK_STATUS"
-
-            if [ "$HAS_CF" = "yes" ] && [ -n "$CF_TOKEN" ]; then
-              echo "=== Verifying token permissions ==="
+            if [ -z "$CF_TOKEN" ]; then
+              echo "No CF token found anywhere, skipping DNS"
+            else
+              echo "=== Verifying token ==="
               VERIFY=$(curl -s "https://api.cloudflare.com/client/v4/user/tokens/verify" \
                 -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
               echo "$VERIFY" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);console.log("Token status:",j.result&&j.result.status||"unknown")}catch(e){console.log("Token parse error")}})' 2>/dev/null || true
-            fi
 
-            if [ "$HAS_CF" = "yes" ] && [ -z "$CF_ZONE" ]; then
-              echo "looking up zone via CF API..."
-              if [ -n "$CF_API_KEY" ] && [ -n "$CF_EMAIL" ]; then
-                ZONE_RESP=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=cent-solution.online" \
-                  -H "X-Auth-Key: ${CF_API_KEY}" -H "X-Auth-Email: ${CF_EMAIL}" -H "Content-Type: application/json")
-              else
-                ZONE_RESP=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=cent-solution.online" \
-                  -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
-              fi
+              echo "=== Looking up zone ==="
+              ZONE_RESP=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=cent-solution.online" \
+                -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
               CF_ZONE=$(echo "$ZONE_RESP" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);const r=j.result||[];console.log(r.length?r[0].id:"")}catch(e){console.log("")}})' 2>/dev/null)
-              ZN_STATUS="NO"; [ -n "$CF_ZONE" ] && ZN_STATUS="YES"
-              echo "CF_ZONE from API: $ZN_STATUS"
-              [ -z "$CF_ZONE" ] && echo "zone response: $ZONE_RESP"
-            fi
 
-            if [ "$HAS_CF" = "yes" ] && [ -n "$CF_ZONE" ]; then
-              if [ -n "$CF_API_KEY" ] && [ -n "$CF_EMAIL" ]; then
-                EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?name=second.cent-solution.online&type=A" \
-                  -H "X-Auth-Key: ${CF_API_KEY}" -H "X-Auth-Email: ${CF_EMAIL}" -H "Content-Type: application/json")
+              if [ -z "$CF_ZONE" ]; then
+                echo "Could not find zone"
+                echo "$ZONE_RESP"
               else
+                echo "Zone found: $CF_ZONE"
+
                 EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?name=second.cent-solution.online&type=A" \
                   -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
-              fi
-              COUNT=$(echo "$EXISTING" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);console.log((j.result||[]).length)}catch(e){console.log("0")}})' 2>/dev/null || echo "0")
-              if [ "$COUNT" != "0" ]; then
-                echo "DNS record already exists"
-              else
-                SERVER_IP=$(curl -s ifconfig.me)
-                echo "Creating DNS A record: second -> $SERVER_IP"
-                if [ -n "$CF_API_KEY" ] && [ -n "$CF_EMAIL" ]; then
-                  DNS_RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
-                    -H "X-Auth-Key: ${CF_API_KEY}" -H "X-Auth-Email: ${CF_EMAIL}" -H "Content-Type: application/json" \
-                    --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
+                COUNT=$(echo "$EXISTING" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);console.log((j.result||[]).length)}catch(e){console.log("0")}})' 2>/dev/null || echo "0")
+
+                if [ "$COUNT" != "0" ]; then
+                  echo "DNS record already exists"
                 else
+                  SERVER_IP=$(curl -s ifconfig.me)
+                  echo "Creating DNS A record: second -> $SERVER_IP"
                   DNS_RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
                     -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
                     --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
+                  echo "$DNS_RESULT" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);console.log("DNS created:",j.success);(j.errors||[]).forEach(e=>console.log("  error:",e.message||""))}catch(e){console.log("DNS parse error")}})' 2>/dev/null
                 fi
-                DNS_OK=$(echo "$DNS_RESULT" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{console.log(JSON.parse(d).success)}catch(e){console.log("false")}})' 2>/dev/null)
-                echo "$DNS_RESULT" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);console.log("DNS created:",j.success);(j.errors||[]).forEach(e=>console.log("  error:",e.message||""))}catch(e){console.log("DNS parse error")}})' 2>/dev/null || echo "DNS response: $DNS_RESULT"
-                if [ "$DNS_OK" != "true" ]; then
-                  echo "=== DNS creation failed. Listing existing *.cent-solution.online records ==="
-                  if [ -n "$CF_API_KEY" ] && [ -n "$CF_EMAIL" ]; then
-                    ALL_DNS=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?per_page=100" \
-                      -H "X-Auth-Key: ${CF_API_KEY}" -H "X-Auth-Email: ${CF_EMAIL}" -H "Content-Type: application/json")
-                  else
-                    ALL_DNS=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?per_page=100" \
-                      -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
-                  fi
-                  echo "$ALL_DNS" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);(j.result||[]).forEach(r=>console.log("  "+r.type.padEnd(5)+r.name.padEnd(40)+"-> "+r.content))}catch(e){console.log("Could not list DNS records")}})' 2>/dev/null || echo "Could not list DNS records"
-                  echo ""
-                  echo "=== Trying to create DNS token via CF API ==="
-                  NEW_TOKEN_RESP=$(curl -s -X POST "https://api.cloudflare.com/client/v4/user/tokens" \
-                    -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
-                    --data "{\"name\":\"dns-edit-second\",\"policies\":[{\"effect\":\"allow\",\"resources\":{\"com.cloudflare.api.account.zone.${CF_ZONE}\":\"*\"},\"permission_groups\":[{\"id\":\"4755a26eedb94da69e1066d98aa820be\",\"name\":\"DNS Write\"}]}]}")
-                  echo "$NEW_TOKEN_RESP" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);console.log("Token create:",j.success);(j.errors||[]).forEach(e=>console.log("  err:",e.message||""))}catch(e){console.log("Token parse error")}})' 2>/dev/null
-                  NEW_TK=$(echo "$NEW_TOKEN_RESP" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);console.log(j.result&&j.result.value||"")}catch(e){console.log("")}})' 2>/dev/null)
-                  if [ -n "$NEW_TK" ] && [ "$NEW_TK" != "None" ]; then
-                    echo "Created new DNS token, trying DNS creation..."
-                    TEST_DNS=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
-                      -H "Authorization: Bearer $NEW_TK" -H "Content-Type: application/json" \
-                      --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
-                    TEST_OK=$(echo "$TEST_DNS" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{console.log(JSON.parse(d).success)}catch(e){console.log("false")}})' 2>/dev/null)
-                    if [ "$TEST_OK" = "true" ]; then
-                      echo "DNS created with new token!"
-                      DNS_OK="true"
-                    else
-                      echo "$TEST_DNS" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);(j.errors||[]).forEach(e=>console.log("  err:",e.message||""))}catch(e){}})' 2>/dev/null
-                    fi
-                  fi
-                fi
+                sleep 10
               fi
-              sleep 10
-            else
-              echo "CF credentials not found, skipping DNS"
             fi
 
             echo "=== SSL certificate ==="
