@@ -71,6 +71,8 @@ jobs:
               [ -z "$CF_TOKEN" ] && CF_TOKEN=$(grep -oP '(?:CLOUDFLARE_TOKEN|CF_TOKEN)=\K\S+' "$f" 2>/dev/null | head -1)
               [ -z "$CF_ZONE" ] && CF_ZONE=$(grep -oP '(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID|CF_ZONE)=\K\S+' "$f" 2>/dev/null | head -1)
             done
+            if [ -z "$CF_TOKEN" ]; then CF_TOKEN=$(grep -oP 'CLOUDFLARE_TOKEN=\K\S+' /etc/systemd/system/gauth.service 2>/dev/null | head -1); fi
+            if [ -z "$CF_ZONE" ]; then CF_ZONE=$(grep -oP 'CLOUDFLARE_ZONE_ID=\K\S+' /etc/systemd/system/gauth.service 2>/dev/null | head -1); fi
 
             if [ -n "$CF_TOKEN" ] && [ -n "$CF_ZONE" ]; then
               EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?name=second.cent-solution.online&type=A" \
