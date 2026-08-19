@@ -1,4 +1,4 @@
-name: photo/data sel_*.json 계정 리스팅
+name: photo/photo2/photo3 데이터 폴더 구조 + 각 폴더 계정 sel_*.json 구분 리스팅
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ jobs:
   list:
     runs-on: ubuntu-latest
     steps:
-      - name: photo/data 계정 sel_*.json 전체 리스팅
+      - name: photo / photo2 / photo3 각각 sel_ 실제 리스팅
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -27,28 +27,51 @@ jobs:
               --quiet \
               --command='bash -s' << "REMOTE"
             set -uo pipefail
-            P1="/var/www/sites/chamgyo/public/photo"
 
-            echo "===== photo/data sel_*.json 전체 리스팅 (mtime + 크기 + 내용) ====="
-            sudo ls -la "$P1/data/sel_"*.json 2>/dev/null | awk "{print \$5, \$6, \$7, \$8, \$9}"
-
-            echo ""
-            echo "===== 각 계정 sel_*.json 내용 ====="
-            for F in "$P1/data/sel_"*.json; do
-              [ -f "$F" ] || continue
-              NAME=$(basename "$F" .json | sed "s/^sel_//")
-              CONTENT=$(sudo cat "$F")
-              MT=$(stat -c "%y" "$F" | cut -d. -f1)
-              printf "%-15s | mtime=%s | %s\n" "$NAME" "$MT" "$CONTENT"
+            echo "===== [0] 심볼릭 체인 확인 ====="
+            for D in photo photo2 photo3; do
+              F="/var/www/sites/chamgyo/public/$D/data"
+              if [ -L "$F" ]; then
+                TARGET=$(readlink -f "$F")
+                echo "$D/data → SYMLINK → $TARGET"
+              elif [ -d "$F" ]; then
+                echo "$D/data → REAL DIRECTORY"
+              else
+                echo "$D/data → MISSING"
+              fi
             done
 
             echo ""
-            echo "===== 총 계정 수 ====="
-            sudo ls "$P1/data/sel_"*.json 2>/dev/null | wc -l
+            for D in photo photo2 photo3; do
+              F="/var/www/sites/chamgyo/public/$D/data"
+              echo ""
+              echo "===== [$D] sel_*.json (해당 폴더 실체 or 심볼릭 통해) ====="
+              # 심볼릭 통해서든 실체든 상관없이 -L 로 실체 접근
+              REAL=$(readlink -f "$F")
+              echo "  (실체 경로: $REAL)"
+              sudo ls -la "$F"/sel_*.json 2>/dev/null | awk "{print \$5, \$6, \$7, \$8, \$9}"
+              CNT=$(sudo ls "$F"/sel_*.json 2>/dev/null | wc -l)
+              echo "  총 계정 수: $CNT"
+
+              echo "  --- 계정 내용 ---"
+              for SF in "$F"/sel_*.json; do
+                [ -f "$SF" ] || continue
+                NAME=$(basename "$SF" .json | sed "s/^sel_//")
+                CONTENT=$(sudo cat "$SF")
+                MT=$(stat -c "%y" "$SF" | cut -d. -f1)
+                printf "  %-15s | %s | %s\n" "$NAME" "$MT" "$CONTENT"
+              done
+            done
 
             echo ""
-            echo "===== photo/data 폴더 전체 heartbeat/session 등 (계정 힌트) ====="
-            sudo ls -la "$P1/data/" | grep -E "heartbeat|session|sel_" | head -30
+            echo "===== [비교] 각 폴더 sel_ 파일이 실제로 같은 파일 (inode) 인가 ====="
+            for L in cent tak jay otuki abc01 gain aass0707 denny; do
+              echo "--- sel_${L}.json inode 비교 ---"
+              for D in photo photo2 photo3; do
+                F="/var/www/sites/chamgyo/public/$D/data/sel_${L}.json"
+                [ -f "$F" ] && stat -c "  $D: inode=%i size=%s mtime=%y" "$F" 2>/dev/null || echo "  $D: MISSING"
+              done
+            done
 
             echo ""
             echo "===== DONE ====="
