@@ -1,5 +1,5 @@
 /**
- * second sub-site server v1.1
+ * second sub-site server v1.2
  * Google OAuth 로그인 + YouTube 채널 조회
  *
  * 환경변수:
