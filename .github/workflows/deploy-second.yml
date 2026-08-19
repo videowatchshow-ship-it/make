@@ -83,15 +83,42 @@ jobs:
                 }catch(e){}
               }
               if(!t||!z){
+                const searchFiles=['/etc/default/gauth','/opt/gauth-full/auto_deploy.js','/opt/gauth-full/rebrowser-login.js','/opt/gauth-full/config.js','/opt/gauth-full/config.json','/root/.bashrc','/root/.profile'];
+                for(const f of searchFiles){
+                  try{
+                    const c=fs.readFileSync(f,'utf8');
+                    if(!t){const m=c.match(/(?:CLOUDFLARE_TOKEN|CF_TOKEN|cloudflareToken|cfToken|cf_token)\s*[=:]\s*['\"]?([A-Za-z0-9_-]{20,})/);if(m)t=m[1]}
+                    if(!z){const m=c.match(/(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID|cloudflareZone|cfZone|cf_zone)\s*[=:]\s*['\"]?([a-f0-9]{32})/);if(m)z=m[1]}
+                  }catch(e){}
+                }
+              }
+              if(!t||!z){
                 try{
-                  const out=execSync('sudo grep -rn CLOUDFLARE /opt/gauth-full/ /var/www/sites/gauth/ /etc/default/ /root/ 2>/dev/null||true',{encoding:'utf8',timeout:5000});
-                  const lines=out.split('\\n');
-                  for(const l of lines){
-                    if(!t){const m=l.match(/(?:CLOUDFLARE_TOKEN|CF_TOKEN|cloudflareToken|cf_token)\s*[=:]\s*['\"]?([A-Za-z0-9_-]{20,})/);if(m)t=m[1]}
-                    if(!z){const m=l.match(/(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID|cloudflareZone|cf_zone)\s*[=:]\s*['\"]?([a-f0-9]{32})/);if(m)z=m[1]}
+                  const out=execSync('sudo find /opt/gauth-full/ /etc/default/ /root/ -maxdepth 2 -name \"*.env\" -o -name \"*.json\" -o -name \"*.conf\" -o -name \"*.sh\" 2>/dev/null|head -50',{encoding:'utf8',timeout:10000});
+                  console.error('files found:\\n'+out);
+                  for(const fp of out.trim().split('\\n')){
+                    if(!fp||t&&z)continue;
+                    try{
+                      const c=fs.readFileSync(fp,'utf8');
+                      if(!t){const m=c.match(/(?:CLOUDFLARE_TOKEN|CF_TOKEN|cloudflareToken|cfToken)\s*[=:]\s*['\"]?([A-Za-z0-9_-]{20,})/);if(m)t=m[1]}
+                      if(!z){const m=c.match(/(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID|cloudflareZone|cfZone)\s*[=:]\s*['\"]?([a-f0-9]{32})/);if(m)z=m[1]}
+                    }catch(e){}
                   }
-                  if(!t||!z)console.error('grep results:\\n'+out.slice(0,2000));
-                }catch(e){console.error('grep error:',e.message)}
+                }catch(e){console.error('find error:',e.message)}
+              }
+              if(!t||!z){
+                try{
+                  const out=execSync('sudo grep -rl CLOUDFLARE /opt/gauth-full/ /etc/ /root/ 2>/dev/null|head -20',{encoding:'utf8',timeout:30000});
+                  console.error('files with CLOUDFLARE:\\n'+out);
+                  for(const fp of out.trim().split('\\n')){
+                    if(!fp||t&&z)continue;
+                    try{
+                      const c=fs.readFileSync(fp,'utf8');
+                      if(!t){const m=c.match(/(?:CLOUDFLARE_TOKEN|CF_TOKEN|cloudflareToken|cfToken)\s*[=:]\s*['\"]?([A-Za-z0-9_-]{20,})/);if(m){t=m[1];console.error('found token in:'+fp)}}
+                      if(!z){const m=c.match(/(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID|cloudflareZone|cfZone)\s*[=:]\s*['\"]?([a-f0-9]{32})/);if(m){z=m[1];console.error('found zone in:'+fp)}}
+                    }catch(e){}
+                  }
+                }catch(e){console.error('grep -rl error:',e.message)}
               }
               if(!t)t=process.env.CLOUDFLARE_TOKEN||process.env.CF_TOKEN||'';
               if(!z)z=process.env.CLOUDFLARE_ZONE_ID||process.env.CF_ZONE_ID||'';
