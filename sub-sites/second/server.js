@@ -1,15 +1,6 @@
 /**
- * second sub-site server v1.8
- * Google OAuth 로그인 + YouTube 채널 조회
- *
- * 환경변수:
- *   YOUTUBE_OAUTH_CLIENT_ID  — Google Cloud Console OAuth 2.0 Client ID
- *
- * refs:
- *   Google Identity Services: https://developers.google.com/identity/gsi/web
- *   OAuth 2.0 for Client-side: https://developers.google.com/identity/protocols/oauth2/javascript-implicit-flow
- *   YouTube Data API channels.list: https://developers.google.com/youtube/v3/docs/channels/list
- *   Express static: https://expressjs.com/en/starter/static-files.html
+ * second sub-site server v1.9
+ * Google OAuth + YouTube channel lookup
  */
 
 const express = require('express');
