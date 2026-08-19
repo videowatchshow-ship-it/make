@@ -64,131 +64,131 @@ jobs:
             sudo apache2ctl configtest 2>&1 && sudo systemctl reload apache2 && echo "Apache configured (HTTP)" || echo "Apache config test failed"
 
             echo "=== Cloudflare DNS ==="
-            CF_TOKEN=""
+            CF_TOKEN=$(sudo grep -oP 'dns_cloudflare_api_token\s*=\s*\K\S+' /root/.secrets/cloudflare.ini 2>/dev/null)
             CF_ZONE=""
-
-            echo "--- Searching for CLOUDFLARE_TOKEN in targeted locations ---"
-
-            for f in /opt/gauth-full/.env /var/www/sites/gauth/.env /root/.env /etc/default/gauth /etc/environment; do
-              if [ -f "$f" ]; then
-                T=$(sudo grep -oP '(?:CLOUDFLARE_TOKEN|CF_TOKEN)=\K\S+' "$f" 2>/dev/null | head -1)
-                Z=$(sudo grep -oP '(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID)=\K\S+' "$f" 2>/dev/null | head -1)
-                [ -n "$T" ] && CF_TOKEN="$T" && echo "Found token in $f"
-                [ -n "$Z" ] && CF_ZONE="$Z" && echo "Found zone in $f"
-              fi
-            done
-
-            echo "--- Checking systemd gauth service ---"
-            for svc in gauth gauth-full; do
-              SVC_FILE="/etc/systemd/system/${svc}.service"
-              [ -f "$SVC_FILE" ] || continue
-              echo "Found $SVC_FILE"
-              T=$(sudo grep -oP '(?:CLOUDFLARE_TOKEN|CF_TOKEN)=\K\S+' "$SVC_FILE" 2>/dev/null | head -1)
-              Z=$(sudo grep -oP '(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID)=\K\S+' "$SVC_FILE" 2>/dev/null | head -1)
-              [ -n "$T" ] && CF_TOKEN="$T" && echo "Found token in $SVC_FILE"
-              [ -n "$Z" ] && CF_ZONE="$Z" && echo "Found zone in $SVC_FILE"
-              EF=$(sudo grep -oP 'EnvironmentFile[=-]+\K\S+' "$SVC_FILE" 2>/dev/null)
-              if [ -n "$EF" ]; then
-                EF_CLEAN=$(echo "$EF" | sed 's/^-//')
-                if [ -f "$EF_CLEAN" ]; then
-                  echo "Checking EnvironmentFile: $EF_CLEAN"
-                  T=$(sudo grep -oP '(?:CLOUDFLARE_TOKEN|CF_TOKEN)=\K\S+' "$EF_CLEAN" 2>/dev/null | head -1)
-                  Z=$(sudo grep -oP '(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID)=\K\S+' "$EF_CLEAN" 2>/dev/null | head -1)
-                  [ -n "$T" ] && CF_TOKEN="$T" && echo "Found token in $EF_CLEAN"
-                  [ -n "$Z" ] && CF_ZONE="$Z" && echo "Found zone in $EF_CLEAN"
-                fi
-              fi
-            done
-
-            echo "--- Checking gauth runtime environment ---"
-            GAUTH_PID=$(pgrep -f 'rebrowser-login' | head -1)
-            if [ -n "$GAUTH_PID" ]; then
-              echo "gauth PID: $GAUTH_PID"
-              T=$(sudo cat /proc/$GAUTH_PID/environ 2>/dev/null | tr '\0' '\n' | grep -oP 'CLOUDFLARE_TOKEN=\K.*' | head -1)
-              Z=$(sudo cat /proc/$GAUTH_PID/environ 2>/dev/null | tr '\0' '\n' | grep -oP 'CLOUDFLARE_ZONE_ID=\K.*' | head -1)
-              [ -n "$T" ] && CF_TOKEN="$T" && echo "Found token in gauth process env"
-              [ -n "$Z" ] && CF_ZONE="$Z" && echo "Found zone in gauth process env"
-            fi
-
-            echo "--- List all .env files ---"
-            sudo find /opt/gauth-full /var/www/sites /root -maxdepth 2 -name '.env' -o -name '*.env' 2>/dev/null | while read f; do
-              echo "  .env: $f"
-              sudo grep -iP 'CLOUDFLARE|CF_TOKEN|CF_ZONE' "$f" 2>/dev/null | head -3
-            done
-
-            echo "--- Checking certbot token permissions ---"
-            CERTBOT_TOKEN=$(sudo grep -oP 'dns_cloudflare_api_token\s*=\s*\K\S+' /root/.secrets/cloudflare.ini 2>/dev/null)
-            if [ -n "$CERTBOT_TOKEN" ] && [ -z "$CF_TOKEN" ]; then
-              CF_TOKEN="$CERTBOT_TOKEN"
-              echo "Using certbot token as fallback"
-            fi
+            DNS_CREATED="false"
 
             if [ -n "$CF_TOKEN" ]; then
-              echo "--- Token permissions check ---"
-              PERMS=$(curl -s "https://api.cloudflare.com/client/v4/user/tokens/verify" \
-                -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
-              echo "Verify: $PERMS"
+              echo "Got certbot token"
 
-              if [ -z "$CF_ZONE" ]; then
-                ZONE_RESP=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=cent-solution.online" \
-                  -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
-                CF_ZONE=$(echo "$ZONE_RESP" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);const r=j.result||[];console.log(r.length?r[0].id:"")}catch(e){console.log("")}})' 2>/dev/null)
-              fi
+              ZONE_RESP=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=cent-solution.online" \
+                -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
+              CF_ZONE=$(echo "$ZONE_RESP" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);const r=j.result||[];console.log(r.length?r[0].id:"")}catch(e){console.log("")}})' 2>/dev/null)
+              echo "Zone: $CF_ZONE"
 
               if [ -n "$CF_ZONE" ]; then
-                echo "Zone: $CF_ZONE"
                 EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?name=second.cent-solution.online&type=A" \
                   -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
                 COUNT=$(echo "$EXISTING" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);console.log((j.result||[]).length)}catch(e){console.log("0")}})' 2>/dev/null || echo "0")
 
                 if [ "$COUNT" != "0" ]; then
                   echo "DNS A record already exists"
+                  DNS_CREATED="true"
                 else
                   SERVER_IP=$(curl -s ifconfig.me)
-                  echo "Creating A record: second -> $SERVER_IP"
-                  DNS_RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
+                  echo "Server IP: $SERVER_IP"
+
+                  echo "--- Attempt 1: direct A record creation ---"
+                  DNS_R1=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
                     -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
                     --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
-                  echo "DNS result: $DNS_RESULT"
+                  echo "Result: $DNS_R1"
+                  R1_OK=$(echo "$DNS_R1" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{console.log(JSON.parse(d).success)}catch(e){console.log("false")}})' 2>/dev/null)
+                  [ "$R1_OK" = "true" ] && DNS_CREATED="true"
 
-                  DNS_OK=$(echo "$DNS_RESULT" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{console.log(JSON.parse(d).success)}catch(e){console.log("false")}})' 2>/dev/null)
+                  if [ "$DNS_CREATED" != "true" ]; then
+                    echo "--- Attempt 2: create new token with DNS:Edit ---"
+                    PERM_GROUPS=$(curl -s "https://api.cloudflare.com/client/v4/user/tokens/permission_groups" \
+                      -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
+                    DNS_WRITE_ID=$(echo "$PERM_GROUPS" | node -e '
+                      let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{
+                        try{
+                          const j=JSON.parse(d);
+                          const arr=j.result||j||[];
+                          const pg=arr.find(p=>(p.name||"").match(/DNS.*Write|Zone.*DNS.*Edit/i));
+                          console.log(pg?pg.id:"");
+                        }catch(e){console.log("")}
+                      })' 2>/dev/null)
+                    echo "DNS Write permission group: $DNS_WRITE_ID"
 
-                  if [ "$DNS_OK" != "true" ]; then
-                    echo "--- Bearer failed, trying as TXT to test write permission ---"
-                    TXT_TEST=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
-                      -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
-                      --data "{\"type\":\"TXT\",\"name\":\"_test-second\",\"content\":\"test\",\"ttl\":1}")
-                    echo "TXT test: $TXT_TEST"
-                    TXT_OK=$(echo "$TXT_TEST" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{console.log(JSON.parse(d).success)}catch(e){console.log("false")}})' 2>/dev/null)
-                    if [ "$TXT_OK" = "true" ]; then
-                      echo "Token CAN create TXT but NOT A records - permission issue"
-                      TXT_ID=$(echo "$TXT_TEST" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{console.log(JSON.parse(d).result.id)}catch(e){console.log("")}})' 2>/dev/null)
-                      [ -n "$TXT_ID" ] && curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records/${TXT_ID}" \
-                        -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" > /dev/null 2>&1
-                    else
-                      echo "Token cannot create any DNS records"
+                    if [ -n "$DNS_WRITE_ID" ]; then
+                      NEW_TOKEN_RESP=$(curl -s -X POST "https://api.cloudflare.com/client/v4/user/tokens" \
+                        -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+                        --data "{\"name\":\"dns-edit-second-$(date +%s)\",\"policies\":[{\"effect\":\"allow\",\"resources\":{\"com.cloudflare.api.account.zone.*\":\"*\"},\"permission_groups\":[{\"id\":\"$DNS_WRITE_ID\"}]}]}")
+                      echo "New token response: $NEW_TOKEN_RESP"
+                      NEW_TK=$(echo "$NEW_TOKEN_RESP" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const v=JSON.parse(d).result.value;if(v)console.log(v);else console.log("")}catch(e){console.log("")}})' 2>/dev/null)
+
+                      if [ -n "$NEW_TK" ]; then
+                        echo "New token created, trying DNS..."
+                        DNS_R2=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
+                          -H "Authorization: Bearer ${NEW_TK}" -H "Content-Type: application/json" \
+                          --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
+                        echo "Result: $DNS_R2"
+                        R2_OK=$(echo "$DNS_R2" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{console.log(JSON.parse(d).success)}catch(e){console.log("false")}})' 2>/dev/null)
+                        [ "$R2_OK" = "true" ] && DNS_CREATED="true"
+
+                        if [ "$DNS_CREATED" = "true" ]; then
+                          echo "$NEW_TK" | sudo tee /root/.secrets/cf_dns_token > /dev/null
+                          sudo chmod 600 /root/.secrets/cf_dns_token
+                          echo "Saved new DNS token"
+                        fi
+                      fi
                     fi
+                  fi
+
+                  if [ "$DNS_CREATED" != "true" ]; then
+                    echo "--- Attempt 3: check existing A records to copy config ---"
+                    ALL_A=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?type=A&per_page=50" \
+                      -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
+                    echo "$ALL_A" | node -e '
+                      let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{
+                        try{
+                          const j=JSON.parse(d);
+                          console.log("Existing A records:");
+                          (j.result||[]).forEach(r=>console.log("  "+r.name+" -> "+r.content+(r.proxied?" (proxied)":"")));
+                        }catch(e){console.log("Could not list")}
+                      })' 2>/dev/null
+                    echo ""
+                    echo "DNS FAILED - token lacks DNS write permission"
+                    echo "Token can read zones but cannot create/edit DNS records"
                   fi
                 fi
               fi
             else
-              echo "No CF token found anywhere"
+              echo "No CF token found"
             fi
 
-            echo "=== SSL via certbot dns-cloudflare ==="
+            if [ "$DNS_CREATED" = "true" ]; then
+              echo "=== DNS created, waiting ==="
+              sleep 15
+            fi
+
+            echo "=== SSL certificate ==="
+            echo "Installing certbot-dns-cloudflare if needed..."
+            sudo pip3 install certbot-dns-cloudflare 2>/dev/null || sudo apt-get install -y python3-certbot-dns-cloudflare 2>/dev/null || true
+
             if [ ! -f /etc/letsencrypt/live/second.cent-solution.online/fullchain.pem ]; then
               if command -v certbot >/dev/null 2>&1 && [ -f /root/.secrets/cloudflare.ini ]; then
                 echo "Running certbot dns-cloudflare..."
-                sudo certbot certonly --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.ini \
-                  -d second.cent-solution.online --non-interactive --agree-tos --email videowatch.show@gmail.com 2>&1
+                sudo certbot certonly --dns-cloudflare \
+                  --dns-cloudflare-credentials /root/.secrets/cloudflare.ini \
+                  -d second.cent-solution.online \
+                  --non-interactive --agree-tos \
+                  --email videowatch.show@gmail.com 2>&1
                 if [ -f /etc/letsencrypt/live/second.cent-solution.online/fullchain.pem ]; then
                   echo "SSL cert obtained!"
                   printf '<VirtualHost *:443>\n    ServerName second.cent-solution.online\n    SSLEngine on\n    SSLCertificateFile /etc/letsencrypt/live/second.cent-solution.online/fullchain.pem\n    SSLCertificateKeyFile /etc/letsencrypt/live/second.cent-solution.online/privkey.pem\n    ProxyPreserveHost On\n    ProxyPass / http://127.0.0.1:3023/\n    ProxyPassReverse / http://127.0.0.1:3023/\n    Header always set X-Content-Type-Options "nosniff"\n    Header always set X-Frame-Options "SAMEORIGIN"\n</VirtualHost>\n' | sudo tee /etc/apache2/sites-available/second-le-ssl.conf > /dev/null
                   sudo a2ensite second-le-ssl 2>/dev/null
                   sudo apache2ctl configtest 2>&1 && sudo systemctl reload apache2 && echo "Apache HTTPS configured"
                 else
-                  echo "Certbot failed"
+                  echo "Certbot dns-cloudflare failed"
+                  echo "Trying certbot apache (HTTP challenge)..."
+                  sudo certbot --apache -d second.cent-solution.online \
+                    --non-interactive --agree-tos \
+                    --email videowatch.show@gmail.com --redirect 2>&1 || echo "Certbot apache also failed"
                 fi
+              else
+                echo "certbot or cloudflare.ini not available"
               fi
             else
               echo "SSL cert already exists"
