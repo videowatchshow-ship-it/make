@@ -38,21 +38,21 @@ jobs:
             done
 
             echo ""
-            echo "===== [2] 백업 후 photo2/photo3 README* 파일 전부 제거 (규칙: README 하나만) ====="
+            echo "===== [2] photo2/photo3 README* 전부 완전 삭제 (rm -f, .removed 도 정리) ====="
             for D in "$P2" "$P3"; do
-              for f in "$D"/README*; do
+              for f in "$D"/README* "$D"/README*.removed.* "$D"/README*.bak.*; do
                 [ -f "$f" ] || continue
-                sudo mv "$f" "$f.removed.$TS"
-                echo "REMOVED (backup): $f → $f.removed.$TS"
+                sudo rm -f "$f"
+                echo "DELETED: $f"
               done
             done
 
             echo ""
-            echo "===== [3] photo/README* 백업/구버전 파일들 전체 정리 ====="
+            echo "===== [3] photo/README* 백업/구버전 파일들 완전 삭제 ====="
             for f in "$P1"/README.md.bak.* "$P1"/README.md.removed.* "$P1"/README_PHOTO.md* "$P1"/README_*.md.bak.*; do
               [ -f "$f" ] || continue
               sudo rm -f "$f"
-              echo "DELETED old backup: $f"
+              echo "DELETED: $f"
             done
 
             echo ""
