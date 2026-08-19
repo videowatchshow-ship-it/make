@@ -1,4 +1,4 @@
-name: photo abc01 실체 + CAH/CAW/SNW 3개 URL 데이터 소스 확인
+name: photo CAH/CAW/SNW 3개 URL 파일 실체 + https 응답 비교
 
 on:
   workflow_dispatch:
@@ -12,7 +12,22 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: appleboy/ssh-action@v1.0.3
+      - name: 로컬 HTTPS 로 실제 3개 URL 응답 비교
+        run: |
+          set +e
+          BASE="https://xn--9d0bw2fjtyymch7de9d.info/photo"
+          TS=$(date +%s)
+          echo "===== 실제 HTTPS (Cloudflare 경유) 3개 URL sha256 + size ====="
+          for F in CAH_1.html CAW_1.html SNW_1.html; do
+            R=$(curl -sS --max-time 15 "$BASE/$F?ch=cent&_t=$TS")
+            SZ=$(echo -n "$R" | wc -c)
+            SHA=$(echo -n "$R" | sha256sum | cut -c1-16)
+            TITLE=$(echo "$R" | grep -oE '<title>[^<]+</title>' | head -1)
+            echo "$F?ch=cent: size=${SZ}B sha256=${SHA} title=$TITLE"
+          done
+
+      - name: SSH - 서버측 3개 파일 실체 확인
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
@@ -28,44 +43,38 @@ jobs:
             set -uo pipefail
             P1="/var/www/sites/chamgyo/public/photo"
 
-            echo "===== [1] photo/data 실제 파일 (sel_ 만 필터) ====="
-            sudo ls -la "$P1/data/"sel_*.json 2>/dev/null | awk "{print \$5, \$6, \$7, \$8, \$9}"
-            echo ""
-            echo "총 sel_ 파일 수: $(sudo ls "$P1/data/"sel_*.json 2>/dev/null | wc -l)"
+            echo "===== [A] 서버 파일 실체 크기 + inode + sha256 ====="
+            for F in CAH_1.html CAW_1.html SNW_1.html CAW_2.html CAW_3.html CAW_4.html; do
+              [ -f "$P1/$F" ] || { echo "$F: MISSING"; continue; }
+              INODE=$(sudo stat -c "%i" "$P1/$F")
+              SIZE=$(sudo stat -c "%s" "$P1/$F")
+              MT=$(sudo stat -c "%y" "$P1/$F" | cut -d. -f1)
+              SHA=$(sudo sha256sum "$P1/$F" | cut -c1-16)
+              printf "%-15s inode=%d size=%-7d sha256=%s mtime=%s\n" "$F" "$INODE" "$SIZE" "$SHA" "$MT"
+            done
 
             echo ""
-            echo "===== [2] abc01 관련 실제 검색 (혹시 다른 위치에?) ====="
-            echo "-- sel_abc01.json --"
-            sudo ls -la "$P1/data/sel_abc01.json" 2>&1
-            sudo cat "$P1/data/sel_abc01.json" 2>&1
-            echo ""
-            echo "-- 전체 서버에서 abc01 검색 --"
-            sudo grep -rln "abc01" /var/www/sites/chamgyo/public/photo /var/www/sites/chamgyo/public/photo2 2>/dev/null | head -10
-
-            echo ""
-            echo "===== [3] CAH_1 / CAW_1 / SNW_1 이 fetch 하는 데이터 소스 (URL 패턴) ====="
+            echo "===== [B] 각 파일 첫 5줄 (title 태그 확인 - 다른 페이지인지) ====="
             for F in CAH_1.html CAW_1.html SNW_1.html; do
               echo "--- $F ---"
-              sudo grep -nE "api_selected_room|/data/sel_|/data/room_|api_all_rooms|fetch\(.*(sel|room)" "$P1/$F" 2>/dev/null | head -15
+              sudo head -5 "$P1/$F"
+              echo "  --- title ---"
+              sudo grep -oE '<title>[^<]+</title>' "$P1/$F" | head -1
             done
 
             echo ""
-            echo "===== [4] api_selected_room.php 소스 (URL 파라미터로 라우팅?) ====="
-            sudo cat "$P1/api_selected_room.php"
+            echo "===== [C] Apache vhost - photo 경로 rewrite 규칙 확인 ====="
+            sudo cat "$P1/.htaccess" 2>/dev/null || echo "(none)"
+            sudo grep -rn "RewriteRule\|Alias\|photo/" /etc/apache2/sites-enabled/ 2>/dev/null | head -20
 
             echo ""
-            echo "===== [5] 3개 URL 실제 HTTP GET (같은 컨텐츠 반환하는지) ====="
+            echo "===== [D] 실제 로컬 HTTP 로 3개 파일 응답 (Host 헤더 명시) ====="
             for F in CAH_1.html CAW_1.html SNW_1.html; do
-              SZ=$(curl -sS "http://localhost/photo/$F?ch=cent" 2>/dev/null | wc -c)
-              SHA=$(curl -sS "http://localhost/photo/$F?ch=cent" 2>/dev/null | sha256sum | cut -c1-16)
-              echo "$F?ch=cent: size=${SZ}B sha256=${SHA}"
-            done
-
-            echo ""
-            echo "===== [6] 세로/가로/싱지뉴 각각의 실제 fetch endpoint 확인 (bgl.js/signal.js/bundle.js 안) ====="
-            for JS in bgl.js signal.js signal_common.js modules/dist/bundle.js; do
-              echo "--- $JS 안의 sel/room fetch ---"
-              sudo grep -oE "sel_[a-z_]+|/data/sel[^\"'\` ]{0,30}|api_selected_room[^\"'\` ]{0,30}" "$P1/$JS" 2>/dev/null | sort -u | head -10
+              R=$(curl -sS -H "Host: xn--9d0bw2fjtyymch7de9d.info" "http://127.0.0.1/photo/$F?ch=cent")
+              SZ=$(echo -n "$R" | wc -c)
+              SHA=$(echo -n "$R" | sha256sum | cut -c1-16)
+              TITLE=$(echo "$R" | grep -oE "<title>[^<]+</title>" | head -1)
+              printf "%-15s size=%-7d sha256=%s title=%s\n" "$F" "$SZ" "$SHA" "$TITLE"
             done
 
             echo ""
