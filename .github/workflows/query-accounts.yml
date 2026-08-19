@@ -1,0 +1,161 @@
+name: Query gauth accounts
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: 'Email to find and show co-source accounts'
+        required: true
+        default: 'nguyenvantoan88st@gmail.com'
+      count:
+        description: 'Number of accounts from same source to show'
+        required: false
+        default: '20'
+      audit:
+        description: 'Run full audit of sparse accounts (true/false)'
+        required: false
+        default: 'false'
+
+jobs:
+  query:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Query accounts via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 5m
+          script: |
+            EMAIL="${{ github.event.inputs.email }}"
+            COUNT="${{ github.event.inputs.count }}"
+            AUDIT="${{ github.event.inputs.audit }}"
+
+            cat > /tmp/query_accounts.js << 'QUERYEOF'
+            const fs = require('fs');
+            const dataFile = '/opt/gauth-full/accounts_normalized.json';
+            let accounts;
+            try { accounts = JSON.parse(fs.readFileSync(dataFile, 'utf8')); } catch(e) { console.log('Error:', e.message); process.exit(1); }
+            if (!Array.isArray(accounts)) accounts = accounts.accounts || [];
+
+            const email = process.argv[2] || '';
+            const count = parseInt(process.argv[3]) || 20;
+            const audit = process.argv[4] === 'true';
+
+            console.log('Total accounts in DB:', accounts.length);
+            console.log('');
+
+            // Find target account
+            const target = accounts.find(a => (a.email || '').toLowerCase() === email.toLowerCase());
+            if (!target) {
+              console.log('NOT FOUND:', email);
+              // Try partial match
+              const partial = accounts.filter(a => (a.email || '').toLowerCase().includes(email.split('@')[0].toLowerCase()));
+              if (partial.length) {
+                console.log('Partial matches:');
+                partial.slice(0, 10).forEach(a => console.log(' ', a.email, '| src:', a.source_file || '?'));
+              }
+            } else {
+              console.log('=== TARGET ACCOUNT ===');
+              console.log(JSON.stringify(target, null, 2));
+              console.log('');
+
+              // Find accounts from same source file
+              const srcFile = target.source_file;
+              if (srcFile) {
+                const sameSource = accounts.filter(a => a.source_file === srcFile);
+                console.log('=== ACCOUNTS FROM SAME SOURCE:', srcFile, '===');
+                console.log('Total from this file:', sameSource.length);
+                console.log('');
+
+                // Stats
+                const withTotp = sameSource.filter(a => a.totp_secret).length;
+                const withRecovery = sameSource.filter(a => a.recovery_email).length;
+                const withYoutube = sameSource.filter(a => a.youtube_url).length;
+                const withPassword = sameSource.filter(a => a.password).length;
+                const withExtra = sameSource.filter(a => a.extra && a.extra.length).length;
+                console.log('Stats: password=' + withPassword + ' totp=' + withTotp + ' recovery=' + withRecovery + ' youtube=' + withYoutube + ' extra=' + withExtra);
+                console.log('');
+
+                // Show first N accounts
+                console.log('=== FIRST', count, 'ACCOUNTS ===');
+                sameSource.slice(0, count).forEach((a, i) => {
+                  console.log('#' + (i+1), a.email);
+                  console.log('  pw:', (a.password || '').slice(0, 20) + (a.password && a.password.length > 20 ? '...' : '') || '(empty)');
+                  console.log('  totp:', a.totp_secret || '(empty)');
+                  console.log('  recovery:', a.recovery_email || '(empty)');
+                  console.log('  youtube:', a.youtube_url || '(empty)');
+                  if (a.extra && a.extra.length) console.log('  extra:', JSON.stringify(a.extra));
+                  if (a.password_alts && a.password_alts.length) console.log('  pw_alts:', JSON.stringify(a.password_alts));
+                  console.log('');
+                });
+              }
+            }
+
+            // Full audit mode
+            if (audit) {
+              console.log('');
+              console.log('========================================');
+              console.log('=== FULL AUDIT: SPARSE ACCOUNTS ===');
+              console.log('========================================');
+
+              // Group by source file
+              const byFile = {};
+              for (const a of accounts) {
+                const f = a.source_file || 'unknown';
+                if (!byFile[f]) byFile[f] = [];
+                byFile[f].push(a);
+              }
+
+              console.log('Total source files:', Object.keys(byFile).length);
+              console.log('');
+
+              let totalSparse = 0;
+              let totalMissingTotp = 0;
+              let totalMissingPw = 0;
+              let totalMissingRecovery = 0;
+
+              const fileStats = [];
+              for (const [file, accs] of Object.entries(byFile)) {
+                const noTotp = accs.filter(a => !a.totp_secret).length;
+                const noPw = accs.filter(a => !a.password).length;
+                const noRecovery = accs.filter(a => !a.recovery_email).length;
+                const noYoutube = accs.filter(a => !a.youtube_url).length;
+                const sparse = accs.filter(a => !a.totp_secret && !a.recovery_email && !a.youtube_url).length;
+
+                totalSparse += sparse;
+                totalMissingTotp += noTotp;
+                totalMissingPw += noPw;
+                totalMissingRecovery += noRecovery;
+
+                fileStats.push({
+                  file, total: accs.length,
+                  noTotp, noPw, noRecovery, noYoutube, sparse,
+                  sparseRate: (sparse / accs.length * 100).toFixed(1)
+                });
+              }
+
+              // Sort by sparse count desc
+              fileStats.sort((a, b) => b.sparse - a.sparse);
+
+              console.log('=== FILES BY SPARSE ACCOUNT COUNT ===');
+              for (const s of fileStats) {
+                if (s.sparse === 0) continue;
+                console.log(s.file);
+                console.log('  total:', s.total, '| sparse(no totp+recovery+youtube):', s.sparse, '(' + s.sparseRate + '%)');
+                console.log('  no_totp:', s.noTotp, '| no_pw:', s.noPw, '| no_recovery:', s.noRecovery, '| no_youtube:', s.noYoutube);
+                console.log('');
+              }
+
+              console.log('=== AUDIT SUMMARY ===');
+              console.log('Total accounts:', accounts.length);
+              console.log('Sparse (no totp + no recovery + no youtube):', totalSparse);
+              console.log('Missing TOTP:', totalMissingTotp);
+              console.log('Missing password:', totalMissingPw);
+              console.log('Missing recovery:', totalMissingRecovery);
+              console.log('Sparse rate:', (totalSparse / accounts.length * 100).toFixed(1) + '%');
+            }
+            QUERYEOF
+
+            node /tmp/query_accounts.js "$EMAIL" "$COUNT" "$AUDIT"
