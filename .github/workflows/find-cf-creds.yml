@@ -1,4 +1,4 @@
-name: Check GCP for CF credentials
+name: Deep search chamgyo server for CF token
 on:
   workflow_dispatch:
 
@@ -9,59 +9,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check GCP secrets and metadata
+      - name: Search chamgyo and all sites for CF tokens
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 60s
+          command_timeout: 90s
           script: |
-            echo "=== 1. gcloud secrets list ==="
-            sudo gcloud secrets list --project=quantum-bonus-455522-b4 2>&1 | head -20
+            echo "=== 1. All cfut_ tokens on server (excluding node_modules) ==="
+            sudo grep -r "cfut_" /var/www/ /opt/ /etc/ /root/ --include="*.js" --include="*.json" --include="*.env" --include="*.ini" --include="*.cfg" --include="*.conf" --include="*.md" --include="*.txt" --include="*.sh" --include="*.yaml" --include="*.yml" 2>/dev/null | grep -v node_modules | head -30
 
             echo ""
-            echo "=== 2. gcloud secrets versions access (any cf-related) ==="
-            for s in $(sudo gcloud secrets list --project=quantum-bonus-455522-b4 --format='value(name)' 2>/dev/null | grep -i 'cloud\|cf\|dns\|token' 2>/dev/null); do
-              echo "--- Secret: $s ---"
-              sudo gcloud secrets versions access latest --secret="$s" --project=quantum-bonus-455522-b4 2>&1
-            done
+            echo "=== 2. Cloudflare config files anywhere ==="
+            sudo find /var/www/ /opt/ /root/ /home/ -name "*.cloudflare*" -o -name "*cloudflare*" -o -name ".cf" 2>/dev/null | grep -v node_modules | head -20
 
             echo ""
-            echo "=== 3. VM metadata ==="
-            curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/attributes/" 2>/dev/null
-            echo ""
-            for attr in $(curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/attributes/" 2>/dev/null | tr '\n' ' '); do
-              echo "--- $attr ---"
-              curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$attr" 2>/dev/null
-              echo ""
-            done
+            echo "=== 3. chamgyo site structure ==="
+            ls -la /var/www/sites/chamgyo/ 2>/dev/null
+            ls -la /var/www/sites/chamgyo/public/ 2>/dev/null | head -10
 
             echo ""
-            echo "=== 4. Project metadata ==="
-            curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/project/attributes/" 2>/dev/null
-            echo ""
-            for attr in $(curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/project/attributes/" 2>/dev/null | tr '\n' ' '); do
-              echo "--- $attr ---"
-              curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/project/attributes/$attr" 2>/dev/null
-              echo ""
-            done
-
-            echo ""
-            echo "=== 5. Check all env files for cloudflare ==="
-            sudo grep -ri "cloudflare\|cfut_\|dns_cloudflare" /opt/gauth-full/.env /var/www/sites/*/.env 2>/dev/null | head -10
-
-            echo ""
-            echo "=== 6. Check certbot renewal conf ==="
-            sudo cat /etc/letsencrypt/renewal/*.conf 2>/dev/null | grep -i "cloudflare\|authenticator\|dns" | head -10
-
-            echo ""
-            echo "=== 7. pip/certbot cloudflare plugin credentials ==="
-            sudo find /etc/letsencrypt/ -name "*.ini" -o -name "*.cfg" 2>/dev/null | head -10
-            for f in $(sudo find /etc/letsencrypt/ -name "*.ini" -o -name "*.cfg" 2>/dev/null); do
+            echo "=== 4. All .env and config files in /var/www/sites/ ==="
+            sudo find /var/www/sites/ -maxdepth 3 -name ".env" -o -name "*.ini" -o -name "*.cfg" 2>/dev/null | head -20
+            for f in $(sudo find /var/www/sites/ -maxdepth 3 -name ".env" 2>/dev/null); do
               echo "--- $f ---"
               sudo cat "$f" 2>/dev/null
             done
+
+            echo ""
+            echo "=== 5. Cloudflare in bash history ==="
+            sudo grep -i "cloudflare\|cfut_\|dns_record" /root/.bash_history /home/*/.bash_history 2>/dev/null | tail -20
+
+            echo ""
+            echo "=== 6. All tokens in claude-mem-sync cent-solution file ==="
+            sudo cat /opt/claude-mem-sync/proj1/cent-solution-on-gcp.md 2>/dev/null
 
             echo ""
             echo "=== DONE ==="
