@@ -7,45 +7,84 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check gain site
-        run: |
-          echo "===== gain.cent-solution.online response ====="
-          curl -sI "https://gain.cent-solution.online/" --max-time 10 2>&1 || echo "FAILED"
-
-          echo ""
-          echo "===== gain.cent-solution.online HTML (first 200 lines) ====="
-          curl -sL "https://gain.cent-solution.online/" --max-time 10 2>/dev/null | head -200
-
-          echo ""
-          echo "===== gauth.cent-solution.online response ====="
-          curl -sI "https://gauth.cent-solution.online/" --max-time 10 2>&1 || echo "FAILED"
-
-      - name: Server scan via SSH
+      - name: List CF tokens and create DNS token
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
           script: |
-            echo "===== All sites ====="
-            ls -la /var/www/sites/ 2>/dev/null
+            CF_TOKEN=$(sudo grep -oP 'dns_cloudflare_api_token\s*=\s*\K\S+' /root/.secrets/cloudflare.ini 2>/dev/null | head -1)
+            ZONE="2601d4f4ab75c910f8d858ca036ff344"
+            SERVER_IP=$(curl -s ifconfig.me)
+            echo "Server IP: $SERVER_IP"
+            echo "Existing token length: ${#CF_TOKEN}"
 
             echo ""
-            echo "===== Search gain everywhere ====="
-            grep -rl "gain" /var/www/ /opt/ /etc/apache2/ /etc/nginx/ 2>/dev/null | head -50 || echo "none"
+            echo "=== 1. List all API tokens ==="
+            curl -s "https://api.cloudflare.com/client/v4/user/tokens" \
+              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+if d.get('success'):
+  for t in d.get('result',[]):
+    print(f\"ID: {t['id']}, Name: {t['name']}, Status: {t['status']}\")
+    for p in t.get('policies',[]):
+      pgroups = [pg.get('name','?') for pg in p.get('permission_groups',[])]
+      res = list(p.get('resources',{}).keys())
+      print(f\"  Perms: {', '.join(pgroups)} | Resources: {', '.join(res)}\")
+else:
+  print('Failed:', json.dumps(d.get('errors',[])))" 2>&1
 
             echo ""
-            echo "===== Apache vhosts ====="
-            cat /etc/apache2/sites-enabled/*.conf 2>/dev/null || echo "no apache"
+            echo "=== 2. Permission groups (DNS related) ==="
+            curl -s "https://api.cloudflare.com/client/v4/user/tokens/permission_groups" \
+              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+if d.get('success'):
+  for p in d.get('result',[]):
+    n=p.get('name','')
+    if 'dns' in n.lower() or 'zone' in n.lower():
+      print(f\"{p['id']}: {n} (scopes: {','.join(p.get('scopes',[]))})\")
+else:
+  print('Failed:', json.dumps(d.get('errors',[])))" 2>&1
 
             echo ""
-            echo "===== Nginx vhosts ====="
-            cat /etc/nginx/sites-enabled/* 2>/dev/null || echo "no nginx"
+            echo "=== 3. Try create DNS Edit token ==="
+            curl -s -X POST "https://api.cloudflare.com/client/v4/user/tokens" \
+              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+              -d "{\"name\":\"DNS-Edit-auto\",\"policies\":[{\"effect\":\"allow\",\"resources\":{\"com.cloudflare.api.account.zone.$ZONE\":\"*\"},\"permission_groups\":[{\"id\":\"4755a26eedb94da69e1066d98aa820be\"}]}]}" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+if d.get('success'):
+  v=d['result'].get('value','???')
+  print(f'NEW TOKEN: {v}')
+  print(f'ID: {d[\"result\"].get(\"id\")}')
+else:
+  print('Create failed:', json.dumps(d.get('errors',[])))" 2>&1
 
             echo ""
-            echo "===== Ports ====="
-            ss -tlnp 2>/dev/null | head -30
+            echo "=== 4. Try with Zone DNS permission groups ==="
+            curl -s -X POST "https://api.cloudflare.com/client/v4/user/tokens" \
+              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+              -d '{"name":"DNS-Edit-auto-v2","policies":[{"effect":"allow","resources":{"com.cloudflare.api.account.zone.'$ZONE'":"*"},"permission_groups":[{"id":"82e64a83756745bbbb1c9c2701bf816b"},{"id":"4755a26eedb94da69e1066d98aa820be"}]}]}' | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+if d.get('success'):
+  v=d['result'].get('value','???')
+  print(f'NEW TOKEN v2: {v}')
+else:
+  print('Create v2 failed:', json.dumps(d.get('errors',[])))" 2>&1
 
             echo ""
-            echo "===== .env domains ====="
-            cat /opt/gauth-full/.env 2>/dev/null | grep -i "domain\|host\|gain\|site" || echo "no relevant vars"
+            echo "=== 5. Try direct DNS record create with existing token ==="
+            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records" \
+              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+              -d "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+print('DNS create:', 'SUCCESS' if d.get('success') else json.dumps(d.get('errors',[])))" 2>&1
+
+            echo "=== DONE ==="
