@@ -42,6 +42,10 @@ function isEmail(s) {
   return /^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(s);
 }
 
+/* Gmail 주소 정규화:
+ * - 점(.) 무시: https://support.google.com/mail/answer/7436150
+ * - 플러스(+) 태그 무시: https://support.google.com/mail/answer/22370
+ * - googlemail.com = gmail.com: https://support.google.com/mail/answer/10313 */
 function normalizeEmail(s) {
   s = String(s || '').trim().toLowerCase();
   if (!s || !s.includes('@')) return s;
@@ -56,6 +60,8 @@ function normalizeEmail(s) {
   return local + '@' + domain;
 }
 
+/* ITU-T E.164: 국제 전화번호는 최대 15자리, 국가코드 포함 최소 7자리
+ * ref: https://www.itu.int/rec/T-REC-E.164-201011-I/en */
 function isPhoneNumber(s) {
   s = String(s || '').trim();
   if (!/^[\+]?[\d\s\-()]{7,20}$/.test(s)) return false;
@@ -110,9 +116,15 @@ function extractTotpFromUrl(s) {
   return null;
 }
 
+/* URL 판별: WHATWG URL Standard https://url.spec.whatwg.org/#urls
+ * YouTube 단축 URL 포함: youtu.be는 YouTube 공식 단축 도메인 */
 function isUrlLike(s) {
   s = String(s || '').trim();
-  return /^https?:\/\//i.test(s) || /^(www\.)?youtube\.com/i.test(s) || /^(www\.)?youtu\.be/i.test(s);
+  if (/^https?:\/\//i.test(s)) {
+    try { new URL(s); return true; } catch (_) { return false; }
+  }
+  if (/^(www\.)?youtube\.com/i.test(s) || /^(www\.)?youtu\.be/i.test(s)) return true;
+  return false;
 }
 
 function isOtpauthUrl(s) {
@@ -206,6 +218,7 @@ function analyzeColumns(rows) {
   const mapping = {};
   const used = new Set();
 
+  /* 이메일 열 판정: 10% 이상이 RFC 5322 이메일 형식이면 이메일 열로 간주 */
   const emailCols = stats
     .filter(s => s.nonEmpty > 0 && s.emails / s.nonEmpty > 0.1)
     .sort((a, b) => {
@@ -265,7 +278,7 @@ function analyzeColumns(rows) {
   let bestDate = null, bestDateRatio = 0;
   for (const s of stats) {
     if (used.has(s.col) || s.nonEmpty === 0) continue;
-    var ratio = s.dates / s.nonEmpty;
+    const ratio = s.dates / s.nonEmpty;
     if (ratio > bestDateRatio && ratio > 0.3) {
       bestDateRatio = ratio;
       bestDate = s.col;
@@ -314,25 +327,33 @@ function extractLabelValue(cell) {
   return null;
 }
 
+/* Excel 시리얼 날짜: 1900-01-01 = 1, 범위 36526(2000-01-01)~54789(2050-01-01)
+ * ref: https://support.microsoft.com/en-us/office/date-systems-in-excel-e7fe7167-48a9-4b96-bb53-5612a800b487
+ * ISO 8601 날짜: https://www.iso.org/iso-8601-date-and-time-format.html */
 function isDateLike(s) {
   s = String(s || '').trim();
   if (/^\d{4}[\.\-\/]\d{1,2}[\.\-\/]\d{1,2}/.test(s)) return true;
   if (/^\d{1,2}[\.\-\/]\d{1,2}[\.\-\/]\d{2,4}/.test(s)) return true;
-  if (/^\d{5}$/.test(s) && parseInt(s) > 40000 && parseInt(s) < 55000) return true;
+  if (/^\d{5}$/.test(s)) {
+    const n = parseInt(s);
+    if (n >= 36526 && n <= 54789) return true;
+  }
   if (/\d{4}년\s*\d{1,2}월\s*\d{1,2}일/.test(s)) return true;
   return false;
 }
 
+/* Excel 시리얼→Unix 변환: epoch 차이 = 25569일 (1900-01-01 ~ 1970-01-01)
+ * ref: https://support.microsoft.com/en-us/office/date-systems-in-excel-e7fe7167-48a9-4b96-bb53-5612a800b487 */
 function parseDateValue(s) {
   s = String(s || '').trim();
   if (/^\d{5}$/.test(s)) {
-    var n = parseInt(s);
-    if (n > 40000 && n < 55000) {
-      var d = new Date((n - 25569) * 86400000);
+    const n = parseInt(s);
+    if (n >= 36526 && n <= 54789) {
+      const d = new Date((n - 25569) * 86400000);
       return d.getTime();
     }
   }
-  var m = s.match(/^(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/);
+  let m = s.match(/^(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/);
   if (m) return new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3])).getTime();
   m = s.match(/^(\d{1,2})[\.\-\/](\d{1,2})[\.\-\/](\d{4})/);
   if (m) return new Date(parseInt(m[3]), parseInt(m[1])-1, parseInt(m[2])).getTime();
@@ -343,13 +364,13 @@ function parseDateValue(s) {
 
 function parseDateFromFilename(name) {
   if (!name) return null;
-  var s = String(name);
-  var m = s.match(/(\d{4})[\.\-_](\d{1,2})[\.\-_](\d{1,2})/);
+  const str = String(name);
+  let m = str.match(/(\d{4})[\.\-_](\d{1,2})[\.\-_](\d{1,2})/);
   if (m) return new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3])).getTime();
-  m = s.match(/(\d{8})/);
+  m = str.match(/(\d{8})/);
   if (m) {
-    var ds = m[1];
-    var y = parseInt(ds.slice(0,4)), mo = parseInt(ds.slice(4,6)), d = parseInt(ds.slice(6,8));
+    const ds = m[1];
+    const y = parseInt(ds.slice(0,4)), mo = parseInt(ds.slice(4,6)), d = parseInt(ds.slice(6,8));
     if (y >= 2020 && y <= 2030 && mo >= 1 && mo <= 12 && d >= 1 && d <= 31) return new Date(y, mo-1, d).getTime();
   }
   return null;
@@ -591,8 +612,8 @@ function bruteForceExtract(rows, sourceFile, sourceMtime) {
         const real = passwordCandidates.find(p => !/^\d{1,4}$/.test(p));
         password = real || passwordCandidates[passwordCandidates.length - 1];
       }
-      var _dateVal = null;
-      for (var _rv of rest) { if (isDateLike(_rv)) { _dateVal = parseDateValue(_rv); break; } }
+      let _dateVal = null;
+      for (const _rv of rest) { if (isDateLike(_rv)) { _dateVal = parseDateValue(_rv); break; } }
       accounts.push({ email: v, password, totp_secret, recovery_email: recovery, youtube_url: youtube, account_date: _dateVal || parseDateFromFilename(sourceFile) || null, extra: extraValues, source_file: sourceFile || 'unknown', source_mtime: sourceMtime || Date.now() });
     }
   }
