@@ -1,4 +1,4 @@
-var CACHE = 'gauth-v37'
+var CACHE = 'gauth-v38'
 var ASSETS = ['/', 'index.html', 'manifest.json', 'xlsx.core.min.js']
 self.addEventListener('install', function(e) {
   e.waitUntil(
