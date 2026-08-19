@@ -746,6 +746,24 @@ jobs:
             echo ""
             echo "=== File hash ==="
             md5sum $FILE
+            echo ""
+            echo "=== JS function defs ==="
+            grep -n 'function escapeHtml\|var escapeHtml\|function _esc\|function _sortByExcelDate\|function render\|function applyFilter\|function load\b\|async function render\|async function load' $FILE | head -20
+            echo ""
+            echo "=== SW version ==="
+            grep -n "var V=" $FILE | head -5
+            grep -n "var CACHE=" /var/www/sites/gauth/public/sw.js 2>/dev/null | head -3
+            echo ""
+            echo "=== API test ==="
+            ACC_RESP=$(curl -s -o /tmp/acc_test.txt -w "%{http_code}" http://localhost:4000/api/normalized-accounts 2>/dev/null || echo "000")
+            echo "normalized-accounts HTTP: $ACC_RESP"
+            if [ "$ACC_RESP" = "200" ]; then
+              python3 -c "import json; d=json.load(open('/tmp/acc_test.txt')); print('accounts:', len(d.get('accounts',[])), 'summary:', d.get('summary',{}).get('total',0))" 2>/dev/null || echo "JSON parse failed"
+            fi
+            echo ""
+            echo "=== Browser render test (first 3 lines of spacer content check) ==="
+            grep -c 'td-card' $FILE || echo "0 td-card refs"
+            grep -c 'sp.innerHTML' $FILE || echo "0 sp.innerHTML refs"
 
       - name: Summary
         if: always()
