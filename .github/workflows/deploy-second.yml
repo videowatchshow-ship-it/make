@@ -31,7 +31,7 @@ jobs:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 5m
+          command_timeout: 8m
           envs: CF_TOKEN_SECRET,CF_ZONE_SECRET
           script: |
             SITE_DIR="/var/www/sites/second"
@@ -83,23 +83,19 @@ jobs:
                 [ -z "$CF_EMAIL" ] && CF_EMAIL=$(sudo grep -oP '(?:CLOUDFLARE_EMAIL|CF_EMAIL)=\K\S+' "$f" 2>/dev/null | head -1)
               done
             fi
-            SEARCH_DIRS="/opt/gauth-full /root /var/www/sites /etc/default /etc/environment"
             if [ -z "$CF_TOKEN" ] && [ -z "$CF_API_KEY" ]; then
-              echo "searching for CF Global API Key across server..."
-              for sd in $SEARCH_DIRS; do
+              echo "searching for CF Global API Key..."
+              for sd in /opt/gauth-full /root /var/www/sites /etc/default /etc/environment; do
                 [ -d "$sd" ] || [ -f "$sd" ] || continue
-                [ -z "$CF_API_KEY" ] && CF_API_KEY=$(sudo grep -rhoP '(?:globalApiKey|CF_API_KEY|CLOUDFLARE_API_KEY|CF_GLOBAL_KEY|apiKey)\s*[=:]\s*['"'"'"]*\K[a-f0-9]{37}' "$sd" 2>/dev/null | head -1)
-                [ -z "$CF_EMAIL" ] && CF_EMAIL=$(sudo grep -rhoP '(?:cloudflareEmail|CF_EMAIL|CLOUDFLARE_EMAIL|authEmail)\s*[=:]\s*['"'"'"]*\K[^\s'"'"'"]+@[^\s'"'"'"]+' "$sd" 2>/dev/null | head -1)
+                [ -z "$CF_API_KEY" ] && CF_API_KEY=$(sudo grep -rlP --include='*.env' --include='*.js' --include='*.json' --include='*.cfg' --include='*.conf' -m1 '[a-f0-9]{37}' "$sd" 2>/dev/null | head -1 | xargs -r sudo grep -oP '(?:globalApiKey|CF_API_KEY|CLOUDFLARE_API_KEY|CF_GLOBAL_KEY)\s*[=:]\s*['"'"'"'"']*\K[a-f0-9]{37}' 2>/dev/null | head -1)
+                [ -z "$CF_EMAIL" ] && CF_EMAIL=$(sudo grep -rhoP --include='*.env' --include='*.js' --include='*.json' '(?:cloudflareEmail|CF_EMAIL|CLOUDFLARE_EMAIL|authEmail)\s*[=:]\s*['"'"'"'"']*\K[^\s'"'"'"'"']+@[^\s'"'"'"'"']+' "$sd" 2>/dev/null | head -1)
               done
               [ -n "$CF_API_KEY" ] && echo "found Global API Key"
               [ -n "$CF_EMAIL" ] && echo "found CF email: $CF_EMAIL"
             fi
             if [ -z "$CF_TOKEN" ] && [ -z "$CF_API_KEY" ]; then
-              echo "searching for CF API tokens across server..."
-              for sd in $SEARCH_DIRS; do
-                [ -d "$sd" ] || [ -f "$sd" ] || continue
-                [ -z "$CF_TOKEN" ] && CF_TOKEN=$(sudo grep -rhoP 'cfut_[A-Za-z0-9_-]{20,}' "$sd" 2>/dev/null | head -1)
-              done
+              echo "searching for CF API tokens..."
+              CF_TOKEN=$(sudo grep -rhoP --include='*.env' --include='*.js' --include='*.json' 'cfut_[A-Za-z0-9_-]{20,}' /opt/gauth-full /root /var/www/sites 2>/dev/null | head -1)
               [ -n "$CF_TOKEN" ] && echo "found cfut_ token"
             fi
             if [ -f /root/.cloudflare/cf-token ] && [ -z "$CF_TOKEN" ] && [ -z "$CF_API_KEY" ]; then
@@ -109,7 +105,7 @@ jobs:
 
             HAS_CF="no"
             [ -n "$CF_TOKEN" ] || [ -n "$CF_API_KEY" ] && HAS_CF="yes"
-            echo "CF credentials found: $HAS_CF (token=$([ -n "$CF_TOKEN" ] && echo YES || echo NO) apikey=$([ -n "$CF_API_KEY" ] && echo YES || echo NO))"
+            echo "CF credentials found: $HAS_CF (token=$([ -n \"$CF_TOKEN\" ] && echo YES || echo NO) apikey=$([ -n \"$CF_API_KEY\" ] && echo YES || echo NO))"
 
             if [ "$HAS_CF" = "yes" ] && [ -n "$CF_TOKEN" ]; then
               echo "=== Verifying token permissions ==="
@@ -128,7 +124,7 @@ jobs:
                   -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
               fi
               CF_ZONE=$(echo "$ZONE_RESP" | python3 -c "import json,sys;d=json.load(sys.stdin);r=d.get('result',[]);print(r[0]['id'] if r else '')" 2>/dev/null)
-              echo "CF_ZONE from API: $([ -n "$CF_ZONE" ] && echo YES || echo NO)"
+              echo "CF_ZONE from API: $([ -n \"$CF_ZONE\" ] && echo YES || echo NO)"
               [ -z "$CF_ZONE" ] && echo "zone response: $ZONE_RESP"
             fi
 
@@ -166,27 +162,27 @@ jobs:
                     ALL_DNS=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?per_page=100" \
                       -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
                   fi
-                  echo "$ALL_DNS" | python3 -c "import json,sys;d=json.load(sys.stdin);[print(f'  {r[\"type\"]:5} {r[\"name\"]:40} -> {r[\"content\"]}') for r in d.get('result',[])]" 2>/dev/null || echo "Could not list DNS records"
+                  echo "$ALL_DNS" | python3 -c "import json,sys;d=json.load(sys.stdin);[print('  '+r['type'].ljust(5)+r['name'].ljust(40)+'-> '+r['content']) for r in d.get('result',[])]" 2>/dev/null || echo "Could not list DNS records"
                   echo ""
-                  echo "=== Searching for ANY CF token with DNS write permissions ==="
-                  ALL_TOKENS=$(sudo grep -rhoP '[A-Za-z0-9_-]{40,}' /opt/gauth-full/.env /root/.env /var/www/sites/*/.env 2>/dev/null | sort -u)
-                  for tk in $ALL_TOKENS; do
-                    V=$(curl -s "https://api.cloudflare.com/client/v4/user/tokens/verify" \
-                      -H "Authorization: Bearer $tk" -H "Content-Type: application/json" 2>/dev/null)
-                    STATUS=$(echo "$V" | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('result',{}).get('status',''))" 2>/dev/null)
-                    if [ "$STATUS" = "active" ] && [ "$tk" != "$CF_TOKEN" ]; then
-                      echo "Found additional active token: ${tk:0:8}..."
-                      TEST_DNS=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
-                        -H "Authorization: Bearer $tk" -H "Content-Type: application/json" \
-                        --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
-                      TEST_OK=$(echo "$TEST_DNS" | python3 -c "import json,sys;print(json.load(sys.stdin).get('success',False))" 2>/dev/null)
-                      if [ "$TEST_OK" = "True" ]; then
-                        echo "DNS created with alternate token!"
-                        DNS_OK="True"
-                        break
-                      fi
+                  echo "=== Trying to create DNS token via CF API ==="
+                  NEW_TOKEN_RESP=$(curl -s -X POST "https://api.cloudflare.com/client/v4/user/tokens" \
+                    -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+                    --data "{\"name\":\"dns-edit-second\",\"policies\":[{\"effect\":\"allow\",\"resources\":{\"com.cloudflare.api.account.zone.${CF_ZONE}\":\"*\"},\"permission_groups\":[{\"id\":\"4755a26eedb94da69e1066d98aa820be\",\"name\":\"DNS Write\"}]}]}")
+                  echo "$NEW_TOKEN_RESP" | python3 -c "import json,sys;d=json.load(sys.stdin);print('Token create:',d.get('success',False));[print('  err:',e.get('message','')) for e in d.get('errors',[])]" 2>/dev/null
+                  NEW_TK=$(echo "$NEW_TOKEN_RESP" | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('result',{}).get('value',''))" 2>/dev/null)
+                  if [ -n "$NEW_TK" ] && [ "$NEW_TK" != "None" ]; then
+                    echo "Created new DNS token, trying DNS creation..."
+                    TEST_DNS=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
+                      -H "Authorization: Bearer $NEW_TK" -H "Content-Type: application/json" \
+                      --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
+                    TEST_OK=$(echo "$TEST_DNS" | python3 -c "import json,sys;print(json.load(sys.stdin).get('success',False))" 2>/dev/null)
+                    if [ "$TEST_OK" = "True" ]; then
+                      echo "DNS created with new token!"
+                      DNS_OK="True"
+                    else
+                      echo "$TEST_DNS" | python3 -c "import json,sys;d=json.load(sys.stdin);[print('  err:',e.get('message','')) for e in d.get('errors',[])]" 2>/dev/null
                     fi
-                  done
+                  fi
                 fi
               fi
               sleep 10
