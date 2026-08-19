@@ -8,77 +8,80 @@ on:
 jobs:
   dns:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
-      - name: SSH로 서버 파일 읽고 토큰 추출 후 DNS 추가
+      - name: SSH로 .env에서 토큰 추출 후 DNS 추가
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
           script_stop: false
-          timeout: 120s
-          command_timeout: 180s
+          timeout: 60s
+          command_timeout: 240s
           script: |
             ZONE_ID="7e5faed2d3d4d6da7aceb4ddde81a62b"
             IP="34.104.233.35"
-
             TOKEN=""
 
-            # 1) gucci CF config 파일에서 토큰 추출
+            # gucci PHP는 parse_ini_file(__DIR__ . '/../../.env') 사용
+            # __DIR__ = /var/www/sites/gucci/config → ../../.env = /var/www/sites/.env
+            echo "=== .env 파일 탐색 ==="
             for f in \
-              /var/www/sites/gucci/config/cloudflare-config.php \
-              /var/www/sites/gucci/config/cloudflare-waf-config.php \
-              /var/www/sites/gucci/config/cloudflare.php \
-              /root/.secrets/cloudflare.ini; do
+              /var/www/sites/.env \
+              /var/www/sites/gucci/.env \
+              /var/www/.env \
+              /var/www/sites/gucci/config/../../.env; do
               if [ -f "$f" ]; then
-                echo "=== $f ==="
-                cat "$f" | head -60
-                T=$(grep -oP 'cfut_[A-Za-z0-9]{40,}' "$f" 2>/dev/null | head -1)
+                echo "파일 발견: $f"
+                cat "$f"
+                T=$(grep -oP 'CLOUDFLARE_API_TOKEN\s*=\s*\K\S+' "$f" 2>/dev/null | head -1)
+                [ -z "$T" ] && T=$(grep -oP 'cfut_[A-Za-z0-9]{40,}' "$f" 2>/dev/null | head -1)
                 if [ -n "$T" ] && [ -z "$TOKEN" ]; then
                   TOKEN="$T"
-                  echo "TOKEN found: ${TOKEN:0:20}..."
+                  echo "TOKEN found in $f"
                 fi
               fi
             done
 
-            # 2) 전체 /var/www 탐색
+            # .env 파일 목록 출력
+            echo "=== find .env 파일 목록 ==="
+            find /var/www/ -maxdepth 5 -name ".env" -type f 2>/dev/null
+            find /var/www/ -maxdepth 5 -name "*.env" -type f 2>/dev/null
+
+            # 발견된 모든 .env 읽기
             if [ -z "$TOKEN" ]; then
-              echo "--- /var/www 전체 탐색 ---"
-              ALL=$(grep -rhoP 'cfut_[A-Za-z0-9]{40,}' /var/www/ 2>/dev/null | sort -u)
-              echo "$ALL" | head -10
-              TOKEN=$(echo "$ALL" | head -1)
+              for f in $(find /var/www/ -maxdepth 5 -name ".env" -type f 2>/dev/null); do
+                echo "=== $f ==="
+                cat "$f"
+                T=$(grep -oP 'CLOUDFLARE_API_TOKEN\s*=\s*\K\S+' "$f" 2>/dev/null | head -1)
+                [ -z "$T" ] && T=$(grep -oP 'cfut_[A-Za-z0-9]{40,}' "$f" 2>/dev/null | head -1)
+                if [ -n "$T" ] && [ -z "$TOKEN" ]; then
+                  TOKEN="$T"
+                  echo "TOKEN found in $f"
+                fi
+              done
             fi
 
-            # 3) /opt 탐색
             if [ -z "$TOKEN" ]; then
-              echo "--- /opt 탐색 ---"
-              ALL=$(grep -rhoP 'cfut_[A-Za-z0-9]{40,}' /opt/ 2>/dev/null | sort -u)
-              echo "$ALL" | head -10
-              TOKEN=$(echo "$ALL" | head -1)
-            fi
-
-            if [ -z "$TOKEN" ]; then
-              echo "ERROR: 서버 전체에서 CF 토큰 못 찾음"
+              echo "ERROR: .env에서 CF 토큰 못 찾음"
               exit 1
             fi
 
             echo "사용 토큰: ${TOKEN:0:25}..."
 
-            # 4) 토큰 권한 확인
+            # 토큰 권한 확인
             VERIFY=$(curl -sS "https://api.cloudflare.com/client/v4/user/tokens/verify" \
               -H "Authorization: Bearer $TOKEN")
-            echo "토큰 상태: $(echo $VERIFY | head -c 300)"
+            echo "토큰 상태: $(echo $VERIFY | head -c 400)"
 
-            # 5) 기존 와일드카드 확인
+            # 기존 와일드카드 확인
             EXISTING=$(curl -sS "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=A&name=*" \
               -H "Authorization: Bearer $TOKEN")
-            echo "기존: $(echo $EXISTING | head -c 400)"
-
             COUNT=$(echo "$EXISTING" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('result_info',{}).get('count',0))" 2>/dev/null || echo 0)
 
             if [ "$COUNT" -gt 0 ]; then
-              echo "이미 존재"
+              echo "와일드카드 이미 존재"
               echo "$EXISTING" | python3 -c "import sys,json; [print(r['name'],r['content'],r['proxied']) for r in json.load(sys.stdin).get('result',[])]"
             else
               echo "생성 중..."
