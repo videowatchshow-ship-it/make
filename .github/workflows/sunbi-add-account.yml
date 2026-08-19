@@ -38,14 +38,23 @@ jobs:
               echo "=== sunbi accounts.json line count ==="
               sudo wc -l "$SUNBI_DIR/accounts.json" 2>/dev/null || echo "0"
               echo ""
-              echo "=== Test sunbi API on port 3013 ==="
-              curl -s http://localhost:3013/api/sunbi/accounts 2>/dev/null | head -200
-              echo ""
               echo "=== systemctl status ==="
               systemctl status sunbi 2>/dev/null | head -20 || echo "no sunbi service"
               echo ""
-              echo "=== pm2 list ==="
-              pm2 list 2>/dev/null | grep -i sunbi || echo "not in pm2"
+              echo "=== journalctl sunbi errors (last 50 lines) ==="
+              sudo journalctl -u sunbi --no-pager -n 50 2>/dev/null || echo "no journal"
+              echo ""
+              echo "=== sunbi service unit file ==="
+              cat /etc/systemd/system/sunbi.service 2>/dev/null || echo "not found"
+              echo ""
+              echo "=== ls sunbi dir ==="
+              ls -la "$SUNBI_DIR/" 2>/dev/null
+              echo ""
+              echo "=== node modules check ==="
+              ls "$SUNBI_DIR/node_modules/" 2>/dev/null | head -20 || echo "no node_modules"
+              echo ""
+              echo "=== Test start sunbi manually ==="
+              cd "$SUNBI_DIR" && timeout 5 node server.js 2>&1 || echo "exit code: $?"
             fi
 
             if [ "$ACTION" = "add" ]; then
