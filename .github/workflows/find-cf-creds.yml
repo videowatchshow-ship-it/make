@@ -1,4 +1,4 @@
-name: Find CF credentials everywhere
+name: Create DNS record for second
 on:
   workflow_dispatch:
 
@@ -9,44 +9,69 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Final CF credential search
+      - name: Create DNS A record via python3
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 90s
+          command_timeout: 60s
           script: |
-            echo "=== 1. Python cloudflare config files ==="
-            sudo cat /root/.cloudflare.cfg 2>/dev/null || echo "no root cfg"
-            sudo find / -name '.cloudflare.cfg' -not -path '*/proc/*' -not -path '*/sys/*' 2>/dev/null | head -5 || echo "none"
-
-            echo ""
-            echo "=== 2. Memory nodes with token ==="
-            sudo find /opt/claude-mem-sync/ -name '*token*' -type f 2>/dev/null
-            sudo find /opt/claude-mem-sync/ -name '*cloudflare*' -type f 2>/dev/null
-
-            echo ""
-            echo "=== 3. Read token memory nodes ==="
-            for f in $(sudo find /opt/claude-mem-sync/ -name '*token*' -type f 2>/dev/null); do
-              echo "--- $f ---"
-              sudo cat "$f" 2>/dev/null
-              echo ""
-            done
-
-            echo ""
-            echo "=== 4. Global API Key refs ==="
-            sudo grep -r 'CLOUDFLARE_EMAIL\|CF_API_KEY\|CLOUDFLARE_API_KEY' /root/ /opt/ /home/ --include='*.env' --include='*.cfg' --include='*.ini' --include='*.conf' --include='*.md' 2>/dev/null | grep -v node_modules | grep -v venv | head -20 || echo "none"
-
-            echo ""
-            echo "=== 5. gucci parent .env ==="
-            sudo cat /var/www/sites/.env 2>/dev/null || echo "no /var/www/sites/.env"
-            sudo cat /var/www/.env 2>/dev/null || echo "no /var/www/.env"
-
-            echo ""
-            echo "=== 6. Python CF module test ==="
+            echo "=== Attempting DNS A record creation ==="
             CF_TOKEN=$(sudo awk -F' = ' '{print $2}' /root/.secrets/cloudflare.ini 2>/dev/null)
-            sudo python3 -c "import CloudFlare; cf=CloudFlare.CloudFlare(token='${CF_TOKEN}'); print(cf.zones.get(params={'name':'cent-solution.online'}))" 2>&1 || echo "python cf failed"
+            SERVER_IP=$(curl -s ifconfig.me)
+            echo "Server IP: $SERVER_IP"
+
+            sudo python3 -c "
+            import CloudFlare
+            cf = CloudFlare.CloudFlare(token='${CF_TOKEN}')
+            zone_id = '2601d4f4ab75c910f8d858ca036ff344'
+
+            # List existing records first
+            try:
+                records = cf.zones.dns_records.get(zone_id, params={'name':'second.cent-solution.online','type':'A'})
+                print('Existing records:', len(records))
+                for r in records:
+                    print(f'  {r[\"name\"]} -> {r[\"content\"]}')
+            except Exception as e:
+                print('List error:', e)
+
+            # Try to create
+            try:
+                result = cf.zones.dns_records.post(zone_id, data={
+                    'type': 'A',
+                    'name': 'second',
+                    'content': '${SERVER_IP}',
+                    'ttl': 1,
+                    'proxied': True
+                })
+                print('SUCCESS:', result.get('name'), '->', result.get('content'))
+            except Exception as e:
+                print('Create error:', e)
+            " 2>&1
+
+            echo ""
+            echo "=== Also try curl directly ==="
+            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/2601d4f4ab75c910f8d858ca036ff344/dns_records" \
+              -H "Authorization: Bearer ${CF_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"${SERVER_IP}\",\"ttl\":1,\"proxied\":true}" 2>&1
+
+            echo ""
+            echo "=== List ALL existing DNS records ==="
+            curl -s "https://api.cloudflare.com/client/v4/zones/2601d4f4ab75c910f8d858ca036ff344/dns_records?per_page=50" \
+              -H "Authorization: Bearer ${CF_TOKEN}" \
+              -H "Content-Type: application/json" 2>&1 | python3 -c "
+            import sys, json
+            try:
+                data = json.load(sys.stdin)
+                if data.get('success'):
+                    for r in data.get('result', []):
+                        print(f'{r[\"type\"]:6} {r[\"name\"]:40} -> {r[\"content\"]}')
+                else:
+                    print('Failed:', data.get('errors'))
+            except Exception as e:
+                print('Parse error:', e)" 2>&1
 
             echo ""
             echo "=== DONE ==="
