@@ -70,55 +70,82 @@ jobs:
             echo "=== Cloudflare DNS ==="
             CF_TOKEN="${CF_TOKEN_SECRET}"
             CF_ZONE="${CF_ZONE_SECRET}"
+            CF_API_KEY=""
+            CF_EMAIL=""
             if [ -n "$CF_TOKEN" ]; then
               echo "CF_TOKEN from GitHub secrets"
             else
-              for f in /opt/gauth-full/.env /etc/environment /etc/default/gauth /var/www/sites/gauth/.env /root/.env /etc/systemd/system/gauth.service; do
+              for f in /opt/gauth-full/.env /etc/environment /etc/default/gauth /var/www/sites/gauth/.env /root/.env; do
                 [ -f "$f" ] || continue
-                [ -z "$CF_TOKEN" ] && CF_TOKEN=$(sudo grep -oP '(?:CLOUDFLARE_TOKEN|CF_TOKEN)=\K\S+' "$f" 2>/dev/null | head -1)
-                [ -z "$CF_ZONE" ] && CF_ZONE=$(sudo grep -oP '(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID)=\K\S+' "$f" 2>/dev/null | head -1)
+                [ -z "$CF_TOKEN" ] && CF_TOKEN=$(sudo grep -oP '(?:CLOUDFLARE_TOKEN|CF_TOKEN)=\K[A-Za-z0-9_-]{20,}' "$f" 2>/dev/null | head -1)
+                [ -z "$CF_ZONE" ] && CF_ZONE=$(sudo grep -oP '(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID)=\K[a-f0-9]{32}' "$f" 2>/dev/null | head -1)
+                [ -z "$CF_API_KEY" ] && CF_API_KEY=$(sudo grep -oP '(?:CLOUDFLARE_API_KEY|CF_API_KEY|CF_GLOBAL_KEY)=\K[a-f0-9]{37}' "$f" 2>/dev/null | head -1)
+                [ -z "$CF_EMAIL" ] && CF_EMAIL=$(sudo grep -oP '(?:CLOUDFLARE_EMAIL|CF_EMAIL)=\K\S+' "$f" 2>/dev/null | head -1)
               done
             fi
-            if [ -z "$CF_TOKEN" ]; then
-              echo "searching JS files for CF token..."
-              for f in /opt/gauth-full/auto_deploy.js /opt/gauth-full/auto_deploy.js.bak2 /opt/gauth-full/auto_deploy.js.bak-; do
-                [ -f "$f" ] || continue
-                T=$(sudo grep -oP "(?:CLOUDFLARE_TOKEN|CF_TOKEN|cfToken|cloudflareToken)\s*[=:]\s*['\"]?\K\S+" "$f" 2>/dev/null | head -1)
-                [ -n "$T" ] && T=$(echo "$T" | tr -d "\"',;") && CF_TOKEN="$T" && echo "found token in $f" && break
-              done
+            if [ -z "$CF_TOKEN" ] && [ -z "$CF_API_KEY" ]; then
+              echo "searching for CF Global API Key..."
+              CF_API_KEY=$(sudo grep -rhoP '(?:globalApiKey|CF_API_KEY|CLOUDFLARE_API_KEY|apiKey)\s*[=:]\s*['"'"'"]*\K[a-f0-9]{37}' /opt/gauth-full/ 2>/dev/null | head -1)
+              [ -n "$CF_API_KEY" ] && echo "found Global API Key"
+              CF_EMAIL=$(sudo grep -rhoP '(?:cloudflareEmail|CF_EMAIL|CLOUDFLARE_EMAIL|authEmail)\s*[=:]\s*['"'"'"]*\K[^\s'"'"'"]+@[^\s'"'"'"]+' /opt/gauth-full/ 2>/dev/null | head -1)
+              [ -n "$CF_EMAIL" ] && echo "found CF email"
             fi
-            if [ -z "$CF_TOKEN" ]; then
-              echo "broad search for cfut_ token..."
+            if [ -z "$CF_TOKEN" ] && [ -z "$CF_API_KEY" ]; then
+              echo "searching for cfut_ token..."
               CF_TOKEN=$(sudo grep -rhoP 'cfut_[A-Za-z0-9_-]{20,}' /opt/gauth-full/ 2>/dev/null | head -1)
               [ -n "$CF_TOKEN" ] && echo "found cfut_ token"
             fi
-            if [ -z "$CF_TOKEN" ]; then
-              echo "searching all token patterns..."
-              CF_TOKEN=$(sudo grep -rhoP '(?:CLOUDFLARE_TOKEN|CF_TOKEN|cfToken)\s*[=:]\s*['"'"'"]*\K[A-Za-z0-9_-]{20,}' /opt/gauth-full/ 2>/dev/null | head -1)
-            fi
-            echo "CF_TOKEN found: $([ -n "$CF_TOKEN" ] && echo YES || echo NO)"
-            if [ -n "$CF_TOKEN" ] && [ -z "$CF_ZONE" ]; then
+
+            HAS_CF="no"
+            [ -n "$CF_TOKEN" ] || [ -n "$CF_API_KEY" ] && HAS_CF="yes"
+            echo "CF credentials found: $HAS_CF (token=$([ -n "$CF_TOKEN" ] && echo YES || echo NO) apikey=$([ -n "$CF_API_KEY" ] && echo YES || echo NO))"
+
+            if [ "$HAS_CF" = "yes" ] && [ -z "$CF_ZONE" ]; then
               echo "looking up zone via CF API..."
-              ZONE_RESP=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=cent-solution.online" \
-                -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
+              if [ -n "$CF_API_KEY" ] && [ -n "$CF_EMAIL" ]; then
+                ZONE_RESP=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=cent-solution.online" \
+                  -H "X-Auth-Key: ${CF_API_KEY}" -H "X-Auth-Email: ${CF_EMAIL}" -H "Content-Type: application/json")
+              else
+                ZONE_RESP=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=cent-solution.online" \
+                  -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
+              fi
               CF_ZONE=$(echo "$ZONE_RESP" | python3 -c "import json,sys;d=json.load(sys.stdin);r=d.get('result',[]);print(r[0]['id'] if r else '')" 2>/dev/null)
               echo "CF_ZONE from API: $([ -n "$CF_ZONE" ] && echo YES || echo NO)"
               [ -z "$CF_ZONE" ] && echo "zone response: $ZONE_RESP"
             fi
 
-            if [ -n "$CF_TOKEN" ] && [ -n "$CF_ZONE" ]; then
-              EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?name=second.cent-solution.online&type=A" \
-                -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
+            if [ "$HAS_CF" = "yes" ] && [ -n "$CF_ZONE" ]; then
+              if [ -n "$CF_API_KEY" ] && [ -n "$CF_EMAIL" ]; then
+                EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?name=second.cent-solution.online&type=A" \
+                  -H "X-Auth-Key: ${CF_API_KEY}" -H "X-Auth-Email: ${CF_EMAIL}" -H "Content-Type: application/json")
+              else
+                EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?name=second.cent-solution.online&type=A" \
+                  -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
+              fi
               COUNT=$(echo "$EXISTING" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('result',[])))" 2>/dev/null || echo "0")
               if [ "$COUNT" != "0" ]; then
                 echo "DNS record already exists"
               else
                 SERVER_IP=$(curl -s ifconfig.me)
                 echo "Creating DNS A record: second -> $SERVER_IP"
-                DNS_RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
-                  -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
-                  --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
+                if [ -n "$CF_API_KEY" ] && [ -n "$CF_EMAIL" ]; then
+                  DNS_RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
+                    -H "X-Auth-Key: ${CF_API_KEY}" -H "X-Auth-Email: ${CF_EMAIL}" -H "Content-Type: application/json" \
+                    --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
+                else
+                  DNS_RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
+                    -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+                    --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
+                fi
+                DNS_OK=$(echo "$DNS_RESULT" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('success',False))" 2>/dev/null)
                 echo "$DNS_RESULT" | python3 -c "import json,sys; d=json.load(sys.stdin); print('DNS created:', d.get('success',False)); [print('  error:', e.get('message','')) for e in d.get('errors',[])]" 2>/dev/null || echo "DNS response: $DNS_RESULT"
+                if [ "$DNS_OK" != "True" ] && [ -n "$CF_TOKEN" ] && [ -n "$CF_API_KEY" ]; then
+                  echo "Retrying with Bearer token..."
+                  DNS_RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
+                    -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+                    --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
+                  echo "$DNS_RESULT" | python3 -c "import json,sys; d=json.load(sys.stdin); print('DNS created:', d.get('success',False)); [print('  error:', e.get('message','')) for e in d.get('errors',[])]" 2>/dev/null
+                fi
               fi
               sleep 10
             else
