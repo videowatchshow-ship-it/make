@@ -87,8 +87,8 @@ jobs:
               echo "searching for CF Global API Key..."
               for sd in /opt/gauth-full /root /var/www/sites /etc/default /etc/environment; do
                 [ -d "$sd" ] || [ -f "$sd" ] || continue
-                [ -z "$CF_API_KEY" ] && CF_API_KEY=$(sudo grep -rlP --include='*.env' --include='*.js' --include='*.json' --include='*.cfg' --include='*.conf' -m1 '[a-f0-9]{37}' "$sd" 2>/dev/null | head -1 | xargs -r sudo grep -oP '(?:globalApiKey|CF_API_KEY|CLOUDFLARE_API_KEY|CF_GLOBAL_KEY)\s*[=:]\s*['"'"'"'"']*\K[a-f0-9]{37}' 2>/dev/null | head -1)
-                [ -z "$CF_EMAIL" ] && CF_EMAIL=$(sudo grep -rhoP --include='*.env' --include='*.js' --include='*.json' '(?:cloudflareEmail|CF_EMAIL|CLOUDFLARE_EMAIL|authEmail)\s*[=:]\s*['"'"'"'"']*\K[^\s'"'"'"'"']+@[^\s'"'"'"'"']+' "$sd" 2>/dev/null | head -1)
+                [ -z "$CF_API_KEY" ] && CF_API_KEY=$(sudo grep -rlP --include='*.env' --include='*.js' --include='*.json' --include='*.cfg' --include='*.conf' -m1 '[a-f0-9]{37}' "$sd" 2>/dev/null | head -1 | xargs -r sudo grep -oP '(?:globalApiKey|CF_API_KEY|CLOUDFLARE_API_KEY|CF_GLOBAL_KEY)\s*[=:]\s*[\x27"]*\K[a-f0-9]{37}' 2>/dev/null | head -1)
+                [ -z "$CF_EMAIL" ] && CF_EMAIL=$(sudo grep -rhoP --include='*.env' --include='*.js' --include='*.json' '(?:cloudflareEmail|CF_EMAIL|CLOUDFLARE_EMAIL|authEmail)\s*[=:]\s*[\x27"]*\K[^\s\x27"]+@[^\s\x27"]+' "$sd" 2>/dev/null | head -1)
               done
               [ -n "$CF_API_KEY" ] && echo "found Global API Key"
               [ -n "$CF_EMAIL" ] && echo "found CF email: $CF_EMAIL"
