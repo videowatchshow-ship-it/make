@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: CF token list and create DNS token
+      - name: CF token ops via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -18,89 +18,23 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 120s
           script: |
+            set -e
             CF_TOKEN=$(sudo grep -oP 'dns_cloudflare_api_token\s*=\s*\K\S+' /root/.secrets/cloudflare.ini 2>/dev/null | head -1)
             ZONE="2601d4f4ab75c910f8d858ca036ff344"
             SERVER_IP=$(curl -s ifconfig.me)
             echo "Server IP: $SERVER_IP"
-            echo "Existing token (first 10): ${CF_TOKEN:0:10}..."
-
+            echo "Token prefix: ${CF_TOKEN:0:10}"
             echo ""
-            echo "=== 1. LIST ALL API TOKENS ==="
-            curl -s "https://api.cloudflare.com/client/v4/user/tokens" \
-              -H "Authorization: Bearer $CF_TOKEN" \
-              -H "Content-Type: application/json" | python3 -c "
-import sys,json
-try:
-  d=json.load(sys.stdin)
-  if d.get('success'):
-    for t in d.get('result',[]):
-      print(f\"ID: {t['id']}, Name: {t['name']}, Status: {t['status']}\")
-      for p in t.get('policies',[]):
-        pgroups = [pg.get('name','?') for pg in p.get('permission_groups',[])]
-        res = list(p.get('resources',{}).keys())
-        print(f\"  Perms: {', '.join(pgroups)}\")
-        print(f\"  Resources: {', '.join(res)}\")
-  else:
-    print('List failed:', json.dumps(d.get('errors',[])))  
-except Exception as e:
-  print('Parse error:', e)
-" 2>&1
-
+            echo "=== 1. LIST ALL TOKENS ==="
+            curl -s "https://api.cloudflare.com/client/v4/user/tokens" -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json"
             echo ""
-            echo "=== 2. PERMISSION GROUPS (DNS/Zone) ==="
-            curl -s "https://api.cloudflare.com/client/v4/user/tokens/permission_groups" \
-              -H "Authorization: Bearer $CF_TOKEN" \
-              -H "Content-Type: application/json" | python3 -c "
-import sys,json
-try:
-  d=json.load(sys.stdin)
-  if d.get('success'):
-    for p in d.get('result',[]):
-      n=p.get('name','')
-      if any(k in n.lower() for k in ['dns','zone']):
-        print(f\"{p['id']}: {n} (scopes: {','.join(p.get('scopes',[]))})\")
-  else:
-    print('Failed:', json.dumps(d.get('errors',[])))
-except Exception as e:
-  print('Parse error:', e)
-" 2>&1
-
+            echo "=== 2. PERMISSION GROUPS ==="
+            curl -s "https://api.cloudflare.com/client/v4/user/tokens/permission_groups" -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" | head -c 5000
             echo ""
-            echo "=== 3. TRY CREATE DNS-EDIT TOKEN ==="
-            curl -s -X POST "https://api.cloudflare.com/client/v4/user/tokens" \
-              -H "Authorization: Bearer $CF_TOKEN" \
-              -H "Content-Type: application/json" \
-              -d "{\"name\":\"DNS-Edit-auto\",\"policies\":[{\"effect\":\"allow\",\"resources\":{\"com.cloudflare.api.account.zone.$ZONE\":\"*\"},\"permission_groups\":[{\"id\":\"4755a26eedb94da69e1066d98aa820be\"}]}]}" | python3 -c "
-import sys,json
-try:
-  d=json.load(sys.stdin)
-  if d.get('success'):
-    v=d['result'].get('value','???')
-    tid=d['result'].get('id','???')
-    print(f'NEW TOKEN CREATED: {v}')
-    print(f'Token ID: {tid}')
-  else:
-    print('Create failed:', json.dumps(d.get('errors',[])))
-except Exception as e:
-  print('Parse error:', e)
-" 2>&1
-
+            echo "=== 3. CREATE DNS TOKEN ==="
+            curl -s -X POST "https://api.cloudflare.com/client/v4/user/tokens" -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" -d '{"name":"DNS-Edit-auto","policies":[{"effect":"allow","resources":{"com.cloudflare.api.account.zone.'"$ZONE"'":"*"},"permission_groups":[{"id":"4755a26eedb94da69e1066d98aa820be"}]}]}'
             echo ""
-            echo "=== 4. TRY DIRECT DNS CREATE WITH EXISTING TOKEN ==="
-            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records" \
-              -H "Authorization: Bearer $CF_TOKEN" \
-              -H "Content-Type: application/json" \
-              -d "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}" | python3 -c "
-import sys,json
-try:
-  d=json.load(sys.stdin)
-  if d.get('success'):
-    print('DNS CREATED:', d['result'].get('name',''), '->', d['result'].get('content',''))
-  else:
-    print('DNS failed:', json.dumps(d.get('errors',[])))
-except Exception as e:
-  print('Parse error:', e)
-" 2>&1
-
+            echo "=== 4. DIRECT DNS CREATE ==="
+            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records" -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" -d '{"type":"A","name":"second","content":"'"$SERVER_IP"'","ttl":1,"proxied":true}'
             echo ""
             echo "=== DONE ==="
