@@ -75,7 +75,7 @@ button:disabled{background:#333;cursor:not-allowed}
 <body>
 <script>
 (function(){
-  var V='v35';
+  var V='v36';
   if(localStorage.getItem('gauth_sw')===V) return;
   if(window.caches){
     caches.keys().then(function(ks){
@@ -625,10 +625,12 @@ function noCacheQuery(url){var u=authQuery(url);return u+(u.includes('?')?'&':'?
 
 var escapeHtml = _esc
 function _sortByExcelDate(arr){
-  return arr.slice().sort(function(a, b){
-    var da = a.account_date || 0, db = b.account_date || 0;
-    return db - da;
-  });
+  var withDate = arr.filter(function(a){ return a.account_date })
+  var noDate   = arr.filter(function(a){ return !a.account_date })
+  withDate.sort(function(a, b){ return b.account_date - a.account_date })
+  if(!withDate.length) return noDate.slice()
+  var mid = Math.ceil(withDate.length / 2)
+  return withDate.slice(0, mid).concat(noDate).concat(withDate.slice(mid))
 }
 let FAILED = {}
 async function load(){
