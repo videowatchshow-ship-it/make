@@ -75,7 +75,7 @@ button:disabled{background:#333;cursor:not-allowed}
 <body>
 <script>
 (function(){
-  var V='v34';
+  var V='v35';
   if(localStorage.getItem('gauth_sw')===V) return;
   if(window.caches){
     caches.keys().then(function(ks){
@@ -716,12 +716,6 @@ async function render(){
   var start = (PAGE-1) * PAGE_SIZE
   var end = Math.min(FILTERED.length, start + PAGE_SIZE)
   const slice = FILTERED.slice(start, end)
-  var codes = []
-  try {
-    codes = await Promise.all(slice.map(a =>
-      a.totp_secret ? fetch(authQuery('/codes/'+a.totp_secret),{headers:authHeaders()}).then(r=>r.json()).then(j=>j.code||'—').catch(()=>'—') : Promise.resolve('—')
-    ))
-  } catch(_){ codes = slice.map(()=>'—') }
   const _cur = localStorage.getItem('gauth_last_lookup')||''
   var rows = []
   for (let i=0;i<slice.length;i++){
@@ -742,7 +736,7 @@ async function render(){
         <div class="td-label" style="color:#8a95a5">#${idx}</div><div><b class="td-email" style="color:#ffb469;font-size:14px;cursor:pointer" onclick="quickLookup('${_em}')">${_em}</b>${cp(a.email)} ${sess}${tfa}${lock}</div>
         <div class="td-label" style="color:#8a95a5">비밀번호</div><div class="mono td-val td-pw" style="color:#3ddc84">${_pw}${cp(a.password)}</div>
         <div class="td-label" style="color:#8a95a5">2FA 시크릿</div><div class="mono td-val td-secret"><span id="sec-${idx}">${_ts}</span>${cp(a.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${_em}','sec-${idx}')">✏️</button></div>
-        <div class="td-label" style="color:#8a95a5">2FA 코드</div><div class="mono td-val td-2fa-code" style="color:#7dabff;font-size:18px;font-weight:700;letter-spacing:2px"><span id="tdcode-${idx}">${codes[i]}</span>${a.totp_secret?cp('_','tdcode-'+idx):cp(codes[i]!=='—'?codes[i]:'')}${a.totp_secret?`<button style="background:#2a323c;padding:3px 8px;font-size:11px;margin-left:6px;color:#c9d2dc" onclick="tdRefreshCode(${idx},'${escapeHtml(a.totp_secret)}',this)">🔄 새로고침</button>`:''}</div>
+        <div class="td-label" style="color:#8a95a5">2FA 코드</div><div class="mono td-val td-2fa-code" style="color:#7dabff;font-size:18px;font-weight:700;letter-spacing:2px"><span id="tdcode-${idx}">…</span>${a.totp_secret?cp('_','tdcode-'+idx):''}${a.totp_secret?`<button style="background:#2a323c;padding:3px 8px;font-size:11px;margin-left:6px;color:#c9d2dc" onclick="tdRefreshCode(${idx},'${escapeHtml(a.totp_secret)}',this)">🔄 새로고침</button>`:''}</div>
         <div class="td-label" style="color:#8a95a5">동작</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button style="background:#7c3aed" onclick="programLogin('${_em}',this)">🔑 로그인</button><button style="background:#1c5a2a;color:#3ddc84;font-weight:700" onclick="ytApiConnect('${_em}',this)">📡 API 연결</button><button style="background:#1c2740;color:#7dabff;font-weight:700" onclick="ytChatShot('${_em}','sky82892 텔레 문의',this)">💬 채팅 샷</button><button style="background:#3a1c00;color:#ff9040;font-weight:700" onclick="ytSpanner('${_em}',this)">🔧 스패너</button></div>
         <div class="td-label" style="color:#8a95a5">YouTube</div><div class="mono td-val" style="color:#ff8a8a;font-size:11px">${yt&&/^https?:\/\//i.test(yt)?`<a href="${_yt}" target="_blank" style="color:#ff8a8a">${_yt}</a>${cp(yt)}`:'—'}</div>
         <div class="td-label" style="color:#8a95a5">복구</div><div class="mono td-val" style="font-size:11px">${_rc}</div>
@@ -752,6 +746,18 @@ async function render(){
   }
   sp.innerHTML = rows.join('')
   renderPagination(totalPages)
+  // TOTP 코드는 카드 렌더링 후 비동기로 채움
+  slice.forEach(function(a, i){
+    if(!a.totp_secret) return
+    var idx = start+i+1
+    var ctrl = new AbortController()
+    setTimeout(function(){ctrl.abort()},5000)
+    fetch(authQuery('/codes/'+a.totp_secret),{headers:authHeaders(),signal:ctrl.signal}).then(function(r){return r.json()}).then(function(j){
+      var el=document.getElementById('tdcode-'+idx); if(el) el.textContent=j.code||'—'
+    }).catch(function(){
+      var el=document.getElementById('tdcode-'+idx); if(el) el.textContent='—'
+    })
+  })
   }catch(e){console.error('render error:',e);sp.innerHTML='<div style="padding:20px;color:#f47070">렌더링 오류: '+e.message+'</div>'}
 }
 function renderPagination(totalPages){
