@@ -67,13 +67,14 @@ jobs:
 
               echo ""
               echo "=== Adding to sunbi accounts.json ==="
+              echo "$ACCOUNT_JSON" > /tmp/sunbi_new_account.json
               node -e "
                 const fs = require('fs');
                 const acctFile = '$SUNBI_DIR/accounts.json';
                 let accounts = [];
                 try { accounts = JSON.parse(fs.readFileSync(acctFile, 'utf8')); } catch(e) { console.log('Creating new file'); }
                 if (!Array.isArray(accounts)) accounts = accounts.accounts || [];
-                const newAcct = JSON.parse(process.argv[1]);
+                const newAcct = JSON.parse(fs.readFileSync('/tmp/sunbi_new_account.json', 'utf8'));
                 const exists = accounts.find(a => (a.email||'').toLowerCase() === (newAcct.email||'').toLowerCase());
                 if (exists) {
                   console.log('Already exists in sunbi, updating...');
@@ -85,7 +86,8 @@ jobs:
                 fs.writeFileSync(acctFile, JSON.stringify(accounts, null, 2));
                 console.log('Done. Total accounts in sunbi:', accounts.length);
                 console.log('Verify:', accounts.find(a => (a.email||'').toLowerCase() === (newAcct.email||'').toLowerCase()).email);
-              " '$ACCOUNT_JSON'
+              "
+              rm -f /tmp/sunbi_new_account.json
 
               echo ""
               echo "=== Verify on sunbi API ==="
@@ -96,9 +98,9 @@ jobs:
                   try {
                     const j = JSON.parse(d);
                     const accs = j.accounts || j || [];
-                    const found = accs.find(a => (a.email||'').toLowerCase() === '$EMAIL'.toLowerCase());
+                    const found = accs.find(a => (a.email||'').toLowerCase() === process.argv[1].toLowerCase());
                     console.log(found ? 'VERIFIED in sunbi API' : 'Not found in API - may need server restart');
                   } catch(e) { console.log('API parse error:', e.message); }
                 });
-              " 2>/dev/null
+              " "$EMAIL"
             fi
