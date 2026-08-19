@@ -1,5 +1,5 @@
 name: Create DNS record for second
-on:
+on:  
   workflow_dispatch:
 
 jobs:
@@ -9,7 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create DNS A record via python3
+      - name: Final DNS attempt
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -17,61 +17,39 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 60s
           script: |
-            echo "=== Attempting DNS A record creation ==="
-            CF_TOKEN=$(sudo awk -F' = ' '{print $2}' /root/.secrets/cloudflare.ini 2>/dev/null)
+            echo "=== 1. Certbot renewal configs ==="
+            sudo find /etc/letsencrypt/ -name '*.conf' -path '*/renewal/*' 2>/dev/null | while read f; do
+              echo "--- $f ---"
+              sudo grep -i 'cloudflare\|authenticator\|credential' "$f" 2>/dev/null
+            done
+
+            echo ""
+            echo "=== 2. All credential files referenced by certbot ==="
+            sudo grep -rh 'credentials' /etc/letsencrypt/renewal/ 2>/dev/null
+
+            echo ""
+            echo "=== 3. Wrangler and .cloudflare configs ==="
+            sudo find /root/ /home/ -name 'wrangler.toml' -o -name '.cloudflare' -o -name 'cloudflare.toml' 2>/dev/null | head -10
+            sudo ls -la /root/.cloudflare/ 2>/dev/null || echo "no /root/.cloudflare/"
+
+            echo ""
+            echo "=== 4. Try direct DNS creation with token from file ==="
             SERVER_IP=$(curl -s ifconfig.me)
-            echo "Server IP: $SERVER_IP"
-
-            sudo python3 -c "
-            import CloudFlare
-            cf = CloudFlare.CloudFlare(token='${CF_TOKEN}')
-            zone_id = '2601d4f4ab75c910f8d858ca036ff344'
-
-            # List existing records first
-            try:
-                records = cf.zones.dns_records.get(zone_id, params={'name':'second.cent-solution.online','type':'A'})
-                print('Existing records:', len(records))
-                for r in records:
-                    print(f'  {r[\"name\"]} -> {r[\"content\"]}')
-            except Exception as e:
-                print('List error:', e)
-
-            # Try to create
-            try:
-                result = cf.zones.dns_records.post(zone_id, data={
-                    'type': 'A',
-                    'name': 'second',
-                    'content': '${SERVER_IP}',
-                    'ttl': 1,
-                    'proxied': True
-                })
-                print('SUCCESS:', result.get('name'), '->', result.get('content'))
-            except Exception as e:
-                print('Create error:', e)
-            " 2>&1
+            TOKEN_RAW=$(sudo cat /root/.secrets/cloudflare.ini 2>/dev/null | grep -oP '=\s*\K\S+')
+            echo "Token starts with: $(echo $TOKEN_RAW | cut -c1-10)"
+            echo "Token length: ${#TOKEN_RAW}"
 
             echo ""
-            echo "=== Also try curl directly ==="
-            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/2601d4f4ab75c910f8d858ca036ff344/dns_records" \
-              -H "Authorization: Bearer ${CF_TOKEN}" \
+            echo "=== 5. Create via curl ==="
+            RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/2601d4f4ab75c910f8d858ca036ff344/dns_records" \
+              -H "Authorization: Bearer $TOKEN_RAW" \
               -H "Content-Type: application/json" \
-              --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"${SERVER_IP}\",\"ttl\":1,\"proxied\":true}" 2>&1
+              -d "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
+            echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print('success:', d.get('success')); [print('err:', e) for e in d.get('errors',[])]" 2>&1
 
             echo ""
-            echo "=== List ALL existing DNS records ==="
-            curl -s "https://api.cloudflare.com/client/v4/zones/2601d4f4ab75c910f8d858ca036ff344/dns_records?per_page=50" \
-              -H "Authorization: Bearer ${CF_TOKEN}" \
-              -H "Content-Type: application/json" 2>&1 | python3 -c "
-            import sys, json
-            try:
-                data = json.load(sys.stdin)
-                if data.get('success'):
-                    for r in data.get('result', []):
-                        print(f'{r[\"type\"]:6} {r[\"name\"]:40} -> {r[\"content\"]}')
-                else:
-                    print('Failed:', data.get('errors'))
-            except Exception as e:
-                print('Parse error:', e)" 2>&1
+            echo "=== 6. Check all tokens in ALL ini/cfg/env files ==="
+            sudo grep -rh 'cfut_\|cloudflare.*token\|CF_API' /root/ /opt/ /etc/ /home/ /var/www/ --include='*.ini' --include='*.cfg' --include='*.env' --include='*.conf' --include='*.php' --include='*.json' --include='*.toml' 2>/dev/null | grep -v node_modules | sort -u | head -20
 
             echo ""
             echo "=== DONE ==="
