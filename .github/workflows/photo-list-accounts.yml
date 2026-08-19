@@ -1,0 +1,55 @@
+name: photo/data sel_*.json 계정 리스팅
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-list-accounts.yml'
+
+jobs:
+  list:
+    runs-on: ubuntu-latest
+    steps:
+      - name: photo/data 계정 sel_*.json 전체 리스팅
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set -uo pipefail
+            P1="/var/www/sites/chamgyo/public/photo"
+
+            echo "===== photo/data sel_*.json 전체 리스팅 (mtime + 크기 + 내용) ====="
+            sudo ls -la "$P1/data/sel_"*.json 2>/dev/null | awk "{print \$5, \$6, \$7, \$8, \$9}"
+
+            echo ""
+            echo "===== 각 계정 sel_*.json 내용 ====="
+            for F in "$P1/data/sel_"*.json; do
+              [ -f "$F" ] || continue
+              NAME=$(basename "$F" .json | sed "s/^sel_//")
+              CONTENT=$(sudo cat "$F")
+              MT=$(stat -c "%y" "$F" | cut -d. -f1)
+              printf "%-15s | mtime=%s | %s\n" "$NAME" "$MT" "$CONTENT"
+            done
+
+            echo ""
+            echo "===== 총 계정 수 ====="
+            sudo ls "$P1/data/sel_"*.json 2>/dev/null | wc -l
+
+            echo ""
+            echo "===== photo/data 폴더 전체 heartbeat/session 등 (계정 힌트) ====="
+            sudo ls -la "$P1/data/" | grep -E "heartbeat|session|sel_" | head -30
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE
