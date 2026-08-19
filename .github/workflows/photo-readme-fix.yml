@@ -48,8 +48,8 @@ jobs:
             done
 
             echo ""
-            echo "===== [3] photo/README.md.bak.* 정리 (백업 파일들 삭제) ====="
-            for f in "$P1"/README.md.bak.* "$P1"/README.md.removed.*; do
+            echo "===== [3] photo/README* 백업/구버전 파일들 전체 정리 ====="
+            for f in "$P1"/README.md.bak.* "$P1"/README.md.removed.* "$P1"/README_PHOTO.md* "$P1"/README_*.md.bak.*; do
               [ -f "$f" ] || continue
               sudo rm -f "$f"
               echo "DELETED old backup: $f"
