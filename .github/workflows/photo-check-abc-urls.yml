@@ -1,4 +1,4 @@
-name: photo write.php 이미지 슬롯 구조 확인
+name: photo images/ch 계정별 이미지 폴더 전수 조사
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ on:
       - '.github/workflows/photo-check-abc-urls.yml'
 
 jobs:
-  imgs:
+  ch_imgs:
     runs-on: ubuntu-latest
     steps:
       - uses: appleboy/ssh-action@v1.0.3
@@ -17,7 +17,7 @@ jobs:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 120s
+          command_timeout: 180s
           script: |
             /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
               --zone=asia-northeast1-a \
@@ -25,39 +25,47 @@ jobs:
               --ssh-flag="-o StrictHostKeyChecking=no" \
               --quiet \
               --command='bash -s' << "REMOTE"
-            set -uo pipefail
+            set +u
             P1="/var/www/sites/chamgyo/public/photo"
 
-            echo "===== [1] photo/images 폴더 (공용 이미지 슬롯) ====="
-            sudo ls -la "$P1/images/" 2>/dev/null | head -50
+            echo "===== [1] images/ch/ 하위 계정별 폴더 전체 리스팅 ====="
+            sudo ls -la "$P1/images/ch/" 2>/dev/null
 
             echo ""
-            echo "===== [2] 아바타 가인 관련 이미지 파일 검색 ====="
-            sudo find "$P1" -type f \( -iname "*gain*" -o -iname "*아바타*" -o -iname "*side*banner*" -o -iname "*h_side*" \) 2>/dev/null | head -20
+            echo "===== [2] 각 계정 폴더 안의 파일 (있으면) ====="
+            for U in aass0707 abc01 abc02 abc03 abc04 abc05 abc06 abc07 cent gain jay otuki tak; do
+              D="$P1/images/ch/$U"
+              if [ -d "$D" ]; then
+                CNT=$(sudo ls "$D" 2>/dev/null | wc -l)
+                echo "--- $U/ ($CNT 파일) ---"
+                sudo ls -la "$D" | awk "\$5>0 {print \$5, \$6, \$7, \$8, \$9}"
+              else
+                echo "$U/ : 폴더 없음 (공용 이미지 폴백)"
+              fi
+            done
 
             echo ""
-            echo "===== [3] write.php 이미지 슬롯 정의 ($slots_shared) ====="
-            sudo grep -nA20 "slots_shared\|slots_b_only\|slots_all\|slots_by_user" "$P1/write.php" | head -60
+            echo "===== [3] data/img_ver_*.json (계정별 이미지 버전 관리) ====="
+            sudo ls -la "$P1/data/"img_ver_*.json 2>/dev/null
 
             echo ""
-            echo "===== [4] 각 계정별 이미지 있는지 - 계정별 slot 구조? ====="
-            sudo grep -nE "sel_[a-z]|per.user|user.image|이미지.*계정|계정.*이미지|slot.*ch|ch.*slot|__id.*image" "$P1/write.php" | head -20
+            echo "===== [4] write.php - images/ch 관련 코드 (계정별 이미지 로드 로직) ====="
+            sudo grep -nE "images/ch|images/\\\$|img.*ch|ch.*img|user_img|user.*image" "$P1/write.php" | head -30
 
             echo ""
-            echo "===== [5] 지금 cent 화면에 뜨는 h_side_banner.png 이미지 위치 + 파일 실체 ====="
-            sudo ls -la "$P1/images/h_side_banner"* 2>/dev/null
+            echo "===== [5] write_upload.php 소스 (이미지 업로드 로직 - 어디로 저장?) ====="
+            sudo cat "$P1/write_upload.php"
 
             echo ""
-            echo "===== [6] cent 계정의 CAH_1.html이 참조하는 실제 이미지 (box_R, side banner) ====="
-            sudo grep -oE "images/[a-zA-Z0-9_.-]+" "$P1/CAH_1.html" 2>/dev/null | sort -u | head -20
+            echo "===== [6] api_img_ver.php 소스 (계정별 이미지 버전 조회?) ====="
+            sudo cat "$P1/api_img_ver.php"
 
             echo ""
-            echo "===== [7] SNW_1.html (파랑 메신저 화면) 이 참조하는 이미지 ====="
-            sudo grep -oE "images/[a-zA-Z0-9_.-]+" "$P1/SNW_1.html" 2>/dev/null | sort -u | head -20
-
-            echo ""
-            echo "===== [8] write.php - 아바타 가인 배너 표시하는 로직 grep ====="
-            sudo grep -nE "gain|아바타|casino7942|ccm7979|가인" "$P1/"*.php "$P1/"*.html 2>/dev/null | head -20
+            echo "===== [7] CAH_1 / CAW_1 / SNW_1 이 images/ch 참조하는지 (없으면 공용만 씀) ====="
+            for F in CAH_1.html CAW_1.html SNW_1.html; do
+              echo "--- $F ---"
+              sudo grep -nE "images/ch|images/\\\$|__ch|ch.*images" "$P1/$F" | head -10
+            done
 
             echo ""
             echo "===== DONE ====="
