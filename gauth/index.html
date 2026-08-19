@@ -76,20 +76,21 @@ button:disabled{background:#333;cursor:not-allowed}
 <script>
 (function(){
   var V='v30';
+  if(localStorage.getItem('gauth_sw')===V) return;
+  if(window.caches){
+    caches.keys().then(function(ks){
+      ks.forEach(function(k){ if(k!=='gauth-'+V) caches.delete(k); });
+    });
+  }
   if(navigator.serviceWorker){
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(r){r.unregister()});
-    });
-  }
-  if(window.caches){
-    caches.keys().then(function(ks){
-      ks.forEach(function(k){
-        if(k!=='gauth-'+V) caches.delete(k);
+      navigator.serviceWorker.register('sw.js?v='+V).then(function(){
+        localStorage.setItem('gauth_sw',V);
       });
     });
-  }
-  if(navigator.serviceWorker){
-    navigator.serviceWorker.register('sw.js?_='+Date.now());
+  } else {
+    localStorage.setItem('gauth_sw',V);
   }
 })();
 </script>
