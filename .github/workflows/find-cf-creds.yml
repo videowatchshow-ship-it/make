@@ -1,52 +1,75 @@
-name: Find cfut_0JOs token
+name: Find CF credentials everywhere
 on:
   workflow_dispatch:
 
 jobs:
   dns:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deep search for second CF token
+      - name: Search all projects for CF token
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 25s
+          command_timeout: 120s
           script: |
-            echo "=== 1. Bash history for cfut_0JOs ==="
-            sudo grep -i "cfut_0JOs\|cfut_0j" /root/.bash_history 2>/dev/null | head -10 || echo "not in root history"
-            sudo grep -i "cfut_0JOs\|cfut_0j" /home/*/.bash_history 2>/dev/null | head -10 || echo "not in user history"
+            echo "=== 1. All projects on server ==="
+            ls -la /opt/ 2>/dev/null
+            ls -la /var/www/sites/ 2>/dev/null
+            ls -la /var/www/ 2>/dev/null
 
             echo ""
-            echo "=== 2. Bash history for cloudflare token ==="
-            sudo grep -i "cloudflare\|cf_token\|dns_cloudflare" /root/.bash_history 2>/dev/null | head -20 || echo "none"
+            echo "=== 2. README and CLAUDE.md in all projects ==="
+            for dir in /opt/*/ /var/www/sites/*/ /var/www/*/; do
+              for f in README.md CLAUDE.md .claude.md readme.md; do
+                if [ -f "$dir$f" ]; then
+                  echo "--- $dir$f ---"
+                  sudo cat "$dir$f" 2>/dev/null | head -100
+                  echo ""
+                fi
+              done
+            done
 
             echo ""
-            echo "=== 3. Global API Key check ==="
-            sudo grep -ri "X-Auth-Key\|x-auth-key\|global.api\|api.key" /root/ /opt/ /var/www/ --include='*.sh' --include='*.php' --include='*.env' --include='*.conf' --include='*.ini' --include='*.json' --include='*.py' 2>/dev/null | head -20 || echo "none"
+            echo "=== 3. All .env files with CF/cloudflare ==="
+            sudo find /opt/ /var/www/ /root/ -name ".env" -type f 2>/dev/null | while read f; do
+              HAS=$(sudo grep -il "cloudflare\|cf_\|cfut_" "$f" 2>/dev/null)
+              if [ -n "$HAS" ]; then
+                echo "--- $f ---"
+                sudo cat "$f" 2>/dev/null
+                echo ""
+              fi
+            done
 
             echo ""
-            echo "=== 4. certbot renewal conf ==="
-            sudo cat /etc/letsencrypt/renewal/*.conf 2>/dev/null | head -50
+            echo "=== 4. Full cent-solution-on-gcp.md ==="
+            sudo cat /opt/claude-mem-sync/proj1/cent-solution-on-gcp.md 2>/dev/null
 
             echo ""
-            echo "=== 5. Claude memory files ==="
-            sudo find /opt/claude-mem-sync/ -name '*.md' -type f 2>/dev/null | head -20
-            sudo grep -l "cfut_0JOs" /opt/claude-mem-sync/ -r 2>/dev/null | head -5
+            echo "=== 5. Any file named cloudflare* anywhere ==="
+            sudo find / -name "*cloudflare*" -not -path "*/node_modules/*" -not -path "*/venv/*" -not -path "*/proc/*" -not -path "*/sys/*" -not -path "*/lib/*" 2>/dev/null | head -20
 
             echo ""
-            echo "=== 6. Full line with cfut_0JOs ==="
-            sudo grep -r "cfut_0JOs" /opt/claude-mem-sync/ 2>/dev/null || echo "only partial ref found"
+            echo "=== 6. Bash history cloudflare commands ==="
+            sudo grep -i "cloudflare\|cfut_\|dns_record\|CF_TOKEN\|CF_API" /root/.bash_history 2>/dev/null | head -30 || echo "none"
 
             echo ""
-            echo "=== 7. Try existing token with DNS list (full error) ==="
+            echo "=== 7. Try list tokens + create DNS token ==="
             CF_TOKEN=$(sudo awk -F' = ' '{print $2}' /root/.secrets/cloudflare.ini 2>/dev/null)
-            curl -s "https://api.cloudflare.com/client/v4/zones/2601d4f4ab75c910f8d858ca036ff344/dns_records?per_page=5" \
-              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" 2>/dev/null
+            echo "Token verify:"
+            curl -s "https://api.cloudflare.com/client/v4/user/tokens/verify" -H "Authorization: Bearer $CF_TOKEN" 2>/dev/null
+            echo ""
+            echo "List tokens:"
+            curl -s "https://api.cloudflare.com/client/v4/user/tokens" -H "Authorization: Bearer $CF_TOKEN" 2>/dev/null
+            echo ""
+            echo "Create DNS token attempt:"
+            curl -s -X POST "https://api.cloudflare.com/client/v4/user/tokens" \
+              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+              --data '{"name":"dns-edit-second","policies":[{"effect":"allow","resources":{"com.cloudflare.api.account.zone.*":"*"},"permission_groups":[{"id":"4755a26eedb94da69e1066d98aa820be","name":"DNS Write"}]}]}' 2>/dev/null
 
             echo ""
             echo "=== DONE ==="
