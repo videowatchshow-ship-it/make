@@ -33,10 +33,10 @@ jobs:
               cat "$SUNBI_DIR/server.js"
               echo ""
               echo "=== sunbi accounts.json (first 100 lines) ==="
-              head -100 "$SUNBI_DIR/accounts.json" 2>/dev/null || echo "file not found"
+              sudo head -100 "$SUNBI_DIR/accounts.json" 2>/dev/null || echo "file not found"
               echo ""
               echo "=== sunbi accounts.json line count ==="
-              wc -l "$SUNBI_DIR/accounts.json" 2>/dev/null || echo "0"
+              sudo wc -l "$SUNBI_DIR/accounts.json" 2>/dev/null || echo "0"
               echo ""
               echo "=== Test sunbi API on port 3013 ==="
               curl -s http://localhost:3013/api/sunbi/accounts 2>/dev/null | head -200
@@ -68,7 +68,8 @@ jobs:
               echo ""
               echo "=== Adding to sunbi accounts.json ==="
               echo "$ACCOUNT_JSON" > /tmp/sunbi_new_account.json
-              node -e "
+
+              sudo node -e "
                 const fs = require('fs');
                 const acctFile = '$SUNBI_DIR/accounts.json';
                 let accounts = [];
