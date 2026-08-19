@@ -75,7 +75,7 @@ button:disabled{background:#333;cursor:not-allowed}
 <body>
 <script>
 (function(){
-  var V='v37';
+  var V='v38';
   if(localStorage.getItem('gauth_sw')===V) return;
   if(window.caches){
     caches.keys().then(function(ks){
@@ -661,6 +661,12 @@ async function load(){
     if(m) return new Date(parseInt(m[1]),parseInt(m[2])-1,parseInt(m[3])).getTime();
     m=name.match(/(\d{8})/);
     if(m){var y=parseInt(m[1].slice(0,4)),mo=parseInt(m[1].slice(4,6)),d=parseInt(m[1].slice(6,8));if(y>=2020&&y<=2030&&mo>=1&&mo<=12&&d>=1&&d<=31) return new Date(y,mo-1,d).getTime();}
+    m=name.match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일?/);
+    if(m){var cy=new Date().getFullYear(),km=parseInt(m[1]),kd=parseInt(m[2]);if(km>=1&&km<=12&&kd>=1&&kd<=31) return new Date(cy,km-1,kd).getTime();}
+    m=name.match(/(\d{1,2})\.(\d{1,2})/);
+    if(m){var sm=parseInt(m[1]),sd=parseInt(m[2]);if(sm>=1&&sm<=12&&sd>=1&&sd<=31) return new Date(new Date().getFullYear(),sm-1,sd).getTime();}
+    m=name.match(/up_(\d{13,})_/);
+    if(m) return parseInt(m[1]);
     return null;
   }
   function _fixMojibake(s){
