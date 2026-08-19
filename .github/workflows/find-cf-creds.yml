@@ -1,15 +1,15 @@
-name: Read gucci cloudflare config files
+name: Create DNS record for second
 on:
   workflow_dispatch:
 
 jobs:
-  search:
+  dns:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - uses: actions/checkout@v4
 
-      - name: Read CF config files
+      - name: Create DNS A record
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -17,35 +17,48 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 30s
           script: |
-            echo "=== 1. cloudflare-config.php ==="
-            sudo cat /var/www/sites/gucci/config/cloudflare-config.php 2>/dev/null
-
-            echo ""
-            echo "=== 2. cloudflare-waf-config.php ==="
-            sudo cat /var/www/sites/gucci/config/cloudflare-waf-config.php 2>/dev/null
-
-            echo ""
-            echo "=== 3. All config files in gucci/config/ ==="
-            ls -la /var/www/sites/gucci/config/ 2>/dev/null
-
-            echo ""
-            echo "=== 4. gucci .env full ==="
-            sudo cat /var/www/sites/gucci/.env 2>/dev/null
-
-            echo ""
-            echo "=== 5. migrate_udongka.sh CF section ==="
-            sudo cat /opt/gauth-full/scripts/migrate_udongka.sh 2>/dev/null | grep -A2 -B2 "CF_TOKEN\|ZONE\|cloudflare\|cfut_"
-
-            echo ""
-            echo "=== 6. Token permissions check ==="
             CF_TOKEN=$(sudo awk -F' = ' '{print $2}' /root/.secrets/cloudflare.ini 2>/dev/null)
-            curl -s "https://api.cloudflare.com/client/v4/user/tokens/verify" \
+            ZONE_ID="2601d4f4ab75c910f8d858ca036ff344"
+            SERVER_IP=$(curl -s ifconfig.me)
+            echo "Server IP: $SERVER_IP"
+            echo "Token length: ${#CF_TOKEN}"
+
+            echo "=== 1. Check token permissions on this zone ==="
+            curl -s "https://api.cloudflare.com/client/v4/zones/$ZONE_ID" \
+              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" 2>/dev/null | python3 -c "
+            import json,sys
+            d=json.load(sys.stdin)
+            if d.get('success'):
+              r=d['result']
+              print(f'Zone: {r[\"name\"]}')
+              print(f'Permissions: {r.get(\"permissions\",\"N/A\")}')
+            else:
+              print(f'Error: {d.get(\"errors\")}')
+            " 2>/dev/null
+
+            echo ""
+            echo "=== 2. List existing DNS for second ==="
+            curl -s "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?name=second.cent-solution.online&type=A" \
               -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" 2>/dev/null
 
             echo ""
-            echo "=== 7. List all Cloudflare API tokens (account level) ==="
-            curl -s "https://api.cloudflare.com/client/v4/user/tokens" \
-              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" 2>/dev/null
+            echo "=== 3. Create A record ==="
+            RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
+              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+              --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}")
+            echo "$RESULT"
+
+            echo ""
+            echo "=== 4. Verify ==="
+            echo "$RESULT" | python3 -c "
+            import json,sys
+            d=json.load(sys.stdin)
+            if d.get('success'):
+              print('SUCCESS! DNS record created.')
+              print(f'Record ID: {d[\"result\"][\"id\"]}')
+            else:
+              print(f'FAILED: {d.get(\"errors\")}')
+            " 2>/dev/null
 
             echo ""
             echo "=== DONE ==="
