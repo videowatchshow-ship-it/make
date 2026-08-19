@@ -1,4 +1,4 @@
-name: photo write.php 경고 안내문 반짝 삽입
+name: photo write.php 반짝 경고 안내문 삽입
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ on:
       - '.github/workflows/photo-check-abc-urls.yml'
 
 jobs:
-  add_notice:
+  insert:
     runs-on: ubuntu-latest
     steps:
       - uses: appleboy/ssh-action@v1.0.3
@@ -17,7 +17,7 @@ jobs:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 300s
+          command_timeout: 180s
           script: |
             /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
               --zone=asia-northeast1-a \
@@ -26,29 +26,94 @@ jobs:
               --quiet \
               --command='bash -s' << "REMOTE"
             set -uo pipefail
-            P1="/var/www/sites/chamgyo/public/photo"
+            F="/var/www/sites/chamgyo/public/photo/write.php"
             TS=$(date +%s)
 
-            echo "===== [1] "프리즘에 넣을 URL" 문구가 있는 파일 찾기 ====="
-            sudo grep -rln "프리즘에 넣을\|프리즘 넣을\|프리즘에 넣는\|cent 님\|님 — 프리즘\|님 - 프리즘\|세로 URL 복사\|가로 URL 복사\|싱지뉴 URL 복사" "$P1" 2>/dev/null | head -10
+            echo "===== [1] 백업 ====="
+            sudo cp "$F" "$F.bak.notice.$TS"
+            echo "backup: $F.bak.notice.$TS"
 
             echo ""
-            echo "===== [2] write.php 안의 텍스트 grep ====="
-            sudo grep -n "프리즘\|세로 URL\|가로 URL\|싱지뉴 URL\|님\s*—" "$P1/write.php" 2>/dev/null | head -30
+            echo "===== [2] 이미 삽입돼 있는지 확인 (중복 방지) ====="
+            if sudo grep -q "warn-blink-user-guide" "$F"; then
+              echo "이미 삽입됨. 삭제 후 재삽입."
+              sudo TARGET="$F" python3 -c "
+            import re, os
+            p = os.environ[\"TARGET\"]
+            s = open(p).read()
+            s = re.sub(r\"<style id=\\\"warn-blink-css\\\">.*?</style>\\s*\", \"\", s, flags=re.DOTALL)
+            s = re.sub(r\"<div class=\\\"warn-blink-user-guide\\\".*?</div>\\s*\", \"\", s, flags=re.DOTALL)
+            open(p, \"w\").write(s)
+            "
+            fi
 
             echo ""
-            echo "===== [3] write.php 파일 크기 + 첫 15줄 ====="
-            sudo ls -la "$P1/write.php"
-            sudo head -15 "$P1/write.php"
+            echo "===== [3] line 116 (제목 라인) 위치 확인 ====="
+            sudo grep -n "님 — 프리즘에 넣을 URL" "$F"
 
             echo ""
-            echo "===== [4] write.php에서 "님 — 프리즘" 패턴 정확 위치 ====="
-            sudo grep -nE "님\s*—|님\s*-|프리즘|세로 URL 복사" "$P1/write.php" 2>/dev/null | head -20
-            echo ""
-            echo "===== [5] write_url.php (있으면) ====="
-            [ -f "$P1/write_url.php" ] && sudo ls -la "$P1/write_url.php" && sudo grep -n "프리즘\|세로 URL\|가로 URL" "$P1/write_url.php" | head -20 || echo "write_url.php 없음"
+            echo "===== [4] Python으로 line 116 뒤에 <style> + <div> 삽입 ====="
+            sudo TARGET="$F" python3 <<'PYEOF'
+            import os
+            p = os.environ["TARGET"]
+            with open(p, "r", encoding="utf-8") as f:
+                s = f.read()
+
+            # blink CSS + 경고 박스
+            css = """<style id="warn-blink-css">
+            @keyframes warnBlink {
+              0%,100% { background:#ff2b2b; color:#fff; box-shadow:0 0 24px #ff2b2b; border-color:#fff; }
+              50%     { background:#ffdb2b; color:#000; box-shadow:0 0 34px #ffdb2b; border-color:#000; }
+            }
+            .warn-blink-user-guide {
+              animation: warnBlink 1.4s ease-in-out infinite;
+              padding: 18px 22px;
+              margin: 16px 0 20px;
+              border-radius: 12px;
+              font-size: 1.05rem;
+              font-weight: 700;
+              line-height: 1.75;
+              border: 4px solid #fff;
+              letter-spacing: -0.3px;
+            }
+            .warn-blink-user-guide .warn-title {
+              display:block;
+              font-size:1.35rem;
+              margin-bottom:8px;
+              text-shadow: 0 2px 4px rgba(0,0,0,.55);
+            }
+            .warn-blink-user-guide .warn-step {
+              display:block;
+              margin-top:4px;
+            }
+            </style>"""
+
+            box = """<div class="warn-blink-user-guide">
+              <span class="warn-title">⚠️ 경고 — 반드시 두 기기 모두 로그인해 주세요!</span>
+              프리즘이 연결된 모바일과 픽을 올리는 모바일, 이렇게 <b>두 기기 모두</b> 이 계정으로 로그인하신 뒤,
+              <span class="warn-step">① 프리즘 웹(Web)에 넣을 URL을 골라 복사하여 삽입해 주시고,</span>
+              <span class="warn-step">② 반대편(픽을 올리는 기기)에서는 같은 계정으로 로그인해 주시고,</span>
+              <span class="warn-step">③ 아래 테이블을 골라 <b>&#39;선택&#39;</b> 버튼을 눌러 주시면 해당 테이블이 화면에 실시간으로 활성화됩니다.</span>
+            </div>"""
+
+            # 제목 라인 뒤에 삽입 - `님 — 프리즘에 넣을 URL</div>` 다음
+            marker = "님 — 프리즘에 넣을 URL</div>"
+            if marker not in s:
+                print("marker NOT FOUND — 삽입 못 함")
+                exit(1)
+            new = s.replace(marker, marker + "\n" + css + "\n" + box, 1)
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(new)
+            print(f"before={len(s)}B  after={len(new)}B  diff={len(new)-len(s)}B")
+            PYEOF
+
+            sudo chown www-data:www-data "$F"
+            sudo chmod 644 "$F"
 
             echo ""
-            echo "===== [6] photo/ 폴더 안에 있는 모든 PHP 파일 (관리자 페이지 후보) ====="
-            sudo ls -la "$P1/"*.php | awk "{print \$5, \$6, \$7, \$8, \$9}" | head -30
+            echo "===== [5] 삽입 후 확인 (line 116 근처 30줄) ====="
+            sudo grep -n "warn-blink-user-guide\|warnBlink\|경고 — 반드시" "$F" | head -10
+
+            echo ""
+            echo "===== DONE ====="
             REMOTE
