@@ -7,7 +7,7 @@ on:
         required: true
         default: 'dun23315@gmail.com'
       action:
-        description: 'inspect (check server) or add (add account)'
+        description: 'inspect or add'
         required: false
         default: 'inspect'
 
@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Inspect or add account to sunbi
+      - name: Sunbi operation
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -26,57 +26,79 @@ jobs:
           script: |
             EMAIL="${{ github.event.inputs.email }}"
             ACTION="${{ github.event.inputs.action }}"
+            SUNBI_DIR="/var/www/sites/sunbi"
 
             if [ "$ACTION" = "inspect" ]; then
-              echo "=== Checking rebrowser-login.js for sunbi routes ==="
-              grep -n -i 'sunbi' /opt/gauth-full/rebrowser-login.js 2>/dev/null | head -50
+              echo "=== sunbi server.js ==="
+              cat "$SUNBI_DIR/server.js"
               echo ""
-              echo "=== Checking for sunbi data files ==="
-              find /opt/gauth-full -name '*sunbi*' 2>/dev/null
-              find /var/www/sites/sunbi -type f 2>/dev/null
+              echo "=== sunbi accounts.json (first 100 lines) ==="
+              head -100 "$SUNBI_DIR/accounts.json" 2>/dev/null || echo "file not found"
               echo ""
-              echo "=== Checking sunbi API route code ==="
-              grep -n -A 20 'sunbi/accounts' /opt/gauth-full/rebrowser-login.js 2>/dev/null | head -60
+              echo "=== sunbi accounts.json line count ==="
+              wc -l "$SUNBI_DIR/accounts.json" 2>/dev/null || echo "0"
               echo ""
-              echo "=== Checking for sunbi allocation/assign logic ==="
-              grep -n -A 10 'sunbi' /opt/gauth-full/rebrowser-login.js 2>/dev/null | head -100
+              echo "=== Test sunbi API on port 3013 ==="
+              curl -s http://localhost:3013/api/sunbi/accounts 2>/dev/null | head -200
               echo ""
-              echo "=== Check if there is a sunbi JSON data file ==="
-              ls -la /opt/gauth-full/sunbi* 2>/dev/null || echo "No sunbi files in /opt/gauth-full/"
-              ls -la /opt/gauth-full/data/sunbi* 2>/dev/null || echo "No sunbi files in /opt/gauth-full/data/"
+              echo "=== systemctl status ==="
+              systemctl status sunbi 2>/dev/null | head -20 || echo "no sunbi service"
               echo ""
-              echo "=== Test API endpoint ==="
-              curl -s http://localhost:4000/api/sunbi/accounts 2>/dev/null | head -500
+              echo "=== pm2 list ==="
+              pm2 list 2>/dev/null | grep -i sunbi || echo "not in pm2"
             fi
 
             if [ "$ACTION" = "add" ]; then
-              echo "=== Adding $EMAIL to sunbi ==="
-              # First get account data from gauth DB
+              echo "=== Getting account from gauth DB ==="
               ACCOUNT_JSON=$(node -e "
                 const fs = require('fs');
                 const d = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
                 const accs = Array.isArray(d) ? d : (d.accounts || []);
-                const t = accs.find(a => (a.email||'').toLowerCase() === '$EMAIL'.toLowerCase());
+                const t = accs.find(a => (a.email||'').toLowerCase() === process.argv[1].toLowerCase());
                 if (!t) { console.log('NOT_FOUND'); process.exit(0); }
                 console.log(JSON.stringify(t));
-              ")
+              " "$EMAIL")
+
               if [ "$ACCOUNT_JSON" = "NOT_FOUND" ]; then
-                echo "Account not found in gauth DB: $EMAIL"
+                echo "Account not found: $EMAIL"
                 exit 1
               fi
-              echo "Account found: $ACCOUNT_JSON"
+              echo "Found in gauth: $ACCOUNT_JSON"
+
               echo ""
-              # Try adding via API
-              curl -s -X POST http://localhost:4000/api/sunbi/add \
-                -H 'Content-Type: application/json' \
-                -d "{\"email\":\"$EMAIL\"}" 2>/dev/null || echo "POST /api/sunbi/add failed"
+              echo "=== Adding to sunbi accounts.json ==="
+              node -e "
+                const fs = require('fs');
+                const acctFile = '$SUNBI_DIR/accounts.json';
+                let accounts = [];
+                try { accounts = JSON.parse(fs.readFileSync(acctFile, 'utf8')); } catch(e) { console.log('Creating new file'); }
+                if (!Array.isArray(accounts)) accounts = accounts.accounts || [];
+                const newAcct = JSON.parse(process.argv[1]);
+                const exists = accounts.find(a => (a.email||'').toLowerCase() === (newAcct.email||'').toLowerCase());
+                if (exists) {
+                  console.log('Already exists in sunbi, updating...');
+                  Object.assign(exists, newAcct);
+                } else {
+                  console.log('Adding new account to sunbi...');
+                  accounts.push(newAcct);
+                }
+                fs.writeFileSync(acctFile, JSON.stringify(accounts, null, 2));
+                console.log('Done. Total accounts in sunbi:', accounts.length);
+                console.log('Verify:', accounts.find(a => (a.email||'').toLowerCase() === (newAcct.email||'').toLowerCase()).email);
+              " '$ACCOUNT_JSON'
+
               echo ""
-              # Verify
-              echo "=== Verify ==="
-              curl -s http://localhost:4000/api/sunbi/accounts 2>/dev/null | node -e "
-                const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
-                const accs = d.accounts || d || [];
-                const found = accs.find(a => (a.email||'').toLowerCase() === '$EMAIL'.toLowerCase());
-                console.log(found ? 'FOUND in sunbi: ' + JSON.stringify(found, null, 2) : 'NOT in sunbi yet');
+              echo "=== Verify on sunbi API ==="
+              curl -s http://localhost:3013/api/sunbi/accounts 2>/dev/null | node -e "
+                let d = '';
+                process.stdin.on('data', c => d += c);
+                process.stdin.on('end', () => {
+                  try {
+                    const j = JSON.parse(d);
+                    const accs = j.accounts || j || [];
+                    const found = accs.find(a => (a.email||'').toLowerCase() === '$EMAIL'.toLowerCase());
+                    console.log(found ? 'VERIFIED in sunbi API' : 'Not found in API - may need server restart');
+                  } catch(e) { console.log('API parse error:', e.message); }
+                });
               " 2>/dev/null
             fi
