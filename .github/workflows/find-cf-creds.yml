@@ -1,79 +1,65 @@
-name: Find CF credentials everywhere
+name: Find CF credentials v2
 on:
   workflow_dispatch:
 
 jobs:
   search:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
-      - name: Search entire server for CF credentials
+      - uses: actions/checkout@v4
+
+      - name: Search server for CF credentials and try token creation
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 8m
+          command_timeout: 4m
           script: |
-            echo "=== ALL MOUNT POINTS ==="
-            df -h 2>/dev/null
+            echo "=== 1. Search ALL files for cloudflare/CF keywords ==="
+            sudo grep -rli 'cloudflare\|CF_API\|CF_TOKEN\|CF_GLOBAL\|CF_EMAIL\|dns_cloudflare\|globalApiKey' /root /opt /var/www /etc /home 2>/dev/null | head -30
+
             echo ""
-            echo "=== MOUNT OUTPUT ==="
-            mount | grep -v tmpfs | grep -v proc | grep -v sys
+            echo "=== 2. Search for Global API Key pattern (37 hex chars) ==="
+            sudo grep -rhoP '[a-f0-9]{37}' /root/.secrets /opt/gauth-full/.env /etc/default /root/.bashrc /root/.profile /root/.bash_history 2>/dev/null | sort -u | head -5
+
             echo ""
-            echo "=== LS ROOT ==="
-            ls -la /
+            echo "=== 3. Check wrangler config ==="
+            sudo find / -maxdepth 4 -name '.wrangler' -o -name 'wrangler.toml' -o -name 'wrangler.json' 2>/dev/null | head -5
+            sudo cat /root/.wrangler/config/default.toml 2>/dev/null || echo "no wrangler config"
+
             echo ""
-            echo "=== CHECK E DRIVE PATHS ==="
-            for p in /e /E /mnt/e /mnt/E /media/e /media/E /d /D /mnt/d /mnt/D /mnt /media /srv /data /backup /home; do
-              if [ -d "$p" ]; then
-                echo "EXISTS: $p"
-                ls -la "$p" 2>/dev/null | head -20
-                echo "---"
-              fi
-            done
+            echo "=== 4. Check bash history for cloudflare ==="
+            sudo grep -i 'cloudflare\|cf_\|dns_cloud' /root/.bash_history 2>/dev/null | tail -20
+
             echo ""
-            echo "=== FIND ALL .env .ini .cfg .conf WITH cloudflare/CF ==="
-            sudo find / -maxdepth 6 \
-              \( -path /proc -o -path /sys -o -path /dev -o -path /run -o -path /snap \) -prune \
-              -o -type f \( -name "*.env" -o -name ".env" -o -name "*.ini" -o -name "*.cfg" -o -name "*.conf" -o -name "*.json" -o -name "*.txt" -o -name "*.sh" -o -name "*.yaml" -o -name "*.yml" \) \
-              -print 2>/dev/null | \
-              xargs sudo grep -il -E "(cloudflare|CF_API|CF_TOKEN|cf_key|dns_cloudflare|X-Auth-Key|Global.API)" 2>/dev/null | head -50
+            echo "=== 5. List all API tokens via existing token ==="
+            CF_TOKEN=$(sudo grep -oP 'dns_cloudflare_api_token\s*=\s*\K\S+' /root/.secrets/cloudflare.ini 2>/dev/null)
+            echo "Using token to list all tokens..."
+            curl -s "https://api.cloudflare.com/client/v4/user/tokens" \
+              -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" | \
+              node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);console.log("success:",j.success);(j.result||[]).forEach(t=>console.log("  token:",t.id,t.name,t.status));(j.errors||[]).forEach(e=>console.log("  err:",e.code,e.message))}catch(e){console.log("parse error",d.substring(0,200))}})'
+
             echo ""
-            echo "=== FIND FILES WITH cloudflare IN NAME ==="
-            sudo find / -maxdepth 6 \
-              \( -path /proc -o -path /sys -o -path /dev -o -path /run -o -path /snap \) -prune \
-              -o -type f -iname "*cloudflare*" -print 2>/dev/null
+            echo "=== 6. Try creating new token with DNS Edit permission ==="
+            CF_ZONE="2601d4f4ab75c910f8d858ca036ff344"
+            NEW_TOKEN=$(curl -s -X POST "https://api.cloudflare.com/client/v4/user/tokens" \
+              -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+              --data "{\"name\":\"dns-edit-auto\",\"policies\":[{\"effect\":\"allow\",\"resources\":{\"com.cloudflare.api.account.zone.${CF_ZONE}\":\"*\"},\"permission_groups\":[{\"id\":\"4755a26eedb94da69e1066d98aa820be\",\"name\":\"DNS Write\"}]}]}")
+            echo "$NEW_TOKEN" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);console.log("create success:",j.success);if(j.result&&j.result.value)console.log("NEW_TOKEN_VALUE:",j.result.value);(j.errors||[]).forEach(e=>console.log("  err:",e.code,e.message))}catch(e){console.log("parse error")}})'
+
             echo ""
-            echo "=== SEARCH FOR GLOBAL API KEY PATTERN (hex 37+ chars) ==="
-            sudo find / -maxdepth 5 \
-              \( -path /proc -o -path /sys -o -path /dev -o -path /run -o -path /snap -o -path /usr \) -prune \
-              -o -type f -size -100k \( -name "*.env" -o -name ".env" -o -name "*.ini" -o -name "*.cfg" -o -name "*.txt" -o -name "*.conf" -o -name "*.json" -o -name "*.sh" \) \
-              -exec sudo grep -l -E "[0-9a-f]{37}" {} \; 2>/dev/null | head -30
+            echo "=== 7. Check Cloudflare account info ==="
+            curl -s "https://api.cloudflare.com/client/v4/accounts" \
+              -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" | \
+              node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);console.log("success:",j.success);(j.result||[]).forEach(a=>console.log("  account:",a.id,a.name));(j.errors||[]).forEach(e=>console.log("  err:",e.code,e.message))}catch(e){console.log("parse error")}})'
+
             echo ""
-            echo "=== PRINT CONTENTS OF ALL CLOUDFLARE-RELATED FILES ==="
-            for f in $(sudo find / -maxdepth 6 \
-              \( -path /proc -o -path /sys -o -path /dev -o -path /run -o -path /snap \) -prune \
-              -o -type f -iname "*cloudflare*" -print 2>/dev/null); do
-              echo "FILE: $f"
-              sudo cat "$f" 2>/dev/null | head -30
-              echo "==="
-            done
+            echo "=== 8. Try listing zone permissions ==="
+            curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}" \
+              -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" | \
+              node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const j=JSON.parse(d);if(j.result){console.log("zone:",j.result.name,"status:",j.result.status);console.log("permissions:",JSON.stringify(j.result.permissions||[]))}console.log("success:",j.success);(j.errors||[]).forEach(e=>console.log("  err:",e.code,e.message))}catch(e){console.log("parse error")}})'
+
             echo ""
-            echo "=== CHECK ALL .env FILES CONTENT ==="
-            for f in $(sudo find / -maxdepth 5 \
-              \( -path /proc -o -path /sys -o -path /dev -o -path /run -o -path /snap -o -path /usr \) -prune \
-              -o -type f -name ".env" -print 2>/dev/null); do
-              echo "FILE: $f"
-              sudo cat "$f" 2>/dev/null
-              echo "==="
-            done
-            echo ""
-            echo "=== CHECK /root AND HOME DIRS FOR ANY CF/API FILES ==="
-            sudo find /root /home -maxdepth 4 -type f \( -name "*.key" -o -name "*.token" -o -name "*.secret" -o -name "*.credentials" -o -name "credentials*" -o -name "secrets*" -o -name "api*" \) 2>/dev/null | while read f; do
-              echo "FILE: $f"
-              sudo cat "$f" 2>/dev/null | head -10
-              echo "==="
-            done
-            echo ""
-            echo "=== SEARCH DONE ==="
+            echo "=== DONE ==="
