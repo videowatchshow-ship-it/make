@@ -1,0 +1,79 @@
+name: Find CF credentials everywhere
+on:
+  workflow_dispatch:
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Search entire server for CF credentials
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 8m
+          script: |
+            echo "=== ALL MOUNT POINTS ==="
+            df -h 2>/dev/null
+            echo ""
+            echo "=== MOUNT OUTPUT ==="
+            mount | grep -v tmpfs | grep -v proc | grep -v sys
+            echo ""
+            echo "=== LS ROOT ==="
+            ls -la /
+            echo ""
+            echo "=== CHECK E DRIVE PATHS ==="
+            for p in /e /E /mnt/e /mnt/E /media/e /media/E /d /D /mnt/d /mnt/D /mnt /media /srv /data /backup /home; do
+              if [ -d "$p" ]; then
+                echo "EXISTS: $p"
+                ls -la "$p" 2>/dev/null | head -20
+                echo "---"
+              fi
+            done
+            echo ""
+            echo "=== FIND ALL .env .ini .cfg .conf WITH cloudflare/CF ==="
+            sudo find / -maxdepth 6 \
+              \( -path /proc -o -path /sys -o -path /dev -o -path /run -o -path /snap \) -prune \
+              -o -type f \( -name "*.env" -o -name ".env" -o -name "*.ini" -o -name "*.cfg" -o -name "*.conf" -o -name "*.json" -o -name "*.txt" -o -name "*.sh" -o -name "*.yaml" -o -name "*.yml" \) \
+              -print 2>/dev/null | \
+              xargs sudo grep -il -E "(cloudflare|CF_API|CF_TOKEN|cf_key|dns_cloudflare|X-Auth-Key|Global.API)" 2>/dev/null | head -50
+            echo ""
+            echo "=== FIND FILES WITH cloudflare IN NAME ==="
+            sudo find / -maxdepth 6 \
+              \( -path /proc -o -path /sys -o -path /dev -o -path /run -o -path /snap \) -prune \
+              -o -type f -iname "*cloudflare*" -print 2>/dev/null
+            echo ""
+            echo "=== SEARCH FOR GLOBAL API KEY PATTERN (hex 37+ chars) ==="
+            sudo find / -maxdepth 5 \
+              \( -path /proc -o -path /sys -o -path /dev -o -path /run -o -path /snap -o -path /usr \) -prune \
+              -o -type f -size -100k \( -name "*.env" -o -name ".env" -o -name "*.ini" -o -name "*.cfg" -o -name "*.txt" -o -name "*.conf" -o -name "*.json" -o -name "*.sh" \) \
+              -exec sudo grep -l -E "[0-9a-f]{37}" {} \; 2>/dev/null | head -30
+            echo ""
+            echo "=== PRINT CONTENTS OF ALL CLOUDFLARE-RELATED FILES ==="
+            for f in $(sudo find / -maxdepth 6 \
+              \( -path /proc -o -path /sys -o -path /dev -o -path /run -o -path /snap \) -prune \
+              -o -type f -iname "*cloudflare*" -print 2>/dev/null); do
+              echo "FILE: $f"
+              sudo cat "$f" 2>/dev/null | head -30
+              echo "==="
+            done
+            echo ""
+            echo "=== CHECK ALL .env FILES CONTENT ==="
+            for f in $(sudo find / -maxdepth 5 \
+              \( -path /proc -o -path /sys -o -path /dev -o -path /run -o -path /snap -o -path /usr \) -prune \
+              -o -type f -name ".env" -print 2>/dev/null); do
+              echo "FILE: $f"
+              sudo cat "$f" 2>/dev/null
+              echo "==="
+            done
+            echo ""
+            echo "=== CHECK /root AND HOME DIRS FOR ANY CF/API FILES ==="
+            sudo find /root /home -maxdepth 4 -type f \( -name "*.key" -o -name "*.token" -o -name "*.secret" -o -name "*.credentials" -o -name "credentials*" -o -name "secrets*" -o -name "api*" \) 2>/dev/null | while read f; do
+              echo "FILE: $f"
+              sudo cat "$f" 2>/dev/null | head -10
+              echo "==="
+            done
+            echo ""
+            echo "=== SEARCH DONE ==="
