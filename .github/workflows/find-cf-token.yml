@@ -1,0 +1,90 @@
+name: Find Cloudflare token
+on:
+  workflow_dispatch:
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Search entire server for CF tokens
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 8m
+          script: |
+            echo "=== Search 1: All env files on entire system ==="
+            sudo find / -maxdepth 6 -name '*.env' -o -name '.env*' -o -name 'env' 2>/dev/null | grep -v proc | grep -v sys | while read f; do
+              HAS=$(sudo grep -ilP 'cloudflare|cf_token|cf_api|cf_zone|cf_global' "$f" 2>/dev/null)
+              [ -n "$HAS" ] && echo "MATCH: $f" && sudo grep -iP 'cloudflare|cf_token|cf_api|cf_zone|cf_global' "$f" 2>/dev/null | head -5
+            done
+
+            echo ""
+            echo "=== Search 2: All config/json files with cloudflare mention ==="
+            sudo find / -maxdepth 6 \( -name '*.json' -o -name '*.cfg' -o -name '*.conf' -o -name '*.ini' -o -name '*.yaml' -o -name '*.yml' -o -name '*.toml' \) 2>/dev/null | grep -v proc | grep -v sys | grep -v node_modules | while read f; do
+              HAS=$(sudo grep -ilP 'cloudflare|cf_token|cf_api' "$f" 2>/dev/null)
+              [ -n "$HAS" ] && echo "MATCH: $f" && sudo grep -iP 'cloudflare|cf_token|cf_api' "$f" 2>/dev/null | head -3
+            done
+
+            echo ""
+            echo "=== Search 3: JS files with cloudflare references ==="
+            sudo find / -maxdepth 6 -name '*.js' 2>/dev/null | grep -v proc | grep -v sys | grep -v node_modules | while read f; do
+              HAS=$(sudo grep -ilP 'cloudflare|CF_TOKEN|CF_API_KEY|CF_ZONE|globalApiKey|authEmail' "$f" 2>/dev/null)
+              [ -n "$HAS" ] && echo "MATCH: $f" && sudo grep -nP 'cloudflare|CF_TOKEN|CF_API_KEY|CF_ZONE|globalApiKey|authEmail' "$f" 2>/dev/null | head -5
+            done
+
+            echo ""
+            echo "=== Search 4: Any file containing cfut_ token pattern ==="
+            sudo grep -rlP 'cfut_[A-Za-z0-9_-]{20,}' / --include='*' 2>/dev/null | grep -v proc | grep -v sys | head -20
+
+            echo ""
+            echo "=== Search 5: Any file with 37-char hex (Global API Key pattern) ==="
+            sudo grep -rlP '[a-f0-9]{37}' /root /opt /etc /var/www 2>/dev/null | grep -v node_modules | grep -v proc | grep -v '.log' | head -20
+
+            echo ""
+            echo "=== Search 6: Cloudflare wrangler / config dirs ==="
+            sudo find / -maxdepth 4 -type d -iname '*cloudflare*' 2>/dev/null | grep -v proc | grep -v sys
+            sudo find / -maxdepth 4 -type f -iname '*cloudflare*' 2>/dev/null | grep -v proc | grep -v sys
+            sudo find / -maxdepth 4 -type f -iname 'wrangler*' 2>/dev/null | grep -v proc | grep -v sys
+            sudo find / -maxdepth 4 -type f -iname '.wrangler*' 2>/dev/null | grep -v proc | grep -v sys
+
+            echo ""
+            echo "=== Search 7: Home dirs and common token locations ==="
+            for d in /root /home/*; do
+              [ -d "$d" ] || continue
+              echo "--- $d ---"
+              sudo ls -la "$d"/.cloudflare* "$d"/.cf* "$d"/.wrangler* 2>/dev/null || echo "  no cloudflare dotfiles"
+              sudo cat "$d"/.cloudflare/cf-token 2>/dev/null && echo "  ^^ cf-token content"
+              sudo cat "$d"/.cloudflare/.credentials 2>/dev/null && echo "  ^^ credentials content"
+            done
+
+            echo ""
+            echo "=== Search 8: E drive / mounted volumes ==="
+            sudo lsblk 2>/dev/null || true
+            sudo df -h 2>/dev/null | grep -v tmpfs | grep -v udev
+            sudo ls -la /mnt/ /media/ /e/ /E/ /drives/ 2>/dev/null || echo "no /mnt /media /e /E /drives"
+            for mp in /mnt/* /media/* /e /E; do
+              [ -d "$mp" ] || continue
+              echo "--- mounted: $mp ---"
+              sudo find "$mp" -maxdepth 4 -type f \( -name '*.env' -o -name '*.json' -o -name '*.cfg' -o -name '*.conf' \) 2>/dev/null | head -20
+              sudo grep -rlP 'cloudflare|cf_token|cfut_' "$mp" 2>/dev/null | head -10
+            done
+
+            echo ""
+            echo "=== Search 9: systemd env files and overrides ==="
+            sudo find /etc/systemd /etc/default /etc/environment* -type f 2>/dev/null | while read f; do
+              HAS=$(sudo grep -ilP 'cloudflare|cf_token|cf_api|cf_zone' "$f" 2>/dev/null)
+              [ -n "$HAS" ] && echo "MATCH: $f" && sudo cat "$f" 2>/dev/null
+            done
+
+            echo ""
+            echo "=== Search 10: npm/pip global configs ==="
+            sudo cat /root/.npmrc 2>/dev/null || true
+            sudo cat /root/.bashrc 2>/dev/null | grep -iP 'cloudflare|cf_token|cf_api|export.*CF' || true
+            sudo cat /root/.profile 2>/dev/null | grep -iP 'cloudflare|cf_token|cf_api|export.*CF' || true
+            sudo cat /etc/environment 2>/dev/null | grep -iP 'cloudflare|cf_token|cf_api|export.*CF' || true
+
+            echo ""
+            echo "=== Done ==="
