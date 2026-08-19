@@ -91,6 +91,11 @@ jobs:
               rm -f /tmp/sunbi_new_account.json
 
               echo ""
+              echo "=== Restarting sunbi service ==="
+              sudo systemctl restart sunbi 2>/dev/null || sudo pm2 restart sunbi 2>/dev/null || echo "No sunbi service manager found"
+              sleep 2
+
+              echo ""
               echo "=== Verify on sunbi API ==="
               curl -s http://localhost:3013/api/sunbi/accounts 2>/dev/null | node -e "
                 let d = '';
