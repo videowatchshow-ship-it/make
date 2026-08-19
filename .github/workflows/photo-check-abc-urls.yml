@@ -1,4 +1,4 @@
-name: denny 계정 삭제 (photo + photo2 실체)
+name: photo 13계정 x 3뷰 URL 백엔드 체인 검증
 
 on:
   workflow_dispatch:
@@ -9,15 +9,16 @@ on:
       - '.github/workflows/photo-check-abc-urls.yml'
 
 jobs:
-  delete_denny:
+  verify_chain:
     runs-on: ubuntu-latest
     steps:
-      - uses: appleboy/ssh-action@v1.0.3
+      - name: 13계정 x 3뷰 = 39 URL 프론트 HTTP + 백엔드 sel/room 체인 검증
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 120s
+          command_timeout: 300s
           script: |
             /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
               --zone=asia-northeast1-a \
@@ -26,57 +27,102 @@ jobs:
               --quiet \
               --command='bash -s' << "REMOTE"
             set -uo pipefail
+            P1="/var/www/sites/chamgyo/public/photo"
+            BASE="https://xn--9d0bw2fjtyymch7de9d.info/photo"
             TS=$(date +%s)
+            NOW=$(date +%s)
 
-            echo "===== BEFORE ====="
-            for D in photo photo2; do
-              F="/var/www/sites/chamgyo/public/$D/data/sel_denny.json"
+            ACCOUNTS="aass0707 abc01 abc02 abc03 abc04 abc05 abc06 abc07 cent gain jay otuki tak"
+
+            echo "===== [A] 13 계정 sel_*.json → 각 계정이 선택한 room_id ====="
+            declare -A ROOM
+            for U in $ACCOUNTS; do
+              F="$P1/data/sel_${U}.json"
               if [ -f "$F" ]; then
-                sudo ls -la "$F"
-                sudo cat "$F"; echo ""
+                CONTENT=$(sudo cat "$F")
+                RID=$(echo "$CONTENT" | grep -oE "room_id[^0-9]*[0-9]+" | grep -oE "[0-9]+" | head -1)
+                MT=$(stat -c "%y" "$F" | cut -d. -f1)
+                ROOM[$U]=$RID
+                printf "  %-10s → room_id=%-4s  sel_mtime=%s  content=%s\n" "$U" "$RID" "$MT" "$CONTENT"
               else
-                echo "$D/data/sel_denny.json: 이미 없음"
+                printf "  %-10s → sel_ 파일 MISSING\n" "$U"
               fi
             done
 
             echo ""
-            echo "===== 백업 후 삭제 ====="
-            for D in photo photo2; do
-              F="/var/www/sites/chamgyo/public/$D/data/sel_denny.json"
+            echo "===== [B] 각 계정 room_<id>.json 존재/신선도 (백엔드 데이터 실체) ====="
+            printf "  %-10s %-6s %-6s %-8s %-8s %s\n" "계정" "room" "http" "age_s" "nums_len" "server_time"
+            echo "  -----------------------------------------------------------------"
+            for U in $ACCOUNTS; do
+              RID=${ROOM[$U]:-}
+              if [ -z "$RID" ]; then
+                printf "  %-10s SKIP (sel_ 없음)\n" "$U"; continue
+              fi
+              F="$P1/data/room_${RID}.json"
               if [ -f "$F" ]; then
-                sudo cp "$F" "/tmp/sel_denny_${D}_${TS}.bak"
-                echo "backup: /tmp/sel_denny_${D}_${TS}.bak"
-                sudo rm -f "$F"
-                echo "$D/data/sel_denny.json 삭제 완료"
+                MT=$(stat -c "%Y" "$F")
+                AGE=$((NOW - MT))
+                CONTENT=$(sudo cat "$F")
+                NL=$(echo "$CONTENT" | python3 -c "import json,sys;d=json.load(sys.stdin);print(len(d.get('nums',[])))" 2>/dev/null || echo "?")
+                ST=$(echo "$CONTENT" | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('server_time','?'))" 2>/dev/null || echo "?")
+                printf "  %-10s %-6s %-6s %-8s %-8s %s\n" "$U" "$RID" "OK" "$AGE" "$NL" "$ST"
+              else
+                printf "  %-10s %-6s %-6s room_%s.json MISSING\n" "$U" "$RID" "-" "$RID"
               fi
             done
 
             echo ""
-            echo "===== heartbeat_denny.info 도 있으면 삭제 ====="
-            for D in photo photo2; do
-              HB="/var/www/sites/chamgyo/public/$D/data/heartbeat_denny.info"
-              if [ -f "$HB" ]; then
-                sudo rm -f "$HB"
-                echo "$D/data/heartbeat_denny.info 삭제"
+            echo "===== [C] 3뷰 파일 실체 (CAH_1/CAW_1/SNW_1) 서버 존재 ====="
+            for F in CAH_1.html CAW_1.html SNW_1.html; do
+              if [ -f "$P1/$F" ]; then
+                SZ=$(sudo stat -c "%s" "$P1/$F")
+                TITLE=$(sudo grep -oE "<title>[^<]+</title>" "$P1/$F" | head -1)
+                printf "  %-12s size=%-6sB title=%s\n" "$F" "$SZ" "$TITLE"
+              else
+                echo "  $F: MISSING"
               fi
             done
 
             echo ""
-            echo "===== AFTER — denny 완전 사라짐 확인 ====="
-            for D in photo photo2; do
-              F="/var/www/sites/chamgyo/public/$D/data/sel_denny.json"
-              [ -f "$F" ] && echo "$D: 아직 있음!" || echo "$D: 삭제됨 ✓"
+            echo "===== [D] 39개 URL 프론트엔드 HTTP (Cloudflare 경유 HTTPS) ====="
+            printf "  %-10s %-6s %-6s %-6s\n" "계정" "세로" "가로" "싱지뉴"
+            echo "  -------------------------------------"
+            for U in $ACCOUNTS; do
+              CAH=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 "$BASE/CAH_1.html?ch=$U&_t=$TS")
+              CAW=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 "$BASE/CAW_1.html?ch=$U&_t=$TS")
+              SNW=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 "$BASE/SNW_1.html?ch=$U&_t=$TS")
+              printf "  %-10s %-6s %-6s %-6s\n" "$U" "$CAH" "$CAW" "$SNW"
             done
 
             echo ""
-            echo "===== photo/data 남은 계정 리스트 ====="
-            sudo ls "/var/www/sites/chamgyo/public/photo/data/"sel_*.json 2>/dev/null | xargs -I {} basename {} .json | sed "s/^sel_//"
-            echo "총: $(sudo ls "/var/www/sites/chamgyo/public/photo/data/"sel_*.json 2>/dev/null | wc -l) 개"
+            echo "===== [E] 백엔드 api_selected_room.php → 각 계정 응답 실체 ====="
+            for U in $ACCOUNTS; do
+              R=$(curl -sS --max-time 10 "$BASE/api_selected_room.php?ch=$U&_t=$TS")
+              printf "  api_selected_room?ch=%-10s → %s\n" "$U" "$R"
+            done
 
             echo ""
-            echo "===== photo2/data 남은 계정 리스트 ====="
-            sudo ls "/var/www/sites/chamgyo/public/photo2/data/"sel_*.json 2>/dev/null | xargs -I {} basename {} .json | sed "s/^sel_//"
-            echo "총: $(sudo ls "/var/www/sites/chamgyo/public/photo2/data/"sel_*.json 2>/dev/null | wc -l) 개"
+            echo "===== [F] 총 계정 x 뷰 매트릭스 종합 판정 ====="
+            OK=0; FAIL=0
+            for U in $ACCOUNTS; do
+              RID=${ROOM[$U]:-}
+              if [ -z "$RID" ] || [ ! -f "$P1/data/room_${RID}.json" ]; then
+                echo "  $U: ❌ (sel 또는 room 없음)"
+                FAIL=$((FAIL+1))
+                continue
+              fi
+              MT=$(stat -c "%Y" "$P1/data/room_${RID}.json")
+              AGE=$((NOW - MT))
+              if [ "$AGE" -gt 600 ]; then
+                echo "  $U (방$RID): ⚠️ stale ${AGE}s (10분+)"
+                FAIL=$((FAIL+1))
+              else
+                echo "  $U (방$RID): ✅ 신선 ${AGE}s"
+                OK=$((OK+1))
+              fi
+            done
+            echo ""
+            echo "정상: $OK / 문제: $FAIL"
 
             echo ""
             echo "===== DONE ====="
