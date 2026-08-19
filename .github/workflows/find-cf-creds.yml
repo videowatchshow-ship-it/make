@@ -1,50 +1,37 @@
-name: Try DNS create + find Global API Key
+name: Check DNS records and wildcard
 on:
   workflow_dispatch:
 
 jobs:
   search:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 2
     steps:
       - uses: actions/checkout@v4
 
-      - name: Try DNS and find key
+      - name: Check DNS
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 60s
+          command_timeout: 30s
           script: |
             CF_TOKEN=$(sudo awk -F' = ' '{print $2}' /root/.secrets/cloudflare.ini 2>/dev/null)
-            SERVER_IP=$(curl -s http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip -H "Metadata-Flavor: Google")
-            echo "Server IP: $SERVER_IP"
 
-            echo ""
-            echo "=== 1. Try DNS A record create with existing token ==="
-            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/2601d4f4ab75c910f8d858ca036ff344/dns_records" \
+            echo "=== 1. List ALL DNS records (token has zone:read) ==="
+            curl -s "https://api.cloudflare.com/client/v4/zones/2601d4f4ab75c910f8d858ca036ff344/dns_records?per_page=100" \
               -H "Authorization: Bearer $CF_TOKEN" \
-              -H "Content-Type: application/json" \
-              --data '{"type":"A","name":"second","content":"'"$SERVER_IP"'","ttl":1,"proxied":true}'
+              -H "Content-Type: application/json" 2>/dev/null | python3 -c "import sys,json; [print(f'{r[\"type\"]:6} {r[\"name\"]:40} -> {r[\"content\"]}') for r in json.load(sys.stdin).get('result',[])]" 2>/dev/null
 
             echo ""
-            echo "=== 2. Check specific files for Global API Key ==="
-            sudo cat /root/.cloudflare 2>/dev/null || echo "no /root/.cloudflare"
-            sudo cat /root/.cloudflare.cfg 2>/dev/null || echo "no .cloudflare.cfg"
-            sudo ls -la /root/.secrets/ 2>/dev/null
-            for f in /root/.secrets/*; do
-              echo "--- $f ---"
-              sudo cat "$f" 2>/dev/null
-            done
+            echo "=== 2. Resolve second.cent-solution.online ==="
+            dig +short second.cent-solution.online A 2>/dev/null || nslookup second.cent-solution.online 2>/dev/null
 
             echo ""
-            echo "=== 3. Check bash history for cloudflare ==="
-            sudo grep -i "cloudflare\|x-auth\|cfut_\|global.*key" /root/.bash_history 2>/dev/null | tail -20
-
-            echo ""
-            echo "=== 4. certbot renewal configs ==="
-            sudo cat /etc/letsencrypt/renewal/*.conf 2>/dev/null | grep -i "cloudflare\|token\|credential"
+            echo "=== 3. Resolve wildcard ==="
+            dig +short '*.cent-solution.online' A 2>/dev/null
+            dig +short random-test-xyz.cent-solution.online A 2>/dev/null
 
             echo ""
             echo "=== DONE ==="
