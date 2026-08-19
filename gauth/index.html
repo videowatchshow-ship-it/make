@@ -720,14 +720,18 @@ function applyFilter(){
   render()
 }
 async function render(){
+  try{
   var totalPages = Math.max(1, Math.ceil(FILTERED.length / PAGE_SIZE))
   if (PAGE > totalPages) PAGE = totalPages
   var start = (PAGE-1) * PAGE_SIZE
   var end = Math.min(FILTERED.length, start + PAGE_SIZE)
   const slice = FILTERED.slice(start, end)
-  const codes = await Promise.all(slice.map(a =>
-    a.totp_secret ? fetch(authQuery('/codes/'+a.totp_secret),{headers:authHeaders()}).then(r=>r.json()).then(j=>j.code||'—').catch(()=>'—') : Promise.resolve('—')
-  ))
+  var codes = []
+  try {
+    codes = await Promise.all(slice.map(a =>
+      a.totp_secret ? fetch(authQuery('/codes/'+a.totp_secret),{headers:authHeaders()}).then(r=>r.json()).then(j=>j.code||'—').catch(()=>'—') : Promise.resolve('—')
+    ))
+  } catch(_){ codes = slice.map(()=>'—') }
   const _cur = localStorage.getItem('gauth_last_lookup')||''
   var rows = []
   for (let i=0;i<slice.length;i++){
@@ -758,6 +762,7 @@ async function render(){
   }
   sp.innerHTML = rows.join('')
   renderPagination(totalPages)
+  }catch(e){console.error('render error:',e);sp.innerHTML='<div style="padding:20px;color:#f47070">렌더링 오류: '+e.message+'</div>'}
 }
 function renderPagination(totalPages){
   const pg = document.getElementById('pagination')
