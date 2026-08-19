@@ -41,6 +41,7 @@ jobs:
                 name=$(basename "$dir")
                 [ "$name" = "gauth" ] && continue
                 port=$(grep -oP 'listen\(\s*\K\d+' "$sjs" 2>/dev/null | head -1)
+                [ -z "$port" ] && port=$(grep -oP '(?:PORT|port)\s*=\s*\K\d+' "$sjs" 2>/dev/null | head -1)
                 [ -z "$port" ] && port=0
                 echo "${name}:${port}:${dir}"
               done

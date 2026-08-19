@@ -41,23 +41,33 @@ Express :4000 (rebrowser-login.js)
 - 데이터 원본: `/opt/gauth-full/accounts_normalized.json`
 - 모든 하위 사이트는 gauth DB에서 계정을 가져감
 
-#### 하위 사이트 (서브사이트, 7개)
+#### 하위 사이트 (서브사이트, 13개)
 
 gauth에서 계정을 받아 독립 운영. 각 사이트는 자체 `server.js` + `accounts.json` + 프론트엔드 보유.
+서버의 listening port 범위: 3011~3022 (server.js 내 변수 기반 할당).
 
-| 사이트 | 포트 | 서버 경로 | accounts.json 형식 | systemd 서비스 |
-|--------|------|-----------|-------------------|---------------|
-| gain.cent-solution.online | 3021 | `/var/www/sites/gain` | `{accounts: [...]}` | `gain` |
-| sunbi.cent-solution.online | 3013 | `/var/www/sites/sunbi` | `{accounts: [...]}` | `sunbi` |
-| woodong.cent-solution.online | 3012 | `/var/www/sites/woodong` | `{accounts: [...]}` | `woodong` |
-| win.cent-solution.online | 4001 | `/var/www/sites/win` | `{accounts: [...]}` | `win` |
-| simmani.cent-solution.online | 3011 | `/var/www/sites/simmani` | `{accounts: [...]}` | `simmani` |
-| romi.cent-solution.online | 3019 | `/var/www/sites/romi` | `{accounts: [...]}` | `romi` |
-| soktv.cent-solution.online | 3017 | `/var/www/sites/soktv` | `{accounts: [...]}` | `soktv` |
+| 사이트 | 서버 경로 | systemd 서비스 | 비고 |
+|--------|-----------|---------------|------|
+| aura.cent-solution.online | `/var/www/sites/aura` | `aura` | |
+| bacad.cent-solution.online | `/var/www/sites/bacad` | `bacad` | |
+| camstouch.cent-solution.online | `/var/www/sites/camstouch` | `camstouch` | |
+| gain.cent-solution.online | `/var/www/sites/gain` | `gain` | port 3021 |
+| james.cent-solution.online | `/var/www/sites/james` | `james` | |
+| misskim.cent-solution.online | `/var/www/sites/misskim` | `misskim` | |
+| naman.cent-solution.online | `/var/www/sites/naman` | `naman` | |
+| romi.cent-solution.online | `/var/www/sites/romi` | `romi` | port 3019 |
+| simmani.cent-solution.online | `/var/www/sites/simmani` | `simmani` | port 3011 |
+| soktv.cent-solution.online | `/var/www/sites/soktv` | `soktv` | port 3017 |
+| sunbi.cent-solution.online | `/var/www/sites/sunbi` | `sunbi` | port 3013 |
+| win.cent-solution.online | `/var/www/sites/win` | — | systemd 서비스 없음 |
+| woodong.cent-solution.online | `/var/www/sites/woodong` | `woodong` | port 3012 |
 
-#### 기타 사이트 (계정 관리 대상 아님)
+accounts.json 형식: 모두 `{accounts: [...]}`.
+`add-account-all-sites.yml` 워크플로는 `/var/www/sites/*/server.js`를 자동 스캔하여 서브사이트를 검색함 (하드코딩 아님).
 
-admin, aura, bacad, camstouch, cent-tools, gauth01, gucci, james, misskim, naman
+#### 기타 사이트 (server.js 없음, 계정 관리 대상 아님)
+
+admin, cent-tools, gauth01, gucci
 
 #### 서브사이트 계정 데이터 구조
 
