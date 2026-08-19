@@ -29,8 +29,11 @@ jobs:
             SUNBI_DIR="/var/www/sites/sunbi"
 
             if [ "$ACTION" = "inspect" ]; then
-              echo "=== sunbi server.js ==="
-              cat "$SUNBI_DIR/server.js"
+              echo "=== sunbi server.js (full) ==="
+              cat -n "$SUNBI_DIR/server.js"
+              echo ""
+              echo "=== sunbi public/index.html ==="
+              cat "$SUNBI_DIR/public/index.html" 2>/dev/null | head -200
               echo ""
               echo "=== sunbi accounts.json (first 100 lines) ==="
               sudo head -100 "$SUNBI_DIR/accounts.json" 2>/dev/null || echo "file not found"
