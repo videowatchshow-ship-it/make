@@ -58,9 +58,9 @@ jobs:
             echo "=== Configuring Apache reverse proxy ==="
             if [ ! -f /etc/apache2/sites-available/second.conf ]; then
               sudo a2enmod proxy proxy_http ssl rewrite headers 2>/dev/null || true
-              printf '<VirtualHost *:80>\n    ServerName second.cent-solution.online\n    RewriteEngine On\n    RewriteCond %%{HTTPS} off\n    RewriteRule ^(.*)$ https://%%{HTTP_HOST}$1 [R=301,L]\n</VirtualHost>\n\n<VirtualHost *:443>\n    ServerName second.cent-solution.online\n    SSLEngine on\n    SSLCertificateFile /etc/letsencrypt/live/cent-solution.online/fullchain.pem\n    SSLCertificateKeyFile /etc/letsencrypt/live/cent-solution.online/privkey.pem\n    ProxyPreserveHost On\n    ProxyPass / http://127.0.0.1:3023/\n    ProxyPassReverse / http://127.0.0.1:3023/\n    Header always set X-Content-Type-Options "nosniff"\n    Header always set X-Frame-Options "SAMEORIGIN"\n</VirtualHost>\n' | sudo tee /etc/apache2/sites-available/second.conf > /dev/null
+              printf '<VirtualHost *:80>\n    ServerName second.cent-solution.online\n    ProxyPreserveHost On\n    ProxyPass / http://127.0.0.1:3023/\n    ProxyPassReverse / http://127.0.0.1:3023/\n    Header always set X-Content-Type-Options "nosniff"\n    Header always set X-Frame-Options "SAMEORIGIN"\n</VirtualHost>\n' | sudo tee /etc/apache2/sites-available/second.conf > /dev/null
               sudo a2ensite second 2>/dev/null
-              sudo apache2ctl configtest 2>&1 && sudo systemctl reload apache2 && echo "Apache configured" || echo "Apache config test failed"
+              sudo apache2ctl configtest 2>&1 && sudo systemctl reload apache2 && echo "Apache configured (HTTP)" || echo "Apache config test failed"
             else
               echo "Apache vhost already exists"
               sudo systemctl reload apache2
@@ -69,7 +69,7 @@ jobs:
             echo "=== SSL certificate ==="
             if [ ! -f /etc/letsencrypt/live/second.cent-solution.online/fullchain.pem ]; then
               if command -v certbot >/dev/null 2>&1; then
-                sudo certbot --apache -d second.cent-solution.online --non-interactive --agree-tos --email videowatch.show@gmail.com 2>&1 || echo "Certbot failed, using wildcard cert"
+                sudo certbot --apache -d second.cent-solution.online --non-interactive --agree-tos --email videowatch.show@gmail.com --redirect 2>&1 || echo "Certbot failed — site available on HTTP only"
               fi
             else
               echo "SSL cert already exists"
