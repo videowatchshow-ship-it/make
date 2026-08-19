@@ -1,0 +1,49 @@
+name: Read gucci CF config
+on:
+  workflow_dispatch:
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Read Cloudflare configs from gucci
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 30s
+          script: |
+            echo "=== 1. cloudflare-config.php ==="
+            cat /var/www/sites/gucci/config/cloudflare-config.php 2>/dev/null || echo "NOT FOUND"
+
+            echo ""
+            echo "=== 2. cloudflare-waf-config.php ==="
+            cat /var/www/sites/gucci/config/cloudflare-waf-config.php 2>/dev/null || echo "NOT FOUND"
+
+            echo ""
+            echo "=== 3. gucci .env ==="
+            cat /var/www/sites/gucci/.env 2>/dev/null || echo "NOT FOUND"
+
+            echo ""
+            echo "=== 4. gucci root .env ==="
+            cat /var/www/sites/gucci/../../.env 2>/dev/null || echo "NOT FOUND"
+
+            echo ""
+            echo "=== 5. All .env files under /var/www/ ==="
+            find /var/www/ -name ".env" -type f 2>/dev/null | while read f; do
+              echo "--- $f ---"
+              grep -i "cloudflare\|cf_\|CF_" "$f" 2>/dev/null || echo "(no CF vars)"
+            done
+
+            echo ""
+            echo "=== 6. cloudflare.ini ==="
+            sudo cat /root/.secrets/cloudflare.ini 2>/dev/null || echo "NOT FOUND"
+
+            echo ""
+            echo "=== 7. All CF tokens on server ==="
+            sudo grep -r "cfut_\|cloudflare_api\|CLOUDFLARE" /var/www/sites/gucci/ 2>/dev/null | head -30 || echo "none"
+
+            echo ""
+            echo "=== DONE ==="
