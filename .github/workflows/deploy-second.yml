@@ -1,0 +1,150 @@
+name: Deploy second sub-site
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['sub-sites/second/**']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: "sub-sites/second/server.js,sub-sites/second/public/index.html"
+          target: "/tmp/second-deploy"
+          strip_components: 2
+
+      - name: Setup and start second sub-site
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 5m
+          script: |
+            SITE_DIR="/var/www/sites/second"
+            echo "=== Deploying second sub-site ==="
+
+            sudo mkdir -p "$SITE_DIR/public"
+            sudo cp /tmp/second-deploy/server.js "$SITE_DIR/server.js"
+            sudo cp /tmp/second-deploy/public/index.html "$SITE_DIR/public/index.html"
+            rm -rf /tmp/second-deploy
+
+            echo "=== Installing express if needed ==="
+            cd "$SITE_DIR"
+            if [ ! -d "node_modules/express" ]; then
+              sudo npm init -y 2>/dev/null
+              sudo npm install express --save 2>/dev/null
+            fi
+
+            echo "=== Creating systemd service ==="
+            sudo tee /etc/systemd/system/second.service > /dev/null << 'SVCEOF'
+[Unit]
+Description=second sub-site
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/sites/second
+Environment=YOUTUBE_OAUTH_CLIENT_ID=
+EnvironmentFile=-/var/www/sites/second/.env
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+
+            sudo systemctl daemon-reload
+            sudo systemctl enable second
+            sudo systemctl restart second
+            sleep 2
+            systemctl is-active second && echo "=== second is running ===" || echo "=== second FAILED ==="
+            curl -s --max-time 3 http://localhost:3023/api/second/accounts || echo "API not reachable yet"
+
+            echo "=== Configuring Apache reverse proxy for second.cent-solution.online ==="
+            if [ ! -f /etc/apache2/sites-available/second.conf ]; then
+              sudo a2enmod proxy proxy_http ssl rewrite headers 2>/dev/null || true
+              sudo tee /etc/apache2/sites-available/second.conf > /dev/null << 'APACHEEOF'
+<VirtualHost *:80>
+    ServerName second.cent-solution.online
+    RewriteEngine On
+    RewriteCond %{HTTPS} off
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}$1 [R=301,L]
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName second.cent-solution.online
+
+    SSLEngine on
+    SSLCertificateFile /etc/letsencrypt/live/cent-solution.online/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/cent-solution.online/privkey.pem
+
+    ProxyPreserveHost On
+    ProxyPass / http://127.0.0.1:3023/
+    ProxyPassReverse / http://127.0.0.1:3023/
+
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+</VirtualHost>
+APACHEEOF
+              sudo a2ensite second 2>/dev/null
+              sudo apache2ctl configtest 2>&1 && sudo systemctl reload apache2 && echo "Apache configured for second.cent-solution.online" || echo "Apache config test failed"
+            else
+              echo "Apache vhost already exists"
+              sudo systemctl reload apache2
+            fi
+
+            echo "=== Requesting SSL certificate if needed ==="
+            if [ ! -f /etc/letsencrypt/live/second.cent-solution.online/fullchain.pem ]; then
+              if command -v certbot >/dev/null 2>&1; then
+                sudo certbot --apache -d second.cent-solution.online --non-interactive --agree-tos --email videowatch.show@gmail.com 2>&1 || echo "Certbot failed — using wildcard cert if available"
+              fi
+            else
+              echo "SSL cert already exists"
+            fi
+
+      - name: Setup Cloudflare DNS
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          if [ -z "${CF_TOKEN}" ] || [ -z "${CF_ZONE}" ]; then
+            echo "Cloudflare secrets not set — skipping DNS"
+            exit 0
+          fi
+
+          echo "=== Checking existing DNS records ==="
+          EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?name=second.cent-solution.online&type=A" \
+            -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
+          COUNT=$(echo "$EXISTING" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('result',[])))" 2>/dev/null || echo "0")
+
+          if [ "$COUNT" != "0" ]; then
+            echo "DNS record already exists for second.cent-solution.online"
+          else
+            echo "=== Getting server IP from gauth record ==="
+            GAUTH_REC=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?name=gauth.cent-solution.online&type=A" \
+              -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
+            SERVER_IP=$(echo "$GAUTH_REC" | python3 -c "import json,sys; d=json.load(sys.stdin); r=d.get('result',[]); print(r[0]['content'] if r else '')" 2>/dev/null)
+
+            if [ -z "$SERVER_IP" ]; then
+              echo "Could not find gauth IP — skipping DNS"
+              exit 0
+            fi
+
+            echo "=== Creating DNS A record: second.cent-solution.online → $SERVER_IP ==="
+            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
+              -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+              --data "{\"type\":\"A\",\"name\":\"second\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}" \
+              | python3 -c "import json,sys; d=json.load(sys.stdin); print('DNS created:', d.get('success',False))" 2>/dev/null
+          fi
