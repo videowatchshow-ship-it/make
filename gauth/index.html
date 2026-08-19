@@ -14,7 +14,7 @@ input{background:#161a20;border:1px solid #2a323c;color:#e8ecef;padding:9px 12px
 input:focus{outline:0;border-color:#2b6cff}
 select{background:#161a20;border:1px solid #2a323c;color:#e8ecef;padding:9px 10px;border-radius:6px;font-size:13px}
 #count{color:#8a95a5;font-size:12px;white-space:nowrap}
-#viewport{overflow-y:auto;height:calc(100vh - 220px)}
+#viewport{overflow-y:visible;min-height:200px}
 #spacer{}
 .row{padding:10px 20px;border-bottom:1px solid #1a1f26;display:grid;grid-template-columns:280px 100px 1fr 1fr 180px 170px;gap:10px;align-items:center;font-size:12.5px}
 .row:hover{background:#141821}
@@ -75,7 +75,7 @@ button:disabled{background:#333;cursor:not-allowed}
 <body>
 <script>
 (function(){
-  var V='v31';
+  var V='v32';
   if(localStorage.getItem('gauth_sw')===V) return;
   if(window.caches){
     caches.keys().then(function(ks){
