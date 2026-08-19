@@ -64,62 +64,34 @@ jobs:
             sudo apache2ctl configtest 2>&1 && sudo systemctl reload apache2 && echo "Apache configured (HTTP)" || echo "Apache config test failed"
 
             echo "=== Cloudflare DNS ==="
-            CF_CREDS=$(sudo node -e "
-              const fs=require('fs'),path=require('path'),{execSync}=require('child_process');
-              let t='',z='';
-              const envFiles=['/opt/gauth-full/.env','/etc/environment','/etc/default/gauth','/var/www/sites/gauth/.env','/root/.env'];
-              for(const f of envFiles){
-                try{
-                  const c=fs.readFileSync(f,'utf8');
-                  if(!t){const m=c.match(/(?:CLOUDFLARE_TOKEN|CF_TOKEN)=(\S+)/);if(m)t=m[1]}
-                  if(!z){const m=c.match(/(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID)=(\S+)/);if(m)z=m[1]}
-                }catch(e){}
-              }
-              if(!t||!z){
-                try{
-                  const svc=fs.readFileSync('/etc/systemd/system/gauth.service','utf8');
-                  if(!t){const m=svc.match(/CLOUDFLARE_TOKEN=(\S+)/);if(m)t=m[1]}
-                  if(!z){const m=svc.match(/CLOUDFLARE_ZONE_ID=(\S+)/);if(m)z=m[1]}
-                }catch(e){}
-              }
-              if(!t||!z){
-                const searchFiles=['/etc/default/gauth','/opt/gauth-full/auto_deploy.js','/opt/gauth-full/rebrowser-login.js','/opt/gauth-full/config.js','/opt/gauth-full/config.json','/root/.bashrc','/root/.profile'];
-                for(const f of searchFiles){
-                  try{
-                    const c=fs.readFileSync(f,'utf8');
-                    if(!t){const m=c.match(/(?:CLOUDFLARE_TOKEN|CF_TOKEN|cloudflareToken|cfToken|cf_token)\s*[=:]\s*['\"]?([A-Za-z0-9_-]{20,})/);if(m)t=m[1]}
-                    if(!z){const m=c.match(/(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID|cloudflareZone|cfZone|cf_zone)\s*[=:]\s*['\"]?([a-f0-9]{32})/);if(m)z=m[1]}
-                  }catch(e){}
-                }
-              }
-              if(!t||!z){
-                try{
-                  const out=execSync('sudo grep -rl CLOUDFLARE /opt/gauth-full/ /etc/ /root/ 2>/dev/null|head -20',{encoding:'utf8',timeout:30000});
-                  for(const fp of out.trim().split('\\n')){
-                    if(!fp||(t&&z))continue;
-                    try{
-                      const c=fs.readFileSync(fp,'utf8');
-                      if(!t){const m=c.match(/(?:CLOUDFLARE_TOKEN|CF_TOKEN|cloudflareToken|cfToken)\s*[=:]\s*['\"]?([A-Za-z0-9_-]{20,})/);if(m)t=m[1]}
-                      if(!z){const m=c.match(/(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID|cloudflareZone|cfZone)\s*[=:]\s*['\"]?([a-f0-9]{32})/);if(m)z=m[1]}
-                    }catch(e){}
-                  }
-                }catch(e){console.error('grep -rl error:',e.message)}
-              }
-              if(!t)t=process.env.CLOUDFLARE_TOKEN||process.env.CF_TOKEN||'';
-              if(!z)z=process.env.CLOUDFLARE_ZONE_ID||process.env.CF_ZONE_ID||'';
-              if(t&&!z){
-                try{
-                  console.error('have token, looking up zone via API...');
-                  const out=execSync('curl -s https://api.cloudflare.com/client/v4/zones?name=cent-solution.online -H \"Authorization: Bearer '+t+'\" -H \"Content-Type: application/json\"',{encoding:'utf8',timeout:15000});
-                  const data=JSON.parse(out);
-                  if(data.result&&data.result.length>0){z=data.result[0].id;console.error('found zone:'+z)}
-                  else{console.error('zone lookup result:'+out.slice(0,500))}
-                }catch(e){console.error('zone lookup error:',e.message)}
-              }
-              console.log(t+'|'+z);
-            " 2>&1 | tee /dev/stderr | tail -1)
-            CF_TOKEN=$(echo "$CF_CREDS" | cut -d'|' -f1)
-            CF_ZONE=$(echo "$CF_CREDS" | cut -d'|' -f2)
+            CF_TOKEN=""
+            CF_ZONE=""
+            for f in /opt/gauth-full/.env /etc/environment /etc/default/gauth /var/www/sites/gauth/.env /root/.env /etc/systemd/system/gauth.service; do
+              [ -f "$f" ] || continue
+              [ -z "$CF_TOKEN" ] && CF_TOKEN=$(sudo grep -oP '(?:CLOUDFLARE_TOKEN|CF_TOKEN)=\K[A-Za-z0-9_-]{20,}' "$f" 2>/dev/null | head -1)
+              [ -z "$CF_ZONE" ] && CF_ZONE=$(sudo grep -oP '(?:CLOUDFLARE_ZONE_ID|CF_ZONE_ID)=\K[a-f0-9]{32}' "$f" 2>/dev/null | head -1)
+            done
+            if [ -z "$CF_TOKEN" ]; then
+              echo "searching JS files for CF token..."
+              for f in /opt/gauth-full/auto_deploy.js /opt/gauth-full/auto_deploy.js.bak2 /opt/gauth-full/auto_deploy.js.bak-; do
+                [ -f "$f" ] || continue
+                T=$(sudo grep -oP "(?:CLOUDFLARE_TOKEN|CF_TOKEN|cfToken|cloudflareToken)\s*[=:]\s*['\"]?\K[A-Za-z0-9_-]{20,}" "$f" 2>/dev/null | head -1)
+                [ -n "$T" ] && CF_TOKEN="$T" && echo "found token in $f" && break
+              done
+            fi
+            if [ -z "$CF_TOKEN" ]; then
+              echo "broad search for CF token..."
+              CF_TOKEN=$(sudo grep -rhoP '(?:CLOUDFLARE_TOKEN|CF_TOKEN|cfToken)\s*[=:]\s*['"'"'"]*\K[A-Za-z0-9_-]{20,}' /opt/gauth-full/*.js 2>/dev/null | head -1)
+            fi
+            echo "CF_TOKEN found: $([ -n "$CF_TOKEN" ] && echo YES || echo NO)"
+            if [ -n "$CF_TOKEN" ] && [ -z "$CF_ZONE" ]; then
+              echo "looking up zone via CF API..."
+              ZONE_RESP=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=cent-solution.online" \
+                -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
+              CF_ZONE=$(echo "$ZONE_RESP" | python3 -c "import json,sys;d=json.load(sys.stdin);r=d.get('result',[]);print(r[0]['id'] if r else '')" 2>/dev/null)
+              echo "CF_ZONE from API: $([ -n "$CF_ZONE" ] && echo YES || echo NO)"
+              [ -z "$CF_ZONE" ] && echo "zone response: $ZONE_RESP"
+            fi
 
             if [ -n "$CF_TOKEN" ] && [ -n "$CF_ZONE" ]; then
               EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?name=second.cent-solution.online&type=A" \
