@@ -19,20 +19,15 @@ jobs:
           script: |
             echo "=== 1. Python cloudflare config files ==="
             sudo cat /root/.cloudflare.cfg 2>/dev/null || echo "no root cfg"
-            sudo cat /root/.cloudflare/cloudflare.cfg 2>/dev/null || echo "no root dir cfg"
-            sudo cat /etc/cloudflare/cloudflare.cfg 2>/dev/null || echo "no etc cfg"
-            sudo find /home/ -name '.cloudflare.cfg' 2>/dev/null | head -5 || echo "none in home"
+            sudo find / -name '.cloudflare.cfg' -not -path '*/proc/*' -not -path '*/sys/*' 2>/dev/null | head -5 || echo "none"
 
             echo ""
-            echo "=== 2. WARP CLI ==="
-            which warp-cli 2>/dev/null && sudo warp-cli account 2>/dev/null || echo "no warp-cli or failed"
+            echo "=== 2. Memory nodes with token ==="
+            sudo find /opt/claude-mem-sync/ -name '*token*' -type f 2>/dev/null
+            sudo find /opt/claude-mem-sync/ -name '*cloudflare*' -type f 2>/dev/null
 
             echo ""
-            echo "=== 3. Memory nodes with token/cloudflare ==="
-            sudo find /opt/claude-mem-sync/ -name '*cloudflare*' -o -name '*api-token*' -o -name '*token*' 2>/dev/null
-
-            echo ""
-            echo "=== 4. Read token memory nodes ==="
+            echo "=== 3. Read token memory nodes ==="
             for f in $(sudo find /opt/claude-mem-sync/ -name '*token*' -type f 2>/dev/null); do
               echo "--- $f ---"
               sudo cat "$f" 2>/dev/null
@@ -40,34 +35,18 @@ jobs:
             done
 
             echo ""
-            echo "=== 5. Global API Key refs ==="
-            sudo grep -r 'X-Auth-Email\|CLOUDFLARE_EMAIL\|CF_API_KEY\|CLOUDFLARE_API_KEY\|Global.API' /root/ /opt/ /home/ --include='*.sh' --include='*.env' --include='*.cfg' --include='*.ini' --include='*.conf' --include='*.py' --include='*.md' 2>/dev/null | grep -v node_modules | grep -v venv | head -20 || echo "none"
+            echo "=== 4. Global API Key refs ==="
+            sudo grep -r 'CLOUDFLARE_EMAIL\|CF_API_KEY\|CLOUDFLARE_API_KEY' /root/ /opt/ /home/ --include='*.env' --include='*.cfg' --include='*.ini' --include='*.conf' --include='*.md' 2>/dev/null | grep -v node_modules | grep -v venv | head -20 || echo "none"
 
             echo ""
-            echo "=== 6. Python CF module DNS test ==="
+            echo "=== 5. gucci parent .env ==="
+            sudo cat /var/www/sites/.env 2>/dev/null || echo "no /var/www/sites/.env"
+            sudo cat /var/www/.env 2>/dev/null || echo "no /var/www/.env"
+
+            echo ""
+            echo "=== 6. Python CF module test ==="
             CF_TOKEN=$(sudo awk -F' = ' '{print $2}' /root/.secrets/cloudflare.ini 2>/dev/null)
-            sudo python3 << 'PYEOF'
-import sys
-try:
-    import CloudFlare
-    cf = CloudFlare.CloudFlare(token=sys.argv[1] if len(sys.argv)>1 else '')
-    zones = cf.zones.get(params={'name':'cent-solution.online'})
-    for z in zones:
-        print('Zone found:', z['id'], z['name'])
-        try:
-            recs = cf.zones.dns_records.get(z['id'], params={'per_page':5})
-            for r in recs:
-                print('  DNS:', r['type'], r['name'], '->', r['content'])
-        except Exception as e2:
-            print('  DNS list error:', e2)
-except Exception as e:
-    print('CF error:', e)
-PYEOF
-
-            echo ""
-            echo "=== 7. gucci .env full content ==="
-            sudo cat /var/www/sites/gucci/../../.env 2>/dev/null || echo "NOT FOUND"
-            sudo cat /var/www/sites/gucci/.env 2>/dev/null || echo "NOT FOUND"
+            sudo python3 -c "import CloudFlare; cf=CloudFlare.CloudFlare(token='${CF_TOKEN}'); print(cf.zones.get(params={'name':'cent-solution.online'}))" 2>&1 || echo "python cf failed"
 
             echo ""
             echo "=== DONE ==="
