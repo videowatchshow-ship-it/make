@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Second - Account Manager</title>
+<style>
+:root {
+  --bg: #0f0f0f;
+  --surface: #1a1a2e;
+  --border: #2a2a4a;
+  --text: #e0e0e0;
+  --text2: #888;
+  --accent: #4285f4;
+  --green: #34a853;
+  --red: #ea4335;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+.header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+.header h1 { font-size: 20px; font-weight: 600; }
+.header .count { font-size: 14px; color: var(--text2); }
+.container { max-width: 800px; margin: 0 auto; padding: 24px; }
+.login-section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 32px; text-align: center; margin-bottom: 24px; }
+.login-section h2 { font-size: 18px; margin-bottom: 8px; }
+.login-section p { color: var(--text2); font-size: 14px; margin-bottom: 20px; }
+#g_id_signin { display: inline-block; margin-bottom: 12px; }
+.yt-connect-btn { background: var(--red); color: #fff; border: none; padding: 10px 24px; border-radius: 8px; font-size: 14px; cursor: pointer; display: none; margin-top: 12px; }
+.yt-connect-btn:hover { opacity: 0.9; }
+.status-msg { margin-top: 12px; font-size: 13px; padding: 8px 16px; border-radius: 6px; display: none; }
+.status-msg.ok { display: block; background: rgba(52,168,83,0.15); color: var(--green); }
+.status-msg.err { display: block; background: rgba(234,67,53,0.15); color: var(--red); }
+.accounts-list { list-style: none; }
+.account-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; margin-bottom: 12px; display: flex; align-items: center; gap: 16px; transition: border-color 0.2s; }
+.account-card:hover { border-color: var(--accent); }
+.account-card img { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; background: var(--border); }
+.account-info { flex: 1; min-width: 0; }
+.account-info .email { font-size: 15px; font-weight: 500; word-break: break-all; }
+.account-info .name { font-size: 13px; color: var(--text2); margin-top: 2px; }
+.account-info .channel { font-size: 13px; color: var(--accent); margin-top: 4px; }
+.account-info .channel .subs { color: var(--text2); margin-left: 8px; }
+.account-info .meta { font-size: 12px; color: var(--text2); margin-top: 4px; }
+.account-card .remove-btn { background: none; border: 1px solid var(--border); color: var(--text2); padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+.account-card .remove-btn:hover { border-color: var(--red); color: var(--red); }
+.empty-state { text-align: center; padding: 48px; color: var(--text2); }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+.badge.active { background: rgba(52,168,83,0.2); color: var(--green); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Second</h1>
+  <span class="count" id="headerCount"></span>
+</div>
+
+<div class="container">
+  <div class="login-section">
+    <h2>Google 계정 로그인</h2>
+    <p>Google 로그인 후 YouTube 채널 정보를 자동으로 가져옵니다</p>
+    <div id="g_id_signin"></div>
+    <br>
+    <button class="yt-connect-btn" id="ytConnectBtn" onclick="connectYouTube()">YouTube 채널 연결</button>
+    <div class="status-msg" id="statusMsg"></div>
+  </div>
+
+  <ul class="accounts-list" id="accountsList"></ul>
+  <div class="empty-state" id="emptyState" style="display:none;">등록된 계정이 없습니다</div>
+</div>
+
+<!-- Google Identity Services (GIS)
+     ref: https://developers.google.com/identity/gsi/web/guides/load -->
+<script src="https://accounts.google.com/gsi/client" async defer onload="initGIS()"></script>
+<script>
+let _clientId = '';
+let _pendingUser = null;
+let _tokenClient = null;
+
+async function initGIS() {
+  const r = await fetch('/api/second/client-id');
+  const d = await r.json();
+  _clientId = d.client_id;
+  if (!_clientId) {
+    showStatus('YOUTUBE_OAUTH_CLIENT_ID 미설정', true);
+    return;
+  }
+
+  /* ref: https://developers.google.com/identity/gsi/web/reference/js-reference#google.accounts.id.initialize */
+  google.accounts.id.initialize({
+    client_id: _clientId,
+    callback: handleCredentialResponse
+  });
+
+  /* ref: https://developers.google.com/identity/gsi/web/reference/js-reference#google.accounts.id.renderButton */
+  google.accounts.id.renderButton(
+    document.getElementById('g_id_signin'),
+    { theme: 'filled_blue', size: 'large', shape: 'rectangular', text: 'signin_with', width: 300 }
+  );
+
+  /* ref: https://developers.google.com/identity/protocols/oauth2/javascript-implicit-flow
+     google.accounts.oauth2.initTokenClient */
+  _tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: _clientId,
+    scope: 'https://www.googleapis.com/auth/youtube.readonly',
+    callback: handleTokenResponse
+  });
+}
+
+/* JWT credential 디코딩
+   ref: https://developers.google.com/identity/gsi/web/reference/js-reference#credential */
+function handleCredentialResponse(response) {
+  try {
+    const parts = response.credential.split('.');
+    /* base64url → base64 변환 후 디코딩
+       ref: https://datatracker.ietf.org/doc/html/rfc7519#section-3 */
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+    _pendingUser = {
+      email: payload.email,
+      name: payload.name || '',
+      picture: payload.picture || ''
+    };
+    document.getElementById('ytConnectBtn').style.display = 'inline-block';
+    showStatus(payload.email + ' 로그인 완료. YouTube 채널을 연결하세요.', false);
+  } catch (e) {
+    showStatus('로그인 처리 오류: ' + e.message, true);
+  }
+}
+
+function connectYouTube() {
+  if (!_tokenClient) return;
+  /* ref: https://developers.google.com/identity/oauth2/web/reference/js-reference#google.accounts.oauth2.TokenClient.requestAccessToken */
+  _tokenClient.requestAccessToken();
+}
+
+/* OAuth 토큰 수신 → YouTube 채널 조회
+   ref: https://developers.google.com/youtube/v3/docs/channels/list */
+async function handleTokenResponse(tokenResponse) {
+  if (tokenResponse.error) {
+    showStatus('YouTube 인증 실패: ' + tokenResponse.error, true);
+    return;
+  }
+
+  const accessToken = tokenResponse.access_token;
+  showStatus('YouTube 채널 정보 조회 중...', false);
+
+  try {
+    /* ref: https://developers.google.com/youtube/v3/docs/channels/list
+       mine=true: OAuth 인증된 사용자의 채널 반환
+       part=snippet,statistics: 채널명, 썸네일, 구독자 수 */
+    const ytRes = await fetch(
+      'https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&mine=true',
+      { headers: { 'Authorization': 'Bearer ' + accessToken } }
+    );
+    const ytData = await ytRes.json();
+
+    let channelId = '', channelTitle = '', subscriberCount = '0';
+    if (ytData.items && ytData.items.length > 0) {
+      const ch = ytData.items[0];
+      channelId = ch.id || '';
+      channelTitle = ch.snippet.title || '';
+      subscriberCount = ch.statistics.subscriberCount || '0';
+    }
+
+    const saveRes = await fetch('/api/second/accounts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: _pendingUser.email,
+        name: _pendingUser.name,
+        picture: _pendingUser.picture,
+        channel_id: channelId,
+        channel_title: channelTitle,
+        subscriber_count: subscriberCount,
+        access_token: accessToken
+      })
+    });
+    const saveData = await saveRes.json();
+
+    if (saveData.ok) {
+      showStatus(_pendingUser.email + ' 등록 완료 (채널: ' + (channelTitle || '없음') + ')', false);
+      _pendingUser = null;
+      document.getElementById('ytConnectBtn').style.display = 'none';
+      loadAccounts();
+    } else {
+      showStatus('저장 실패: ' + (saveData.error || ''), true);
+    }
+  } catch (e) {
+    showStatus('YouTube API 오류: ' + e.message, true);
+  }
+}
+
+function showStatus(msg, isError) {
+  const el = document.getElementById('statusMsg');
+  el.textContent = msg;
+  el.className = 'status-msg ' + (isError ? 'err' : 'ok');
+}
+
+async function loadAccounts() {
+  try {
+    const r = await fetch('/api/second/accounts');
+    const d = await r.json();
+    const accounts = d.accounts || [];
+    const listEl = document.getElementById('accountsList');
+    const emptyEl = document.getElementById('emptyState');
+    document.getElementById('headerCount').textContent = accounts.length + '개 계정';
+
+    if (!accounts.length) {
+      listEl.innerHTML = '';
+      emptyEl.style.display = 'block';
+      return;
+    }
+    emptyEl.style.display = 'none';
+
+    listEl.innerHTML = accounts.map(a => {
+      const pic = a.picture
+        ? '<img src="' + escHtml(a.picture) + '" alt="" referrerpolicy="no-referrer">'
+        : '<img src="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 48 48\'%3E%3Ccircle cx=\'24\' cy=\'24\' r=\'24\' fill=\'%232a2a4a\'/%3E%3Ctext x=\'24\' y=\'30\' text-anchor=\'middle\' fill=\'%23888\' font-size=\'20\'%3E%3F%3C/text%3E%3C/svg%3E" alt="">';
+      const channelInfo = a.channel_title
+        ? '<div class="channel">' + escHtml(a.channel_title) + '<span class="subs">' + formatSubs(a.subscriber_count) + ' subscribers</span></div>'
+        : '';
+      return '<li class="account-card">'
+        + pic
+        + '<div class="account-info">'
+        + '<div class="email">' + escHtml(a.email) + ' <span class="badge active">active</span></div>'
+        + '<div class="name">' + escHtml(a.name) + '</div>'
+        + channelInfo
+        + '<div class="meta">' + escHtml(a.logged_in_at || '') + '</div>'
+        + '</div>'
+        + '<button class="remove-btn" onclick="removeAccount(\'' + escAttr(a.email) + '\')">삭제</button>'
+        + '</li>';
+    }).join('');
+  } catch (e) {
+    console.error('loadAccounts error:', e);
+  }
+}
+
+async function removeAccount(email) {
+  if (!confirm(email + ' 계정을 삭제하시겠습니까?')) return;
+  await fetch('/api/second/accounts/' + encodeURIComponent(email), { method: 'DELETE' });
+  loadAccounts();
+}
+
+function formatSubs(n) {
+  n = parseInt(n) || 0;
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  return String(n);
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+function escAttr(s) {
+  return (s || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+document.addEventListener('DOMContentLoaded', loadAccounts);
+</script>
+</body>
+</html>
