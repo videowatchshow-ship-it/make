@@ -93,6 +93,32 @@ jobs:
               exit 0
             fi
 
+            if [ "$ACTION" = "remove" ]; then
+              for SITE_DEF in $SITES; do
+                SITE_NAME=$(echo "$SITE_DEF" | cut -d: -f1)
+                SITE_PORT=$(echo "$SITE_DEF" | cut -d: -f2)
+                SITE_DIR=$(echo "$SITE_DEF" | cut -d: -f3)
+                echo ""
+                echo "========== remove: $SITE_NAME =========="
+                ACCT_FILE="$SITE_DIR/accounts.json"
+                if [ ! -f "$ACCT_FILE" ]; then
+                  echo "  no accounts.json, skipping"
+                  continue
+                fi
+                sudo node -e "
+                  const fs=require('fs');
+                  const data=JSON.parse(fs.readFileSync('$ACCT_FILE','utf8'));
+                  let accounts=Array.isArray(data)?data:(data.accounts||[]);
+                  const before=accounts.length;
+                  accounts=accounts.filter(a=>(a.email||'').toLowerCase()!=='$EMAIL'.toLowerCase());
+                  fs.writeFileSync('$ACCT_FILE',JSON.stringify({accounts},null,2));
+                  console.log('Removed',before-accounts.length,'account(s), remaining:',accounts.length);
+                "
+                sudo systemctl restart "$SITE_NAME" 2>/dev/null || echo "  (no systemd service)"
+              done
+              exit 0
+            fi
+
             if [ "$ACTION" = "fix-status" ]; then
               for SITE_DEF in $SITES; do
                 SITE_NAME=$(echo "$SITE_DEF" | cut -d: -f1)
