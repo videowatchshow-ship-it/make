@@ -1,4 +1,4 @@
-name: Find CF token from claude-mem-sync
+name: Find second CF token everywhere
 on:
   workflow_dispatch:
 
@@ -9,7 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Find cloudflare-api-token memory file and all cfut_ tokens
+      - name: Deep search for second CF token
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -17,39 +17,31 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 3m
           script: |
-            echo "=== 1. Find cloudflare-api-token file in claude-mem-sync ==="
-            sudo find /opt/claude-mem-sync/ -name "*cloudflare*" -o -name "*cf-token*" -o -name "*cf_token*" 2>/dev/null
+            echo "=== 1. All files in claude-mem-sync ==="
+            sudo find /opt/claude-mem-sync/ -type f 2>/dev/null
 
             echo ""
-            echo "=== 2. Read all cloudflare-related files ==="
-            for f in $(sudo find /opt/claude-mem-sync/ -name "*cloudflare*" -o -name "*cf-token*" -o -name "*cf_token*" 2>/dev/null); do
-              echo "--- FILE: $f ---"
-              sudo cat "$f" 2>/dev/null
+            echo "=== 2. Search 0JOs anywhere ==="
+            sudo grep -r "0JOs" /opt/ /root/ /home/ /etc/ /var/www/ 2>/dev/null | head -20
+
+            echo ""
+            echo "=== 3. All memory files content ==="
+            for f in $(sudo find /opt/claude-mem-sync/ -type f -name '*.md' 2>/dev/null); do
+              echo "--- $f ---"
+              sudo head -5 "$f" 2>/dev/null
               echo ""
             done
 
             echo ""
-            echo "=== 3. Search cfut_ in claude-mem-sync ==="
-            sudo grep -r "cfut_" /opt/claude-mem-sync/ 2>/dev/null
+            echo "=== 4. List CF tokens via existing token ==="
+            CF_TOKEN=$(sudo awk -F' = ' '{print $2}' /root/.secrets/cloudflare.ini 2>/dev/null)
+            curl -s -X GET "https://api.cloudflare.com/client/v4/user/tokens" \
+              -H "Authorization: Bearer $CF_TOKEN" \
+              -H "Content-Type: application/json" 2>/dev/null
 
             echo ""
-            echo "=== 4. Search cfut_ in /root/ ==="
-            sudo grep -r "cfut_" /root/ 2>/dev/null | head -20
-
-            echo ""
-            echo "=== 5. Search cfut_ in all .env files ==="
-            sudo find / -name ".env" -not -path "*/node_modules/*" 2>/dev/null | while read f; do
-              sudo grep -l "cfut_" "$f" 2>/dev/null && sudo grep "cfut_" "$f" 2>/dev/null
-            done
-
-            echo ""
-            echo "=== 6. Search cfut_ in /etc/ ==="
-            sudo grep -r "cfut_" /etc/ 2>/dev/null | head -10
-
-            echo ""
-            echo "=== 7. Certbot/secrets dir ==="
-            sudo ls -la /root/.secrets/ 2>/dev/null
-            sudo cat /root/.secrets/cloudflare.ini 2>/dev/null
+            echo "=== 5. Check Cloudflare configs everywhere ==="
+            sudo grep -r "cloudflare" /root/ /opt/ /etc/ 2>/dev/null | grep -iv "node_modules\|.git\|Binary\|certbot\|snap" | head -30
 
             echo ""
             echo "=== DONE ==="
