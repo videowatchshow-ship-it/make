@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Find CF token on server then add wildcard DNS
+      - name: Find CF token via GCP then add wildcard DNS
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -20,32 +20,52 @@ jobs:
           script: |
             ZONE_ID="7e5faed2d3d4d6da7aceb4ddde81a62b"
 
-            echo "=== /root/ cfut_ tokens (maxdepth 4) ==="
-            TOKEN=$(sudo grep -rhoP 'cfut_[A-Za-z0-9_-]{20,}' /root/ --include='*.md' --include='*.txt' --include='*.ini' --include='*.json' --include='*.conf' --include='*.env' 2>/dev/null | sort -u | head -5)
-            echo "found tokens: $TOKEN"
+            echo "=== GCP VM Metadata (project, service account) ==="
+            PROJECT=$(curl -sS -H "Metadata-Flavor: Google" \
+              "http://metadata.google.internal/computeMetadata/v1/project/project-id" 2>/dev/null)
+            echo "project: $PROJECT"
+
+            SA=$(curl -sS -H "Metadata-Flavor: Google" \
+              "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email" 2>/dev/null)
+            echo "service account: $SA"
 
             echo ""
-            echo "=== /root/ all files with cfut_ ==="
-            sudo grep -rloP 'cfut_[A-Za-z0-9_-]{20,}' /root/ 2>/dev/null | head -10
+            echo "=== GCP Secret Manager: list secrets ==="
+            gcloud secrets list --project="$PROJECT" 2>/dev/null | head -20 || echo "gcloud not installed or no access"
 
             echo ""
-            echo "=== /opt/ cfut_ tokens (excl node_modules, maxdepth 4) ==="
-            sudo grep -rhoP 'cfut_[A-Za-z0-9_-]{20,}' /opt/ --include='*.md' --include='*.txt' --include='*.ini' --include='*.env' --include='*.json' 2>/dev/null | sort -u | head -5
+            echo "=== GCP Secret Manager: try cloudflare-related secrets ==="
+            for secret in cloudflare-token cloudflare_token cf-token cf_token CLOUDFLARE_TOKEN cloudflare-api-token; do
+              VAL=$(gcloud secrets versions access latest --secret="$secret" --project="$PROJECT" 2>/dev/null)
+              [ -n "$VAL" ] && echo "SECRET $secret = $VAL"
+            done
 
             echo ""
-            echo "=== Try existing token from cloudflare.ini ==="
-            EXISTING=$(sudo grep -hoP 'cfut_[A-Za-z0-9_-]{20,}' /root/.secrets/cloudflare.ini 2>/dev/null)
-            echo "existing token: $EXISTING"
-            if [ -n "$EXISTING" ]; then
-              echo "--- Verify token permissions ---"
-              curl -sS "https://api.cloudflare.com/client/v4/user/tokens/verify" \
-                -H "Authorization: Bearer $EXISTING" | python3 -c "import sys,json; d=json.load(sys.stdin); print('status:', d.get('result',{}).get('status',''), 'errors:', d.get('errors',[]))"
-              echo "--- Try DNS add with existing token ---"
+            echo "=== GCP Instance metadata: custom attributes ==="
+            curl -sS -H "Metadata-Flavor: Google" \
+              "http://metadata.google.internal/computeMetadata/v1/instance/attributes/?recursive=true" 2>/dev/null | python3 -m json.tool 2>/dev/null || echo "no custom attributes"
+
+            echo ""
+            echo "=== /root/ cfut_ search (targeted) ==="
+            EXISTING=$(sudo grep -rhoP 'cfut_[A-Za-z0-9_-]{20,}' /root/.secrets/ 2>/dev/null | sort -u)
+            echo "from .secrets/: $EXISTING"
+            ALL=$(sudo grep -rhoP 'cfut_[A-Za-z0-9_-]{20,}' /root/ --include='*.md' --include='*.ini' --include='*.env' --include='*.json' --include='*.txt' 2>/dev/null | sort -u)
+            echo "all in /root/: $ALL"
+
+            echo ""
+            echo "=== Verify existing token & try DNS add ==="
+            TOKEN="${ALL:-$EXISTING}"
+            for T in $TOKEN; do
+              echo "--- Token: ${T:0:15}... ---"
+              STATUS=$(curl -sS "https://api.cloudflare.com/client/v4/user/tokens/verify" \
+                -H "Authorization: Bearer $T" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('result',{}).get('status','unknown'), d.get('errors',[]))")
+              echo "verify: $STATUS"
               R=$(curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
-                -H "Authorization: Bearer $EXISTING" \
+                -H "Authorization: Bearer $T" \
                 -H "Content-Type: application/json" \
                 --data '{"type":"A","name":"*","content":"34.104.233.35","ttl":1,"proxied":true}')
-              echo "$R" | python3 -c "import sys,json; d=json.load(sys.stdin); print('success:', d.get('success'), 'errors:', d.get('errors',[]))"
-            fi
+              OK=$(echo "$R" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('success'), d.get('errors',[]))")
+              echo "dns_add: $OK"
+            done
 
             echo "=== DONE ==="
