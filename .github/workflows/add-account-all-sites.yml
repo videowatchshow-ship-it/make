@@ -6,7 +6,7 @@ on:
         description: 'Email to add (from gauth DB)'
         required: true
       sites:
-        description: 'Comma-separated site names (or "all")'
+        description: 'Comma-separated site names (or "all" for every sub-site with server.js)'
         required: false
         default: 'all'
       action:
@@ -31,8 +31,26 @@ jobs:
             SITES_INPUT="${{ github.event.inputs.sites }}"
             ACTION="${{ github.event.inputs.action }}"
 
-            # Sub-site definitions: name:port:dir
-            ALL_SITES="gain:3021:/var/www/sites/gain sunbi:3013:/var/www/sites/sunbi woodong:3012:/var/www/sites/woodong win:4001:/var/www/sites/win simmani:3011:/var/www/sites/simmani romi:3019:/var/www/sites/romi soktv:3017:/var/www/sites/soktv"
+            # Auto-discover all sub-sites: scan /var/www/sites/*/server.js
+            # Extract port from server.js listen() call
+            # Exclude gauth (master site)
+            discover_sites() {
+              for sjs in /var/www/sites/*/server.js; do
+                [ -f "$sjs" ] || continue
+                dir=$(dirname "$sjs")
+                name=$(basename "$dir")
+                [ "$name" = "gauth" ] && continue
+                port=$(grep -oP 'listen\(\s*\K\d+' "$sjs" 2>/dev/null | head -1)
+                [ -z "$port" ] && port=0
+                echo "${name}:${port}:${dir}"
+              done
+            }
+
+            ALL_SITES=$(discover_sites)
+            SITE_COUNT=$(echo "$ALL_SITES" | wc -w)
+            echo "=== Discovered $SITE_COUNT sub-sites (excluding gauth master) ==="
+            echo "$ALL_SITES" | tr ' ' '\n'
+            echo ""
 
             # Filter sites if not "all"
             if [ "$SITES_INPUT" = "all" ]; then
@@ -55,7 +73,7 @@ jobs:
                 SITE_PORT=$(echo "$SITE_DEF" | cut -d: -f2)
                 SITE_DIR=$(echo "$SITE_DEF" | cut -d: -f3)
                 echo ""
-                echo "========== $SITE_NAME (port $SITE_PORT) =========="
+                echo "========== $SITE_NAME (port $SITE_PORT, $SITE_DIR) =========="
                 echo "--- accounts.json ---"
                 if [ -f "$SITE_DIR/accounts.json" ]; then
                   sudo node -e "const d=JSON.parse(require('fs').readFileSync('$SITE_DIR/accounts.json','utf8'));const a=Array.isArray(d)?d:(d.accounts||[]);console.log('Count:',a.length);a.forEach(x=>console.log(' -',x.email,'status='+(x.status||'MISSING')))"
@@ -65,7 +83,11 @@ jobs:
                 echo "--- service ---"
                 systemctl is-active "${SITE_NAME}" 2>/dev/null || echo "  no systemd service"
                 echo "--- API test ---"
-                curl -s --max-time 3 "http://localhost:${SITE_PORT}/api/${SITE_NAME}/accounts" 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const j=JSON.parse(d);const a=j.accounts||j||[];console.log('  API accounts:',a.length)}catch(e){console.log('  API error:',e.message)}})" || echo "  API unreachable"
+                if [ "$SITE_PORT" != "0" ]; then
+                  curl -s --max-time 3 "http://localhost:${SITE_PORT}/api/${SITE_NAME}/accounts" 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const j=JSON.parse(d);const a=j.accounts||j||[];console.log('  API accounts:',a.length)}catch(e){console.log('  API error:',e.message)}})" || echo "  API unreachable"
+                else
+                  echo "  port unknown, skipping API test"
+                fi
               done
               exit 0
             fi
@@ -100,7 +122,6 @@ jobs:
               echo "=== Verification ==="
               for SITE_DEF in $SITES; do
                 SITE_NAME=$(echo "$SITE_DEF" | cut -d: -f1)
-                SITE_PORT=$(echo "$SITE_DEF" | cut -d: -f2)
                 SITE_DIR=$(echo "$SITE_DEF" | cut -d: -f3)
                 if [ -f "$SITE_DIR/accounts.json" ]; then
                   COUNT=$(sudo node -e "const d=JSON.parse(require('fs').readFileSync('$SITE_DIR/accounts.json','utf8'));const a=Array.isArray(d)?d:(d.accounts||[]);const act=a.filter(x=>x.status==='active').length;console.log(a.length+' total, '+act+' active')")
@@ -175,6 +196,10 @@ jobs:
             for SITE_DEF in $SITES; do
               SITE_NAME=$(echo "$SITE_DEF" | cut -d: -f1)
               SITE_PORT=$(echo "$SITE_DEF" | cut -d: -f2)
+              if [ "$SITE_PORT" = "0" ]; then
+                echo "$SITE_NAME: port unknown, skipping API verify"
+                continue
+              fi
               curl -s --max-time 3 "http://localhost:${SITE_PORT}/api/${SITE_NAME}/accounts" 2>/dev/null | node -e "
                 let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
                   try{
