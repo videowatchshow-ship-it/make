@@ -166,12 +166,7 @@ jobs:
                     ALL_DNS=$(curl -s "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?per_page=100" \
                       -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json")
                   fi
-                  echo "$ALL_DNS" | python3 -c "
-import json,sys
-d=json.load(sys.stdin)
-for r in d.get('result',[]):
-    print(f\"  {r['type']:5} {r['name']:40} -> {r['content']}\")
-" 2>/dev/null || echo "Could not list DNS records"
+                  echo "$ALL_DNS" | python3 -c "import json,sys;d=json.load(sys.stdin);[print(f'  {r[\"type\"]:5} {r[\"name\"]:40} -> {r[\"content\"]}') for r in d.get('result',[])]" 2>/dev/null || echo "Could not list DNS records"
                   echo ""
                   echo "=== Searching for ANY CF token with DNS write permissions ==="
                   ALL_TOKENS=$(sudo grep -rhoP '[A-Za-z0-9_-]{40,}' /opt/gauth-full/.env /root/.env /var/www/sites/*/.env 2>/dev/null | sort -u)
