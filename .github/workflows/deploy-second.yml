@@ -56,15 +56,12 @@ jobs:
             curl -s --max-time 3 http://localhost:3023/api/second/accounts || echo "API not reachable yet"
 
             echo "=== Configuring Apache reverse proxy ==="
-            if [ ! -f /etc/apache2/sites-available/second.conf ]; then
-              sudo a2enmod proxy proxy_http ssl rewrite headers 2>/dev/null || true
-              printf '<VirtualHost *:80>\n    ServerName second.cent-solution.online\n    ProxyPreserveHost On\n    ProxyPass / http://127.0.0.1:3023/\n    ProxyPassReverse / http://127.0.0.1:3023/\n    Header always set X-Content-Type-Options "nosniff"\n    Header always set X-Frame-Options "SAMEORIGIN"\n</VirtualHost>\n' | sudo tee /etc/apache2/sites-available/second.conf > /dev/null
-              sudo a2ensite second 2>/dev/null
-              sudo apache2ctl configtest 2>&1 && sudo systemctl reload apache2 && echo "Apache configured (HTTP)" || echo "Apache config test failed"
-            else
-              echo "Apache vhost already exists"
-              sudo systemctl reload apache2
-            fi
+            sudo a2enmod proxy proxy_http ssl rewrite headers 2>/dev/null || true
+            sudo a2dissite second second-le-ssl 2>/dev/null || true
+            sudo rm -f /etc/apache2/sites-available/second.conf /etc/apache2/sites-available/second-le-ssl.conf /etc/apache2/sites-enabled/second.conf /etc/apache2/sites-enabled/second-le-ssl.conf
+            printf '<VirtualHost *:80>\n    ServerName second.cent-solution.online\n    ProxyPreserveHost On\n    ProxyPass / http://127.0.0.1:3023/\n    ProxyPassReverse / http://127.0.0.1:3023/\n    Header always set X-Content-Type-Options "nosniff"\n    Header always set X-Frame-Options "SAMEORIGIN"\n</VirtualHost>\n' | sudo tee /etc/apache2/sites-available/second.conf > /dev/null
+            sudo a2ensite second 2>/dev/null
+            sudo apache2ctl configtest 2>&1 && sudo systemctl reload apache2 && echo "Apache configured (HTTP)" || echo "Apache config test failed"
 
             echo "=== SSL certificate ==="
             if [ ! -f /etc/letsencrypt/live/second.cent-solution.online/fullchain.pem ]; then
