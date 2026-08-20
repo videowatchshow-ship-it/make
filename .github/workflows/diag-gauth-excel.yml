@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Verify label column raw
+      - name: Dump raw rows 15/16 from today's most recent uploaded excel
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -18,19 +18,29 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 60s
           script: |
+            cd /opt/gauth-full
+            echo "=== Most recently modified excel files (any dir) ==="
+            sudo find /opt/gauth-full -iname "*.xlsx" -o -iname "*.xls" 2>/dev/null | xargs -I{} sudo stat -c '%Y %n' {} 2>/dev/null | sort -rn | head -10
+
+            LATEST=$(sudo find /opt/gauth-full -iname "*.xlsx" -o -iname "*.xls" 2>/dev/null | xargs -I{} sudo stat -c '%Y {}' {} 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+            echo ""
+            echo "=== Using latest file: $LATEST ==="
+            sudo stat "$LATEST" 2>&1
+
             sudo node -e "
             const XLSX = require('/opt/gauth-full/node_modules/xlsx');
-            const fs = require('fs');
-            const dir = '/opt/gauth-full/uploads/archive';
-            const files = fs.readdirSync(dir).filter(f=>f.toLowerCase().endsWith('.xlsx'));
-            const fp = dir + '/' + files[0];
-            const wb = XLSX.readFile(fp);
-            const sh = wb.Sheets[wb.SheetNames[0]];
-            const rows = XLSX.utils.sheet_to_json(sh, {header:1, raw:true, defval:''});
-            const r15 = rows[14], r16 = rows[15];
-            console.log('Row15 col7 (label):', JSON.stringify(r15[7]));
-            console.log('Row15 col7 bytes (hex):', Buffer.from(String(r15[7]),'utf8').toString('hex'));
-            console.log('Row16 col7 (label):', JSON.stringify(r16[7]));
-            console.log('Row16 col7 bytes (hex):', Buffer.from(String(r16[7]),'utf8').toString('hex'));
-            " 2>&1
-            echo "=== DONE ==="
+            const path = '$LATEST';
+            const wb = XLSX.readFile(path);
+            for (const sn of wb.SheetNames) {
+              const sheet = wb.Sheets[sn];
+              const rows = XLSX.utils.sheet_to_json(sheet, {header:1, raw:false, defval:''});
+              console.log('--- sheet:', sn, 'total rows:', rows.length, '---');
+              [14,15].forEach(idx => {
+                if (rows[idx]) {
+                  console.log('Row ' + (idx+1) + ' (0-idx ' + idx + '):', JSON.stringify(rows[idx]));
+                } else {
+                  console.log('Row ' + (idx+1) + ': (none)');
+                }
+              });
+            }
+            "
