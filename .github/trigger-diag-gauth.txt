@@ -1,1 +1,1 @@
-trigger59-find-chamgyo-photo-misplaced-install
+trigger60-broad-find-chamgyo-and-list-vhosts

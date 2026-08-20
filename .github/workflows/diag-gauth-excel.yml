@@ -30,17 +30,12 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 60s
           script: |
-            echo "=== locate the chamgyo site root ==="
-            sudo find /var/www/sites -maxdepth 3 -iname "*chamgyo*" -o -iname "*photo*" 2>/dev/null
+            echo "=== does /var/www/sites even exist here, and what is in it? ==="
+            ls -la /var/www/sites 2>/dev/null || echo "no /var/www/sites"
             echo ""
-            echo "=== photo / photo2 / photo3 top-level listing ==="
-            for d in /var/www/sites/chamgyo/public/photo /var/www/sites/chamgyo/public/photo2 /var/www/sites/chamgyo/public/photo3; do
-              echo "--- $d ---"
-              ls -la "$d" 2>/dev/null || echo "(not found)"
-            done
+            echo "=== broad search across whole filesystem for chamgyo / photo3 / my-site-1 ==="
+            sudo find / -maxdepth 6 \( -iname "*chamgyo*" -o -iname "*my-site-1*" -o -iname "photo3" \) 2>/dev/null
             echo ""
-            echo "=== anything recently modified (last 2 days) under chamgyo public/ ==="
-            sudo find /var/www/sites/chamgyo/public -maxdepth 4 -mtime -2 -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -50
-            echo ""
-            echo "=== any node_modules or global-looking installs misplaced under photo dirs ==="
-            sudo find /var/www/sites/chamgyo/public -iname "node_modules" -o -iname "package.json" 2>/dev/null
+            echo "=== all vhosts on this box (server names only) ==="
+            sudo grep -rh "ServerName" /etc/apache2/sites-available/ 2>/dev/null | sort -u
+            sudo grep -rh "server_name" /etc/nginx/sites-available/ 2>/dev/null | sort -u
