@@ -1,0 +1,59 @@
+name: SNW_1.html ch=cent 실측 확인
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-snw1-check.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: HTTP 상태 + HTML 구조 확인
+        run: |
+          curl -sS -o /tmp/snw1.html -w "http_code=%{http_code}\n" "https://xn--9d0bw2fjtyymch7de9d.info/photo/SNW_1.html?ch=cent"
+          echo "===== 파일 크기 ====="
+          wc -c /tmp/snw1.html
+          echo ""
+          echo "===== canvas/svg 요소 ====="
+          grep -noE '<(svg|canvas)[^>]*(id|class)="[^"]*"[^>]*>' /tmp/snw1.html | head -30
+          echo ""
+          echo "===== script src ====="
+          grep -noE '<script[^>]*src="[^"]*"' /tmp/snw1.html | head -20
+          echo ""
+          echo "===== ch= 관련 JS 처리 로직 ====="
+          grep -n "ch=\|getParameter\|URLSearchParams\|channel" /tmp/snw1.html | head -20
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm init -y >/dev/null 2>&1 && npm i -D playwright >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: 라이브 렌더 + 콘솔 에러 확인
+        timeout-minutes: 1
+        run: |
+          cat > sn.js << 'EOF'
+          const { chromium } = require('playwright');
+          (async () => {
+            try {
+              const browser = await chromium.launch();
+              const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+              const errors = [];
+              page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+              page.on('pageerror', e => errors.push('PAGEERROR: ' + e.message));
+              await page.goto('https://xn--9d0bw2fjtyymch7de9d.info/photo/SNW_1.html?ch=cent', { waitUntil: 'domcontentloaded', timeout: 15000 });
+              await page.waitForTimeout(3000);
+              const bglInfo = await page.evaluate(() => (window.BGL && window.BGL.info) ? window.BGL.info : 'no BGL.info');
+              const bodyText = await page.evaluate(() => document.body.innerText.slice(0, 300));
+              console.log('BGL_INFO:', JSON.stringify(bglInfo));
+              console.log('BODY_TEXT:', JSON.stringify(bodyText));
+              console.log('CONSOLE_ERRORS:', JSON.stringify(errors));
+              await browser.close();
+              process.exit(0);
+            } catch (e) {
+              console.error('ERR:', e.message);
+              process.exit(1);
+            }
+          })();
+          EOF
+          timeout 50 node sn.js || echo "타임아웃/에러"
