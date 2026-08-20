@@ -1,0 +1,72 @@
+name: 모바일 화면에서 이미지 크기/오버레이 확인
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-mobile-overlay.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: img CSS 규칙 확인
+        run: |
+          curl -sS -o /tmp/snw1.html "https://xn--9d0bw2fjtyymch7de9d.info/photo/SNW_1.html?ch=cent"
+          echo "===== img 관련 CSS ====="
+          grep -n "img\s*{" -A 10 /tmp/snw1.html | head -40
+          echo ""
+          echo "===== img 태그 자체 ====="
+          grep -n "<img" /tmp/snw1.html
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm init -y >/dev/null 2>&1 && npm i -D playwright >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: 모바일 뷰포트로 오버레이 재확인
+        timeout-minutes: 1
+        run: |
+          cat > mv.js << 'EOF'
+          const { chromium } = require('playwright');
+          (async () => {
+            try {
+              const browser = await chromium.launch();
+              const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+              await page.goto('https://xn--9d0bw2fjtyymch7de9d.info/photo/SNW_1.html?ch=cent', { waitUntil: 'domcontentloaded', timeout: 15000 });
+              await page.waitForTimeout(3000);
+              const result = await page.evaluate(() => {
+                const out = {};
+                const img = document.querySelector('img');
+                if (img) {
+                  const r = img.getBoundingClientRect();
+                  const cs = getComputedStyle(img);
+                  out.img = { rect: {x:r.x,y:r.y,w:r.width,h:r.height}, position: cs.position, zIndex: cs.zIndex, naturalW: img.naturalWidth, naturalH: img.naturalHeight, cssWidth: cs.width, cssHeight: cs.height, maxWidth: cs.maxWidth };
+                }
+                ['cBead','cBig','cDrv'].forEach(id => {
+                  const c = document.getElementById(id);
+                  if (!c) { out[id] = 'no canvas'; return; }
+                  const rect = c.getBoundingClientRect();
+                  const cx = rect.left + rect.width/2;
+                  const cy = rect.top + rect.height/2;
+                  const topEl = document.elementFromPoint(cx, cy);
+                  out[id] = {
+                    canvasRect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
+                    topElementAtCenter: topEl ? (topEl.tagName + (topEl.id ? '#'+topEl.id : '')) : null,
+                    coveredByOther: topEl !== c
+                  };
+                });
+                out.bodyScrollWidth = document.body.scrollWidth;
+                out.viewportWidth = window.innerWidth;
+                return out;
+              });
+              console.log('MOBILE_CHECK:', JSON.stringify(result, null, 2));
+              await page.screenshot({ path: 'mobile.jpg', type: 'jpeg', quality: 30, fullPage: true });
+              await browser.close();
+              process.exit(0);
+            } catch (e) {
+              console.error('ERR:', e.message);
+              process.exit(1);
+            }
+          })();
+          EOF
+          timeout 50 node mv.js || echo "타임아웃/에러"
