@@ -1,1 +1,1 @@
-trigger66-direct-post-create-jump
+trigger67-save-infra-memo-to-mem-sync
