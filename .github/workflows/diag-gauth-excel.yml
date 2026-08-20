@@ -10,28 +10,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Verify health and sorted list
+      - name: Full hash comparison
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 60s
+          command_timeout: 30s
           script: |
-            echo "=== health retries ==="
-            for i in 1 2 3 4 5; do
-              HTTP=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4000/api/normalized-accounts 2>/dev/null || echo 000)
-              echo "attempt $i: HTTP $HTTP"
-              [ "$HTTP" = "200" ] && break
-              sleep 2
-            done
-            echo ""
-            echo "=== top 10 newest by account_date ==="
-            sudo node -e "
-            const d=JSON.parse(require('fs').readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
-            const arr=Array.isArray(d)?d:(d.accounts||[]);
-            const withDate = arr.filter(a=>a.account_date).sort((a,b)=>b.account_date-a.account_date);
-            console.log('with date:', withDate.length, '/', arr.length);
-            for (const a of withDate.slice(0,10)) console.log(' ', new Date(a.account_date).toISOString().slice(0,10), a.email, '|', a.source_file);
-            " 2>&1
+            echo "=== SERVER hashes ==="
+            md5sum /var/www/sites/gauth/public/index.html
+            md5sum /opt/gauth-full/upload_excels.js
+            md5sum /opt/gauth-full/auto_deploy.js
+            md5sum /var/www/sites/gauth/public/xlsx.core.min.js
+            md5sum /var/www/sites/gauth/public/manifest.json
+            md5sum /var/www/sites/gauth/public/sw.js
+            md5sum /opt/gauth-full/advanced-google-login-v2.js
+            md5sum /opt/gauth-full/package.json
             echo "=== DONE ==="

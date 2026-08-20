@@ -1,1 +1,1 @@
-trigger19-final-verify
+trigger20-full-hash-check
