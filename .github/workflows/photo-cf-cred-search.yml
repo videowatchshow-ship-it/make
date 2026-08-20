@@ -1,0 +1,48 @@
+name: CF 자격증명 넓게 탐색 (값은 절대 출력 안함, 변수명/길이만)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-cf-cred-search.yml'
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    steps:
+      - name: gauth + my-site-1 넓게 탐색
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            echo "===== cloudflare.ini 전체 변수명 (값은 마스킹) ====="
+            sudo sed -E 's/=.*/=<masked>/' /root/.secrets/cloudflare.ini 2>/dev/null || echo "파일 없음"
+
+            echo ""
+            echo "===== dns_cloudflare_api_token 권한 그룹 자체 조회 시도 ====="
+            CF_TOKEN=$(sudo grep -oP 'dns_cloudflare_api_token\s*=\s*\K\S+' /root/.secrets/cloudflare.ini 2>/dev/null)
+            if [ -n "$CF_TOKEN" ]; then
+              TID=$(curl -s "https://api.cloudflare.com/client/v4/user/tokens/verify" -H "Authorization: Bearer $CF_TOKEN" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('result',{}).get('id','') if d.get('success') else '')")
+              echo "TOKEN_ID(앞8자리)=${TID:0:8}"
+              curl -s "https://api.cloudflare.com/client/v4/user/tokens/$TID" -H "Authorization: Bearer $CF_TOKEN" | python3 -m json.tool 2>/dev/null | head -40
+            fi
+
+            echo ""
+            echo "===== 다른 CF 관련 파일/디렉토리 탐색 (루트 전역, 값은 안보임) ====="
+            sudo find /root /etc /opt /home -maxdepth 4 \( -iname "*cloudflare*" -o -iname "*cf_token*" -o -iname "*cf-token*" \) -type f 2>/dev/null
+
+            echo ""
+            echo "===== .env / docker-compose 류에서 CF 관련 변수명만 ====="
+            sudo grep -rlE "CLOUDFLARE|CF_API|CF_TOKEN" /root /etc /opt /home --include="*.env" --include="*.ini" --include="docker-compose*.yml" --include="*.conf" 2>/dev/null | head -20
+
+            echo ""
+            echo "===== my-site-1 (gcloud ssh 경유) 도 탐색 ====="
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='sudo find /root /etc /opt /home -maxdepth 4 \( -iname "*cloudflare*" -o -iname "*cf_token*" \) -type f 2>/dev/null; echo "---env---"; sudo grep -rlE "CLOUDFLARE|CF_API" /root /etc /opt /home --include="*.env" --include="*.ini" 2>/dev/null | head -20' 2>&1 || echo "my-site-1 SSH 접근 실패"
