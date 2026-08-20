@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check newest upload + dump rows 5211/5212
+      - name: Recheck merge result + account 5211/5212 after merge completes
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -18,40 +18,18 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 60s
           script: |
-            echo "=== 1. Latest upload POST in access log (most recent line) ==="
-            sudo tail -100 /var/log/apache2/gauth_access.log | grep -i "upload-excels" | tail -5
+            echo "=== 1. Merge log for the most recent upload ==="
+            sudo journalctl -u gauth --since "-15 min" 2>/dev/null | grep -iE "upload-excels|merge done" | tail -20
 
             echo ""
-            echo "=== 2. Newest excel file on disk right now ==="
-            LATEST=$(sudo find /opt/gauth-full -iname "*.xlsx" -o -iname "*.xls" 2>/dev/null | xargs -I{} sudo stat -c '%Y {}' {} 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
-            echo "Latest file: $LATEST"
-            sudo stat "$LATEST" 2>&1
-
-            echo ""
-            echo "=== 3. accounts_normalized.json total count + index 5210/5211 (0-idx, i.e. 5211th/5212th) ==="
+            echo "=== 2. Current total count + accounts 5211/5212 (1-indexed) ==="
             sudo node -e "
             const fs = require('fs');
             const d = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
             const arr = Array.isArray(d) ? d : (d.accounts||[]);
-            console.log('Total accounts in master DB:', arr.length);
-            console.log('Record 5211 (0-idx 5210):', JSON.stringify(arr[5210], null, 2));
-            console.log('Record 5212 (0-idx 5211):', JSON.stringify(arr[5211], null, 2));
-            "
-
-            echo ""
-            echo "=== 4. rows 5211/5212 (0-idx 5210/5211) from newest excel file, all sheets ==="
-            sudo node -e "
-            const XLSX = require('/opt/gauth-full/node_modules/xlsx');
-            const path = '$LATEST';
-            const wb = XLSX.readFile(path);
-            for (const sn of wb.SheetNames) {
-              const sheet = wb.Sheets[sn];
-              const rows = XLSX.utils.sheet_to_json(sheet, {header:1, raw:false, defval:''});
-              if (rows.length >= 5211) {
-                console.log('--- sheet:', sn, 'total rows:', rows.length, '(HAS row 5211+) ---');
-                [5209,5210].forEach(idx => {
-                  if (rows[idx]) console.log('Row ' + (idx+1) + ':', JSON.stringify(rows[idx]));
-                });
-              }
-            }
+            console.log('Total accounts NOW:', arr.length);
+            console.log('=== Account #5211 (index 5210) ===');
+            console.log(JSON.stringify(arr[5210], null, 2));
+            console.log('=== Account #5212 (index 5211) ===');
+            console.log(JSON.stringify(arr[5211], null, 2));
             "
