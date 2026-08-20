@@ -1,0 +1,59 @@
+name: Next.P dayan(big-eye-boy) 값 실측 계산 검증
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-nextp-verify.yml'
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: bgl.js 전체 + room 데이터로 ask() 직접 실행
+        run: |
+          curl -sS -o /tmp/cah1.html "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html"
+          BGLURL=$(grep -oE 'src="[^"]*bgl\.js[^"]*"' /tmp/cah1.html | head -1 | sed -E 's/src="([^"]*)"/\1/')
+          curl -sS -o /tmp/bgl.js "https://xn--9d0bw2fjtyymch7de9d.info/photo/$BGLURL"
+          echo "bgl.js 크기: $(wc -c < /tmp/bgl.js) bytes"
+          curl -sS -o /tmp/room.json "https://xn--9d0bw2fjtyymch7de9d.info/photo/data/room_110.json"
+          cat /tmp/room.json | head -c 500
+          echo ""
+          echo "===== 실행 ====="
+          node -e "
+          const fs = require('fs');
+          const src = fs.readFileSync('/tmp/bgl.js', 'utf8');
+          const roomData = JSON.parse(fs.readFileSync('/tmp/room.json', 'utf8'));
+
+          const B = 'B', P = 'P', T = 'T';
+          global.B = B; global.P = P; global.T = T;
+
+          const sandbox = { console, B, P, T };
+          const vm = require('vm');
+          vm.createContext(sandbox);
+          try {
+            vm.runInContext(src, sandbox);
+          } catch (e) {
+            console.log('bgl.js 전체 실행 실패(브라우저 전용 API 사용 가능):', e.message);
+          }
+
+          const results = (roomData.nums || []).map(s => {
+            const outcome = s[0] === 'P' ? P : s[0] === 'B' ? B : T;
+            return { outcome, bPair: false, pPair: false };
+          });
+          console.log('results.length=', results.length);
+          console.log('outcomes=', results.map(r => r.outcome).join(','));
+
+          if (typeof sandbox.ask === 'function') {
+            const nextP = sandbox.ask(results, P);
+            const nextB = sandbox.ask(results, B);
+            console.log('ask(results, P) =', JSON.stringify(nextP));
+            console.log('ask(results, B) =', JSON.stringify(nextB));
+          } else {
+            console.log('sandbox 안에 ask 함수 없음 (전역 노출 방식이 다를 수 있음)');
+            console.log('sandbox 키들:', Object.keys(sandbox).filter(k => typeof sandbox[k] === 'function').join(','));
+          }
+          "
