@@ -1,0 +1,42 @@
+name: chamgyo 로그인 리다이렉트에서 서브도메인 URL 생성 지점 전수 조사
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/chamgyo-login-redirect-search.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: 로그인 관련 파일에서 서브도메인 리다이렉트 패턴 검색
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            echo "===== chamgyo public 디렉토리 전체에서 서브도메인 패턴(.xn--...) 검색 (write.php 접속 리다이렉트 후보) ====="
+            sudo grep -rlnE "\\\$__id.*xn--9d0bw2fjtyymch7de9d|xn--9d0bw2fjtyymch7de9d.*\\\$__id|\\.xn--9d0bw2fjtyymch7de9d\\.info" /var/www/sites/chamgyo/public 2>/dev/null
+            echo "===== login/index/auth 관련 파일 목록 ====="
+            sudo find /var/www/sites/chamgyo/public -maxdepth 2 -iname "*login*" -o -iname "index.php" -o -iname "*auth*" 2>/dev/null
+            echo "===== photo2 디렉토리 전체 php 파일 목록 ====="
+            sudo find /var/www/sites/chamgyo/public/photo2 -maxdepth 1 -iname "*.php" 2>/dev/null
+            echo "===== photo2 로그인 관련 php 안에서 location.href / header Location / subdomain 패턴 ====="
+            for f in $(sudo find /var/www/sites/chamgyo/public/photo2 -maxdepth 1 -iname "*.php" 2>/dev/null); do
+              echo "--- $f ---"
+              sudo grep -nE "location\.href|window\.location|header\(.Location|\\\$_SERVER\['HTTP_HOST'\]|\\\$__id|subdomain" "$f" 2>/dev/null | head -20
+            done
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
