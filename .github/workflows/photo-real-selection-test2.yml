@@ -1,0 +1,74 @@
+name: 방 선택 실제 동작 테스트 v2 (session_start 순서 수정)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-real-selection-test2.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+            cd "$P1"
+
+            echo "===== [0] 테스트 전 원본 값 ====="
+            ORIG_TAK=$(sudo cat data/sel_tak.json 2>/dev/null)
+            ORIG_CENT=$(sudo cat data/sel_cent.json 2>/dev/null)
+            echo "tak: $ORIG_TAK"
+            echo "cent: $ORIG_CENT"
+
+            echo ""
+            echo "===== [1] session_start 먼저 호출 후 세션값 주입 (tak 로그인 시뮬레이션), ch=cent 로 침범 시도 ====="
+            cat > /tmp/seltest.php << 'PHPEOF'
+            <?php
+            chdir("/var/www/sites/chamgyo/public/photo");
+            session_start();
+            $_SESSION["auth"] = true;
+            $_SESSION["id"] = "tak";
+            $_POST["room_id"] = "777";
+            $_POST["board"] = "TESTBOARD";
+            $_POST["ch"] = "cent";
+            $_SERVER["REQUEST_METHOD"] = "POST";
+            require "/var/www/sites/chamgyo/public/photo/write_select_room.php";
+            PHPEOF
+            sudo -u www-data php /tmp/seltest.php 2>&1
+            echo ""
+
+            echo "===== [2] 결과: sel_tak.json 은 바뀌고 sel_cent.json 은 안 바뀌어야 함(격리 증명) ====="
+            echo "--- sel_tak.json ---"
+            sudo cat data/sel_tak.json 2>&1
+            echo ""
+            echo "--- sel_cent.json ---"
+            sudo cat data/sel_cent.json 2>&1
+
+            echo ""
+            echo "===== [3] api_selected_room.php 실제 폴링 응답 (도메인 경유) ====="
+            curl -sSL "https://xn--9d0bw2fjtyymch7de9d.info/photo/api_selected_room.php?ch=tak&_=$(date +%s)" 2>&1
+            echo ""
+
+            echo ""
+            echo "===== [4] 원상복구 ====="
+            if [ -n "$ORIG_TAK" ]; then echo "$ORIG_TAK" | sudo tee data/sel_tak.json >/dev/null; fi
+            echo "--- 복구후 sel_tak.json ---"
+            sudo cat data/sel_tak.json 2>&1
+            echo ""
+            echo "--- sel_cent.json 최종 ---"
+            sudo cat data/sel_cent.json 2>&1
+            sudo rm -f /tmp/seltest.php
+            REMOTE
