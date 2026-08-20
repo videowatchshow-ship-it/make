@@ -563,8 +563,22 @@ function accessBadge(a){
     <span>비번만 <b id="s-pw">–</b></span>
   </div>
   <div id="upload-status" style="margin-top:6px;padding:6px 12px;border-radius:6px;font-size:12px;font-family:monospace;display:none"></div>
+  <div id="subsite-counts" style="margin-top:6px;padding:6px 12px;border-radius:6px;font-size:12px;font-family:monospace;color:#8a95a5;border:1px solid #2a3140;background:#0d1117"></div>
 </header>
 <script>
+function updateSubsiteCounts(){
+  var el = document.getElementById('subsite-counts');
+  if(!el) return;
+  fetch(authQuery('/api/subsite-counts'),{cache:'no-store',headers:authHeaders()}).then(function(r){return r.json();}).then(function(d){
+    if(!d || !d.sites || !d.sites.length){ el.textContent='하위 사이트 배포 계정: 없음'; return; }
+    var parts = d.sites.map(function(s){
+      return '<span style="color:#e8ecef">'+s.site+'</span> <b style="color:#3ddc84">'+s.count+'</b>';
+    });
+    el.innerHTML = '하위 사이트 배포 계정 (총 <b style="color:#3ddc84">'+d.total+'</b>건): ' + parts.join(' · ');
+  }).catch(function(){ el.textContent=''; });
+}
+updateSubsiteCounts();
+setInterval(updateSubsiteCounts, 30000);
 function updateUploadStatus(){
   var el = document.getElementById('upload-status');
   if(!el) return;
