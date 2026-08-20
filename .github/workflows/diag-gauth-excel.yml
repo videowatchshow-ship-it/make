@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Find accounts ending with 781@gmail.com or 433@gmail.com
+      - name: Verify sort fix deployed on live server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -18,14 +18,8 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 60s
           script: |
-            sudo node -e "
-            const fs = require('fs');
-            const d = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
-            const arr = Array.isArray(d) ? d : (d.accounts||[]);
-            const matches781 = arr.filter(a => (a.email||'').endsWith('781@gmail.com'));
-            const matches433 = arr.filter(a => (a.email||'').endsWith('433@gmail.com'));
-            console.log('=== ending with 781@gmail.com ===', matches781.length, 'found');
-            matches781.forEach((a,i) => console.log(i+1, JSON.stringify(a, null, 2)));
-            console.log('=== ending with 433@gmail.com ===', matches433.length, 'found');
-            matches433.forEach((a,i) => console.log(i+1, JSON.stringify(a, null, 2)));
-            "
+            echo "=== live file check ==="
+            sudo grep -n "noDate.sort" /var/www/sites/gauth/public/index.html
+            sudo md5sum /var/www/sites/gauth/public/index.html
+            echo "=== curl localhost check ==="
+            curl -s http://localhost:4000/ 2>/dev/null | grep -o "noDate.sort[^}]*}" | head -1
