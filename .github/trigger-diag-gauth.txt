@@ -1,1 +1,1 @@
-trigger79-create-jump-chamgyo-streaming-design
+trigger80-fix-jump-cert-certonly-plus-ssl-vhost
