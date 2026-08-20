@@ -1,0 +1,64 @@
+name: fc-sinji-investigate2
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/fc-sinji-investigate2.yml'
+jobs:
+  investigate2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            echo "=== A. cron def files ==="
+            timeout 5 sudo cat /etc/cron.d/chamgyo-sinji-new-collector 2>&1
+            timeout 5 sudo cat /etc/cron.d/chamgyo-sinji-new-discover 2>&1
+
+            echo "=== B. tables.json sinji_new fields ==="
+            timeout 8 sudo php -r '$t=json_decode(file_get_contents("/var/www/sites/chamgyo/public/photo/data/tables.json"),true); echo "sinji_new: ".json_encode($t["sinji_new"]??null)."\n"; echo "sinji_new_ts: ".($t["sinji_new_ts"]??"none")." (".(($t["sinji_new_ts"]??0)?date("Y-m-d H:i:s",$t["sinji_new_ts"]):"").")\n"; echo "sinji_new_seen: ".json_encode($t["sinji_new_seen"]??null)."\n";'
+
+            echo "=== C. room_23.json (BASE fcj6 room) current content ==="
+            timeout 5 sudo cat /var/www/sites/chamgyo/public/photo/data/room_23.json 2>&1
+            echo ""
+            timeout 5 sudo cat /var/www/sites/chamgyo/public/photo/data/room_100.json 2>&1
+            echo ""
+            timeout 5 sudo cat /var/www/sites/chamgyo/public/photo/data/room_20018.json 2>&1
+
+            echo "=== D. raw upstream API direct curl (room 23, with fcj6 Origin) ==="
+            timeout 6 curl -s -H "Origin: https://fcj6.oqogyf.com" -H "Referer: https://fcj6.oqogyf.com/" "https://xjh.liveview2024.vip/api/pub/get_newly_issue?room_id=23"
+            echo ""
+            echo "=== D2. raw upstream API direct curl (room 100) ==="
+            timeout 6 curl -s -H "Origin: https://fcj6.oqogyf.com" -H "Referer: https://fcj6.oqogyf.com/" "https://xjh.liveview2024.vip/api/pub/get_newly_issue?room_id=100"
+            echo ""
+            echo "=== D3. raw upstream API direct curl (room 20018 - stale one) ==="
+            timeout 6 curl -s -H "Origin: https://fcj6.oqogyf.com" -H "Referer: https://fcj6.oqogyf.com/" "https://xjh.liveview2024.vip/api/pub/get_newly_issue?room_id=20018"
+            echo ""
+
+            echo "=== E. crontab -l for www-data / root related sinji ==="
+            timeout 5 sudo crontab -l -u www-data 2>&1
+            timeout 5 sudo grep -ri sinji /etc/crontab 2>&1
+            timeout 5 sudo bash -lc 'ls /etc/cron.d/ | grep -i sinji'
+
+            echo "=== F. actual log locations - search var log ==="
+            timeout 8 sudo find /var/log -maxdepth 1 -iname "*sinji*" -o -iname "*chamgyo*" 2>&1
+
+            echo "=== G. SNW_1.html references to fc/sinji_new/room list ==="
+            timeout 6 sudo grep -n "sinji_new\|fcj6\|fc " /var/www/sites/chamgyo/public/photo/SNW_1.html 2>&1 | head -40
+
+            echo "=== H. current UTC time ==="
+            date -u
+            REMOTE
