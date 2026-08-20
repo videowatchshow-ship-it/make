@@ -1,1 +1,1 @@
-trigger67-save-infra-memo-to-mem-sync
+trigger68-create-jump-with-registered-secret
