@@ -1,0 +1,244 @@
+name: Add account to all sub-sites
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: 'Email to add (from gauth DB)'
+        required: true
+      sites:
+        description: 'Comma-separated site names (or "all" for every sub-site with server.js)'
+        required: false
+        default: 'all'
+      action:
+        description: 'add, fix-status, or inspect'
+        required: false
+        default: 'add'
+
+jobs:
+  add-to-sites:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Add account to sub-sites
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 8m
+          script: |
+            EMAIL="${{ github.event.inputs.email }}"
+            SITES_INPUT="${{ github.event.inputs.sites }}"
+            ACTION="${{ github.event.inputs.action }}"
+
+            # Auto-discover all sub-sites: scan /var/www/sites/*/server.js
+            # Extract port from server.js listen() call
+            # Exclude gauth (master site)
+            discover_sites() {
+              for sjs in /var/www/sites/*/server.js; do
+                [ -f "$sjs" ] || continue
+                dir=$(dirname "$sjs")
+                name=$(basename "$dir")
+                [ "$name" = "gauth" ] && continue
+                port=$(grep -oP 'listen\(\s*\K\d+' "$sjs" 2>/dev/null | head -1)
+                [ -z "$port" ] && port=$(grep -oP '(?:PORT|port)\s*=\s*\K\d+' "$sjs" 2>/dev/null | head -1)
+                [ -z "$port" ] && port=0
+                echo "${name}:${port}:${dir}"
+              done
+            }
+
+            ALL_SITES=$(discover_sites)
+            SITE_COUNT=$(echo "$ALL_SITES" | wc -w)
+            echo "=== Discovered $SITE_COUNT sub-sites (excluding gauth master) ==="
+            echo "$ALL_SITES" | tr ' ' '\n'
+            echo ""
+
+            # Filter sites if not "all"
+            if [ "$SITES_INPUT" = "all" ]; then
+              SITES="$ALL_SITES"
+            else
+              SITES=""
+              for s in $(echo "$SITES_INPUT" | tr ',' ' '); do
+                match=$(echo "$ALL_SITES" | tr ' ' '\n' | grep "^${s}:")
+                if [ -n "$match" ]; then
+                  SITES="$SITES $match"
+                else
+                  echo "WARNING: Unknown site '$s', skipping"
+                fi
+              done
+            fi
+
+            if [ "$ACTION" = "inspect" ]; then
+              for SITE_DEF in $SITES; do
+                SITE_NAME=$(echo "$SITE_DEF" | cut -d: -f1)
+                SITE_PORT=$(echo "$SITE_DEF" | cut -d: -f2)
+                SITE_DIR=$(echo "$SITE_DEF" | cut -d: -f3)
+                echo ""
+                echo "========== $SITE_NAME (port $SITE_PORT, $SITE_DIR) =========="
+                echo "--- accounts.json ---"
+                if [ -f "$SITE_DIR/accounts.json" ]; then
+                  sudo node -e "const d=JSON.parse(require('fs').readFileSync('$SITE_DIR/accounts.json','utf8'));const a=Array.isArray(d)?d:(d.accounts||[]);console.log('Count:',a.length);a.forEach(x=>console.log(' -',x.email,'status='+(x.status||'MISSING')))"
+                else
+                  echo "  no accounts.json"
+                fi
+                echo "--- service ---"
+                systemctl is-active "${SITE_NAME}" 2>/dev/null || echo "  no systemd service"
+                echo "--- API test ---"
+                if [ "$SITE_PORT" != "0" ]; then
+                  curl -s --max-time 3 "http://localhost:${SITE_PORT}/api/${SITE_NAME}/accounts" 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const j=JSON.parse(d);const a=j.accounts||j||[];console.log('  API accounts:',a.length)}catch(e){console.log('  API error:',e.message)}})" || echo "  API unreachable"
+                else
+                  echo "  port unknown, skipping API test"
+                fi
+              done
+              exit 0
+            fi
+
+            if [ "$ACTION" = "remove" ]; then
+              for SITE_DEF in $SITES; do
+                SITE_NAME=$(echo "$SITE_DEF" | cut -d: -f1)
+                SITE_PORT=$(echo "$SITE_DEF" | cut -d: -f2)
+                SITE_DIR=$(echo "$SITE_DEF" | cut -d: -f3)
+                echo ""
+                echo "========== remove: $SITE_NAME =========="
+                ACCT_FILE="$SITE_DIR/accounts.json"
+                if [ ! -f "$ACCT_FILE" ]; then
+                  echo "  no accounts.json, skipping"
+                  continue
+                fi
+                sudo node -e "
+                  const fs=require('fs');
+                  const data=JSON.parse(fs.readFileSync('$ACCT_FILE','utf8'));
+                  let accounts=Array.isArray(data)?data:(data.accounts||[]);
+                  const before=accounts.length;
+                  accounts=accounts.filter(a=>(a.email||'').toLowerCase()!=='$EMAIL'.toLowerCase());
+                  fs.writeFileSync('$ACCT_FILE',JSON.stringify({accounts},null,2));
+                  console.log('Removed',before-accounts.length,'account(s), remaining:',accounts.length);
+                "
+                sudo systemctl restart "$SITE_NAME" 2>/dev/null || echo "  (no systemd service)"
+              done
+              exit 0
+            fi
+
+            if [ "$ACTION" = "fix-status" ]; then
+              for SITE_DEF in $SITES; do
+                SITE_NAME=$(echo "$SITE_DEF" | cut -d: -f1)
+                SITE_DIR=$(echo "$SITE_DEF" | cut -d: -f3)
+                echo ""
+                echo "========== fix-status: $SITE_NAME =========="
+                if [ ! -f "$SITE_DIR/accounts.json" ]; then
+                  echo "  no accounts.json, skipping"
+                  continue
+                fi
+                sudo node -e "
+                  const fs=require('fs'),f='$SITE_DIR/accounts.json';
+                  const data=JSON.parse(fs.readFileSync(f,'utf8'));
+                  const accounts=Array.isArray(data)?data:(data.accounts||[]);
+                  let fixed=0;const today=new Date().toISOString().slice(0,10);
+                  accounts.forEach(a=>{
+                    if(!a.status){a.status='active';fixed++}
+                    if(!a.allocated_date){a.allocated_date=today}
+                    if(a.totp_secret&&!a.twofa_secret){a.twofa_secret=a.totp_secret}
+                  });
+                  fs.writeFileSync(f,JSON.stringify({accounts},null,2));
+                  console.log('Fixed',fixed+'/'+accounts.length,'accounts');
+                "
+                sudo systemctl restart "$SITE_NAME" 2>/dev/null || echo "  no systemd service to restart"
+              done
+              sleep 2
+              echo ""
+              echo "=== Verification ==="
+              for SITE_DEF in $SITES; do
+                SITE_NAME=$(echo "$SITE_DEF" | cut -d: -f1)
+                SITE_DIR=$(echo "$SITE_DEF" | cut -d: -f3)
+                if [ -f "$SITE_DIR/accounts.json" ]; then
+                  COUNT=$(sudo node -e "const d=JSON.parse(require('fs').readFileSync('$SITE_DIR/accounts.json','utf8'));const a=Array.isArray(d)?d:(d.accounts||[]);const act=a.filter(x=>x.status==='active').length;console.log(a.length+' total, '+act+' active')")
+                  echo "  $SITE_NAME: $COUNT"
+                fi
+              done
+              exit 0
+            fi
+
+            # ACTION = add
+            echo "=== Getting account from gauth DB ==="
+            ACCOUNT_JSON=$(node -e "
+              const fs=require('fs');
+              const d=JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+              const accs=Array.isArray(d)?d:(d.accounts||[]);
+              const t=accs.find(a=>(a.email||'').toLowerCase()===process.argv[1].toLowerCase());
+              if(!t){console.log('NOT_FOUND');process.exit(0)}
+              if(!t.status) t.status='active';
+              if(!t.allocated_date) t.allocated_date=new Date().toISOString().slice(0,10);
+              if(t.totp_secret&&!t.twofa_secret) t.twofa_secret=t.totp_secret;
+              console.log(JSON.stringify(t));
+            " "$EMAIL")
+
+            if [ "$ACCOUNT_JSON" = "NOT_FOUND" ]; then
+              echo "Account not found in gauth DB: $EMAIL"
+              exit 1
+            fi
+            echo "Found: $(echo "$ACCOUNT_JSON" | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log(d.email)")"
+            echo "$ACCOUNT_JSON" > /tmp/site_new_account.json
+
+            RESULTS=""
+            for SITE_DEF in $SITES; do
+              SITE_NAME=$(echo "$SITE_DEF" | cut -d: -f1)
+              SITE_PORT=$(echo "$SITE_DEF" | cut -d: -f2)
+              SITE_DIR=$(echo "$SITE_DEF" | cut -d: -f3)
+              echo ""
+              echo "========== Adding to $SITE_NAME =========="
+
+              if [ ! -d "$SITE_DIR" ]; then
+                echo "  Directory $SITE_DIR not found, skipping"
+                RESULTS="$RESULTS $SITE_NAME:SKIP_NO_DIR"
+                continue
+              fi
+
+              ACCT_FILE="$SITE_DIR/accounts.json"
+              sudo node -e "
+                const fs=require('fs');
+                let data={};
+                try{data=JSON.parse(fs.readFileSync('$ACCT_FILE','utf8'))}catch(e){console.log('Creating new accounts.json')}
+                let accounts=Array.isArray(data)?data:(data.accounts||[]);
+                const newAcct=JSON.parse(fs.readFileSync('/tmp/site_new_account.json','utf8'));
+                const exists=accounts.find(a=>(a.email||'').toLowerCase()===(newAcct.email||'').toLowerCase());
+                if(exists){
+                  console.log('Already exists, updating...');
+                  Object.assign(exists,newAcct);
+                }else{
+                  console.log('Adding new account...');
+                  accounts.unshift(newAcct);
+                }
+                accounts.sort((a,b)=>{const da=a.allocated_date||'';const db=b.allocated_date||'';return da>db?-1:da<db?1:0;});
+                fs.writeFileSync('$ACCT_FILE',JSON.stringify({accounts},null,2));
+                console.log('Total accounts:',accounts.length);
+              "
+              sudo systemctl restart "$SITE_NAME" 2>/dev/null || echo "  (no systemd service)"
+              RESULTS="$RESULTS $SITE_NAME:OK"
+            done
+
+            rm -f /tmp/site_new_account.json
+            sleep 2
+
+            echo ""
+            echo "=== Final Verification ==="
+            for SITE_DEF in $SITES; do
+              SITE_NAME=$(echo "$SITE_DEF" | cut -d: -f1)
+              SITE_PORT=$(echo "$SITE_DEF" | cut -d: -f2)
+              if [ "$SITE_PORT" = "0" ]; then
+                echo "$SITE_NAME: port unknown, skipping API verify"
+                continue
+              fi
+              curl -s --max-time 3 "http://localhost:${SITE_PORT}/api/${SITE_NAME}/accounts" 2>/dev/null | node -e "
+                let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
+                  try{
+                    const j=JSON.parse(d);const a=j.accounts||j||[];
+                    const found=a.find(x=>(x.email||'').toLowerCase()===process.argv[1].toLowerCase());
+                    console.log('$SITE_NAME:',found?'VERIFIED':'NOT_FOUND','('+a.length+' total)');
+                  }catch(e){console.log('$SITE_NAME: API error -',e.message)}
+                });
+              " "$EMAIL" || echo "$SITE_NAME: API unreachable"
+            done
+
+            echo ""
+            echo "=== Summary ==="
+            echo "Results:$RESULTS"

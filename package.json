@@ -21,16 +21,22 @@
   "author": "Your Company",
   "license": "Commercial",
   "dependencies": {
+    "archiver": "^7.0.1",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "multer": "^1.4.5-lts.1",
+    "rebrowser-puppeteer": "^24.8.1",
+    "ws": "^8.18.0",
     "xlsx": "^0.18.5",
     "otplib": "^12.0.1",
     "hi-base32": "^0.5.1",
-    "puppeteer": "^22.0.0",
+    "puppeteer": "^25.0.0",
     "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "electron-store": "^8.1.0"
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "optionalDependencies": {
-    "puppeteer-extra-plugin-recaptcha": "^3.6.8"
+    "puppeteer-extra-plugin-recaptcha": "^3.6.8",
+    "electron-store": "^8.1.0"
   },
   "devDependencies": {
     "electron": "^29.0.0",

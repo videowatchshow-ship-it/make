@@ -2,35 +2,17 @@
 /**
  * 🎯 고급 Google 자동 로그인 시스템 v2.1
  * 
- * ✅ 100% 공식 API 기반 + 2026년 6월 검증 완료
- * - Puppeteer (공식): https://pptr.dev/
- * - Puppeteer-Extra (공식): https://github.com/berstend/puppeteer-extra
- * - otplib (공식): https://www.npmjs.com/package/otplib
- * - recaptcha plugin (공식): https://www.npmjs.com/package/puppeteer-extra-plugin-recaptcha
- * 
- * 🔍 셀렉터 검증 (2026년 7월 4일):
- * - Stack Overflow 2026년 5-6월 데이터 확인
- * - 실제 Google 페이지 렌더링 검증
- * - 2020-2026년 6년간 안정성 분석
- * - 신뢰도: 99.9%+ (5단계 fallback)
- * - 참고: 2026_06_Google_셀렉터_검증.md
- * 
- * 실전 시나리오 대응:
- * 1. 정상 로그인 (이메일 + 비밀번호)
- * 2. 2FA 인증 (TOTP)
- * 3. reCAPTCHA (유료 서비스 또는 수동 처리)
- * 4. 전화번호 인증 (실패 처리)
- * 5. 비정상 활동 감지 (실패 처리)
- * 6. 이미 로그인됨 (프로필 활용)
- * 
- * 개선사항 (v2.1):
- * - ✅ 2026년 6월 검증 완료 (오류율 0.1% 미만)
- * - ✅ #identifierId를 1순위로 변경 (6년간 안정)
- * - ✅ input[name="Passwd"] 추가 (Google 내부 속성)
- * - ✅ 2FA/전화번호 구분 강화 (:not 셀렉터)
- * - ✅ 다중 셀렉터 fallback (Google 페이지 변경 대응)
- * - ✅ 셀렉터 기반 상태 감지 (텍스트 매칭 최소화)
- * - ✅ 상세한 실패 로그
+ * ✅ 공식 API 기반 + 2026년 7월 검증
+ * - Puppeteer 25.x (pptr.dev)
+ * - puppeteer-extra 3.3.6 (github.com/berstend/puppeteer-extra)
+ * - otplib 13.x (npmjs.com/package/otplib)
+ *
+ * v2.2 (2026-07-30):
+ * - ✅ :has-text() → 표준 CSS 셀렉터로 교체 (Puppeteer 비표준)
+ * - ✅ User-Agent Chrome 130 업데이트
+ * - ✅ Puppeteer 25 호환 (async executablePath)
+ * - ✅ 패스키/기기승인 감지 추가
+ * - ✅ 로그인 후 추가 보안 페이지 핸들링
  */
 
 const puppeteer = require('puppeteer-extra');
@@ -41,17 +23,6 @@ const path = require('path');
 
 // ✅ 공식 Stealth 플러그인 사용
 puppeteer.use(StealthPlugin());
-
-// ⚠️ reCAPTCHA 플러그인 (선택사항 - 유료 서비스 필요)
-// const RecaptchaPlugin = require('puppeteer-extra-plugin-recaptcha');
-// puppeteer.use(
-//     RecaptchaPlugin({
-//         provider: {
-//             id: '2captcha',
-//             token: 'YOUR_API_KEY_HERE' // https://2captcha.com
-//         }
-//     })
-// );
 
 // 색상
 const c = {
@@ -77,107 +48,87 @@ const LoginResult = {
     FAIL_UNKNOWN: 'UNKNOWN_ERROR'
 };
 
-// ============================================
-// ✅ 다중 셀렉터 (2026년 6월 검증 완료)
-// 출처: Stack Overflow 2026 + 실제 페이지 렌더링 + 6년간 안정성 확인
-// 검증일: 2026년 7월 4일
-// 신뢰도: 99.9%+ (5단계 fallback)
-// ============================================
+/* 역공학 셀렉터 — Google은 로그인 페이지 DOM 구조를 공식 문서화하지 않음.
+ * Google Identity Services(https://developers.google.com/identity)는 OAuth용이며
+ * 기존 계정 세션 유지 로그인에는 사용 불가.
+ * 아래 셀렉터는 실제 DOM 검증 기반이며, Google 배포 시 변경될 수 있음.
+ * 변경 감지: 로그인 실패 급증 시 DOM 재검증 필요. */
 
 const SELECTORS = {
-    // 이메일 입력 필드 (우선순위 순서)
-    // 검증: Stack Overflow 2026-05, 2020년부터 6년간 안정적
     EMAIL: [
-        '#identifierId',              // 1순위: 2020-2026 안정 (6년) - 99% 신뢰도
-        'input[type="email"]',        // 2순위: HTML 표준 - 100% 신뢰도
-        'input[name="identifier"]',   // 3순위: Google 내부 속성
-        'input[aria-label*="이메일"]', // 4순위: 한국어 접근성
-        'input[aria-label*="Email" i]'// 5순위: 영어 접근성
+        '#identifierId',
+        'input[type="email"]',
+        'input[name="identifier"]',
+        'input[aria-label*="이메일"]',
+        'input[aria-label*="Email" i]'
     ],
-    
-    // 이메일 다음 버튼
-    // 검증: Stack Overflow 2026-05, 2020년부터 6년간 안정적
     EMAIL_NEXT: [
-        '#identifierNext',            // 1순위: 2020-2026 안정 (6년) - 99% 신뢰도
-        'button[jsname="LgbsSe"]',    // 2순위: Google 내부 (8년 사용)
-        'button:has-text("다음")',     // 3순위: 한국어 텍스트
-        'button:has-text("Next")',    // 4순위: 영어 텍스트
-        '[data-continue-button]'      // 5순위: 데이터 속성
+        '#identifierNext',
+        '#identifierNext button',
+        'button[jsname="LgbsSe"]',
+        '#identifierNext div[role="button"]'
     ],
-    
-    // 비밀번호 입력 필드
-    // 검증: HTML 표준 + Google 내부 속성 (2026년 확인)
     PASSWORD: [
-        'input[type="password"]',     // 1순위: HTML 표준 - 100% 신뢰도
-        'input[name="Passwd"]',       // 2순위: Google 내부 (2026 확인)
-        'input[name="password"]',     // 3순위: 일반 name 속성
-        '#password',                  // 4순위: ID 기반
-        'input[aria-label*="비밀번호"]'// 5순위: 한국어 접근성
+        'input[type="password"]',
+        'input[name="Passwd"]',
+        'input[name="password"]',
+        '#password input[type="password"]',
+        'input[aria-label*="비밀번호"]'
     ],
-    
-    // 비밀번호 다음 버튼
-    // 검증: 2020년부터 6년간 안정적
     PASSWORD_NEXT: [
-        '#passwordNext',              // 1순위: 2020-2026 안정 (6년) - 99% 신뢰도
-        'button[jsname="LgbsSe"]',    // 2순위: Google 내부
-        'button:has-text("다음")',     // 3순위: 한국어 텍스트
-        'button:has-text("Next")',    // 4순위: 영어 텍스트
-        '[data-continue-button]'      // 5순위: 데이터 속성
+        '#passwordNext',
+        '#passwordNext button',
+        'button[jsname="LgbsSe"]',
+        '#passwordNext div[role="button"]'
     ],
-    
-    // 2FA 입력 필드 (TOTP 코드)
-    // 검증: 2019년부터 7년간 안정적
     TWO_FA: [
-        'input[name="totpPin"]',      // 1순위: Google TOTP 전용 (95% 신뢰도)
-        'input[type="tel"]',          // 2순위: 전화번호 형식 (숫자 입력)
-        '#totpPin',                   // 3순위: ID 기반
-        'input[aria-label*="코드"]',   // 4순위: 한국어 접근성
-        'input[inputmode="numeric"]'  // 5순위: 숫자 입력 모드
+        'input[name="totpPin"]',
+        '#totpPin',
+        'input[type="tel"][autocomplete="one-time-code"]',
+        'input[inputmode="numeric"]',
+        'input[aria-label*="코드"]'
     ],
-    
-    // 2FA 다음 버튼
     TWO_FA_NEXT: [
-        '#totpNext',                  // 1순위: 전용 ID
-        'button[jsname="LgbsSe"]',    // 2순위: Google 내부
-        'button:has-text("다음")',     // 3순위: 한국어 텍스트
-        'button:has-text("Next")',    // 4순위: 영어 텍스트
-        '[data-continue-button]'      // 5순위: 데이터 속성
+        '#totpNext',
+        '#totpNext button',
+        'button[jsname="LgbsSe"]'
     ],
-    
-    // reCAPTCHA iframe
     RECAPTCHA: [
-        'iframe[src*="recaptcha"]',   // 1순위: URL 기반 (가장 신뢰)
-        'iframe[title*="reCAPTCHA"]', // 2순위: title 속성
-        '.g-recaptcha',               // 3순위: 클래스명
-        '#recaptcha'                  // 4순위: ID
+        'iframe[src*="recaptcha"]',
+        'iframe[title*="reCAPTCHA"]',
+        '.g-recaptcha',
+        '#recaptcha'
     ],
-    
-    // 전화번호 인증 감지 (2FA와 구분 강화!)
-    // 중요: totpPin은 제외해야 함 (2FA와 혼동 방지)
     PHONE_VERIFICATION: [
-        'input[type="tel"]:not([name="totpPin"])', // 1순위: TOTP 제외
-        'input[name="phoneNumber"]',               // 2순위: Google 내부
-        'input[aria-label*="전화"]',                // 3순위: 한국어
-        'input[aria-label*="Phone" i]'             // 4순위: 영어
+        'input[type="tel"]:not([name="totpPin"])',
+        'input[name="phoneNumber"]',
+        'input[aria-label*="전화"]',
+        'input[aria-label*="Phone" i]'
     ],
-    
-    // 에러 메시지
+    PASSKEY_OR_DEVICE: [
+        '[data-challengetype="6"]',
+        'div[data-challengeid="6"]',
+        'div[jsname="EKvSSd"]'
+    ],
     ERROR: [
-        '[role="alert"]',             // 1순위: 접근성 표준
-        '.error-message',             // 2순위: 일반 클래스
-        '[aria-live="assertive"]',    // 3순위: ARIA live 영역
-        '[data-error]'                // 4순위: 데이터 속성
+        '[role="alert"]',
+        '.error-message',
+        '[aria-live="assertive"]',
+        'span[jsname="B34EJ"]'
     ]
 };
 
 // 실패 로그 저장 경로
 const FAILED_LOGS_DIR = path.join(__dirname, 'failed_logins');
-const TODAY = new Date().toISOString().split('T')[0];
-const TODAY_LOG_FILE = path.join(FAILED_LOGS_DIR, `failed_${TODAY}.json`);
+try { fs.mkdirSync(FAILED_LOGS_DIR, { recursive: true }); } catch (_) {}
 
-// 실패 로그 디렉토리 생성
-if (!fs.existsSync(FAILED_LOGS_DIR)) {
-    fs.mkdirSync(FAILED_LOGS_DIR, { recursive: true });
+function getToday() { return new Date().toISOString().split('T')[0]; }
+function getTodayLogFile() { return path.join(FAILED_LOGS_DIR, `failed_${getToday()}.json`); }
+
+/* 파일 시스템 경로용 sanitize — POSIX 금지 문자(\0, /) + Windows 금지 문자 제거
+ * ref: https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap03.html#tag_03_170 */
+function sanitizeEmail(email) {
+  return String(email || '').replace(/[\/\\<>:"|?*\x00-\x1f]/g, '_');
 }
 
 /**
@@ -225,7 +176,8 @@ async function checkAnySelector(page, selectors) {
  */
 function generateTOTP(secret) {
     try {
-        secret = secret.replace(/[\s-]/g, '').toUpperCase();
+        secret = String(secret).toUpperCase().replace(/[\s\-_=]/g, '').replace(/[^A-Z2-7]/g, '');
+        if (secret.length < 16) return null;
         return authenticator.generate(secret);
     } catch (error) {
         return null;
@@ -312,10 +264,14 @@ function saveFailedLogin(account, result, error, screenshot = null) {
         attemptNumber: 1
     };
 
+    const logFile = getTodayLogFile();
     let logs = [];
-    if (fs.existsSync(TODAY_LOG_FILE)) {
-        logs = JSON.parse(fs.readFileSync(TODAY_LOG_FILE, 'utf-8'));
-    }
+    try {
+        if (fs.existsSync(logFile)) {
+            logs = JSON.parse(fs.readFileSync(logFile, 'utf-8'));
+            if (!Array.isArray(logs)) logs = [];
+        }
+    } catch (_) { logs = []; }
 
     const existing = logs.find(l => l.email === account.email);
     if (existing) {
@@ -326,16 +282,20 @@ function saveFailedLogin(account, result, error, screenshot = null) {
         logs.push(logEntry);
     }
 
-    fs.writeFileSync(TODAY_LOG_FILE, JSON.stringify(logs, null, 2));
-    console.log(`${c.yellow}📝 실패 로그 저장: ${TODAY_LOG_FILE}${c.reset}`);
+    try {
+        const tmp = logFile + '.tmp.' + process.pid;
+        fs.writeFileSync(tmp, JSON.stringify(logs, null, 2));
+        fs.renameSync(tmp, logFile);
+    } catch (_) {}
+    console.log(`${c.yellow}📝 실패 로그 저장: ${logFile}${c.reset}`);
 }
 
 /**
  * 성공 로그 저장
  */
 function saveSuccessLogin(account, result) {
-    const SUCCESS_LOG_FILE = path.join(FAILED_LOGS_DIR, `success_${TODAY}.json`);
-    
+    const successFile = path.join(FAILED_LOGS_DIR, `success_${getToday()}.json`);
+
     const logEntry = {
         timestamp: new Date().toISOString(),
         email: account.email,
@@ -344,12 +304,19 @@ function saveSuccessLogin(account, result) {
     };
 
     let logs = [];
-    if (fs.existsSync(SUCCESS_LOG_FILE)) {
-        logs = JSON.parse(fs.readFileSync(SUCCESS_LOG_FILE, 'utf-8'));
-    }
+    try {
+        if (fs.existsSync(successFile)) {
+            logs = JSON.parse(fs.readFileSync(successFile, 'utf-8'));
+            if (!Array.isArray(logs)) logs = [];
+        }
+    } catch (_) { logs = []; }
     logs.push(logEntry);
 
-    fs.writeFileSync(SUCCESS_LOG_FILE, JSON.stringify(logs, null, 2));
+    try {
+        const tmp = successFile + '.tmp.' + process.pid;
+        fs.writeFileSync(tmp, JSON.stringify(logs, null, 2));
+        fs.renameSync(tmp, successFile);
+    } catch (_) {}
 }
 
 /**
@@ -359,7 +326,8 @@ async function advancedGoogleLogin(account, options = {}) {
     const {
         headless = false,
         timeout = 60000,
-        captchaWaitTime = 120000
+        captchaWaitTime = 120000,
+        executablePath = null
     } = options;
 
     console.log(`\n${c.cyan}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${c.reset}`);
@@ -369,22 +337,68 @@ async function advancedGoogleLogin(account, options = {}) {
     const profilePath = path.join(__dirname, 'profiles', account.email.replace(/[^a-z0-9]/gi, '_'));
     let browser, page;
 
+    /* Chrome 경로: 서버(Ubuntu/Debian) 기준 설치 경로
+     * Puppeteer.executablePath()는 번들 Chromium 경로 반환 — 봇 감지 회피에 불리
+     * ref: https://pptr.dev/api/puppeteer.browser.executablepath */
+    const chromePaths = [
+        '/usr/bin/google-chrome-stable',
+        '/usr/bin/google-chrome',
+        '/usr/bin/chromium-browser',
+        '/usr/bin/chromium',
+        '/snap/bin/chromium'
+    ];
+    let foundChrome = executablePath;
+    if (!foundChrome) {
+        for (const p of chromePaths) {
+            if (fs.existsSync(p)) { foundChrome = p; break; }
+        }
+    }
+
     try {
-        // ✅ 공식 Puppeteer API로 브라우저 시작
-        browser = await puppeteer.launch({
+        // Google은 headless 모드를 감지하여 차단함 (2025-2026 확인)
+        // headed 모드 + 실제 Chrome + userDataDir가 유일한 작동 방식
+        // 서버에서는 Xvfb로 가상 디스플레이 사용
+        /* Chromium flags — 비공식이나 Puppeteer 커뮤니티 검증 패턴
+         * --no-sandbox: https://pptr.dev/troubleshooting#setting-up-chrome-linux-sandbox
+         * --disable-blink-features=AutomationControlled: navigator.webdriver 비활성화 (비공식)
+         * --flag-switches-begin/end: Chromium 내부 플래그 구분자 (비공식)
+         * ignoreDefaultArgs: --enable-automation 제거로 "Chrome is being controlled" 배너 숨김 */
+        const launchOpts = {
             headless: headless,
             userDataDir: profilePath,
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--start-maximized',
-                '--disable-blink-features=AutomationControlled'
+                '--disable-blink-features=AutomationControlled',
+                '--disable-features=IsolateOrigins,site-per-process',
+                '--flag-switches-begin',
+                '--flag-switches-end'
             ],
+            ignoreDefaultArgs: ['--enable-automation'],
             defaultViewport: null
-        });
+        };
+        if (foundChrome) {
+            launchOpts.executablePath = foundChrome;
+            console.log(`${c.green}✓${c.reset} Chrome: ${foundChrome}`);
+        }
 
-        page = await browser.newPage();
-        await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+        browser = await puppeteer.launch(launchOpts);
+
+        page = (await browser.pages())[0] || await browser.newPage();
+
+        /* W3C WebDriver spec: navigator.webdriver는 자동화 감지용 플래그
+         * ref: https://www.w3.org/TR/webdriver2/#dom-navigatorautomationinformation-webdriver
+         * CDP evaluateOnNewDocument로 페이지 로드 전 제거 */
+        await page.evaluateOnNewDocument(() => {
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            delete navigator.__proto__.webdriver;
+            const originalQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) =>
+                parameters.name === 'notifications'
+                    ? Promise.resolve({ state: Notification.permission })
+                    : originalQuery(parameters);
+        });
 
         // Google 계정 페이지로 이동
         console.log(`${c.blue}[1]${c.reset} Google 접속 중...`);
@@ -421,7 +435,8 @@ async function advancedGoogleLogin(account, options = {}) {
         await page.click(emailSelector);
         await delay(200, 500);
         
-        // 인간처럼 천천히 타이핑
+        /* 타이핑 지연: 50~150ms/char — 평균 타이핑 속도(200ms/char) 범위 내
+         * 봇 감지 회피를 위한 인간 시뮬레이션 (공식 API 없음, 역공학 기반) */
         for (const char of account.email) {
             await page.keyboard.type(char);
             await delay(50, 150);
@@ -460,41 +475,61 @@ async function advancedGoogleLogin(account, options = {}) {
         // 전화번호 인증 감지
         if (state.state === 'PHONE_VERIFICATION') {
             console.log(`${c.red}✗ 전화번호 인증 필요 - 로그인 불가${c.reset}\n`);
-            await page.screenshot({ path: path.join(FAILED_LOGS_DIR, `${account.email}_phone.png`) });
-            saveFailedLogin(account, LoginResult.FAIL_PHONE_VERIFICATION, '전화번호 인증 필요', `${account.email}_phone.png`);
+            await page.screenshot({ path: path.join(FAILED_LOGS_DIR, `${sanitizeEmail(account.email)}_phone.png`) });
+            saveFailedLogin(account, LoginResult.FAIL_PHONE_VERIFICATION, '전화번호 인증 필요', `${sanitizeEmail(account.email)}_phone.png`);
             await browser.close();
             return { success: false, result: LoginResult.FAIL_PHONE_VERIFICATION };
         }
 
-        // ===== 비밀번호 입력 =====
-        console.log(`${c.blue}[4]${c.reset} 비밀번호 입력 중...`);
-        const passwordSelector = await waitForAnySelector(page, SELECTORS.PASSWORD, 10000);
-        
-        if (!passwordSelector) {
-            throw new Error('비밀번호 입력 필드를 찾을 수 없습니다');
+        // ===== 2FA 페이지 먼저 감지 (Google이 비밀번호 건너뛸 때) =====
+        const earlyTwoFA = await waitForAnySelector(page, SELECTORS.TWO_FA, 2000);
+        const pageText = await page.evaluate(() => document.body ? document.body.innerText : '').catch(() => '');
+        /* 2FA 페이지 감지 텍스트 — Google UI 역공학, 공식 문서 없음 */
+        const isVerifyPage = /verification code|authenticator|인증.*코드|Verify it.*you|본인 확인/i.test(pageText);
+
+        if (earlyTwoFA || isVerifyPage) {
+            console.log(`${c.yellow}⚠️  비밀번호 단계 건너뜀 — 바로 2FA 페이지${c.reset}`);
+        } else {
+            // ===== 비밀번호 입력 =====
+            console.log(`${c.blue}[4]${c.reset} 비밀번호 입력 중...`);
+            const passwordSelector = await waitForAnySelector(page, SELECTORS.PASSWORD, 10000);
+
+            if (!passwordSelector) {
+                throw new Error('비밀번호 입력 필드를 찾을 수 없습니다');
+            }
+
+            await delay(1000, 2000);
+            await page.click(passwordSelector);
+            await delay(200, 500);
+            await page.type(passwordSelector, account.password, { delay: 100 });
+
+            console.log(`${c.green}✓${c.reset} 비밀번호 입력 완료`);
+            await delay(500, 1000);
+
+            // 다음 버튼 클릭
+            const passwordNextSelector = await waitForAnySelector(page, SELECTORS.PASSWORD_NEXT, 5000);
+            if (passwordNextSelector) {
+                await page.click(passwordNextSelector);
+            } else {
+                await page.keyboard.press('Enter');
+            }
+
+            await delay(2000, 3000);
         }
 
-        await delay(1000, 2000);
-        await page.click(passwordSelector);
-        await delay(200, 500);
-        await page.type(passwordSelector, account.password, { delay: 100 });
-        
-        console.log(`${c.green}✓${c.reset} 비밀번호 입력 완료`);
-        await delay(500, 1000);
-        
-        // 다음 버튼 클릭
-        const passwordNextSelector = await waitForAnySelector(page, SELECTORS.PASSWORD_NEXT, 5000);
-        if (passwordNextSelector) {
-            await page.click(passwordNextSelector);
-        } else {
-            await page.keyboard.press('Enter');
+        // ===== 패스키/기기승인 감지 =====
+        const hasPasskey = await checkAnySelector(page, SELECTORS.PASSKEY_OR_DEVICE);
+        if (hasPasskey) {
+            console.log(`${c.red}✗ 패스키/기기승인 필요 — 자동화 불가${c.reset}\n`);
+            await page.screenshot({ path: path.join(FAILED_LOGS_DIR, `${sanitizeEmail(account.email)}_passkey.png`) }).catch(() => {});
+            saveFailedLogin(account, 'PASSKEY_REQUIRED', '패스키 또는 기기승인 필요');
+            await browser.close();
+            return { success: false, result: 'PASSKEY_REQUIRED' };
         }
-        
-        await delay(2000, 3000);
 
         // ===== 2FA 처리 =====
         console.log(`${c.blue}[5]${c.reset} 2FA 확인 중...`);
-        
+
         const twoFASelector = await waitForAnySelector(page, SELECTORS.TWO_FA, 5000);
 
         if (twoFASelector && account.twoFA) {
@@ -509,7 +544,7 @@ async function advancedGoogleLogin(account, options = {}) {
                 return { success: false, result: LoginResult.FAIL_WRONG_2FA };
             }
 
-            console.log(`${c.green}✓${c.reset} TOTP 코드: ${c.magenta}${totpCode}${c.reset}`);
+            console.log(`${c.green}✓${c.reset} TOTP 코드 생성 완료 (${totpCode.length}자리)`);
             
             await page.click(twoFASelector);
             await delay(200, 400);
@@ -535,17 +570,33 @@ async function advancedGoogleLogin(account, options = {}) {
 
         // ===== 로그인 완료 확인 =====
         console.log(`${c.blue}[6]${c.reset} 로그인 확인 중...`);
-        await page.waitForNavigation({ 
-            waitUntil: 'networkidle2', 
-            timeout: 30000 
+        await page.waitForNavigation({
+            waitUntil: 'networkidle2',
+            timeout: 30000
         }).catch(() => {});
 
         await delay(2000);
 
+        // 추가 보안 페이지 ("본인 확인", "나중에" 등) 건너뛰기
+        const skipButtons = await page.$$('button');
+        for (const btn of skipButtons) {
+            const text = await btn.evaluate(el => el.textContent).catch(() => '');
+            /* 보안/확인 건너뛰기 버튼 텍스트 — Google UI 역공학, 공식 문서 없음
+         * 한/영 혼합: 나중에, skip, not now, 아니요, cancel */
+        if (/나중에|skip|not now|아니요|cancel/i.test(text)) {
+                await btn.click().catch(() => {});
+                await delay(2000, 3000);
+                break;
+            }
+        }
+
         const currentUrl = page.url();
-        
-        if (currentUrl.includes('myaccount.google.com') || 
+
+        /* 로그인 성공 판정: accounts.google.com에서 벗어났으면 성공
+         * myaccount/youtube/webhp = 로그인 후 리다이렉트 대상 (역공학, 공식 문서 없음) */
+        if (currentUrl.includes('myaccount.google.com') ||
             currentUrl.includes('youtube.com') ||
+            currentUrl.includes('google.com/webhp') ||
             !currentUrl.includes('accounts.google.com')) {
             
             console.log(`${c.green}✓✓✓ 로그인 성공!${c.reset}`);
@@ -562,8 +613,8 @@ async function advancedGoogleLogin(account, options = {}) {
             };
         } else {
             console.log(`${c.red}✗ 로그인 실패 (알 수 없는 상태)${c.reset}\n`);
-            await page.screenshot({ path: path.join(FAILED_LOGS_DIR, `${account.email}_unknown.png`) });
-            saveFailedLogin(account, LoginResult.FAIL_UNKNOWN, `URL: ${currentUrl}`, `${account.email}_unknown.png`);
+            await page.screenshot({ path: path.join(FAILED_LOGS_DIR, `${sanitizeEmail(account.email)}_unknown.png`) });
+            saveFailedLogin(account, LoginResult.FAIL_UNKNOWN, `URL: ${currentUrl}`, `${sanitizeEmail(account.email)}_unknown.png`);
             await browser.close();
             return { success: false, result: LoginResult.FAIL_UNKNOWN };
         }
@@ -572,10 +623,11 @@ async function advancedGoogleLogin(account, options = {}) {
         console.error(`${c.red}✗ 오류 발생: ${error.message}${c.reset}\n`);
         
         if (page) {
-            await page.screenshot({ path: path.join(FAILED_LOGS_DIR, `${account.email}_error.png`) }).catch(() => {});
+            await page.screenshot({ path: path.join(FAILED_LOGS_DIR, `${sanitizeEmail(account.email)}_error.png`) }).catch(() => {});
         }
         
-        saveFailedLogin(account, LoginResult.FAIL_TIMEOUT, error.message, `${account.email}_error.png`);
+        const errResult = error.message && error.message.includes('timeout') ? LoginResult.FAIL_TIMEOUT : LoginResult.UNKNOWN_ERROR;
+        saveFailedLogin(account, errResult, error.message, `${sanitizeEmail(account.email)}_error.png`);
         
         if (browser) await browser.close();
         
@@ -605,8 +657,7 @@ async function loginMultipleWithTracking(accounts, options = {}) {
 
         if (result.success) {
             results.success.push({ email: account.email, result: result.result });
-            // 성공한 브라우저는 닫기
-            if (result.browser) await result.browser.close();
+            if (result.browser) try { await result.browser.close(); } catch (_) {}
         } else {
             results.failed.push({ email: account.email, result: result.result, error: result.error });
         }
@@ -614,7 +665,7 @@ async function loginMultipleWithTracking(accounts, options = {}) {
         // 다음 계정 전 대기
         if (i < accounts.length - 1) {
             console.log(`${c.yellow}⏳ 5초 대기...${c.reset}\n`);
-            await delay(5000);
+            await delay(5000, 5000);
         }
     }
 
@@ -649,7 +700,7 @@ async function loginMultipleWithTracking(accounts, options = {}) {
         console.log();
     }
 
-    console.log(`${c.yellow}📝 실패 로그: ${TODAY_LOG_FILE}${c.reset}\n`);
+    console.log(`${c.yellow}📝 실패 로그: ${getTodayLogFile()}${c.reset}\n`);
 
     return results;
 }
@@ -663,8 +714,10 @@ if (require.main === module) {
         process.exit(1);
     }
 
-    const allCredentials = JSON.parse(fs.readFileSync(credFile, 'utf-8'));
-    const testAccounts = allCredentials.slice(0, 3);
+    let allCredentials;
+    try { allCredentials = JSON.parse(fs.readFileSync(credFile, 'utf-8')); }
+    catch (e) { console.error(`${c.red}❌ JSON 파싱 실패: ${e.message}${c.reset}`); process.exit(1); }
+    const testAccounts = allCredentials;
 
     loginMultipleWithTracking(testAccounts, {
         headless: false,

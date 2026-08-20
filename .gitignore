@@ -1,6 +1,58 @@
+# Dependencies
 node_modules/
-profiles/
-credentials_data.json
+package-lock.json
+yarn.lock
+
+# Environment & Secrets
 .env
+.env.local
+.env.*.local
+.credentials
+credentials_data.json
+*.pem
+*.key
+*.pfx
+
+# Sensitive files
+profiles/
+sessions/
+screenshots/
+failed_logins/
+chrome/
+.cache/
+.claude/settings.local.json
+.claude/settings.local.json.backup
+
+# Logs
 *.log
+logs/
+
+# Build
 dist/
+build/
+out/
+
+# Media
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+fail_*.png
+error_*.png
+
+# IDE
+.vscode/
+.claude/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# API Keys & Tokens (just in case they slip in)
+*-token*
+*-key*
+*-secret*
