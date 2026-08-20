@@ -1,1 +1,1 @@
-trigger69-mirror-jump-vhost-and-ssl
+trigger70-fix-yaml-indent-mirror-jump-vhost

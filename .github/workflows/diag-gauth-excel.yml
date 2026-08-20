@@ -41,30 +41,27 @@ jobs:
 
             echo "=== extract ONLY the <VirtualHost> blocks that mention gauth.cent-solution.online ==="
             sudo python3 -c "
-import re
-with open('$GAUTH_CONF') as f:
-    content = f.read()
-blocks = re.findall(r'(?:<IfModule[^>]*>\s*)?<VirtualHost[^>]*>.*?</VirtualHost>\s*(?:</IfModule>)?', content, re.DOTALL)
-gauth_blocks = [b for b in blocks if 'gauth.cent-solution.online' in b]
-print(f'found {len(gauth_blocks)} gauth-related blocks', file=__import__('sys').stderr)
-out = '\n\n'.join(gauth_blocks)
-out = out.replace('gauth.cent-solution.online', 'jump.cent-solution.online')
-with open('/tmp/jump_full.conf', 'w') as f:
-    f.write(out)
-"
+            import re
+            with open('$GAUTH_CONF') as f:
+                content = f.read()
+            blocks = re.findall(r'(?:<IfModule[^>]*>\s*)?<VirtualHost[^>]*>.*?</VirtualHost>\s*(?:</IfModule>)?', content, re.DOTALL)
+            gauth_blocks = [b for b in blocks if 'gauth.cent-solution.online' in b]
+            print(f'found {len(gauth_blocks)} gauth-related blocks', file=__import__('sys').stderr)
+            out = '\n\n'.join(gauth_blocks)
+            out = out.replace('gauth.cent-solution.online', 'jump.cent-solution.online')
+            with open('/tmp/jump_full.conf', 'w') as f:
+                f.write(out)
+            "
             echo "--- extracted+renamed block preview ---"
             sudo cat /tmp/jump_full.conf
 
             echo "=== build HTTP-only version (strip SSL directives) for the pre-cert reload ==="
             sudo python3 -c "
-import re
-with open('/tmp/jump_full.conf') as f:
-    content = f.read()
-# drop the :443/IfModule mod_ssl block entirely for the pre-cert version
-content_http_only = re.sub(r'<IfModule mod_ssl\.c>.*?</IfModule>', '', content, flags=re.DOTALL)
-with open('/tmp/jump_http_only.conf', 'w') as f:
-    f.write(content_http_only)
-"
+            import re
+            content = open('/tmp/jump_full.conf').read()
+            content_http_only = re.sub(r'<IfModule mod_ssl\.c>.*?</IfModule>', '', content, flags=re.DOTALL)
+            open('/tmp/jump_http_only.conf', 'w').write(content_http_only)
+            "
             sudo cp /tmp/jump_http_only.conf /etc/apache2/sites-available/jump.conf
             sudo apache2ctl configtest
             sudo a2ensite jump.conf
