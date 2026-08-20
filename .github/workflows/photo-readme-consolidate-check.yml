@@ -1,0 +1,55 @@
+name: photo README 중복 검사 (photo/photo2/photo3 전체)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-readme-consolidate-check.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 90s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P="/var/www/sites/chamgyo/public"
+
+            echo "===== [1] photo/photo2/photo3 최상위 .md 파일 목록 ====="
+            timeout 8 sudo find "$P/photo" -maxdepth 1 -iname "*.md" 2>/dev/null
+            timeout 8 sudo find "$P/photo2" -maxdepth 1 -iname "*.md" 2>/dev/null
+            timeout 8 sudo find "$P/photo3" -maxdepth 1 -iname "*.md" 2>/dev/null
+
+            echo ""
+            echo "===== [2] public 바로 아래 .md 파일 ====="
+            timeout 8 sudo find "$P" -maxdepth 1 -iname "*.md" 2>/dev/null
+
+            echo ""
+            echo "===== [3] photo/README.md 심볼릭 여부 및 크기 ====="
+            timeout 5 sudo ls -la "$P/photo/README.md" 2>&1
+            timeout 5 sudo ls -la "$P/photo2/README.md" 2>&1
+            timeout 5 sudo ls -la "$P/photo3/README.md" 2>&1
+
+            echo ""
+            echo "===== [4] photo/README.md 마지막 30줄 (최신성 확인용) ====="
+            timeout 5 sudo tail -30 "$P/photo/README.md" 2>&1
+
+            echo ""
+            echo "===== [5] __all__ / aass0707 마스터 업로드 언급 여부 (README 안) ====="
+            timeout 5 sudo grep -n "__all__\|aass0707\|마스터" "$P/photo/README.md" 2>&1
+
+            echo ""
+            echo "===== [6] write_upload.php 안에 __all__ 모드 실제로 존재하는지 (다른 에이전트 작업 확인용, 읽기 전용) ====="
+            timeout 5 sudo grep -n "__all__" "$P/write_upload.php" 2>&1 | head -10
+            REMOTE
