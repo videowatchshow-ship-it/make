@@ -1,0 +1,36 @@
+name: chamgyo 전체(photo/photo2/photo3) 서브도메인 URL 패턴 전수 조사
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/chamgyo-subdomain-pattern-sweep.yml'
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: photo/photo2/photo3 전체 PHP/HTML 파일에서 서브도메인 패턴 검색
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            echo "===== \$__id (또는 다른 변수) 를 서브도메인으로 쓰는 패턴 전수 검색 ====="
+            sudo grep -rnE "https?://<\?=.*\?>\.xn--9d0bw2fjtyymch7de9d\.info" /var/www/sites/chamgyo/public/photo /var/www/sites/chamgyo/public/photo2 /var/www/sites/chamgyo/public/photo3 2>/dev/null
+            echo "(끝 - 위에 아무것도 없으면 서브도메인 패턴 완전히 없음)"
+            echo "===== photo/write.php 전체 URL 관련 줄 (참고용 재확인) ====="
+            grep -nE "myUrl|xn--9d0bw2fjtyymch7de9d" /var/www/sites/chamgyo/public/photo/write.php 2>/dev/null | head -30
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
