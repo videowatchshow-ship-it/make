@@ -662,5 +662,74 @@ module.exports = function(app) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
-  console.log('[auto_deploy] routes registered: /api/accounts, /api/normalized-accounts, /api/profiles, /api/failed-accounts, /api/deploy, /api/update-secret, /api/lookup/:email, /api/search-account, /api/deploy-status, /api/login-one, /api/youtube/*, /api/fix-mtime, /api/parse-report, /codes/:secret');
+  /* Google Sign-In / Sign-Up (일반 회원가입)
+   * ref: https://developers.google.com/identity/gsi/web/reference/js-reference
+   * ref: https://developers.google.com/identity/openid-connect/openid-connect#validatinganidtoken
+   * ref: https://github.com/nodejs/node/blob/main/doc/api/https.md */
+  const https = require('https');
+  const GSIGNUP_FILE = path.join(DATA_DIR, 'google_signup_users.json');
+  function readGSignupUsers() {
+    try { return JSON.parse(fs.readFileSync(GSIGNUP_FILE, 'utf8')); } catch { return {}; }
+  }
+  function writeGSignupUsers(data) {
+    const tmp = GSIGNUP_FILE + '.tmp.' + process.pid + '.' + Date.now();
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+    fs.renameSync(tmp, GSIGNUP_FILE);
+  }
+  function verifyGoogleIdToken(idToken) {
+    return new Promise((resolve, reject) => {
+      const url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken);
+      https.get(url, (r) => {
+        let buf = '';
+        r.on('data', (c) => buf += c);
+        r.on('end', () => {
+          if (r.statusCode !== 200) return reject(new Error('tokeninfo status ' + r.statusCode));
+          try { resolve(JSON.parse(buf)); } catch (e) { reject(e); }
+        });
+      }).on('error', reject);
+    });
+  }
+
+  app.get('/api/google-signup/client-id', (req, res) => {
+    res.json({ client_id: process.env.GOOGLE_SIGNUP_CLIENT_ID || '' });
+  });
+
+  app.post('/api/google-signup/verify', async (req, res) => {
+    try {
+      const { credential } = req.body || {};
+      if (!credential) return res.status(400).json({ ok: false, error: 'credential required' });
+      const expectedAud = process.env.GOOGLE_SIGNUP_CLIENT_ID || '';
+      if (!expectedAud) return res.status(503).json({ ok: false, error: 'GOOGLE_SIGNUP_CLIENT_ID not configured' });
+      const info = await verifyGoogleIdToken(credential);
+      if (info.aud !== expectedAud) return res.status(401).json({ ok: false, error: 'aud mismatch' });
+      if (info.iss !== 'https://accounts.google.com' && info.iss !== 'accounts.google.com') return res.status(401).json({ ok: false, error: 'iss mismatch' });
+      if (info.email_verified !== 'true' && info.email_verified !== true) return res.status(401).json({ ok: false, error: 'email not verified' });
+      const email = normalizeEmail(info.email);
+      const users = readGSignupUsers();
+      const now = Date.now();
+      const existed = !!users[email];
+      users[email] = {
+        email,
+        sub: info.sub,
+        name: info.name || users[email]?.name || '',
+        picture: info.picture || users[email]?.picture || '',
+        first_seen: users[email]?.first_seen || now,
+        last_login: now,
+        login_count: (users[email]?.login_count || 0) + 1
+      };
+      writeGSignupUsers(users);
+      res.json({ ok: true, new_user: !existed, user: { email, name: users[email].name, picture: users[email].picture } });
+    } catch (e) {
+      console.error('[gauth-api] google-signup verify error:', e.message);
+      res.status(500).json({ ok: false, error: 'verification failed' });
+    }
+  });
+
+  app.get('/api/google-signup/users', authMiddleware, (req, res) => {
+    const users = readGSignupUsers();
+    const list = Object.values(users).sort((a, b) => (b.last_login || 0) - (a.last_login || 0));
+    res.json({ ok: true, count: list.length, users: list });
+  });
+
+  console.log('[auto_deploy] routes registered: /api/accounts, /api/normalized-accounts, /api/profiles, /api/failed-accounts, /api/deploy, /api/update-secret, /api/lookup/:email, /api/search-account, /api/deploy-status, /api/login-one, /api/youtube/*, /api/google-signup/*, /api/fix-mtime, /api/parse-report, /codes/:secret');
 };
