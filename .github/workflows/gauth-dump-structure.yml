@@ -1,0 +1,35 @@
+name: gauth · dump subsite card structure
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-dump-structure.txt']
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Print HTML around subsite + lookup + authQuery
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 60s
+          script: |
+            F=/var/www/sites/gauth/public/index.html
+            echo '=== grep line numbers for key markers ==='
+            sudo grep -nE 'subsite|하위 사이트|계정 정보 확인|조회|authQuery|auth-broad-shim|tab-' "$F" | head -60
+            echo ''
+            echo '=== total lines ==='
+            sudo wc -l "$F"
+            echo ''
+            echo '=== context: 20 lines around first subsite occurrence ==='
+            LINE=$(sudo grep -nE 'subsite' "$F" | head -1 | cut -d: -f1)
+            echo "first subsite at line: $LINE"
+            if [ -n "$LINE" ]; then
+              START=$((LINE-8)); [ $START -lt 1 ] && START=1
+              sudo sed -n "${START},$((LINE+40))p" "$F"
+            fi
