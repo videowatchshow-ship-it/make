@@ -1,1 +1,1 @@
-trigger76-delete-jump-subdomain-entirely
+trigger77-verify-subsite-counts-live
