@@ -46,13 +46,20 @@ jobs:
             if (badPw[0]) console.log(JSON.stringify(badPw[0].raw_values, null, 2));
 
             console.log('');
-            console.log('=== grep for %7C / pipe-join / encodeURIComponent near password across all server files ===');
-            const files = ['/opt/gauth-full/upload_excels.js', '/opt/gauth-full/rebrowser-login.js'];
-            files.forEach(fp => {
-              const src = fs.readFileSync(fp, 'utf8');
-              const lines = src.split(String.fromCharCode(10));
-              lines.forEach((l, i) => {
-                if (/%7C|encodeURIComponent|\.join\(|old_totp/i.test(l)) console.log(fp+':'+(i+1)+':', l);
-              });
-            });
-            " 2>&1 | head -300
+            console.log('=== broad grep for literal %7C or old_totp across ALL .js in /opt/gauth-full ===');
+            const { execSync } = require('child_process');
+            try {
+              const out = execSync(\"grep -rn '%7C\\|old_totp' /opt/gauth-full --include='*.js' 2>/dev/null || true\").toString();
+              console.log(out || '(no matches found in any .js file)');
+            } catch(e) { console.log('grep error:', e.message); }
+
+            console.log('');
+            console.log('=== recheck raw record (password/totp masked, structure only) ===');
+            const badPw2 = arr.find(a => a.email === 'GalissaZo.hir@gmail.com');
+            if (badPw2) {
+              const masked = Object.assign({}, badPw2);
+              ['password','totp_secret'].forEach(k => { if (masked[k]) masked[k] = '[MASKED len='+String(masked[k]).length+']'; });
+              if (masked.password_alts) masked.password_alts = masked.password_alts.map(v=>'[MASKED len='+String(v).length+']');
+              console.log(JSON.stringify(masked, null, 2));
+            }
+            "
