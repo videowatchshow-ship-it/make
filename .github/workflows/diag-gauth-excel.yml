@@ -22,20 +22,34 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check for existing SSH access from this box to my-site-1 (34.104.233.35)
+      - name: Create jump.cent-solution.online using the cloudflare.ini token already on this server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 30s
+          command_timeout: 60s
           script: |
-            echo "=== ssh keys present on this box (filenames only) ==="
-            sudo find / -maxdepth 6 -iname "google_compute_engine*" 2>/dev/null
-            find ~ -maxdepth 3 -iname "*.pem" -o -iname "id_*" 2>/dev/null
-            echo ""
-            echo "=== known_hosts entries mentioning the my-site-1 IP ==="
-            grep -l "34.104.233.35\|34.85.126.48" ~/.ssh/known_hosts /root/.ssh/known_hosts 2>/dev/null
-            echo ""
-            echo "=== try a quick reachability test (3s timeout, no auth attempt) ==="
-            timeout 3 bash -c "echo > /dev/tcp/34.104.233.35/22" && echo "port 22 reachable from this box" || echo "NOT reachable from this box"
+            set -e
+            CF_TOKEN=$(sudo grep -oP 'dns_cloudflare_api_token\s*=\s*\K\S+' /root/.secrets/cloudflare.ini 2>/dev/null | head -1)
+            ZONE="2601d4f4ab75c910f8d858ca036ff344"
+            echo "token found: $([ -n "$CF_TOKEN" ] && echo yes || echo no)"
+
+            EXISTING=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records?name=gauth.cent-solution.online" \
+              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json")
+            TYPE=$(echo "$EXISTING" | python3 -c "import json,sys; print(json.load(sys.stdin)['result'][0]['type'])")
+            CONTENT=$(echo "$EXISTING" | python3 -c "import json,sys; print(json.load(sys.stdin)['result'][0]['content'])")
+            PROXIED=$(echo "$EXISTING" | python3 -c "import json,sys; print(str(json.load(sys.stdin)['result'][0]['proxied']).lower())")
+            echo "gauth record: type=$TYPE content=$CONTENT proxied=$PROXIED"
+
+            CHECK=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records?name=jump.cent-solution.online" \
+              -H "Authorization: Bearer $CF_TOKEN")
+            COUNT=$(echo "$CHECK" | python3 -c "import json,sys; print(len(json.load(sys.stdin)['result']))")
+            if [ "$COUNT" -gt 0 ]; then
+              echo "jump.cent-solution.online already exists, skipping create"
+            else
+              curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records" \
+                -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+                --data "{\"type\":\"$TYPE\",\"name\":\"jump.cent-solution.online\",\"content\":\"$CONTENT\",\"ttl\":1,\"proxied\":$PROXIED}" \
+                | python3 -c "import json,sys; d=json.load(sys.stdin); print('success='+str(d['success'])); print(d.get('errors'))"
+            fi

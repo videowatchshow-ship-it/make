@@ -1,1 +1,1 @@
-trigger62-check-ssh-access-to-my-site-1
+trigger64-create-jump-dns-with-server-cf-token
