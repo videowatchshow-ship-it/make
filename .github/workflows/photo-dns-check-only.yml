@@ -1,0 +1,20 @@
+name: DNS 실측만 확인 (SSH 없이 러너에서 직접)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-dns-check-only.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          for acc in gain tak cent otuki jay abc01 abc02 abc03 abc04 abc05 abc06 abc07 aass0707 denny; do
+            echo "----- $acc -----"
+            getent hosts $acc.xn--9d0bw2fjtyymch7de9d.info || echo "DNS 없음"
+          done
+          echo ""
+          echo "===== gain write.php HTTP 확인 ====="
+          curl -sS -o /dev/null -D - "https://gain.xn--9d0bw2fjtyymch7de9d.info/photo2/write.php" 2>&1 | head -10
