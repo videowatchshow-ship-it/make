@@ -1,1 +1,1 @@
-trigger25-check-all-today-uploads-and-cron
+trigger26-check-5211-5212
