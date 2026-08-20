@@ -1,0 +1,32 @@
+name: fc-sinji-investigate5
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/fc-sinji-investigate5.yml'
+jobs:
+  investigate5:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            echo "=== A. bgl.js lines 200-400 (BGL.start / polling / room id resolution) ==="
+            timeout 6 sudo sed -n '200,400p' /var/www/sites/chamgyo/public/photo/bgl.js 2>&1
+
+            echo "=== B. current UTC time ==="
+            date -u
+            REMOTE
