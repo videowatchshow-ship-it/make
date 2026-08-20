@@ -1,0 +1,40 @@
+name: chamgyo write.php 로그인 리다이렉트 로직 + Apache vhost 서브도메인 설정 실측
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/chamgyo-writephp-source-check.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: write.php 소스 + Apache vhost 서브도메인 설정 실측
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            echo "===== write.php 위치 검색 ====="
+            sudo find /var/www/sites/chamgyo -iname "write.php" 2>/dev/null
+            echo "===== write.php 안에서 subdomain/location.href/redirect 관련 코드 ====="
+            for f in $(sudo find /var/www/sites/chamgyo -iname "write.php" 2>/dev/null); do
+              echo "--- $f ---"
+              sudo grep -nE "location\.href|window\.location|header\(.Location|subdomain|\.info|\\\$ch|\\\$_GET\['ch'\]" "$f" | head -40
+            done
+            echo "===== Apache 사이트 설정에서 chamgyo 관련 ServerName/ServerAlias ====="
+            sudo grep -rniE "chamgyo|9d0bw2fjtyymch7de9d|ServerAlias|ServerName" /etc/apache2/sites-enabled/ 2>/dev/null | head -60
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
