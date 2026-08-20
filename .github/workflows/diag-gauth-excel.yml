@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: 20th row from today's excel
+      - name: 50th row from today's excel
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -28,6 +28,6 @@ jobs:
             const wb = XLSX.readFile(fp);
             const sh = wb.Sheets[wb.SheetNames[0]];
             const rows = XLSX.utils.sheet_to_json(sh, {header:1, raw:true, defval:''});
-            console.log('Row 20 (index 19):', JSON.stringify(rows[19]));
+            console.log('Row 50 (index 49):', JSON.stringify(rows[49]));
             " 2>&1
             echo "=== DONE ==="
