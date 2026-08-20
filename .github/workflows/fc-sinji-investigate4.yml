@@ -1,0 +1,50 @@
+name: fc-sinji-investigate4
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/fc-sinji-investigate4.yml'
+jobs:
+  investigate4:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            echo "=== A. all <script src> tags in SNW_1.html ==="
+            timeout 6 sudo grep -oE '<script[^>]*src="[^"]*"' /var/www/sites/chamgyo/public/photo/SNW_1.html 2>&1
+
+            echo "=== B. all data-* / room number attributes near top of SNW_1.html (first 100 lines after style) ==="
+            timeout 6 sudo grep -n "room\|ROOM\|selRoom\|roomId\|room_id\|table_no\|tableNo" /var/www/sites/chamgyo/public/photo/SNW_1.html 2>&1 | head -40
+
+            echo "=== C. list all .js files in photo dir ==="
+            timeout 6 sudo ls -la /var/www/sites/chamgyo/public/photo/*.js 2>&1
+
+            echo "=== D. grep 'room_' fetch pattern across ALL js and php in photo dir (maxdepth 1) ==="
+            timeout 10 sudo grep -l "room_" /var/www/sites/chamgyo/public/photo/*.js /var/www/sites/chamgyo/public/photo/*.php 2>&1
+
+            echo "=== E. bgl.js head (first 80 lines) to see general structure ==="
+            timeout 6 sudo head -n 80 /var/www/sites/chamgyo/public/photo/bgl.js 2>&1
+
+            echo "=== F. bgl.js grep for 'nums' or 'source' parsing (data model) ==="
+            timeout 6 sudo grep -n "\.nums\|\.source\|xtd6688\|P00\|B00\|parseNum\|parseResult" /var/www/sites/chamgyo/public/photo/bgl.js 2>&1 | head -40
+
+            echo "=== G. tail of SNW_1.html (last 150 lines - likely main JS logic) ==="
+            timeout 6 sudo tail -n 150 /var/www/sites/chamgyo/public/photo/SNW_1.html 2>&1
+
+            echo "=== H. current UTC time ==="
+            date -u
+            REMOTE
