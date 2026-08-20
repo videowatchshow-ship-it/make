@@ -1,0 +1,54 @@
+name: gain 계정 세로(CAH_1) 배너 이미지 현재 상태 확인 + 다운로드
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-gain-image-check.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 90s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+            echo "===== gain 세로(Live_height_kakao.gif) 현재 상태 ====="
+            sudo ls -la "$P1/images/ch/gain/Live_height_kakao.gif" 2>&1
+            sudo sha256sum "$P1/images/ch/gain/Live_height_kakao.gif" 2>&1
+            sudo file "$P1/images/ch/gain/Live_height_kakao.gif" 2>&1
+            echo ""
+            echo "===== gain 계정 images/ch/gain 폴더 전체 목록 ====="
+            sudo ls -la "$P1/images/ch/gain/" 2>&1
+            REMOTE
+
+      - name: 도메인 경유 실제 응답 확인 + 이미지 다운로드
+        run: |
+          DOM="xn--9d0bw2fjtyymch7de9d.info"
+          echo "===== curl 헤더 ====="
+          curl -sS -o /dev/null -D - "https://$DOM/photo/images/ch/gain/Live_height_kakao.gif?_=$(date +%s)" | grep -Ei "^HTTP|content-length|content-type"
+          echo ""
+          echo "===== 실제 다운로드 ====="
+          curl -sS -o gain_live_height.gif "https://$DOM/photo/images/ch/gain/Live_height_kakao.gif?_=$(date +%s)"
+          ls -la gain_live_height.gif
+          sha256sum gain_live_height.gif
+          file gain_live_height.gif
+
+      - name: 이미지 아티팩트 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: gain-live-height-image
+          path: gain_live_height.gif
+          retention-days: 3
