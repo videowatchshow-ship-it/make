@@ -756,8 +756,21 @@ function propagateBatchDateWithinFile(accounts) {
   return accounts;
 }
 
+/* 엑셀 문서 자체의 core.xml 메타데이터(생성일/수정일)는 다운로드 날짜나
+ * 서버 파일 mtime과 무관하게 문서 자체에 기록되는 값 — 셀에 날짜가 전혀
+ * 없는 파일의 최후 수단으로 사용. ModifiedDate 우선(최신 편집 시점), 없으면 CreatedDate.
+ * ref: SheetJS Props (Document Properties) https://github.com/SheetJS/sheetjs */
+function excelDocumentDate(wb) {
+  const props = wb.Props || {};
+  const raw = props.ModifiedDate || props.CreatedDate;
+  if (!raw) return null;
+  const t = new Date(raw).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+
 function parseExcelFile(filePath, originalName) {
-  const wb = XLSX.readFile(filePath);
+  const wb = XLSX.readFile(filePath, { bookProps: true });
+  const docDate = excelDocumentDate(wb);
   const allAccounts = [];
   const baseName = originalName || path.basename(filePath);
   let fileMtime = Date.now();
@@ -781,6 +794,9 @@ function parseExcelFile(filePath, originalName) {
 
   recoverMissingFieldsFromExtra(allAccounts);
   propagateBatchDateWithinFile(allAccounts);
+  if (docDate) {
+    for (const a of allAccounts) { if (!a.account_date) a.account_date = docDate; }
+  }
 
   return allAccounts;
 }
