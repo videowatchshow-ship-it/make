@@ -1,4 +1,4 @@
-name: BGL.wenlu / BGL.drawAsk 로직 + 실측 데이터 대조
+name: ask() 함수 (問路 최소 판수 조건) 확인
 on:
   workflow_dispatch:
   push:
@@ -10,19 +10,10 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - name: wenlu / drawAsk 함수 본문 + 현재 room 데이터
+      - name: ask 함수 본문 추출
         run: |
           curl -sS -o /tmp/cah1.html "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html"
           BGLURL=$(grep -oE 'src="[^"]*bgl\.js[^"]*"' /tmp/cah1.html | head -1 | sed -E 's/src="([^"]*)"/\1/')
           curl -sS -o /tmp/bgl.js "https://xn--9d0bw2fjtyymch7de9d.info/photo/$BGLURL"
-
-          echo "===== wenlu 함수 본문 (앞부분 1500자) ====="
-          python3 -c "import re; src=open('/tmp/bgl.js').read(); m=re.search(r'wenlu\s*[:=]\s*function[^{]*\{|function\s+wenlu[^{]*\{', src); print(src[m.start():m.start()+1500] if m else 'wenlu 못찾음')"
-
-          echo ""
-          echo "===== drawAsk 함수 본문 (앞부분 1500자) ====="
-          python3 -c "import re; src=open('/tmp/bgl.js').read(); m=re.search(r'drawAsk\s*[:=]\s*function[^{]*\{|function\s+drawAsk[^{]*\{', src); print(src[m.start():m.start()+1500] if m else 'drawAsk 못찾음')"
-
-          echo ""
-          echo "===== 현재 tak 계정 room 데이터 (nums 개수, 최근 10개) ====="
-          curl -sS "https://xn--9d0bw2fjtyymch7de9d.info/photo/data/room_110.json" | python3 -c "import sys,json; d=json.load(sys.stdin); nums=d.get('nums',[]); print('id=',d.get('id'),'ver=',d.get('ver'),'count=',len(nums)); print('last10=',nums[-10:])"
+          echo "===== ask 함수 본문 (앞부분 2000자) ====="
+          python3 -c "import re; src=open('/tmp/bgl.js').read(); m=re.search(r'function\s+ask[^{]*\{', src); print(src[m.start():m.start()+2000] if m else 'ask 못찾음')"
