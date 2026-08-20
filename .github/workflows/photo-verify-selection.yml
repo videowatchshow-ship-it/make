@@ -1,4 +1,4 @@
-name: 계정 선택 방이 CAH/CAW/SNW 3뷰 모두 동일하게 뜨는지 실측
+name: 계정 선택 방이 3뷰에 실제 반영되는지 실측 v2 (https + bundle 포함)
 
 on:
   workflow_dispatch:
@@ -28,61 +28,48 @@ jobs:
             set +u
             P1="/var/www/sites/chamgyo/public/photo"
 
-            HOST="https://xn--9d0bw2fjtyymch7de9d.info"
-            # 로컬 apache 로 직접 요청 (외부 DNS/CF 우회, Host 헤더 지정)
-            LOCAL="http://localhost"
+            # 로컬 https 로 self-cert 우회
+            LOCAL="https://localhost"
             HOSTHDR="Host: xn--9d0bw2fjtyymch7de9d.info"
+            OPTS="-sSk -L -H"
 
-            echo "===== [1] 각 계정의 sel_<계정>.json 파일 실체 room_id ====="
-            for U in aass0707 abc01 abc02 abc03 abc04 abc05 abc06 abc07 cent gain jay otuki tak; do
-              F="$P1/data/sel_$U.json"
-              [ -f "$F" ] && printf "  %-10s | %s\n" "$U" "$(sudo cat "$F")" || printf "  %-10s | MISSING\n" "$U"
-            done
-
-            echo ""
-            echo "===== [2] api_selected_room.php?ch=<계정> 실제 응답 ====="
+            echo "===== [1] api_selected_room.php 실제 응답 (https + -L 리다이렉트 따라감) ====="
             for U in aass0707 abc01 cent gain jay otuki tak; do
-              R=$(curl -sS -H "$HOSTHDR" "$LOCAL/photo/api_selected_room.php?ch=$U")
+              R=$(curl $OPTS "$HOSTHDR" "$LOCAL/photo/api_selected_room.php?ch=$U")
               printf "  %-10s | %s\n" "$U" "$R"
             done
 
             echo ""
-            echo "===== [3] 3개 뷰(HTML) 각각 실제 GET 응답 코드 + 크기 (계정 cent 기준) ====="
-            for VIEW in CAH_1 CAW_1 SNW_1; do
-              CODE=$(curl -sS -o /tmp/v.html -w "%{http_code} %{size_download}" -H "$HOSTHDR" "$LOCAL/photo/$VIEW.html?ch=cent")
-              echo "  $VIEW.html?ch=cent → HTTP $CODE"
-            done
+            echo "===== [2] api_selected_room.php 소스 확인 (파일 실제 읽는지) ====="
+            sudo cat "$P1/api_selected_room.php"
 
             echo ""
-            echo "===== [4] 3개 뷰 HTML 안에 room_id 하드코딩 여부 ====="
+            echo "===== [3] 3개 뷰 HTML 안에 sel/api 관련 어떤 문자열이든 (bundle 참조 포함) ====="
             for VIEW in CAH_1 CAW_1 SNW_1; do
               echo "--- $VIEW.html ---"
-              sudo grep -n "sel_\|selected_room\|api_selected\|room_id\|__ch\|ch=" "$P1/$VIEW.html" 2>/dev/null | head -8
+              sudo grep -nE "sel_|api_selected|room_id|selected_room|__ch|window\.__|bundle|src=\"modules|src=\"\." "$P1/$VIEW.html" 2>/dev/null | head -15
+              echo ""
             done
 
             echo ""
-            echo "===== [5] 3개 뷰가 api_selected_room 을 호출하는지 스크립트 확인 ====="
-            for VIEW in CAH_1 CAW_1 SNW_1; do
-              CNT=$(sudo grep -c "api_selected_room" "$P1/$VIEW.html" 2>/dev/null)
-              printf "  %-12s | api_selected_room 참조 %s회\n" "$VIEW" "$CNT"
+            echo "===== [4] bundle.js / modules 안에 sel/api 참조 ====="
+            for BJ in "$P1/modules/dist/bundle.js" "$P1/bundle.js"; do
+              [ -f "$BJ" ] && echo "--- $BJ ---" && sudo grep -oE "sel_[a-z0-9_]+|api_selected_room[^\"'\`]*|selected_room\.json|api_all_rooms" "$BJ" 2>/dev/null | sort -u | head -20
             done
 
             echo ""
-            echo "===== [6] 강제 테스트: cent 를 room 999 로 임시 변경 후 3뷰 확인 ====="
+            echo "===== [5] 강제 테스트: cent 를 room 999 로 변경 후 api 응답 (https) ====="
             ORIG=$(sudo cat "$P1/data/sel_cent.json")
             echo "  원래: $ORIG"
-            sudo tee "$P1/data/sel_cent.json" > /dev/null << "SEL"
-            {"room_id":999,"board":"CAH_1"}
-            SEL
+            echo "{\"room_id\":999,\"board\":\"CAH_1\"}" | sudo tee "$P1/data/sel_cent.json" > /dev/null
             sudo chown www-data:www-data "$P1/data/sel_cent.json"
             sleep 1
-            echo "  임시 변경 후 api 응답:"
-            R=$(curl -sS -H "$HOSTHDR" "$LOCAL/photo/api_selected_room.php?ch=cent")
-            echo "    $R"
+            R=$(curl $OPTS "$HOSTHDR" "$LOCAL/photo/api_selected_room.php?ch=cent")
+            echo "  변경 후 api: $R"
             if echo "$R" | grep -q "999"; then
-              echo "  ✅ PASS: api 가 sel_cent.json 즉시 반영"
+              echo "  ✅ PASS: api 즉시 반영 (sel_cent.json 실시간 반영됨)"
             else
-              echo "  ❌ FAIL: api 가 999 반환 안함"
+              echo "  ❌ FAIL"
             fi
 
             echo "  원상복구:"
@@ -91,15 +78,19 @@ jobs:
             echo "    복구후: $(sudo cat "$P1/data/sel_cent.json")"
 
             echo ""
-            echo "===== [7] 결론 매트릭스: 계정별 sel_.json room vs api 응답 vs 3뷰 ====="
-            printf "  %-10s | %-8s | %-40s | %s\n" "계정" "sel파일" "api응답" "3뷰 HTTP"
+            echo "===== [6] 결론 매트릭스: 계정별 sel_ vs api 응답 (https 정상 응답) ====="
+            printf "  %-10s | %-8s | %s\n" "계정" "sel파일" "api응답"
             for U in cent tak gain aass0707 abc01; do
               SEL=$(sudo cat "$P1/data/sel_$U.json" 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get(\"room_id\"))" 2>/dev/null)
-              API=$(curl -sS -H "$HOSTHDR" "$LOCAL/photo/api_selected_room.php?ch=$U" 2>/dev/null)
-              CH=$(curl -sS -o /dev/null -w "%{http_code}" -H "$HOSTHDR" "$LOCAL/photo/CAH_1.html?ch=$U" 2>/dev/null)
-              CW=$(curl -sS -o /dev/null -w "%{http_code}" -H "$HOSTHDR" "$LOCAL/photo/CAW_1.html?ch=$U" 2>/dev/null)
-              SN=$(curl -sS -o /dev/null -w "%{http_code}" -H "$HOSTHDR" "$LOCAL/photo/SNW_1.html?ch=$U" 2>/dev/null)
-              printf "  %-10s | %-8s | %-40s | CAH=%s CAW=%s SNW=%s\n" "$U" "$SEL" "$API" "$CH" "$CW" "$SN"
+              API=$(curl $OPTS "$HOSTHDR" "$LOCAL/photo/api_selected_room.php?ch=$U" 2>/dev/null)
+              printf "  %-10s | %-8s | %s\n" "$U" "$SEL" "$API"
+            done
+
+            echo ""
+            echo "===== [7] 3뷰 HTML 실응답 코드 (https + -L) ====="
+            for VIEW in CAH_1 CAW_1 SNW_1; do
+              CODE=$(curl $OPTS "$HOSTHDR" -o /dev/null -w "%{http_code} %{size_download}B" "$LOCAL/photo/$VIEW.html?ch=cent")
+              echo "  $VIEW.html?ch=cent → $CODE"
             done
 
             echo ""
