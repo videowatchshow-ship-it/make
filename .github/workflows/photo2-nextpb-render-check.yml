@@ -1,0 +1,82 @@
+name: photo2 SNW_1.html 실제 브라우저 렌더링 확인
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-nextpb-render-check.yml'
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Playwright 설치
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.48.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: 렌더링 + 요소 위치 + 가림여부 + 전체 스크린샷
+        run: |
+          cat > shot2.js << 'EOF'
+          const { chromium } = require('playwright');
+          (async () => {
+            const browser = await chromium.launch();
+            const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+            const errors = [];
+            page.on('pageerror', e => errors.push('pageerror: ' + e.message));
+            page.on('console', msg => { if (msg.type() === 'error') errors.push('console: ' + msg.text()); });
+            await page.goto('https://xn--9d0bw2fjtyymch7de9d.info/photo2/SNW_1.html?ch=cent', { waitUntil: 'domcontentloaded', timeout: 40000 });
+            await page.waitForTimeout(4000);
+
+            const info = await page.evaluate(() => {
+              function rectOf(id) {
+                const el = document.getElementById(id);
+                if (!el) return null;
+                const r = el.getBoundingClientRect();
+                const cs = getComputedStyle(el);
+                return { x: r.x, y: r.y, w: r.width, h: r.height, display: cs.display, visibility: cs.visibility, zIndex: cs.zIndex, opacity: cs.opacity };
+              }
+              function topElementAtCenter(id) {
+                const el = document.getElementById(id);
+                if (!el) return 'NO_ELEMENT';
+                const r = el.getBoundingClientRect();
+                const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+                const top = document.elementFromPoint(cx, cy);
+                if (!top) return 'NOTHING_AT_POINT';
+                return top.id || top.className || top.tagName;
+              }
+              const nr = document.querySelector('.next_row');
+              return {
+                cAskP: rectOf('cAskP'),
+                cAskB: rectOf('cAskB'),
+                chamgyoBanner: rectOf('chamgyoBanner'),
+                nextRowRect: nr ? nr.getBoundingClientRect() : null,
+                nextRowComputed: nr ? (()=>{const c=getComputedStyle(nr); return {display:c.display,position:c.position,top:c.top,left:c.left,zIndex:c.zIndex,visibility:c.visibility};})() : 'NO_NEXT_ROW',
+                topAtP: topElementAtCenter('cAskP'),
+                topAtB: topElementAtCenter('cAskB'),
+                bglInfo: window.BGL ? window.BGL.info : 'NO_BGL',
+              };
+            });
+            console.log('===== 실측 정보 (photo2) =====');
+            console.log(JSON.stringify(info, null, 2));
+            console.log('===== 콘솔/페이지 에러 =====');
+            console.log(errors.length ? errors.join('\n') : '(에러 없음)');
+
+            const buf = await page.screenshot({ clip: { x: 950, y: 0, width: 970, height: 420 }, type: 'jpeg', quality: 70 });
+            console.log('===== SCREENSHOT_BASE64_START =====');
+            console.log(buf.toString('base64'));
+            console.log('===== SCREENSHOT_BASE64_END =====');
+
+            const full = await page.screenshot({ type: 'jpeg', quality: 60, fullPage: false });
+            console.log('===== FULLPAGE_BASE64_START =====');
+            console.log(full.toString('base64'));
+            console.log('===== FULLPAGE_BASE64_END =====');
+
+            await browser.close();
+          })();
+          EOF
+          timeout 60 node shot2.js
