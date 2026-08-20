@@ -643,6 +643,7 @@ function noCacheQuery(url){var u=authQuery(url);return u+(u.includes('?')?'&':'?
 var escapeHtml = _esc
 function _parseFilenameDate(name){
   if(!name) return null
+  name = name.normalize('NFC')
   var y = new Date().getFullYear()
   var m
   // "N월 M일" (Korean)
