@@ -1,0 +1,76 @@
+name: CF 와일드카드 DNS 최종 수정 (workflow_dispatch 입력으로 토큰 1회성 전달)
+on:
+  workflow_dispatch:
+    inputs:
+      cf_token:
+        description: 'Cloudflare API token (1회성 사용, 로그에 마스킹됨)'
+        required: true
+        type: string
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 토큰 마스킹 등록 (이후 모든 로그에서 자동 은닉)
+        run: echo "::add-mask::${{ inputs.cf_token }}"
+
+      - name: zone 조회 + 기존 루트 레코드 확인 + 와일드카드 생성
+        env:
+          CF_TOKEN: ${{ inputs.cf_token }}
+        run: |
+          echo "::add-mask::$CF_TOKEN"
+          echo "===== 토큰 유효성 확인 ====="
+          curl -sS -X GET "https://api.cloudflare.com/client/v4/user/tokens/verify" \
+            -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" | python3 -m json.tool
+
+          echo ""
+          echo "===== zone 조회 ====="
+          ZLOOKUP=$(curl -sS -X GET "https://api.cloudflare.com/client/v4/zones?name=xn--9d0bw2fjtyymch7de9d.info" \
+            -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json")
+          echo "$ZLOOKUP" | python3 -m json.tool
+          ZONE_ID=$(echo "$ZLOOKUP" | python3 -c "import sys,json; d=json.load(sys.stdin); r=d.get('result') or []; print(r[0]['id'] if r else '')")
+          echo "ZONE_ID=$ZONE_ID"
+          if [ -z "$ZONE_ID" ]; then echo "zone 조회 실패, 중단"; exit 1; fi
+
+          echo ""
+          echo "===== 기존 루트 레코드 조회 ====="
+          ROOTREC=$(curl -sS -X GET "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?name=xn--9d0bw2fjtyymch7de9d.info" \
+            -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json")
+          echo "$ROOTREC" | python3 -m json.tool
+          REC_TYPE=$(echo "$ROOTREC" | python3 -c "import sys,json; d=json.load(sys.stdin); r=d.get('result') or []; print(r[0]['type'] if r else '')")
+          REC_CONTENT=$(echo "$ROOTREC" | python3 -c "import sys,json; d=json.load(sys.stdin); r=d.get('result') or []; print(r[0]['content'] if r else '')")
+          REC_PROXIED=$(echo "$ROOTREC" | python3 -c "import sys,json; d=json.load(sys.stdin); r=d.get('result') or []; print(str(r[0].get('proxied', True)).lower() if r else 'true')")
+          echo "REC_TYPE=$REC_TYPE REC_CONTENT=$REC_CONTENT REC_PROXIED=$REC_PROXIED"
+          if [ -z "$REC_TYPE" ]; then echo "루트 레코드 조회 실패, 중단"; exit 1; fi
+
+          echo ""
+          echo "===== 와일드카드(*) 레코드 기존 존재 확인 ====="
+          WCREC=$(curl -sS -X GET "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?name=*.xn--9d0bw2fjtyymch7de9d.info" \
+            -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json")
+          echo "$WCREC" | python3 -m json.tool
+          WC_EXISTS=$(echo "$WCREC" | python3 -c "import sys,json; d=json.load(sys.stdin); r=d.get('result') or []; print('yes' if r else 'no')")
+
+          if [ "$WC_EXISTS" = "yes" ]; then
+            echo "이미 존재함 - 생성 스킵"
+          else
+            echo ""
+            echo "===== 와일드카드 레코드 생성 ====="
+            CREATE=$(curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
+              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+              --data "{\"type\":\"$REC_TYPE\",\"name\":\"*\",\"content\":\"$REC_CONTENT\",\"proxied\":$REC_PROXIED,\"ttl\":1}")
+            echo "$CREATE" | python3 -m json.tool
+          fi
+
+          echo ""
+          echo "===== CF 전체 캐시 purge 도 이 김에 실행 ====="
+          curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/purge_cache" \
+            -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}' | python3 -m json.tool
+
+      - name: DNS 전파 대기 후 실측 확인
+        run: |
+          sleep 20
+          echo "===== gain 서브도메인 DNS 재조회 ====="
+          getent hosts gain.xn--9d0bw2fjtyymch7de9d.info || echo "아직 실패 (전파 대기 필요할 수 있음)"
+          echo ""
+          echo "===== HTTP 응답 확인 ====="
+          curl -sS -o /dev/null -D - "https://gain.xn--9d0bw2fjtyymch7de9d.info/photo2/write.php" 2>&1 | head -10
