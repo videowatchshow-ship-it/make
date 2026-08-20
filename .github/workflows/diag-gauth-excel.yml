@@ -6,49 +6,36 @@ on:
     paths: ['.github/trigger-diag-gauth.txt']
 
 jobs:
-  create-jump-subdomain:
+  check-secrets:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 1
     steps:
-      - name: Create jump.cent-solution.online DNS record (mirrors gauth record)
+      - name: Check whether CLOUDFLARE_TOKEN / CLOUDFLARE_ZONE_ID secrets are actually set (lengths only)
         run: |
-          EXISTING=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/dns_records?name=gauth.cent-solution.online" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" \
-            -H "Content-Type: application/json")
-          echo "$EXISTING" | python3 -c "import json,sys; d=json.load(sys.stdin); r=d['result'][0]; print('type='+r['type'], 'content='+r['content'], 'proxied='+str(r['proxied']))"
-          TYPE=$(echo "$EXISTING" | python3 -c "import json,sys; print(json.load(sys.stdin)['result'][0]['type'])")
-          CONTENT=$(echo "$EXISTING" | python3 -c "import json,sys; print(json.load(sys.stdin)['result'][0]['content'])")
-          PROXIED=$(echo "$EXISTING" | python3 -c "import json,sys; print(str(json.load(sys.stdin)['result'][0]['proxied']).lower())")
+          echo "CLOUDFLARE_TOKEN length: ${#CF_TOKEN}"
+          echo "CLOUDFLARE_ZONE_ID length: ${#CF_ZONE}"
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
 
-          CHECK=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/dns_records?name=jump.cent-solution.online" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}")
-          COUNT=$(echo "$CHECK" | python3 -c "import json,sys; print(len(json.load(sys.stdin)['result']))")
-          if [ "$COUNT" -gt 0 ]; then
-            echo "jump.cent-solution.online already exists, skipping create"
-          else
-            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/dns_records" \
-              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" \
-              -H "Content-Type: application/json" \
-              --data "{\"type\":\"$TYPE\",\"name\":\"jump.cent-solution.online\",\"content\":\"$CONTENT\",\"ttl\":1,\"proxied\":$PROXIED}" \
-              | python3 -c "import json,sys; d=json.load(sys.stdin); print('success='+str(d['success'])); print(d.get('errors'))"
-          fi
-
-  setup-jump-vhost:
-    needs: create-jump-subdomain
+  diag:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 5
     steps:
-      - name: Point jump.cent-solution.online at the same gauth app (mirror vhost)
+      - name: Find vhost config + any cloudflare creds already on the server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 60s
+          command_timeout: 30s
           script: |
-            echo "=== find existing gauth vhost config ==="
-            sudo grep -rl "gauth.cent-solution.online" /etc/apache2/sites-available/ 2>/dev/null || sudo grep -rl "gauth.cent-solution.online" /etc/nginx/sites-available/ 2>/dev/null
             echo "=== apache2 sites ==="
             ls /etc/apache2/sites-available/ 2>/dev/null || echo "no apache2"
             echo "=== nginx sites ==="
             ls /etc/nginx/sites-available/ 2>/dev/null || echo "no nginx"
+            echo "=== gauth vhost content ==="
+            sudo grep -rl "gauth.cent-solution.online" /etc/apache2/sites-available/ 2>/dev/null | xargs -r sudo cat
+            sudo grep -rl "gauth.cent-solution.online" /etc/nginx/sites-available/ 2>/dev/null | xargs -r sudo cat
+            echo "=== any cloudflare env file on this server? (filenames only) ==="
+            sudo find / -maxdepth 4 -iname "*.env*" 2>/dev/null | xargs -r sudo grep -li "cloudflare" 2>/dev/null

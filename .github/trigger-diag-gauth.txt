@@ -1,1 +1,1 @@
-trigger57-find-vhost-config
+trigger58-check-secrets-and-vhost
