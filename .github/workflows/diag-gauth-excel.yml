@@ -26,10 +26,11 @@ jobs:
 
             // valid TOTP secret: base32 alphabet, typically 16-64 chars, no @ / % / spaces
             const isValidTotp = s => !s || /^[A-Z2-7]{8,64}$/.test(String(s).replace(/\s+/g,''));
-            // corrupted password: contains url-encoding, an embedded email, or a pipe char
-            const isCorruptPw = s => !!s && (/%[0-9A-Fa-f]{2}/.test(s) || /@/.test(s) || /\|/.test(s));
+            const looksLikeEmail = s => /[^\s@]+@[^\s@]+\.[^\s@]+/.test(s);
+            // corrupted password: url-encoding leftovers, OR an actual embedded email address, OR abnormally long (>25 chars, real passwords here run ~8-20)
+            const isCorruptPw = s => !!s && (/%[0-9A-Fa-f]{2}/.test(s) || looksLikeEmail(s) || String(s).length > 25);
             // corrupted totp: non-empty but fails base32 shape, or contains url-encoding/email
-            const isCorruptTotp = s => !!s && (!isValidTotp(s) || /%[0-9A-Fa-f]{2}/.test(s) || /@/.test(s));
+            const isCorruptTotp = s => !!s && (!isValidTotp(s) || /%[0-9A-Fa-f]{2}/.test(s) || looksLikeEmail(s));
 
             const badPw = arr.filter(a => isCorruptPw(a.password));
             const badTotp = arr.filter(a => isCorruptTotp(a.totp_secret));
