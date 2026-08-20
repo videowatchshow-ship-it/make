@@ -1,0 +1,40 @@
+name: 실 서버 페이지 스크린샷 + 구조 확인
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-live-screenshot.yml'
+jobs:
+  shot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm init -y >/dev/null 2>&1 && npm i -D playwright >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: 스크린샷 + 페이지 구조 확인
+        run: |
+          cat > shot.js << 'EOF'
+          const { chromium } = require('playwright');
+          (async () => {
+            const browser = await chromium.launch();
+            const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+            await page.goto('https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html', { waitUntil: 'networkidle', timeout: 30000 });
+            await page.waitForTimeout(3000);
+            await page.screenshot({ path: 'full.png', fullPage: true });
+            const html = await page.content();
+            require('fs').writeFileSync('page.html', html);
+          })();
+          EOF
+          node shot.js
+          echo "===== 스크린샷 크기 ====="
+          ls -la full.png
+          echo ""
+          echo "===== 빨간 선/차트 관련 요소 검색 (svg, canvas, line, chart, road) ====="
+          grep -noE '<(svg|canvas)[^>]*(id|class)="[^"]*"[^>]*>' page.html | head -30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: live-screenshot
+          path: full.png
