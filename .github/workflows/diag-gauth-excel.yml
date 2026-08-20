@@ -26,19 +26,61 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Find insertion point in rebrowser-login.js for a new /api/subsite-counts route
+      - name: Insert /api/subsite-counts route and restart gauth
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 30s
+          command_timeout: 60s
           script: |
-            echo "=== app.listen location ==="
-            sudo grep -n "app.listen" /opt/gauth-full/rebrowser-login.js
+            set -e
+            F=/opt/gauth-full/rebrowser-login.js
+            sudo cp "$F" "$F.bak.$(date +%s)"
+            sudo python3 - <<'PYEOF'
+            import re
+            f = "/opt/gauth-full/rebrowser-login.js"
+            with open(f, "r", encoding="utf-8") as fh:
+                src = fh.read()
+            if "/api/subsite-counts" in src:
+                print("route already present, skipping insert")
+            else:
+                marker = "app.get('/api/status', (_req, res) => res.json({ status: 'ok', total: accounts.length, isRunning }))"
+                idx = src.index(marker)
+                insert_at = src.index("\n", idx) + 1
+                route = (
+                    "app.get('/api/subsite-counts', (_req, res) => {\n"
+                    "  try {\n"
+                    "    const fs = require('fs');\n"
+                    "    const path = require('path');\n"
+                    "    const base = '/var/www/sites';\n"
+                    "    const out = [];\n"
+                    "    for (const name of fs.readdirSync(base)) {\n"
+                    "      if (name === 'gauth') continue;\n"
+                    "      const p = path.join(base, name, 'accounts.json');\n"
+                    "      if (!fs.existsSync(p)) continue;\n"
+                    "      try {\n"
+                    "        const d = JSON.parse(fs.readFileSync(p, 'utf8'));\n"
+                    "        const arr = Array.isArray(d) ? d : (d.accounts || []);\n"
+                    "        out.push({ site: name, count: arr.length });\n"
+                    "      } catch (e) {}\n"
+                    "    }\n"
+                    "    out.sort((a, b) => a.site.localeCompare(b.site));\n"
+                    "    res.json({ sites: out, total: out.reduce((s, x) => s + x.count, 0) });\n"
+                    "  } catch (e) {\n"
+                    "    res.status(500).json({ error: e.message });\n"
+                    "  }\n"
+                    "})\n"
+                )
+                src = src[:insert_at] + route + src[insert_at:]
+                with open(f, "w", encoding="utf-8") as fh:
+                    fh.write(src)
+                print("route inserted")
+            PYEOF
+            sudo node -c /opt/gauth-full/rebrowser-login.js && echo "syntax OK"
+            sudo systemctl restart gauth
+            sleep 2
+            sudo systemctl is-active gauth
             echo ""
-            echo "=== a sample existing app.get('/api/...') route, for style reference ==="
-            sudo grep -n "app.get('/api" /opt/gauth-full/rebrowser-login.js | head -5
-            echo ""
-            echo "=== express app variable name (app.get vs router.get etc) ==="
-            sudo grep -n "^const app\|^let app\|= express()" /opt/gauth-full/rebrowser-login.js | head -3
+            echo "=== live test ==="
+            curl -s http://localhost:4000/api/subsite-counts
