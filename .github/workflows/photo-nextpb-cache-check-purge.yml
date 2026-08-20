@@ -1,0 +1,50 @@
+name: photo SNW_1.html 캐시 상태 확인 + 필요시 Cloudflare purge
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-nextpb-cache-check-purge.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: 캐시 상태 + 실제 바디에 cAskP 포함여부 확인 (3종 세트)
+        run: |
+          echo "===== 응답 헤더 (cf-cache-status 포함) ====="
+          curl -sS -D /tmp/headers.txt -o /tmp/body.html "https://xn--9d0bw2fjtyymch7de9d.info/photo/SNW_1.html?ch=cent"
+          cat /tmp/headers.txt
+          echo ""
+          echo "===== SHA256 ====="
+          sha256sum /tmp/body.html
+          echo "===== size ====="
+          wc -c /tmp/body.html
+          echo "===== cAskP/cAskB 포함여부 ====="
+          grep -oE '<canvas id="[^"]*"' /tmp/body.html
+      - name: Cloudflare 캐시 purge (참교육카지노 zone, cent 경로)
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          if [ -z "$CF_TOKEN" ] || [ -z "$CF_ZONE_ID" ]; then
+            echo "CF_TOKEN 또는 CF_ZONE_ID 시크릿 없음 - purge 스킵"
+            exit 0
+          fi
+          curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/purge_cache" \
+            -H "Authorization: Bearer $CF_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data '{"files":["https://xn--9d0bw2fjtyymch7de9d.info/photo/SNW_1.html?ch=cent","https://xn--9d0bw2fjtyymch7de9d.info/photo/SNW_1.html"]}'
+      - name: purge 후 재확인 (3종 세트)
+        run: |
+          sleep 5
+          echo "===== 응답 헤더 ====="
+          curl -sS -D /tmp/headers2.txt -o /tmp/body2.html "https://xn--9d0bw2fjtyymch7de9d.info/photo/SNW_1.html?ch=cent"
+          cat /tmp/headers2.txt
+          echo "===== SHA256 ====="
+          sha256sum /tmp/body2.html
+          echo "===== size ====="
+          wc -c /tmp/body2.html
+          echo "===== cAskP/cAskB 포함여부 ====="
+          grep -oE '<canvas id="[^"]*"' /tmp/body2.html
