@@ -1,0 +1,89 @@
+name: gain 계정 실제 렌더링 확인 (폴백 로직 포함, Playwright)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-gain-actual-render-check.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 서버 - __perAccountImages 폴백 로직 확인 + gain 관련 전체 파일 재검색
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 90s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+
+            echo "===== [1] __perAccountImages 폴백(onerror) 로직 확인 ====="
+            sudo grep -n "perAccountImages\|onerror\|onError" "$P1/CAH_1.html" 2>&1 | head -30
+
+            echo ""
+            echo "===== [2] gain 관련 파일 서버 전체(사이트 루트 기준) 재검색 - Live_height 뿐 아니라 전체 ====="
+            sudo find "$P1" -maxdepth 3 -iname "*gain*" 2>&1
+
+            echo ""
+            echo "===== [3] 공용 기본 이미지 현재 상태 (gain 이 폴백할 대상) ====="
+            sudo ls -la "$P1/images/Live_height_kakao.gif" 2>&1
+            sudo sha256sum "$P1/images/Live_height_kakao.gif" 2>&1
+
+            echo ""
+            echo "===== [4] gain 세션/로그인 계정 목록에 실제 존재하는지 (login_check.php ACCOUNTS) ====="
+            sudo grep -n "gain" "$P1/login_check.php" 2>&1
+            sudo grep -rn "gain" "$P1"/*.php 2>&1 | grep -v Binary | head -20
+            REMOTE
+
+      - name: 도메인 - CAH_1.html?ch=gain 실제 Playwright 렌더 확인
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@latest >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+          cat > shot.js << 'EOF'
+          const { chromium } = require('playwright');
+          (async () => {
+            const browser = await chromium.launch();
+            const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+            const url = 'https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html?ch=gain&_=' + Date.now();
+            console.log('Navigating to: ' + url);
+            await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+            await page.waitForTimeout(3000);
+            await page.screenshot({ path: 'gain_screenshot.png', fullPage: false });
+            const imgInfo = await page.evaluate(() => {
+              const img = document.querySelector('.kakao_banner img');
+              if (!img) return { found: false };
+              const rect = img.getBoundingClientRect();
+              return {
+                found: true,
+                src: img.src,
+                naturalWidth: img.naturalWidth,
+                naturalHeight: img.naturalHeight,
+                complete: img.complete,
+                rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
+                display: getComputedStyle(img).display,
+                visibility: getComputedStyle(img).visibility
+              };
+            });
+            console.log('IMG INFO:', JSON.stringify(imgInfo, null, 2));
+            await browser.close();
+          })();
+          EOF
+          node shot.js 2>&1
+
+      - name: 스크린샷 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: gain-cah1-screenshot
+          path: gain_screenshot.png
+          retention-days: 3
