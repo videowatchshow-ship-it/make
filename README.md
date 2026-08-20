@@ -46,7 +46,10 @@ Express :4000 (rebrowser-login.js)
 - 데이터: gauth의 `/api/subsite-accounts`(전체 계정 상세)를 jump 자체 vhost에서 읽기 전용으로 프록시. 실패 시 `/api/subsite-counts`로 자동 폴백. 로그인/2FA/토큰 관련 엔드포인트(`/codes`, `/tok`, `/totp`)는 프록시하지 않음
 - 캐시 방지: Apache vhost가 `.html/.json/.js`에 대해 `Cache-Control: no-store, no-cache, must-revalidate` + `Clear-Site-Data: "cache", "storage"` 헤더를 강제 → 브라우저의 이전 서비스 워커 캐시(옛 gauth 관리자 패널 잔재)를 자동 삭제. HTML 자체에도 `<meta http-equiv="Cache-Control">`과 서비스 워커 unregister + `caches.delete()` 스크립트 포함
 - 배포: Cloudflare DNS(A, proxied) + Apache 정적 vhost(+API 읽기전용 프록시 + no-cache 헤더) + Let's Encrypt(dns-cloudflare, certonly + 수동 SSL vhost) — `.github/workflows/diag-gauth-excel.yml`을 통해 SSH로 배포
-- 한글 라벨: gain(게인), woodong(우동), sunbi(선비), simmani(심마니), win(윈), aura(아우라), bacad(바캇), camstouch(캠스터치), james(제임스), misskim(미스김), naman(나만), romi(로미), second(세컨드), soktv(속TV)
+- 한글 라벨: gain(게인), woodong(우동), sunbi(선비), simmani(심마니), win(윈), aura(아우라), bacad(바캇), camstouch(캠스터치), james(제임스), misskim(미스김), naman(나만), romi(로미), second(세컨드), soktv(속TV), cham(참)
+- 엑셀 업로드 카드(단일 파일): 상단 "📄 엑셀 업로드 (단일 파일)" 카드에서 `.xlsx/.xls/.csv` 하나를 골라 `POST /api/excel/upload` (Apache가 `/excel/upload`로 gauth Express에 프록시)
+- SMM URL 매칭 → 배정: `.github/workflows/list-smm-gmails.yml`이 `.github/smm-urls.txt`의 채널 URL과 gauth DB의 `youtube_url`을 매칭해서 지메일을 뽑고, `.github/workflows/distribute-matched-gmails.yml`이 매칭된 지메일을 13개 하위 사이트에 **라운드로빈**으로 분배(중복 배정 방지). `cham/accounts.json`은 `[]`로 리셋
+- gauth 프론트엔드 `auth*` 미정의 shim: 이전 세션에서 gauth 메인 index.html에 추가된 탭 UI가 `authQuery/authHeaders/authUrl/authNonce/authToken/authUser/authEmail/authFetch`를 정의 없이 호출하는 버그를 shim(`.github/workflows/gauth-fix-authquery.yml`)이 `<body>` 직후 no-op 함수로 정의
 
 #### gauth 메인 화면 — 하위 사이트 계정 뷰
 
