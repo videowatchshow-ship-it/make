@@ -1,0 +1,35 @@
+name: README 전체 내용 확인
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-check-readme.yml'
+jobs:
+  readme:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+
+            echo "===== README.md 전체 내용 ====="
+            sudo cat "$P1/README.md" 2>&1
+
+            echo ""
+            echo "===== 배너/CAH_1/banner 관련 부분만 별도 검색 ====="
+            sudo grep -n -A3 -B1 "배너\|CAH_1\|kakao_banner\|banner" "$P1/README.md" 2>&1 | head -80
+            REMOTE
