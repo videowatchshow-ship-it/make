@@ -1,0 +1,71 @@
+name: gauth cloudflare.ini 토큰으로 와일드카드 DNS + purge 최종 실행
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-cf-ini-token-dns-fix.yml'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            CF_TOKEN=$(sudo grep -oP 'dns_cloudflare_api_token\s*=\s*\K\S+' /root/.secrets/cloudflare.ini 2>/dev/null)
+            if [ -z "$CF_TOKEN" ]; then
+              echo "cloudflare.ini 에서 토큰 못 찾음"
+              exit 1
+            fi
+            echo "토큰 발견 (길이만): ${#CF_TOKEN}"
+
+            ZONE_ID=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=xn--9d0bw2fjtyymch7de9d.info" \
+              -H "Authorization: Bearer $CF_TOKEN" | python3 -c "
+import sys,json; d=json.load(sys.stdin)
+print((d.get('result') or [{}])[0].get('id',''))
+")
+            echo "ZONE_ID=$ZONE_ID"
+            [ -z "$ZONE_ID" ] && echo "zone 못찾음" && exit 1
+
+            echo "=== 루트 레코드 조회 ==="
+            ROOTREC=$(curl -s "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?name=xn--9d0bw2fjtyymch7de9d.info" \
+              -H "Authorization: Bearer $CF_TOKEN")
+            echo "$ROOTREC" | python3 -m json.tool
+
+            echo "=== 와일드카드 기존 존재 확인 ==="
+            WCREC=$(curl -s "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?name=*.xn--9d0bw2fjtyymch7de9d.info" \
+              -H "Authorization: Bearer $CF_TOKEN")
+            echo "$WCREC" | python3 -m json.tool
+            WC_EXISTS=$(echo "$WCREC" | python3 -c "import sys,json; d=json.load(sys.stdin); r=d.get('result') or []; print('yes' if r else 'no')")
+
+            if [ "$WC_EXISTS" = "no" ]; then
+              REC_TYPE=$(echo "$ROOTREC" | python3 -c "import sys,json; d=json.load(sys.stdin); r=d.get('result') or []; print(r[0]['type'] if r else 'A')")
+              REC_CONTENT=$(echo "$ROOTREC" | python3 -c "import sys,json; d=json.load(sys.stdin); r=d.get('result') or []; print(r[0]['content'] if r else '')")
+              REC_PROXIED=$(echo "$ROOTREC" | python3 -c "import sys,json; d=json.load(sys.stdin); r=d.get('result') or []; print(str(r[0].get('proxied', True)).lower() if r else 'true')")
+              echo "생성할 값: type=$REC_TYPE content=$REC_CONTENT proxied=$REC_PROXIED"
+              CREATE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
+                -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+                --data "{\"type\":\"$REC_TYPE\",\"name\":\"*\",\"content\":\"$REC_CONTENT\",\"proxied\":$REC_PROXIED,\"ttl\":1}")
+              echo "$CREATE" | python3 -m json.tool
+            else
+              echo "이미 존재 - 스킵"
+            fi
+
+            echo "=== 캐시 전체 purge ==="
+            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/purge_cache" \
+              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+              --data '{"purge_everything":true}' | python3 -m json.tool
+
+      - name: 전파 대기 후 실측
+        run: |
+          sleep 25
+          echo "=== DNS 재조회 ==="
+          getent hosts gain.xn--9d0bw2fjtyymch7de9d.info || echo "아직 실패"
+          getent hosts tak.xn--9d0bw2fjtyymch7de9d.info || echo "아직 실패"
+          echo "=== HTTP 응답 ==="
+          curl -sS -o /dev/null -D - "https://gain.xn--9d0bw2fjtyymch7de9d.info/photo2/write.php" 2>&1 | head -10
