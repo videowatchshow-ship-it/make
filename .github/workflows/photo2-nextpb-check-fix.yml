@@ -1,0 +1,85 @@
+name: photo2 SNW_1.html Next.P/B 상태 진단 + 필요시 자동 수정
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-nextpb-check-fix.yml'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: photo2/SNW_1.html 진단 후 필요시 z-index/마크업 자동 수정
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            F=/var/www/sites/chamgyo/public/photo2/SNW_1.html
+            if [ ! -f "$F" ]; then
+              echo "파일 없음: $F"
+              sudo find /var/www/sites/chamgyo/public -maxdepth 4 -iname "SNW_1.html" 2>/dev/null
+              exit 1
+            fi
+            echo "===== 수정 전 next_row / canvas 상태 ====="
+            grep -oE '<div class="next_row"[^>]*>' "$F" || echo "NO_NEXT_ROW_DIV"
+            grep -oE '<canvas id="cAsk[PB]"' "$F" || echo "NO_ASK_CANVAS"
+            sudo cp "$F" "${F}.bak_$(date +%s)"
+            sudo python3 << 'PYEOF'
+            path = "/var/www/sites/chamgyo/public/photo2/SNW_1.html"
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+            changed = False
+            if 'id="cAskP"' not in content:
+                anchor = '<div id="chamgyoBanner" style="position:absolute;left:980px;top:20px;width:920px;height:227px;background:#000;overflow:hidden;z-index:50;"><img id="chamgyoImg" src="" alt="" style="width:100%;height:100%;object-fit:contain;display:block;"></div>'
+                insertion = '<div class="next_row" style="position:absolute;left:980px;top:267px;width:920px;height:104px;z-index:60;"><div class="pill"><span class="lbl p">Next.<span class="dot">●</span></span><canvas id="cAskP" width="236" height="68"></canvas></div><div class="pill"><span class="lbl b">Next.<span class="dot">●</span></span><canvas id="cAskB" width="236" height="68"></canvas></div></div>'
+                if anchor in content:
+                    content = content.replace(anchor, anchor + insertion, 1)
+                    changed = True
+                    print("MARKUP_INSERTED_WITH_ZINDEX")
+                else:
+                    print("ANCHOR_NOT_FOUND_CANNOT_INSERT")
+            else:
+                old = '<div class="next_row" style="position:absolute;left:980px;top:267px;width:920px;height:104px;">'
+                new = '<div class="next_row" style="position:absolute;left:980px;top:267px;width:920px;height:104px;z-index:60;">'
+                if old in content:
+                    content = content.replace(old, new, 1)
+                    changed = True
+                    print("ZINDEX_PATCHED_OK")
+                elif 'z-index:60' in content.split('class="next_row"')[1][:120] if 'class="next_row"' in content else False:
+                    print("ALREADY_HAS_ZINDEX_SKIP")
+                else:
+                    print("NEXT_ROW_STYLE_NOT_MATCHED_NEEDS_MANUAL_CHECK")
+            if changed:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(content)
+            PYEOF
+            sudo chown --reference="${F}.bak_"* "$F" 2>/dev/null || true
+            echo "===== 수정 후 next_row / canvas 상태 ====="
+            grep -oE '<div class="next_row"[^>]*>' "$F" || echo "NO_NEXT_ROW_DIV"
+            grep -oE '<canvas id="cAsk[PB]"' "$F" || echo "NO_ASK_CANVAS"
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
+
+      - name: 라이브 실측 확인 (photo2)
+        run: |
+          sleep 3
+          echo "===== photo2 라이브 next_row/canvas ====="
+          curl -sS "https://xn--9d0bw2fjtyymch7de9d.info/photo2/SNW_1.html?ch=cent" -o /tmp/p2.html
+          grep -oE '<div class="next_row"[^>]*>' /tmp/p2.html || echo "NO_NEXT_ROW_DIV"
+          grep -oE '<canvas id="cAsk[PB]"' /tmp/p2.html || echo "NO_ASK_CANVAS"
+          echo "===== SHA256/size ====="
+          sha256sum /tmp/p2.html
+          wc -c /tmp/p2.html
