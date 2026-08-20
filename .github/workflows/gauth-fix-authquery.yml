@@ -1,0 +1,65 @@
+name: gauth · fix auth* not defined (broad shim)
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-authquery-fix.txt']
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Diagnose + install broad auth shim (v2)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 60s
+          script: |
+            F=/var/www/sites/gauth/public/index.html
+            echo "=== 1. every auth* identifier referenced in index.html ==="
+            sudo grep -oE 'auth[A-Za-z_]+' "$F" | sort -u
+            echo ""
+            echo "=== 2. reinstall broad shim covering more identifiers ==="
+            sudo cp "$F" "$F.bak.$(date +%s)"
+            sudo python3 - <<'PYEOF'
+            import re
+            f = "/var/www/sites/gauth/public/index.html"
+            s = open(f, encoding='utf-8').read()
+            s = re.sub(r'<script>\n// auth[A-Za-z]* shim:.*?</script>\n', '', s, count=0, flags=re.S)
+            s = re.sub(r'<script>\n// auth-broad-shim start.*?// auth-broad-shim end\n</script>\n', '', s, count=0, flags=re.S)
+            shim = (
+              '<script>\n'
+              '// auth-broad-shim start\n'
+              '(function(){\n'
+              '  function getFilter(){\n'
+              '    var el = document.querySelector("input[placeholder*=\\"\uD544\\ud130\\"], input[type=\\"search\\"], #subsite-filter, #filter-input");\n'
+              '    return el ? (el.value||"").trim().toLowerCase() : "";\n'
+              '  }\n'
+              '  window.authQuery   = window.authQuery   || function(){ return getFilter(); };\n'
+              '  window.authHeaders = window.authHeaders || function(){ return { "Accept": "application/json" }; };\n'
+              '  window.authToken   = window.authToken   || function(){ return ""; };\n'
+              '  window.authNonce   = window.authNonce   || function(){ return Math.random().toString(36).slice(2); };\n'
+              '  window.authUrl     = window.authUrl     || function(p){ return String(p||""); };\n'
+              '  window.authUser    = window.authUser    || function(){ return null; };\n'
+              '  window.authEmail   = window.authEmail   || function(){ return ""; };\n'
+              '  window.authFetch   = window.authFetch   || function(u, o){ o=o||{}; o.headers=Object.assign({}, o.headers||{}, window.authHeaders()); o.cache="no-store"; return fetch(u, o); };\n'
+              '})();\n'
+              '// auth-broad-shim end\n'
+              '</script>\n'
+            )
+            if '<body>' in s:
+                s = s.replace('<body>', '<body>\n' + shim, 1)
+                open(f, 'w', encoding='utf-8').write(s)
+                print('broad shim v2 installed')
+            PYEOF
+            echo ""
+            echo "=== 3. verify shim present ==="
+            sudo grep -c 'auth-broad-shim' "$F"
+            curl -s --max-time 10 https://gauth.cent-solution.online/ | grep -c 'auth-broad-shim'
+            echo ""
+            echo "=== 4. show shim lines for confirmation ==="
+            sudo grep -n 'window.auth' "$F" | head -10

@@ -21,7 +21,7 @@ jobs:
           source: ".github/smm-urls.txt"
           target: "/tmp"
           strip_components: 1
-      - name: Round-robin all matched gmails to REAL sub-sites, empty cham
+      - name: 1-per-subsite + leftover to cham
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -31,7 +31,6 @@ jobs:
           script: |
             sudo python3 - <<'PYEOF'
             import json, os, re, urllib.parse, time, shutil
-
             URLS_FILE = "/tmp/smm-urls.txt"
             BASE = "/var/www/sites"
             MASTER = "/opt/gauth-full/accounts_normalized.json"
@@ -45,101 +44,84 @@ jobs:
                 u = re.sub(r'/(videos|featured|about|shorts|streams|community)$', '', u, flags=re.I)
                 return u.lower()
 
-            wanted = set(); wanted_h = set(); wanted_c = set()
-            for line in open(URLS_FILE):
-                s = line.strip()
-                if not s: continue
-                n = norm(s); wanted.add(n)
+            wanted=set(); wh=set(); wc=set()
+            for L in open(URLS_FILE):
+                n = norm(L.strip())
+                if not n: continue
+                wanted.add(n)
                 m = re.search(r'youtube\.com/@([^/]+)', n)
-                if m: wanted_h.add(m.group(1).lower())
+                if m: wh.add(m.group(1).lower())
                 m = re.search(r'youtube\.com/channel/([^/|]+)', n)
-                if m: wanted_c.add(m.group(1).lower())
-
-            def matches(yurl):
-                n = norm(yurl)
+                if m: wc.add(m.group(1).lower())
+            def mm(y):
+                n = norm(y)
                 if not n: return False
                 if n in wanted: return True
                 m = re.search(r'youtube\.com/@([^/]+)', n)
-                if m and m.group(1).lower() in wanted_h: return True
+                if m and m.group(1).lower() in wh: return True
                 m = re.search(r'youtube\.com/channel/([^/|]+)', n)
-                if m and m.group(1).lower() in wanted_c: return True
+                if m and m.group(1).lower() in wc: return True
                 return False
 
             master = json.load(open(MASTER, encoding='utf-8'))
-            master_arr = master if isinstance(master, list) else master.get('accounts', [])
-            pool = []; seen = set()
-            for a in master_arr:
+            marr = master if isinstance(master, list) else master.get('accounts', [])
+            pool = []; seen=set()
+            for a in marr:
                 if not isinstance(a, dict): continue
-                email = (a.get('email') or a.get('gmail') or '').strip().lower()
-                if not email.endswith('@gmail.com'): continue
-                if email in seen: continue
-                yurl = a.get('youtube_url') or a.get('youtube') or a.get('channel_url') or ''
-                if not matches(yurl): continue
-                seen.add(email); pool.append(a)
-            print(f"pool size: {len(pool)}")
+                e = (a.get('email') or a.get('gmail') or '').strip().lower()
+                if not e.endswith('@gmail.com'): continue
+                if e in seen: continue
+                if not mm(a.get('youtube_url') or a.get('youtube') or a.get('channel_url') or ''): continue
+                seen.add(e); pool.append(a)
+            print(f"pool: {len(pool)}")
 
-            sites = []
+            # list REAL sub-sites (exclude cham)
+            REAL = []
             for name in sorted(os.listdir(BASE)):
-                if name == 'gauth': continue
+                if name in ('gauth','cham'): continue
                 p = os.path.join(BASE, name, 'accounts.json')
-                if os.path.exists(p): sites.append(name)
-            print(f"sites: {sites}")
+                if os.path.exists(p): REAL.append(name)
+            print(f"sub-sites: {REAL}")
 
             ts = str(int(time.time()))
-            # 1) empty cham first (owner wanted cham = 0)
-            cham_p = os.path.join(BASE, 'cham', 'accounts.json')
-            if os.path.exists(cham_p):
-                shutil.copy(cham_p, cham_p + f'.bak.{ts}')
-                with open(cham_p, 'w', encoding='utf-8') as fh:
-                    json.dump([], fh)
-                print(f"cham cleared -> [] (backup: {cham_p}.bak.{ts})")
 
+            # 1) each REAL site gets ONE unique gmail (not already there)
             present = {}
-            for site in sites:
-                p = os.path.join(BASE, site, 'accounts.json')
-                try:
-                    d = json.load(open(p, encoding='utf-8'))
-                    arr = d if isinstance(d, list) else d.get('accounts', [])
-                    present[site] = set(((x.get('email') or x.get('gmail') or '').strip().lower()) for x in arr if isinstance(x, dict))
-                except Exception:
-                    present[site] = set()
+            for site in REAL:
+                d = json.load(open(os.path.join(BASE, site, 'accounts.json'), encoding='utf-8'))
+                arr = d if isinstance(d, list) else d.get('accounts', [])
+                present[site] = set(((x.get('email') or x.get('gmail') or '').strip().lower()) for x in arr if isinstance(x, dict))
 
-            REAL = [s for s in sites if s != 'cham']
-            plan = {s: [] for s in REAL}
-            idx = 0
-            for a in pool:
-                e = (a.get('email') or a.get('gmail') or '').strip().lower()
-                if not REAL: break
-                for k in range(len(REAL)):
-                    site = REAL[(idx + k) % len(REAL)]
-                    if e not in present[site]:
-                        plan[site].append(a)
-                        present[site].add(e)
-                        idx = (idx + k + 1) % len(REAL)
-                        break
+            assigned = {s: None for s in REAL}
+            used = set()
+            for site in REAL:
+                for a in pool:
+                    e = (a.get('email') or a.get('gmail') or '').strip().lower()
+                    if e in used: continue
+                    if e in present[site]: continue
+                    assigned[site] = a; used.add(e); break
 
-            print("")
-            print("=== ROUND-ROBIN PLAN ===")
-            total = 0
-            for site, arr in plan.items():
-                total += len(arr)
-                print(f"{site:<12} +{len(arr)}")
-                for a in arr:
-                    print(f"    {a.get('email','?')}")
-            print(f"total planned: {total}")
-
-            for site, arr in plan.items():
-                if not arr: continue
+            # apply to each sub-site
+            for site, a in assigned.items():
+                if a is None: continue
                 p = os.path.join(BASE, site, 'accounts.json')
                 shutil.copy(p, p + f'.bak.{ts}')
                 d = json.load(open(p, encoding='utf-8'))
-                if isinstance(d, list):
-                    for a in arr: d.append(a)
-                    out = d
-                else:
-                    for a in arr: d.setdefault('accounts', []).append(a)
-                    out = d
+                if isinstance(d, list): d.append(a); out = d
+                else: d.setdefault('accounts', []).append(a); out = d
                 with open(p, 'w', encoding='utf-8') as fh:
                     json.dump(out, fh, ensure_ascii=False, indent=2)
-                print(f"  ok {site}: +{len(arr)} (backup: {p}.bak.{ts})")
+                print(f"  {site:<12} + {a.get('email')}")
+
+            # 2) rest -> cham (replace)
+            leftover = [a for a in pool if (a.get('email') or a.get('gmail') or '').strip().lower() not in used]
+            CHAM = os.path.join(BASE, 'cham', 'accounts.json')
+            if os.path.exists(CHAM):
+                shutil.copy(CHAM, CHAM + f'.bak.{ts}')
+            os.makedirs(os.path.dirname(CHAM), exist_ok=True)
+            with open(CHAM, 'w', encoding='utf-8') as fh:
+                json.dump(leftover, fh, ensure_ascii=False, indent=2)
+            print(f"cham <- {len(leftover)} leftover accounts")
+            for a in leftover:
+                print(f"  cham + {a.get('email')}")
             PYEOF
