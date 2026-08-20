@@ -1,0 +1,47 @@
+name: fc-sinji-verify-fix
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/fc-sinji-verify-fix.yml'
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            echo "=== A. new log files exist and have content? ==="
+            timeout 5 sudo ls -la /var/www/sites/chamgyo/run/photo/ 2>&1
+            timeout 5 sudo tail -n 5 /var/www/sites/chamgyo/run/photo/sinji-new-collector.log 2>&1
+            timeout 5 sudo tail -n 5 /var/www/sites/chamgyo/run/photo/sinji-new-discover.log 2>&1
+
+            echo "=== B. cron.d disabled files confirmed present (not active) ==="
+            timeout 5 sudo ls -la /etc/cron.d/ | grep -i sinji
+
+            echo "=== C. room data still updating normally (no regression) ==="
+            timeout 5 sudo cat /var/www/sites/chamgyo/public/photo/data/room_103.json 2>&1
+            echo ""
+            timeout 6 curl -s -H "Origin: https://fcj6.oqogyf.com" -H "Referer: https://fcj6.oqogyf.com/" "https://xjh.liveview2024.vip/api/pub/get_newly_issue?room_id=103"
+            echo ""
+            timeout 5 sudo ls -la --time-style=full-iso /var/www/sites/chamgyo/public/photo/data/room_103.json /var/www/sites/chamgyo/public/photo/data/room_110.json 2>&1
+
+            echo "=== D. collector process still running fine ==="
+            timeout 5 sudo ps aux | grep -i "sinji\|photo_coll_sn" | grep -v grep
+
+            echo "=== E. current UTC time ==="
+            date -u
+            REMOTE
