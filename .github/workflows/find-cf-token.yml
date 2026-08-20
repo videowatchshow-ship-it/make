@@ -1,6 +1,11 @@
 name: Find Cloudflare token
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/find-cf-token.yml'
 
 jobs:
   search:
