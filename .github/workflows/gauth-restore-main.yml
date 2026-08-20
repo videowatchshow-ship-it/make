@@ -1,0 +1,171 @@
+name: gauth · restore main index.html + move sub-site view to /subsites.html
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-restore-main.txt']
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Find pristine backup, restore main, create /subsites.html
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 90s
+          script: |
+            F=/var/www/sites/gauth/public/index.html
+            D=/var/www/sites/gauth/public
+
+            echo '=== 1. list all backups (oldest first) ==='
+            sudo ls -1t $F.bak.* 2>/dev/null | tail -30
+
+            echo ''
+            echo '=== 2. find oldest backup NOT containing subsite tab UI ==='
+            PRISTINE=''
+            for b in $(sudo ls -1r $F.bak.* 2>/dev/null); do
+              if ! sudo grep -q 'tab-subsite\|subsite-accounts-body\|하위 사이트 계정' "$b" 2>/dev/null; then
+                PRISTINE="$b"
+                break
+              fi
+            done
+            if [ -z "$PRISTINE" ]; then
+              echo 'no pristine backup found; will strip in-place'
+            else
+              echo "pristine backup: $PRISTINE"
+            fi
+
+            echo ''
+            echo '=== 3. save current as .before-restore + copy pristine ==='
+            sudo cp "$F" "$F.before-restore.$(date +%s)"
+            if [ -n "$PRISTINE" ]; then
+              sudo cp "$PRISTINE" "$F"
+              echo 'restored from pristine backup'
+            fi
+
+            echo ''
+            echo '=== 4. strip any residual subsite/shim blocks + add tiny nav link ==='
+            sudo python3 - <<'PYEOF'
+            import re, os
+            f = '/var/www/sites/gauth/public/index.html'
+            s = open(f, encoding='utf-8').read()
+            # strip shims I added earlier
+            s = re.sub(r'<script>\n// auth-broad-shim start.*?// auth-broad-shim end\n</script>\n', '', s, flags=re.S)
+            s = re.sub(r'<script>\n// fetch-shim start.*?// fetch-shim end\n</script>\n', '', s, flags=re.S)
+            s = re.sub(r'<script>\n// authQuery shim.*?</script>\n', '', s, flags=re.S)
+            # strip subsite tab UI if present (marker-based, conservative)
+            s = re.sub(r'<div[^>]*id="tab-subsite"[^>]*>.*?</div>\s*<!-- /tab-subsite -->', '', s, flags=re.S)
+            s = re.sub(r'<div[^>]*id="subsite-accounts-body"[^>]*>.*?</div>', '', s, flags=re.S)
+            # add top-right nav link to /subsites.html (idempotent by marker)
+            if 'id="nav-subsites"' not in s and '<body>' in s:
+                nav = (
+                    '<a id="nav-subsites" href="/subsites.html" '
+                    'style="position:fixed;top:12px;right:14px;z-index:9999;'
+                    'background:#161a20;color:#7dabff;border:1px solid #22282f;'
+                    'border-radius:999px;padding:6px 14px;font-size:12px;'
+                    'text-decoration:none;font-weight:700;font-family:sans-serif">'
+                    '📦 하위 계정 →</a>\n'
+                )
+                s = s.replace('<body>', '<body>\n' + nav, 1)
+            open(f, 'w', encoding='utf-8').write(s)
+            print('main index.html sanitized')
+            PYEOF
+
+            echo ''
+            echo '=== 5. write standalone /subsites.html (uses /api/subsite-accounts) ==='
+            sudo tee $D/subsites.html > /dev/null <<'SUBEOF'
+            <!doctype html>
+            <html lang="ko">
+            <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width,initial-scale=1">
+            <title>gauth · 하위 사이트 계정</title>
+            <meta http-equiv="Cache-Control" content="no-store">
+            <style>
+              :root{--bg:#0d1117;--panel:#0f1620;--card:#161a20;--border:#22282f;--border2:#2a323c;--text:#e8ecef;--sub:#8a95a5;--accent:#7dabff;--accent2:#3ddc84}
+              *{box-sizing:border-box}
+              body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo",sans-serif;min-height:100vh;padding:24px 16px}
+              .wrap{max-width:560px;margin:0 auto}
+              .brand{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+              h1{margin:0;font-size:20px}
+              a.back{color:var(--sub);font-size:12px;text-decoration:none;border:1px solid var(--border);border-radius:999px;padding:5px 12px}
+              .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px}
+              .site-row{background:var(--card);border:1px solid var(--border2);border-radius:10px;overflow:hidden;margin-bottom:8px}
+              .site-head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer}
+              .site-head:hover{background:#1a1f27}
+              .site-count{color:var(--accent2);font-weight:800;font-size:14px}
+              .site-body{display:none;border-top:1px solid var(--border2);padding:10px 14px;background:#12171e}
+              .site-row.open .site-body{display:block}
+              .site-row.open .caret{transform:rotate(90deg)}
+              .caret{transition:.2s;color:var(--sub)}
+              ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:4px;font-size:12.5px;font-family:ui-monospace,Menlo,monospace}
+              li{padding:5px 8px;border-radius:6px;background:#0d1218;display:flex;justify-content:space-between;gap:8px}
+              .pager{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:var(--sub)}
+              .pager button{background:var(--card);border:1px solid var(--border2);color:var(--text);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer}
+              .pager button:disabled{opacity:.35}
+            </style>
+            </head>
+            <body>
+              <div class="wrap">
+                <div class="brand">
+                  <h1>📦 하위 사이트별 계정</h1>
+                  <a class="back" href="/">← 메인</a>
+                </div>
+                <div class="card">
+                  <div id="list">불러오는 중…</div>
+                </div>
+              </div>
+            <script>
+            var META = {gain:{e:'🟣',k:'게인'},woodong:{e:'🚕',k:'우동'},sunbi:{e:'📘',k:'선비'},simmani:{e:'🎬',k:'심마니'},win:{e:'🏆',k:'윈'},aura:{e:'✨',k:'아우라'},bacad:{e:'🎓',k:'바칽'},camstouch:{e:'📷',k:'칠스터치'},james:{e:'👤',k:'제임스'},misskim:{e:'👩',k:'미스김'},naman:{e:'🧑',k:'나만'},romi:{e:'🐾',k:'로미'},second:{e:'2️⃣',k:'세컨드'},soktv:{e:'📺',k:'속TV'},cham:{e:'🐘',k:'참'}};
+            var PS = 10, pg = {}, cache = null;
+            function esc(s){var d=document.createElement('div');d.textContent=String(s==null?'':s);return d.innerHTML;}
+            function renderPage(site, arr){
+              var p = pg[site]||0, tot=arr.length, pages=Math.max(1,Math.ceil(tot/PS));
+              if(p>=pages) p=pages-1; if(p<0) p=0; pg[site]=p;
+              var st=p*PS, sl=arr.slice(st,st+PS);
+              if(!sl.length) return '<div style="color:var(--sub);padding:6px">계정 없음</div>';
+              var items=sl.map(function(a){var e=a.email||a.gmail||'?';return '<li><span>'+esc(e)+'</span><span style="color:var(--sub);font-size:10px">'+esc(a.status||'')+'</span></li>';}).join('');
+              var pager='<div class="pager"><button data-s="'+esc(site)+'" data-d="-1" '+(p===0?'disabled':'')+'>◀</button><span>'+(st+1)+'–'+Math.min(st+PS,tot)+' / '+tot+'</span><button data-s="'+esc(site)+'" data-d="1" '+(p>=pages-1?'disabled':'')+'>▶</button></div>';
+              return '<ul>'+items+'</ul>'+pager;
+            }
+            function render(sites){
+              var el=document.getElementById('list');
+              if(!sites.length){el.textContent='데이터 없음';return;}
+              cache=sites;
+              el.innerHTML=sites.map(function(s){var m=META[s.site]||{e:'📁',k:''};var c=(s.accounts&&s.accounts.length)||s.count||0;return '<div class="site-row" data-s="'+esc(s.site)+'"><div class="site-head"><div>'+m.e+' <b>'+esc(s.site)+'</b> <span style="color:var(--sub);font-size:12px">('+m.k+')</span></div><div><span class="site-count">'+c+'개</span> <span class="caret">▶</span></div></div><div class="site-body"></div></div>';}).join('');
+              el.querySelectorAll('.site-row').forEach(function(row){
+                row.querySelector('.site-head').addEventListener('click',function(){
+                  var open=row.classList.contains('open');
+                  if(open){row.classList.remove('open');return;}
+                  row.classList.add('open');
+                  var site=row.getAttribute('data-s'), obj=cache.find(function(x){return x.site===site;});
+                  var body=row.querySelector('.site-body');
+                  body.innerHTML=renderPage(site, obj.accounts||[]);
+                  wire(body, obj);
+                });
+              });
+            }
+            function wire(body, obj){
+              body.querySelectorAll('.pager button').forEach(function(b){
+                b.addEventListener('click',function(e){e.stopPropagation();var s=b.getAttribute('data-s'),d=parseInt(b.getAttribute('data-d'),10);pg[s]=(pg[s]||0)+d;body.innerHTML=renderPage(s,obj.accounts||[]);wire(body,obj);});
+              });
+            }
+            fetch('/api/subsite-accounts',{cache:'no-store'}).then(function(r){return r.json();}).then(function(d){render(d.sites||[]);}).catch(function(e){document.getElementById('list').textContent='오류: '+e.message;});
+            </script>
+            </body>
+            </html>
+            SUBEOF
+
+            echo ''
+            echo '=== 6. verify ==='
+            curl -s -o /dev/null -w 'main:  %{http_code}\n' https://gauth.cent-solution.online/ --max-time 10
+            curl -s -o /dev/null -w 'subs:  %{http_code}\n' https://gauth.cent-solution.online/subsites.html --max-time 10
+            echo 'residual subsite refs on main:'
+            curl -s --max-time 10 https://gauth.cent-solution.online/ | grep -c 'tab-subsite\|subsite-accounts-body\|하위 사이트 계정' || echo 0
+            echo 'nav link present:'
+            curl -s --max-time 10 https://gauth.cent-solution.online/ | grep -c 'nav-subsites' || echo 0
