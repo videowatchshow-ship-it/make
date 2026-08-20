@@ -1,0 +1,123 @@
+name: 사용자 원본 chamgyo_1787189338.png 12계정 즉시 배포
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-deploy-user-original.yml'
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          envs: CF_TOKEN,CF_ZONE
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="bash -s -- '$CF_TOKEN' '$CF_ZONE'" << 'REMOTE'
+            set +u
+            CF_TOKEN="$1"
+            CF_ZONE="$2"
+            P1="/var/www/sites/chamgyo/public/photo"
+            SRC="/tmp/chamgyo_1787189338.png"
+            TS=$(date +%s)
+
+            echo "===== [1] 원본 존재 확인 ====="
+            sudo ls -la "$SRC"
+            sudo file "$SRC"
+            SRC_SZ=$(sudo stat -c %s "$SRC")
+            SRC_HASH=$(sudo sha256sum "$SRC" | awk '{print $1}')
+            echo "  원본: ${SRC_SZ}B  sha256=$SRC_HASH"
+
+            if [ ! -f "$SRC" ]; then
+              echo "  원본 없음, 중단"
+              exit 1
+            fi
+
+            echo ""
+            echo "===== [2] 공용 배포 ====="
+            sudo cp "$SRC" "$P1/images/Live_height_kakao.gif"
+            sudo chown www-data:www-data "$P1/images/Live_height_kakao.gif"
+            sudo chmod 644 "$P1/images/Live_height_kakao.gif"
+            SZ=$(sudo stat -c %s "$P1/images/Live_height_kakao.gif")
+            echo "  공용 Live_height_kakao.gif = ${SZ}B"
+
+            echo ""
+            echo "===== [3] 12계정 배포 (gain 제외) ====="
+            ACCTS="aass0707 abc01 abc02 abc03 abc04 abc05 abc06 abc07 cent jay otuki tak"
+            for U in $ACCTS; do
+              DIR="$P1/images/ch/$U"
+              [ -d "$DIR" ] || continue
+              sudo cp "$SRC" "$DIR/Live_height_kakao.gif"
+              sudo chown www-data:www-data "$DIR/Live_height_kakao.gif"
+              sudo chmod 644 "$DIR/Live_height_kakao.gif"
+              SZ=$(sudo stat -c %s "$DIR/Live_height_kakao.gif")
+              echo "  $U = ${SZ}B"
+              # img_ver 갱신
+              sudo tee "$P1/data/img_ver_$U.json" > /dev/null << VJEOF
+            {"Live_height_kakao.gif":$TS,"_all":$TS}
+            VJEOF
+              sudo chown www-data:www-data "$P1/data/img_ver_$U.json"
+            done
+
+            echo ""
+            echo "===== [4] img_ver.json 공용 갱신 ====="
+            sudo tee "$P1/data/img_ver.json" > /dev/null << VJEOF
+            {"Live_height_kakao.gif":$TS,"_all":$TS}
+            VJEOF
+            sudo chown www-data:www-data "$P1/data/img_ver.json"
+            echo "  ts=$TS"
+
+            echo ""
+            echo "===== [5] gain 손 안 댐 확인 ====="
+            sudo ls -la "$P1/images/ch/gain/Live_height_kakao.gif" 2>/dev/null || sudo ls -la "$P1/images/ch/gain/" | grep -i "banner\|live" | head -3
+
+            echo ""
+            echo "===== [6] SHA256 최종 대조 ====="
+            sudo sha256sum "$P1/images/Live_height_kakao.gif"
+            for U in $ACCTS; do
+              sudo sha256sum "$P1/images/ch/$U/Live_height_kakao.gif" 2>/dev/null
+            done
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE
+
+      - name: CF purge_everything (GH러너에서 재시도 - 30초 rate-limit 회피)
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          sleep 30
+          curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE/purge_cache" \
+            -H "Authorization: Bearer $CF_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}' | python3 -m json.tool | head -10
+          echo ""
+          sleep 5
+          DOM="xn--9d0bw2fjtyymch7de9d.info"
+          echo "=== 최종 실측 (원본 크기 67524B 이어야 함) ==="
+          for U in "" "cent" "tak" "abc01" "aass0707"; do
+            if [ -z "$U" ]; then
+              URL="https://$DOM/photo/images/Live_height_kakao.gif?t=$(date +%s%N)"
+              LBL="공용"
+            else
+              URL="https://$DOM/photo/images/ch/$U/Live_height_kakao.gif?t=$(date +%s%N)"
+              LBL="$U"
+            fi
+            SZ=$(curl -sS -o /dev/null -w "%{size_download}" -H "Cache-Control: no-cache" "$URL")
+            CF=$(curl -sS -I -H "Cache-Control: no-cache" "$URL" 2>&1 | grep -i "cf-cache-status" | awk '{print $2}' | tr -d '\r')
+            echo "  $LBL: ${SZ}B cf=${CF}"
+          done
