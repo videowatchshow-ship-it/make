@@ -1,0 +1,21 @@
+name: photo SNW_1.html Next.P/B 라벨 실제 텍스트 확인
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-nextpb-label-check.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: 라벨 마크업 원문 확인
+        run: |
+          curl -sS "https://xn--9d0bw2fjtyymch7de9d.info/photo/SNW_1.html?ch=cent" -o /tmp/live.html
+          echo "===== next_row 전체 블록 ====="
+          grep -oE '<div class="next_row"[^Z]*</div></div>' /tmp/live.html | head -c 2000
+          echo ""
+          echo "===== lbl 라인 ====="
+          grep -oE '<span class="lbl[^/]*/span></span>' /tmp/live.html
