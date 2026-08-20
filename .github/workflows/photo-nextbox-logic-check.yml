@@ -1,0 +1,39 @@
+name: nextboxP nextboxB 채우는 JS 로직 확인 + 실측 렌더
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-nextbox-logic-check.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: bgl.js / CAH_1.html 에서 nextbox 관련 JS 로직 추출
+        run: |
+          curl -sS -o /tmp/cah1.html "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html"
+          echo "===== CAH_1.html 안의 nextbox 관련 JS (inline script 포함) ====="
+          grep -n "nextbox\|nextboxP\|nextboxB" /tmp/cah1.html | head -60
+          echo ""
+          echo "===== bgl.js 버전 확인 ====="
+          grep -oE 'bgl\.js\?v=[0-9]+' /tmp/cah1.html | head -3
+          BGLURL=$(grep -oE 'src="[^"]*bgl\.js[^"]*"' /tmp/cah1.html | head -1 | sed -E 's/src="([^"]*)"/\1/')
+          echo "BGLURL=$BGLURL"
+          if [[ "$BGLURL" == /* ]]; then
+            FULLURL="https://xn--9d0bw2fjtyymch7de9d.info$BGLURL"
+          else
+            FULLURL="https://xn--9d0bw2fjtyymch7de9d.info/photo/$BGLURL"
+          fi
+          echo "FULLURL=$FULLURL"
+          curl -sS -o /tmp/bgl.js "$FULLURL"
+          echo ""
+          echo "===== bgl.js 안의 nextbox 관련 함수 (앞뒤 15줄) ====="
+          grep -n "nextbox\|nextboxP\|nextboxB\|next_road" /tmp/bgl.js | head -30
+          echo ""
+          echo "===== nextboxP 정의부 앞뒤 문맥 ====="
+          grep -n "nextboxP" /tmp/bgl.js | head -1 | cut -d: -f1 | while read ln; do
+            START=$((ln>15 ? ln-15 : 1))
+            END=$((ln+30))
+            sed -n "${START},${END}p" /tmp/bgl.js
+          done
