@@ -95,48 +95,51 @@ jobs:
                 except Exception:
                     present[site] = set()
 
-            placed = set()
-            for _, emails in present.items(): placed |= emails
-
-            plan = {}
-            for site in sites:
-                pick = None
-                for a in pool:
-                    e = (a.get('email') or a.get('gmail') or '').strip().lower()
-                    if e in present[site]: continue
-                    if e in placed: continue
-                    pick = a; break
-                if pick is None:
-                    for a in pool:
-                        e = (a.get('email') or a.get('gmail') or '').strip().lower()
-                        if e in present[site]: continue
-                        pick = a; break
-                if pick is not None:
-                    plan[site] = pick
-                    placed.add((pick.get('email') or pick.get('gmail') or '').strip().lower())
+            REAL = [s for s in sites if s != 'cham']
+            plan = {s: [] for s in REAL}
+            idx = 0
+            for a in pool:
+                e = (a.get('email') or a.get('gmail') or '').strip().lower()
+                if not REAL: break
+                for k in range(len(REAL)):
+                    site = REAL[(idx + k) % len(REAL)]
+                    if e not in present[site]:
+                        plan[site].append(a)
+                        present[site].add(e)
+                        idx = (idx + k + 1) % len(REAL)
+                        break
 
             print("")
-            print("=== DISTRIBUTION PLAN ===")
-            for site, a in plan.items():
-                mpw = ('*' * min(6, len(a.get('password','')))) if a.get('password') else '(no-pw-field)'
-                print(f"{site:<12} {a.get('email','?'):<40} yurl={a.get('youtube_url','')}  pw={mpw}")
+            print("=== DISTRIBUTION PLAN (round-robin, all placed) ===")
+            total_planned = 0
+            for site, arr in plan.items():
+                total_planned += len(arr)
+                print(f"{site:<12} +{len(arr)}")
+                for a in arr:
+                    print(f"    {a.get('email','?'):<40} yurl={a.get('youtube_url','')}")
+            print(f"total planned insertions: {total_planned}")
 
             ts = str(int(time.time()))
-            for site, a in plan.items():
+            for site, arr in plan.items():
+                if not arr: continue
                 p = os.path.join(BASE, site, 'accounts.json')
                 shutil.copy(p, p + f'.bak.{ts}')
                 d = json.load(open(p, encoding='utf-8'))
                 if isinstance(d, list):
-                    d.append(a); out = d
+                    for a in arr: d.append(a)
+                    out = d
                 else:
-                    d.setdefault('accounts', []).append(a); out = d
+                    for a in arr: d.setdefault('accounts', []).append(a)
+                    out = d
                 with open(p, 'w', encoding='utf-8') as fh:
                     json.dump(out, fh, ensure_ascii=False, indent=2)
-                print(f"  ok {site}: appended {a.get('email')} (backup: {p}.bak.{ts})")
+                print(f"  ok {site}: appended {len(arr)} (backup: {p}.bak.{ts})")
 
             print("")
-            print("=== INSERTED RECORDS (full detail) ===")
-            for site, a in plan.items():
-                print(f"\n--- {site} ---")
-                print(json.dumps(a, ensure_ascii=False, indent=2))
+            print("=== INSERTED PER-SUBSITE RECORDS (owner view, unmasked pw) ===")
+            for site, arr in plan.items():
+                if not arr: continue
+                print(f"\n--- {site} ({len(arr)}) ---")
+                for a in arr:
+                    print(json.dumps(a, ensure_ascii=False, indent=2))
             PYEOF
