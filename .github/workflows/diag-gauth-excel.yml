@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Verify sort fix deployed on live server
+      - name: Re-verify sort fix + live service health
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -18,8 +18,26 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 60s
           script: |
-            echo "=== live file check ==="
-            sudo grep -n "noDate.sort" /var/www/sites/gauth/public/index.html
+            echo "=== 1. systemd service status ==="
+            sudo systemctl is-active gauth
+            sudo systemctl status gauth --no-pager | head -10
+
+            echo ""
+            echo "=== 2. deployed file content check ==="
+            sudo grep -n "noDate.sort\|withDate.sort\|function _sortByExcelDate" /var/www/sites/gauth/public/index.html
+
+            echo ""
+            echo "=== 3. md5 compare ==="
             sudo md5sum /var/www/sites/gauth/public/index.html
-            echo "=== curl localhost check ==="
-            curl -s http://localhost:4000/ 2>/dev/null | grep -o "noDate.sort[^}]*}" | head -1
+
+            echo ""
+            echo "=== 4. live HTTPS response check ==="
+            curl -sI --max-time 8 https://gauth.cent-solution.online/ | head -5
+
+            echo ""
+            echo "=== 5. live content grep via https ==="
+            curl -s --max-time 8 https://gauth.cent-solution.online/ | grep -o "noDate.sort[^}]*}" | head -1
+
+            echo ""
+            echo "=== 6. local backend direct check ==="
+            curl -s --max-time 8 http://localhost:4000/ | grep -o "noDate.sort[^}]*}" | head -1
