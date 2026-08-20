@@ -100,4 +100,27 @@ jobs:
               const out = execSync(\"find /opt/gauth-full/uploads -iname '*8.15*' 2>/dev/null; find /opt/gauth-full -iname '*보물섬*' 2>/dev/null\").toString();
               console.log(out || '(no matching file found anywhere under /opt/gauth-full)');
             } catch(e) { console.log('find error:', e.message); }
+
+            console.log('');
+            console.log('=== inspecting REAL column layout of the archived original excel (using the same xlsx lib the server uses) ===');
+            const XLSX = require('/opt/gauth-full/node_modules/xlsx');
+            const files = execSync(\"find /opt/gauth-full/uploads/archive -iname '*8.15*'\").toString().trim().split(String.fromCharCode(10)).filter(Boolean);
+            files.forEach(fp => {
+              console.log('--- ' + fp + ' ---');
+              const wb = XLSX.readFile(fp);
+              const sheetName = wb.SheetNames[0];
+              const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: '', raw: false });
+              console.log('sheet:', sheetName, '| total rows:', rows.length);
+              console.log('header row (row 0):', JSON.stringify(rows[0]));
+              function maskRow(r) {
+                return (r||[]).map(c => {
+                  const s = String(c);
+                  if (!s) return '';
+                  if (/@/.test(s)) return s; // emails are already visible elsewhere, safe
+                  return s.slice(0,2) + '***(len=' + s.length + ')';
+                });
+              }
+              console.log('sample data row (row 1, non-email cells masked):', JSON.stringify(maskRow(rows[1])));
+              console.log('sample data row (row 2, non-email cells masked):', JSON.stringify(maskRow(rows[2])));
+            });
             "
