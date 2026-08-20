@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Verify health + sort
+      - name: 20th row from today's excel
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -18,25 +18,16 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 60s
           script: |
-            echo "=== Health check retries ==="
-            for i in 1 2 3 4 5; do
-              HTTP=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4000/api/normalized-accounts 2>/dev/null || echo 000)
-              echo "attempt $i: HTTP $HTTP"
-              [ "$HTTP" = "200" ] && break
-              sleep 2
-            done
-            echo ""
-            echo "=== systemctl status ==="
-            sudo systemctl is-active gauth
-            echo ""
-            echo "=== Sample: sorted by account_date desc (top 5) ==="
             sudo node -e "
-            const d=JSON.parse(require('fs').readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
-            const arr=Array.isArray(d)?d:(d.accounts||[]);
-            const withDate = arr.filter(a=>a.account_date).sort((a,b)=>b.account_date-a.account_date);
-            console.log('accounts with date:', withDate.length, '/', arr.length);
-            for (const a of withDate.slice(0,5)) console.log(' ', new Date(a.account_date).toISOString(), a.email, '|', a.source_file);
-            console.log('--- oldest 3 ---');
-            for (const a of withDate.slice(-3)) console.log(' ', new Date(a.account_date).toISOString(), a.email, '|', a.source_file);
+            const XLSX = require('/opt/gauth-full/node_modules/xlsx');
+            const fs = require('fs');
+            const dir = '/opt/gauth-full/uploads/archive';
+            const files = fs.readdirSync(dir).filter(f=>f.toLowerCase().endsWith('.xlsx'));
+            const fp = dir + '/' + files[0];
+            console.log('File:', files[0]);
+            const wb = XLSX.readFile(fp);
+            const sh = wb.Sheets[wb.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(sh, {header:1, raw:true, defval:''});
+            console.log('Row 20 (index 19):', JSON.stringify(rows[19]));
             " 2>&1
             echo "=== DONE ==="
