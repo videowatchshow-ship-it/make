@@ -11,44 +11,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Dump page 1147 + JS, find client_id + login code
+      - name: Dump full unified auth JS + save to server for reuse
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 90s
+          command_timeout: 60s
           script: |
             SITE='https://xn--9d0bw2fjtyymch7de9d.info'
-            curl -s --max-time 15 "$SITE/?page=1147" > /tmp/p1147.html || true
-            echo '=== A. client_id in page 1147 ==='
-            grep -oE '[0-9]{10,}-[a-z0-9]+\.apps\.googleusercontent\.com' /tmp/p1147.html | sort -u
+            echo '=== save the unified auth JS onto gauth server ==='
+            sudo mkdir -p /var/www/sites/gauth/public/core/auth
+            curl -s --max-time 15 "$SITE/core/auth/google-auth-unified.js?v=20260712rrn" | sudo tee /var/www/sites/gauth/public/core/auth/google-auth-unified.js > /dev/null
+            echo 'saved. size:'
+            sudo wc -c /var/www/sites/gauth/public/core/auth/google-auth-unified.js
             echo ''
-            echo '=== B. g_id_onload / data-client_id block ==='
-            grep -oiE 'g_id_onload[^>]{0,400}' /tmp/p1147.html | head -5
-            grep -oiE 'data-client_id="[^"]*"' /tmp/p1147.html | sort -u | head -5
-            grep -oiE 'data-login_uri="[^"]*"' /tmp/p1147.html | sort -u | head -5
-            grep -oiE 'data-callback="[^"]*"' /tmp/p1147.html | sort -u | head -5
-            echo ''
-            echo '=== C. accounts.google.initialize / renderButton snippets ==='
-            grep -oiE 'google\.accounts\.id\.[a-z]+\([^)]{0,200}' /tmp/p1147.html | head -10
-            grep -oiE 'client_id["'\'' :]{1,6}[^,;}"'\'' ]{10,120}' /tmp/p1147.html | head -10
-            echo ''
-            echo '=== D. list all .js srcs on page 1147 ==='
-            grep -oE 'src="[^"]+\.js[^"]*"' /tmp/p1147.html | sed 's/src="//;s/"$//' | sort -u | head -30
-            echo ''
-            echo '=== E. fetch each same-origin js and grep for googleusercontent client_id ==='
-            for j in $(grep -oE 'src="[^"]+\.js[^"]*"' /tmp/p1147.html | sed 's/src="//;s/"$//' | sort -u); do
-              case "$j" in
-                http*) U="$j" ;;
-                //*)   U="https:$j" ;;
-                /*)    U="$SITE$j" ;;
-                *)     U="$SITE/$j" ;;
-              esac
-              case "$U" in *xn--9d0bw2fjtyymch7de9d.info*) ;; *) continue ;; esac
-              cid=$(curl -s --max-time 10 "$U" | grep -oE '[0-9]{10,}-[a-z0-9]+\.apps\.googleusercontent\.com' | sort -u | head -1)
-              [ -n "$cid" ] && echo "FOUND in $U -> $cid"
-            done
-            echo ''
-            echo '=== F. raw login-related HTML block (context around gsi) ==='
-            grep -n -iE 'gsi|g_id|google.accounts|signin|로그인|구글' /tmp/p1147.html | head -30
+            echo '=== FULL JS CONTENT (for review) ==='
+            sudo cat /var/www/sites/gauth/public/core/auth/google-auth-unified.js
