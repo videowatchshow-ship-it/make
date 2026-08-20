@@ -26,28 +26,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Count accounts allocated to each sub-site (gain, woodong/우동카, etc)
+      - name: Find insertion point in rebrowser-login.js for a new /api/subsite-counts route
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 60s
+          command_timeout: 30s
           script: |
-            set -e
-            echo "=== discover sub-sites (same logic as add-account-all-sites.yml) ==="
-            for sjs in /var/www/sites/*/server.js; do
-              [ -f "$sjs" ] || continue
-              dir=$(dirname "$sjs")
-              name=$(basename "$dir")
-              [ "$name" = "gauth" ] && continue
-              if [ -f "$dir/accounts.json" ]; then
-                sudo node -e "
-                const d = JSON.parse(require('fs').readFileSync('$dir/accounts.json','utf8'));
-                const a = Array.isArray(d) ? d : (d.accounts||[]);
-                console.log('$name'.padEnd(12), a.length);
-                "
-              else
-                echo "$(printf '%-12s' "$name") 0 (no accounts.json)"
-              fi
-            done
+            echo "=== app.listen location ==="
+            sudo grep -n "app.listen" /opt/gauth-full/rebrowser-login.js
+            echo ""
+            echo "=== a sample existing app.get('/api/...') route, for style reference ==="
+            sudo grep -n "app.get('/api" /opt/gauth-full/rebrowser-login.js | head -5
+            echo ""
+            echo "=== express app variable name (app.get vs router.get etc) ==="
+            sudo grep -n "^const app\|^let app\|= express()" /opt/gauth-full/rebrowser-login.js | head -3
