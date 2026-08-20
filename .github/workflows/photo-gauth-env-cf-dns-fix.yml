@@ -1,0 +1,90 @@
+name: gauth .env 내 CF 자격증명으로 와일드카드 DNS 추가 시도
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-gauth-env-cf-dns-fix.yml'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 60s
+          script: |
+            echo "===== .env 안 CF 관련 키 이름만 확인 (값 노출 안 함) ====="
+            sudo grep -oE "^[A-Z_]*CLOUDFLARE[A-Z_]*|^[A-Z_]*CF_[A-Z_]*" /opt/gauth-full/.env 2>/dev/null
+            echo ""
+            echo "===== .env 전체 키 이름 목록 (= 앞부분만, 값 제외) ====="
+            sudo grep -oE "^[A-Za-z_]+=" /opt/gauth-full/.env 2>/dev/null | sed 's/=$//'
+
+      - name: CF 자격증명 있으면 zone 조회 + 와일드카드 DNS 추가 시도 (값 절대 echo 안 함)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 60s
+          script: |
+            set +u
+            set -a
+            [ -f /opt/gauth-full/.env ] && source <(sudo cat /opt/gauth-full/.env 2>/dev/null | grep -E "CLOUDFLARE|CF_")
+            set +a
+
+            TOKEN="${CLOUDFLARE_TOKEN:-${CF_API_TOKEN:-${CF_TOKEN:-}}}"
+            ZONEENV="${CLOUDFLARE_ZONE_ID:-${CF_ZONE_ID:-}}"
+
+            if [ -z "$TOKEN" ]; then
+              echo "이 .env 에 CF 토큰으로 쓸 값 없음 - 스킵"
+              exit 0
+            fi
+            echo "토큰 발견됨 (길이만 표시): ${#TOKEN} 자"
+
+            echo "===== 메인 도메인 zone 조회 ====="
+            ZLOOKUP=$(curl -sS -X GET "https://api.cloudflare.com/client/v4/zones?name=xn--9d0bw2fjtyymch7de9d.info" \
+              -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json")
+            echo "$ZLOOKUP" | python3 -m json.tool 2>&1 | head -20
+            ZONE_ID=$(echo "$ZLOOKUP" | python3 -c "import sys,json; d=json.load(sys.stdin); r=d.get('result') or []; print(r[0]['id'] if r else '')" 2>/dev/null)
+
+            if [ -z "$ZONE_ID" ]; then
+              echo "이 토큰으로는 해당 zone 접근 불가 (다른 계정/도메인용 토큰) - 스킵"
+              exit 0
+            fi
+            echo "zone id 확인됨: $ZONE_ID"
+
+            echo "===== 기존 루트 도메인 A/CNAME 레코드 조회 (와일드카드에 복제할 대상 확인) ====="
+            ROOTREC=$(curl -sS -X GET "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?name=xn--9d0bw2fjtyymch7de9d.info" \
+              -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json")
+            echo "$ROOTREC" | python3 -m json.tool 2>&1 | head -40
+
+            REC_TYPE=$(echo "$ROOTREC" | python3 -c "import sys,json; d=json.load(sys.stdin); r=d.get('result') or []; print(r[0]['type'] if r else '')" 2>/dev/null)
+            REC_CONTENT=$(echo "$ROOTREC" | python3 -c "import sys,json; d=json.load(sys.stdin); r=d.get('result') or []; print(r[0]['content'] if r else '')" 2>/dev/null)
+            REC_PROXIED=$(echo "$ROOTREC" | python3 -c "import sys,json; d=json.load(sys.stdin); r=d.get('result') or []; print(str(r[0].get('proxied', True)).lower() if r else 'true')" 2>/dev/null)
+
+            echo "기존 레코드: type=$REC_TYPE content=$REC_CONTENT proxied=$REC_PROXIED"
+            if [ -z "$REC_TYPE" ]; then
+              echo "루트 레코드 조회 실패 - 와일드카드 생성 스킵"
+              exit 0
+            fi
+
+            echo "===== 와일드카드 (*) 레코드 이미 있는지 확인 ====="
+            WCREC=$(curl -sS -X GET "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?name=*.xn--9d0bw2fjtyymch7de9d.info" \
+              -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json")
+            echo "$WCREC" | python3 -m json.tool 2>&1 | head -20
+            WC_EXISTS=$(echo "$WCREC" | python3 -c "import sys,json; d=json.load(sys.stdin); r=d.get('result') or []; print('yes' if r else 'no')" 2>/dev/null)
+
+            if [ "$WC_EXISTS" = "yes" ]; then
+              echo "와일드카드 레코드 이미 존재함 - 생성 스킵 (다른 원인 재조사 필요)"
+              exit 0
+            fi
+
+            echo "===== 와일드카드 레코드 생성 ====="
+            CREATE=$(curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
+              -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+              --data "{\"type\":\"$REC_TYPE\",\"name\":\"*\",\"content\":\"$REC_CONTENT\",\"proxied\":$REC_PROXIED,\"ttl\":1}")
+            echo "$CREATE" | python3 -m json.tool 2>&1
