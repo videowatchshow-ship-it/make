@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Inspect gauth server files part 2
+      - name: Get full upload_excels.js head + busboy config
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -18,39 +18,40 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 60s
           script: |
-            echo "=== 1. account_date extraction logic in upload_excels.js ==="
-            sudo grep -n "account_date\|parseDate\|extractDate\|Date(" /opt/gauth-full/upload_excels.js 2>/dev/null | head -60
+            echo "=== 1. upload_excels.js lines 1-100 (imports, isDateLike, classifyValue) ==="
+            sudo sed -n '1,100p' /opt/gauth-full/upload_excels.js 2>/dev/null
 
             echo ""
-            echo "=== 2. account_date stats ==="
+            echo "=== 2. upload_excels.js lines 330-460 (parseDateValue, isDateLike, column extraction) ==="
+            sudo sed -n '330,460p' /opt/gauth-full/upload_excels.js 2>/dev/null
+
+            echo ""
+            echo "=== 3. upload_excels.js lines 580-630 (bruteForceExtract date handling) ==="
+            sudo sed -n '580,630p' /opt/gauth-full/upload_excels.js 2>/dev/null
+
+            echo ""
+            echo "=== 4. upload_excels.js lines 690,730 (label-value extract date handling) ==="
+            sudo sed -n '690,730p' /opt/gauth-full/upload_excels.js 2>/dev/null
+
+            echo ""
+            echo "=== 5. busboy init - filename/encoding config ==="
+            sudo grep -n "busboy\|Busboy\|new bb\|require('busboy')\|require(\"busboy\")" /opt/gauth-full/upload_excels.js 2>/dev/null
+
+            echo ""
+            echo "=== 6. actual raw excel cell sample - dump first sheet of a real file to see date format ==="
             sudo node -e "
-            const d=JSON.parse(require('fs').readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
-            const arr=Array.isArray(d)?d:(d.accounts||[]);
-            const withDate = arr.filter(a=>a.account_date);
-            const noDate = arr.filter(a=>!a.account_date);
-            console.log('total:', arr.length, 'withDate:', withDate.length, 'noDate:', noDate.length);
-            console.log('sample withDate:', JSON.stringify(withDate.slice(0,5).map(a=>({email:a.email, account_date:a.account_date, source_file:a.source_file}))));
+            const XLSX = require('/opt/gauth-full/node_modules/xlsx');
+            const fs = require('fs');
+            const dir = '/opt/gauth-full/uploads/archive';
+            const files = fs.readdirSync(dir).filter(f=>f.toLowerCase().endsWith('.xlsx'));
+            if(files.length){
+              const fp = dir + '/' + files[0];
+              console.log('Sample file:', files[0]);
+              const wb = XLSX.readFile(fp);
+              const sh = wb.Sheets[wb.SheetNames[0]];
+              const rows = XLSX.utils.sheet_to_json(sh, {header:1, raw:true});
+              console.log(JSON.stringify(rows.slice(0,8)));
+            } else { console.log('no archive files'); }
             " 2>&1
-
-            echo ""
-            echo "=== 3. _fixMojibake function definition in index.html ==="
-            sudo grep -n "_fixMojibake" -A 15 /var/www/sites/gauth/public/index.html 2>/dev/null | head -40
-
-            echo ""
-            echo "=== 4. mojibake filenames - hex dump of one ==="
-            sudo node -e "
-            const d=JSON.parse(require('fs').readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
-            const arr=Array.isArray(d)?d:(d.accounts||[]);
-            const bad = arr.find(a=>a.source_file && a.source_file.includes('ë'));
-            if(bad){ console.log('filename:', bad.source_file); console.log('bytes:', Buffer.from(bad.source_file,'utf8').toString('hex')); }
-            " 2>&1
-
-            echo ""
-            echo "=== 5. Which endpoint serves accounts to frontend (grep app.get accounts) ==="
-            sudo grep -n "app.get.*account\|app.get.*/api/" /opt/gauth-full/rebrowser-login.js 2>/dev/null | head -30
-
-            echo ""
-            echo "=== 6. multer/busboy filename encoding handling ==="
-            sudo grep -n "originalname\|latin1\|utf8\|encoding" /opt/gauth-full/rebrowser-login.js 2>/dev/null | head -30
 
             echo "=== DONE ==="
