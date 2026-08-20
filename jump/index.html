@@ -94,10 +94,11 @@ const SITE_META = {
   naman:     {emoji:'🧑', ko:'나만'},
   romi:      {emoji:'🐾', ko:'로미'},
   second:    {emoji:'2️⃣', ko:'세컨드'},
-  soktv:     {emoji:'📺', ko:'속TV'}
+  soktv:     {emoji:'📺', ko:'속TV'},
+  cham:      {emoji:'🐘', ko:'참'}
 };
 const PAGE_SIZE = 10;
-const pageState = {}; // site -> current page index
+const pageState = {};
 
 function esc(s){ var d=document.createElement('div'); d.textContent=String(s==null?'':s); return d.innerHTML; }
 
@@ -144,8 +145,6 @@ function renderSites(sites){
       + '<div class="site-body" data-body="'+esc(s.site)+'"></div>'
     + '</div>';
   }).join('');
-
-  // wire up expand/collapse
   el.querySelectorAll('.site-row').forEach(function(row){
     var site = row.getAttribute('data-site');
     var head = row.querySelector('.site-head');
@@ -182,7 +181,6 @@ async function loadSubsites(){
   try{
     var r = await fetch('/api/subsite-accounts', {cache:'no-store'});
     if(!r.ok){
-      // fallback to counts-only endpoint
       var r2 = await fetch('/api/subsite-counts', {cache:'no-store'});
       var d2 = await r2.json();
       var sites2 = (d2.sites||[]).map(function(s){return {site:s.site, count:s.count, accounts:[]};});
@@ -202,7 +200,6 @@ async function loadSubsites(){
 document.getElementById('refresh-subsites').addEventListener('click', loadSubsites);
 loadSubsites();
 
-// PWA install
 let deferredPrompt;
 const installBtn = document.getElementById('install-btn');
 window.addEventListener('beforeinstallprompt', function(e){
@@ -215,7 +212,6 @@ installBtn.addEventListener('click', function(){
 });
 window.addEventListener('appinstalled', function(){ installBtn.style.display='none'; });
 
-// unregister any old service worker + clear caches (kill old admin-panel cache)
 if('serviceWorker' in navigator){
   navigator.serviceWorker.getRegistrations().then(function(regs){
     regs.forEach(function(reg){ reg.unregister(); });
