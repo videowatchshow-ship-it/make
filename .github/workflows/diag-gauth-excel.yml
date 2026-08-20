@@ -22,11 +22,31 @@ jobs:
           CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
           CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
 
-  delete-jump:
+  create-jump:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
-      - name: Remove jump.cent-solution.online entirely (DNS + vhost + cert)
+      - uses: actions/checkout@v4
+      - name: Ensure remote dir exists
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 20s
+          script: |
+            sudo mkdir -p /var/www/sites/jump/public
+            sudo chown -R ${{ secrets.GAUTH_USER }}:${{ secrets.GAUTH_USER }} /var/www/sites/jump
+      - name: Copy new jump design (index.html, manifest.json, sw.js)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: "jump/index.html,jump/manifest.json,jump/sw.js"
+          target: "/var/www/sites/jump/public"
+          strip_components: 1
+      - name: Create DNS record + static vhost + cert + enable
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -37,65 +57,52 @@ jobs:
             set -e
             CF_TOKEN="${{ secrets.CLOUDFLARE_TOKEN }}"
             ZONE="2601d4f4ab75c910f8d858ca036ff344"
+            SERVER_IP=$(curl -s ifconfig.me)
 
-            echo "=== 1. delete Cloudflare DNS record for jump ==="
-            REC_ID=$(curl -s "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records?name=jump.cent-solution.online" -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" | python3 -c "import sys,json; d=json.load(sys.stdin); r=d.get('result',[]); print(r[0]['id'] if r else '')")
-            if [ -n "$REC_ID" ]; then
-              curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records/$REC_ID" -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json"
-              echo "DNS record $REC_ID deleted"
+            echo "=== 1. create/ensure Cloudflare DNS record for jump ==="
+            EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records?name=jump.cent-solution.online" -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" | python3 -c "import sys,json; d=json.load(sys.stdin); r=d.get('result',[]); print(r[0]['id'] if r else '')")
+            if [ -n "$EXISTING" ]; then
+              echo "DNS record already exists ($EXISTING), skipping create"
             else
-              echo "no DNS record found for jump"
+              curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records" -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" -d '{"type":"A","name":"jump","content":"'"$SERVER_IP"'","ttl":1,"proxied":true}'
+              echo "DNS record created"
             fi
             echo ""
 
-            echo "=== 2. find and remove apache vhost block(s) for jump ==="
-            for conf in /etc/apache2/sites-available/*.conf; do
-              [ -f "$conf" ] || continue
-              if sudo grep -q "jump.cent-solution.online" "$conf"; then
-                echo "found in $conf"
-                sudo cp "$conf" "$conf.bak.$(date +%s)"
-                sudo python3 - "$conf" <<'PYEOF'
-            import re, sys
-            path = sys.argv[1]
-            with open(path, "r", encoding="utf-8") as fh:
-                src = fh.read()
-            blocks = re.findall(r"<VirtualHost[^>]*>.*?</VirtualHost>", src, flags=re.S)
-            kept = []
-            removed = 0
-            for b in blocks:
-                if "jump.cent-solution.online" in b:
-                    removed += 1
-                    continue
-                kept.append(b)
-            if removed:
-                new_src = src
-                for b in blocks:
-                    if "jump.cent-solution.online" in b:
-                        new_src = new_src.replace(b, "")
-                with open(path, "w", encoding="utf-8") as fh:
-                    fh.write(new_src)
-                print(f"removed {removed} VirtualHost block(s) from {path}")
-            else:
-                print(f"no matching VirtualHost block in {path}")
-            PYEOF
-              fi
-            done
+            sudo chown -R www-data:www-data /var/www/sites/jump/public
 
-            echo ""
-            echo "=== 3. disable jump site config + reload apache ==="
-            sudo a2dissite jump.conf 2>/dev/null || true
-            sudo a2dissite jump-le-ssl.conf 2>/dev/null || true
+            echo "=== 2. write plain static apache vhost (no proxy — display only) ==="
+            sudo tee /etc/apache2/sites-available/jump.conf > /dev/null <<'VHOSTEOF'
+            <VirtualHost *:80>
+                ServerName jump.cent-solution.online
+                DocumentRoot /var/www/sites/jump/public
+                <Directory /var/www/sites/jump/public>
+                    AllowOverride All
+                    Require all granted
+                </Directory>
+            </VirtualHost>
+            VHOSTEOF
+            sudo a2ensite jump.conf
             sudo apachectl configtest && sudo systemctl reload apache2
 
             echo ""
-            echo "=== 4. remove jump documentroot + certbot cert ==="
-            sudo rm -rf /var/www/sites/jump 2>/dev/null || true
-            sudo certbot delete --cert-name jump.cent-solution.online --non-interactive 2>&1 || echo "no cert named jump.cent-solution.online (or already removed)"
+            echo "=== 3. issue Let's Encrypt cert via dns-cloudflare ==="
+            sudo mkdir -p /root/.secrets
+            echo "dns_cloudflare_api_token = $CF_TOKEN" | sudo tee /root/.secrets/cloudflare-jump.ini > /dev/null
+            sudo chmod 600 /root/.secrets/cloudflare-jump.ini
+            sudo certbot --apache -d jump.cent-solution.online \
+              --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare-jump.ini \
+              --non-interactive --agree-tos -m admin@cent-solution.online --redirect \
+              || echo "certbot failed or already has cert, continuing"
+            sudo shred -u /root/.secrets/cloudflare-jump.ini 2>/dev/null || sudo rm -f /root/.secrets/cloudflare-jump.ini
+
+            sudo apachectl configtest && sudo systemctl reload apache2
 
             echo ""
-            echo "=== 5. verify ==="
-            curl -s -o /dev/null -w "jump http status: %{http_code}\n" https://jump.cent-solution.online/ --max-time 5 || echo "jump unreachable (expected)"
-            curl -s "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records?name=jump.cent-solution.online" -H "Authorization: Bearer $CF_TOKEN" | python3 -c "import sys,json; d=json.load(sys.stdin); print('remaining DNS records:', len(d.get('result',[])))"
+            echo "=== 4. verify ==="
+            sleep 3
+            curl -s -o /dev/null -w "jump https status: %{http_code}\n" https://jump.cent-solution.online/ --max-time 10
+            curl -s --max-time 10 https://jump.cent-solution.online/ | grep -o "참교육 스트리밍" | head -1
 
   diag:
     runs-on: ubuntu-latest

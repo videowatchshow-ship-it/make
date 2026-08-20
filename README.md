@@ -36,6 +36,21 @@ Express :4000 (rebrowser-login.js)
 | 사이트 | 포트 | 경로 | 역할 |
 |--------|------|------|------|
 | gauth.cent-solution.online | 4000 | `/var/www/sites/gauth/public` | 마스터 계정 관리 (엑셀 업로드, 로그인, TOTP) |
+| jump.cent-solution.online | (정적) | `/var/www/sites/jump/public` | 참교육 스트리밍 전용 표시 페이지 (계정정보/방송 템플릿) — 로그인·API 기능 없음, gauth 전용 뷰 |
+
+#### jump.cent-solution.online
+
+- 목적: 로그인/2FA/토큰 발급 등 실제 계정 조작 기능은 전혀 없는 **표시 전용(display-only)** 페이지. 실제 로그인/API는 gauth에서만 처리.
+- 소스: `jump/index.html`, `jump/manifest.json`, `jump/sw.js` (PWA 설치 지원)
+- 구성: 스트리밍 제목/설명 템플릿 카드 (복사 버튼), 새로고침으로 여러 템플릿 순환
+- 배포: Cloudflare DNS(A, proxied) + Apache 정적 vhost + Let's Encrypt(dns-cloudflare) — `.github/workflows/diag-gauth-excel.yml`을 통해 SSH로 배포
+
+#### gauth 메인 화면 — 하위 사이트 계정 뷰
+
+gauth.cent-solution.online 접속 시 기본 화면은 4,875개 마스터 계정 목록이 아니라 **GAIN·우동카(woodong) 등 13개 하위 사이트에 배포된 계정 목록**이다. 전체 마스터 목록은 "🗂 전체 마스터 계정" 탭에서 별도로 확인한다.
+
+- API: `GET /api/subsite-counts` — 사이트별 배포 계정 수
+- API: `GET /api/subsite-accounts` — 사이트별 배포 계정 상세(이메일, 채널 링크 등)
 
 - Express 서버: `/opt/gauth-full/rebrowser-login.js`
 - 데이터 원본: `/opt/gauth-full/accounts_normalized.json`

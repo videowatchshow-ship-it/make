@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>참교육 스트리밍 · 계정 정보</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0d1117">
+<style>
+  :root{
+    --bg:#0d1117; --panel:#0f1620; --card:#161a20; --border:#22282f; --border2:#2a323c;
+    --text:#e8ecef; --sub:#8a95a5; --accent:#7dabff; --accent2:#3ddc84; --warn:#ffb469; --pink:#ff8ad4;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:32px 16px 60px}
+  .wrap{width:100%;max-width:520px}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:22px;justify-content:center}
+  .brand .logo{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:20px}
+  .brand h1{font-size:20px;font-weight:800;margin:0}
+  .brand .sub{color:var(--sub);font-size:12px;margin-top:2px}
+  .install-bar{display:flex;justify-content:center;margin-bottom:24px}
+  #install-btn{display:none;align-items:center;gap:8px;background:linear-gradient(135deg,var(--accent),#5a8dff);color:#0d1117;font-weight:800;border:none;border-radius:999px;padding:10px 20px;font-size:14px;cursor:pointer;box-shadow:0 4px 20px rgba(125,171,255,.35)}
+  #install-btn:active{transform:scale(.97)}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:20px;margin-bottom:16px}
+  .card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .card-head .label{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;color:var(--accent)}
+  .card-head .actions{display:flex;gap:6px}
+  .icon-btn{background:var(--card);border:1px solid var(--border2);color:var(--sub);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px;transition:.15s}
+  .icon-btn:hover{color:var(--text);border-color:var(--accent)}
+  .icon-btn.copied{color:var(--accent2);border-color:var(--accent2)}
+  .content-box{background:var(--card);border:1px solid var(--border2);border-radius:10px;padding:14px 16px;font-size:15px;line-height:1.6;white-space:pre-wrap;word-break:break-word;transition:opacity .15s}
+  .content-box.title-box{font-weight:800;font-size:17px;color:var(--warn)}
+  .content-box.fading{opacity:0}
+  .hashtags{color:var(--pink);font-weight:700}
+  .footer-note{text-align:center;color:var(--sub);font-size:11px;margin-top:28px;line-height:1.7}
+  .footer-note b{color:var(--accent2)}
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#0d1117; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="brand">
+    <div class="logo">🎮</div>
+    <div>
+      <h1>참교육 스트리밍</h1>
+      <div class="sub">계정 정보 · 방송 템플릿</div>
+    </div>
+  </div>
+
+  <div class="install-bar"><button id="install-btn">📲 앱으로 설치</button></div>
+
+  <div class="card">
+    <div class="card-head">
+      <span class="label">🎙️ 스트리밍 제목</span>
+      <div class="actions">
+        <button class="icon-btn" id="refresh-title">🔄 새로고침</button>
+        <button class="icon-btn" id="copy-title">📋 복사</button>
+      </div>
+    </div>
+    <div class="content-box title-box" id="title-box">참교육 당해야 하는 것인가?</div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <span class="label">📝 설명</span>
+      <div class="actions">
+        <button class="icon-btn" id="copy-desc">📋 복사</button>
+      </div>
+    </div>
+    <div class="content-box" id="desc-box"><span class="hashtags">#실시간게임 #라이브캄보디아 #대리운전 #아바타 🎮🔥</span> 란 ?
+참교육 채널입니다. 👊
+24시간 365일 1등급 생방송 스피드 하게 진행! ⚡️
+탁&제이 여러분 환영합니다. 🙌
+시아누크빌 현장에서 진행합니다. 🇰🇭
+필리핀 아님XX ❌🇵🇭</div>
+  </div>
+
+  <div class="footer-note">gauth.cent-solution.online 계정 데이터를 함께 표시하는 전용 뷰입니다.<br>로그인/2FA/토큰 발급은 <b>gauth</b>에서만 처리됩니다.</div>
+</div>
+
+<script>
+const TEMPLATES = [
+  {
+    title: '참교육 당해야 하는 것인가?',
+    desc: '<span class="hashtags">#실시간게임 #라이브캄보디아 #대리운전 #아바타 🎮🔥</span> 란 ?\n참교육 채널입니다. 👊\n24시간 365일 1등급 생방송 스피드 하게 진행! ⚡️\n탁&제이 여러분 환영합니다. 🙌\n시아누크빌 현장에서 진행합니다. 🇰🇭\n필리핀 아님XX ❌🇵🇭'
+  },
+  {
+    title: '참교육 24시간 라이브 중 🔴',
+    desc: '<span class="hashtags">#실시간 #라이브캄보디아 #시아누크빌 #참교육 🎮🔥</span>\n탁&제이가 진행하는 참교육 채널입니다. 👊\n연중무휴 24시간 · 365일 논스톱 생방송! ⚡️\n현장은 시아누크빌, 필리핀 아닙니다 ❌🇵🇭\n실시간 채팅으로 함께해요 🙌'
+  },
+  {
+    title: '오늘도 참교육 시작합니다 🎬',
+    desc: '<span class="hashtags">#라이브캄보디아 #대리운전 #아바타 #참교육 🔥</span>\n시아누크빌 현장 생중계 🇰🇭\n탁&제이와 함께하는 1등급 스피드 방송 ⚡️\n24시간 · 365일 라이브 진행 중 👊\n필리핀 아님, 캄보디아입니다 ❌🇵🇭'
+  }
+];
+let tIdx = 0;
+
+function escapeHtml(s){
+  var d = document.createElement('div'); d.textContent = s; return d.innerHTML;
+}
+function plainDesc(html){
+  var d = document.createElement('div'); d.innerHTML = html; return d.textContent;
+}
+function applyTemplate(i){
+  var titleBox = document.getElementById('title-box');
+  var descBox = document.getElementById('desc-box');
+  titleBox.classList.add('fading');
+  descBox.classList.add('fading');
+  setTimeout(function(){
+    titleBox.textContent = TEMPLATES[i].title;
+    descBox.innerHTML = TEMPLATES[i].desc;
+    titleBox.classList.remove('fading');
+    descBox.classList.remove('fading');
+  }, 150);
+}
+document.getElementById('refresh-title').onclick = function(){
+  tIdx = (tIdx + 1) % TEMPLATES.length;
+  applyTemplate(tIdx);
+};
+function flashCopied(btn){
+  var orig = btn.textContent;
+  btn.textContent = '✅ 복사됨';
+  btn.classList.add('copied');
+  setTimeout(function(){ btn.textContent = orig; btn.classList.remove('copied'); }, 1200);
+}
+document.getElementById('copy-title').onclick = function(){
+  var text = document.getElementById('title-box').textContent;
+  navigator.clipboard.writeText(text).then(function(){ flashCopied(document.getElementById('copy-title')); });
+};
+document.getElementById('copy-desc').onclick = function(){
+  var text = plainDesc(document.getElementById('desc-box').innerHTML);
+  navigator.clipboard.writeText(text).then(function(){ flashCopied(document.getElementById('copy-desc')); });
+};
+
+// PWA install prompt
+let deferredPrompt;
+const installBtn = document.getElementById('install-btn');
+window.addEventListener('beforeinstallprompt', function(e){
+  e.preventDefault();
+  deferredPrompt = e;
+  installBtn.style.display = 'inline-flex';
+});
+installBtn.addEventListener('click', function(){
+  if(!deferredPrompt) return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.finally(function(){ deferredPrompt = null; installBtn.style.display = 'none'; });
+});
+window.addEventListener('appinstalled', function(){ installBtn.style.display = 'none'; });
+
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/sw.js').catch(function(){});
+}
+</script>
+</body>
+</html>
