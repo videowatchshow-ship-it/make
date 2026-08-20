@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Find accounts missing a password
+      - name: Find accounts missing 2FA + scan for display/rendering bugs
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -22,19 +22,32 @@ jobs:
             const fs = require('fs');
             const d = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
             const arr = Array.isArray(d) ? d : (d.accounts||[]);
-
             console.log('total accounts:', arr.length);
-            console.log('sample record keys:', Object.keys(arr[0]||{}));
 
-            const pwKeys = Object.keys(arr[0]||{}).filter(k => /pass|pw/i.test(k));
-            console.log('password-like fields detected:', pwKeys);
-
-            const missing = arr.filter(a => {
-              return pwKeys.length ? pwKeys.every(k => !a[k] || String(a[k]).trim()==='') : true;
-            });
+            const no2fa = arr.filter(a => !a.totp_secret || String(a.totp_secret).trim()==='');
+            console.log('=== accounts missing totp_secret (2FA): count =', no2fa.length, '===');
+            fs.writeFileSync('/opt/gauth-full/missing_2fa_report.json', JSON.stringify(no2fa.map(a=>({email:a.email, source_file:a.source_file})), null, 2));
+            console.log('full list written to /opt/gauth-full/missing_2fa_report.json (not printed here)');
 
             console.log('');
-            console.log('=== accounts missing password: count =', missing.length, '===');
-            fs.writeFileSync('/opt/gauth-full/missing_password_report.json', JSON.stringify(missing.map(a=>({email:a.email, source_file:a.source_file})), null, 2));
-            console.log('full list written to /opt/gauth-full/missing_password_report.json on server (not printed to CI log)');
+            console.log('=== scanning for display/rendering anomalies in each field ===');
+            const fields = ['email','password','totp_secret','recovery_email','recovery_phone','youtube_url','login_method','channel_status','channel_status_reason','channel_status_label'];
+            const isMojibake = s => /[�]|Ã.|â..|ì..|ê../.test(s);
+            const isSuspicious = s => /\bundefined\b|\bnull\b|\bNaN\b|\[object Object\]/i.test(s);
+            const issues = { mojibake: [], literalNull: [], badEmail: [], newlineOrTab: [], tooLong: [] };
+            arr.forEach(a => {
+              fields.forEach(f => {
+                const v = a[f];
+                if (v === undefined || v === null) return;
+                const s = String(v);
+                if (isMojibake(s)) issues.mojibake.push({field:f, email:a.email});
+                if (isSuspicious(s)) issues.literalNull.push({field:f, email:a.email, value:s.slice(0,60)});
+                if (/[\n\t\r]/.test(s)) issues.newlineOrTab.push({field:f, email:a.email});
+                if (s.length > 300) issues.tooLong.push({field:f, email:a.email, len:s.length});
+              });
+              if (a.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email)) issues.badEmail.push(a.email);
+            });
+            Object.keys(issues).forEach(k => console.log(k+':', issues[k].length));
+            fs.writeFileSync('/opt/gauth-full/display_bugs_report.json', JSON.stringify(issues, null, 2));
+            console.log('full details written to /opt/gauth-full/display_bugs_report.json (not printed here)');
             "

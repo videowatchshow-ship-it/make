@@ -1,1 +1,1 @@
-trigger41-find-accounts-missing-password
+trigger42-missing-2fa-and-display-bugs-scan
