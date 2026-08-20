@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Find real today upload events (not archive mtime)
+      - name: Check for automated re-upload sources (cron, scripts, bots)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -18,35 +18,31 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 60s
           script: |
-            echo "=== 1. systemd journal for gauth service, today, upload-related lines ==="
-            sudo journalctl -u gauth --since "today" 2>/dev/null | grep -iE "upload|excel|parse" | tail -60
+            echo "=== 1. all cron jobs (system + user) ==="
+            sudo crontab -l 2>/dev/null
+            echo "--- /etc/cron.d ---"
+            sudo ls -la /etc/cron.d/ 2>/dev/null
+            for f in /etc/cron.d/*; do echo ">>> $f"; sudo cat "$f" 2>/dev/null; done
+            echo "--- /etc/crontab ---"
+            sudo cat /etc/crontab 2>/dev/null
 
             echo ""
-            echo "=== 2. uploads/ dir (pre-archive, not yet processed) ==="
-            sudo ls -la /opt/gauth-full/uploads/ 2>/dev/null | head -20
+            echo "=== 2. systemd timers ==="
+            sudo systemctl list-timers --all 2>/dev/null | head -30
 
             echo ""
-            echo "=== 3. archive/ dir sorted by ctime (creation/move time), today only ==="
-            sudo find /opt/gauth-full/uploads/archive -iname "*.xlsx" -newermt "today 00:00" 2>/dev/null -exec sudo stat -c '%Y %n' {} \; | sort -rn
+            echo "=== 3. full request details for the 00:11:50 upload - IP, user agent, referer ==="
+            sudo grep "00:11:5" /var/log/apache2/gauth_access.log 2>/dev/null
 
             echo ""
-            echo "=== 4. accounts_normalized.json - accounts with source_file matching today's archive file, count + upload-related meta fields ==="
-            sudo node -e "
-            const fs = require('fs');
-            const d = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
-            const arr = Array.isArray(d) ? d : (d.accounts||[]);
-            const bySource = {};
-            for (const a of arr) {
-              const sf = a.source_file || '(none)';
-              bySource[sf] = (bySource[sf]||0)+1;
-            }
-            const sorted = Object.entries(bySource).sort((a,b)=>b[1]-a[1]).slice(0,10);
-            console.log('Top source_file counts:', JSON.stringify(sorted,null,2));
-            const sample = arr.find(a => (a.email||'')==='fovehuzomisu37067@gmail.com');
-            console.log('Sample account full record:', JSON.stringify(sample,null,2));
-            "
+            echo "=== 4. any other upload-excels POSTs today (full day) ==="
+            sudo grep "upload-excels" /var/log/apache2/gauth_access.log 2>/dev/null | grep "20/Aug/2026"
 
             echo ""
-            echo "=== 5. Apache/nginx access log for POST to upload endpoint today ==="
-            sudo grep -iE "upload" /var/log/apache2/*access*.log 2>/dev/null | grep "$(date +%d/%b/%Y)" | tail -20 || echo "no apache log match"
-            sudo grep -iE "upload" /var/log/nginx/*access*.log 2>/dev/null | grep "$(date +%d/%b/%Y)" | tail -20 || echo "no nginx log match"
+            echo "=== 5. IP geolocation hint - reverse check if 172.70.143.216 is Cloudflare edge (expected) or something else ==="
+            echo "172.70.143.216 is a known Cloudflare anycast IP range if proxied=true"
+
+            echo ""
+            echo "=== 6. check for any script/cron that calls upload-excels programmatically ==="
+            sudo grep -rl "upload-excels" /opt/gauth-full/*.js /opt/gauth-full/*.sh 2>/dev/null
+            sudo grep -rn "upload-excels\|POST.*upload" /etc/cron.d/ /etc/systemd/system/*.timer /etc/systemd/system/*.service 2>/dev/null

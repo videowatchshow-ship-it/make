@@ -1,1 +1,1 @@
-trigger24-find-real-today-upload
+trigger25-check-all-today-uploads-and-cron
