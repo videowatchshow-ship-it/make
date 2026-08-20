@@ -10,38 +10,50 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Today uploads + service health
+      - name: Exhaustive date search in archived excel
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 60s
+          command_timeout: 90s
           script: |
-            echo "=== Server date/time ==="
-            date -u
-            echo ""
-            echo "=== Archive dir (all files with mtime) ==="
-            sudo ls -la --time-style=full-iso /opt/gauth-full/uploads/archive/ 2>/dev/null
-            echo ""
-            echo "=== accounts_normalized.json source_mtime for most recent uploads (top 20) ==="
             sudo node -e "
-            const d=JSON.parse(require('fs').readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
-            const arr=Array.isArray(d)?d:(d.accounts||[]);
-            const bySrc = {};
-            for (const a of arr) { const s=a.source_file||'?'; if(!bySrc[s]||a.source_mtime>bySrc[s]) bySrc[s]=a.source_mtime; }
-            const sorted = Object.entries(bySrc).sort((a,b)=>b[1]-a[1]).slice(0,20);
-            for (const [f,m] of sorted) console.log(new Date(m).toISOString(), '-', f);
+            const XLSX = require('/opt/gauth-full/node_modules/xlsx');
+            const fs = require('fs');
+            const dir = '/opt/gauth-full/uploads/archive';
+            const files = fs.readdirSync(dir).filter(f=>f.toLowerCase().endsWith('.xlsx'));
+            console.log('files:', files);
+            for (const fname of files) {
+              const fp = dir + '/' + fname;
+              console.log('');
+              console.log('===== FILE:', fname, '=====');
+              const wb = XLSX.readFile(fp, {cellDates:true, bookProps:true});
+              console.log('--- Workbook Props (core.xml metadata) ---');
+              console.log(JSON.stringify(wb.Props, null, 2));
+              console.log('--- Custom Props ---');
+              console.log(JSON.stringify(wb.Custprops || {}, null, 2));
+              console.log('--- Sheet names ---');
+              console.log(wb.SheetNames);
+              for (const sn of wb.SheetNames) {
+                const sh = wb.Sheets[sn];
+                console.log('--- Sheet:', sn, 'range:', sh['!ref'], '---');
+                const rows = XLSX.utils.sheet_to_json(sh, {header:1, raw:true, defval:''});
+                console.log('total rows:', rows.length);
+                console.log('first 3 rows:', JSON.stringify(rows.slice(0,3)));
+                console.log('last 3 rows:', JSON.stringify(rows.slice(-3)));
+                for (let r=0;r<Math.min(rows.length,30);r++){
+                  for (let c=0;c<(rows[r]||[]).length;c++){
+                    const v = rows[r][c];
+                    if (v && typeof v === 'number' && v>=36526 && v<=54789) {
+                      console.log('  DATE-LIKE at row', r, 'col', c, ':', v, '=', new Date((v-25569)*86400000).toISOString());
+                    }
+                    if (v && typeof v === 'string' && /\d{1,2}[.\/월]\s*\d{0,2}/.test(v) && v.length<20) {
+                      console.log('  KOREAN-DATE-LIKE at row', r, 'col', c, ':', JSON.stringify(v));
+                    }
+                  }
+                }
+              }
+            }
             " 2>&1
-            echo ""
-            echo "=== gauth service status ==="
-            sudo systemctl status gauth --no-pager -l 2>&1 | tail -20
-            echo ""
-            echo "=== Health check retry ==="
-            for i in 1 2 3; do
-              HTTP=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4000/api/normalized-accounts 2>/dev/null || echo 000)
-              echo "attempt $i: HTTP $HTTP"
-              [ "$HTTP" = "200" ] && break
-              sleep 2
-            done
             echo "=== DONE ==="

@@ -1,1 +1,1 @@
-trigger8-today-uploads-and-health
+trigger9-exhaustive-date-search
