@@ -26,20 +26,64 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Create jump.cent-solution.online with the freshly-issued token
+      - name: Mirror gauth vhost as jump.cent-solution.online and issue SSL
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 30s
-          envs: CF_TOKEN
+          command_timeout: 120s
           script: |
-            ZONE="2601d4f4ab75c910f8d858ca036ff344"
-            SERVER_IP=$(curl -s ifconfig.me)
-            echo "server IP: $SERVER_IP"
-            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records" \
-              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
-              --data "{\"type\":\"A\",\"name\":\"jump.cent-solution.online\",\"content\":\"$SERVER_IP\",\"ttl\":1,\"proxied\":true}"
-        env:
-          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+            set -e
+            echo "=== find the conf file containing gauth's vhost blocks ==="
+            GAUTH_CONF=$(sudo grep -rl "ServerName gauth.cent-solution.online" /etc/apache2/sites-available/ | head -1)
+            echo "source conf: $GAUTH_CONF (NOTE: this file may contain OTHER sites' vhosts too - extracting gauth blocks only)"
+
+            echo "=== extract ONLY the <VirtualHost> blocks that mention gauth.cent-solution.online ==="
+            sudo python3 -c "
+import re
+with open('$GAUTH_CONF') as f:
+    content = f.read()
+blocks = re.findall(r'(?:<IfModule[^>]*>\s*)?<VirtualHost[^>]*>.*?</VirtualHost>\s*(?:</IfModule>)?', content, re.DOTALL)
+gauth_blocks = [b for b in blocks if 'gauth.cent-solution.online' in b]
+print(f'found {len(gauth_blocks)} gauth-related blocks', file=__import__('sys').stderr)
+out = '\n\n'.join(gauth_blocks)
+out = out.replace('gauth.cent-solution.online', 'jump.cent-solution.online')
+with open('/tmp/jump_full.conf', 'w') as f:
+    f.write(out)
+"
+            echo "--- extracted+renamed block preview ---"
+            sudo cat /tmp/jump_full.conf
+
+            echo "=== build HTTP-only version (strip SSL directives) for the pre-cert reload ==="
+            sudo python3 -c "
+import re
+with open('/tmp/jump_full.conf') as f:
+    content = f.read()
+# drop the :443/IfModule mod_ssl block entirely for the pre-cert version
+content_http_only = re.sub(r'<IfModule mod_ssl\.c>.*?</IfModule>', '', content, flags=re.DOTALL)
+with open('/tmp/jump_http_only.conf', 'w') as f:
+    f.write(content_http_only)
+"
+            sudo cp /tmp/jump_http_only.conf /etc/apache2/sites-available/jump.conf
+            sudo apache2ctl configtest
+            sudo a2ensite jump.conf
+            sudo systemctl reload apache2
+            echo "apache reloaded with jump vhost (HTTP only, no SSL yet)"
+
+            echo "=== issue SSL cert via certbot (dns-cloudflare, same method as other sites on this box) ==="
+            sudo certbot certonly --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.ini \
+              -d jump.cent-solution.online --non-interactive --agree-tos -m admin@cent-solution.online \
+              --cert-name jump.cent-solution.online || echo "CERTBOT_FAILED"
+
+            if [ -f /etc/letsencrypt/live/jump.cent-solution.online/fullchain.pem ]; then
+              echo "=== cert issued, swap in the full (HTTP+SSL) vhost ==="
+              sudo cp /tmp/jump_full.conf /etc/apache2/sites-available/jump.conf
+              sudo apache2ctl configtest && sudo systemctl reload apache2
+              echo "SSL vhost active for jump.cent-solution.online"
+            else
+              echo "certbot failed - DNS may not have propagated to Cloudflare's authoritative servers yet; HTTP vhost stays live, retry cert issuance later"
+            fi
+
+            echo "=== verify ==="
+            curl -s -o /dev/null -w "http status: %{http_code}\n" http://jump.cent-solution.online/ || true

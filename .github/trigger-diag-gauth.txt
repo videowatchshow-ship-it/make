@@ -1,1 +1,1 @@
-trigger68-create-jump-with-registered-secret
+trigger69-mirror-jump-vhost-and-ssl
