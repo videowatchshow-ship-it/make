@@ -1,0 +1,45 @@
+name: extract google login from info site
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-extract-glogin.txt']
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Curl the info site + grep for gsi client_id and 1147 menu
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 90s
+          script: |
+            SITE='https://xn--9d0bw2fjtyymch7de9d.info'
+            echo '=== 0. reachability ==='
+            curl -s -o /dev/null -w 'root: %{http_code}\n' --max-time 15 "$SITE/" || echo 'unreachable'
+            echo ''
+            echo '=== 1. grep client_id / gsi / accounts.google from homepage ==='
+            curl -s --max-time 15 "$SITE/" > /tmp/info_home.html || true
+            grep -oE 'client_id[^,;\"]{0,120}' /tmp/info_home.html | head -10
+            grep -oE '[0-9]{10,}-[a-z0-9]+\.apps\.googleusercontent\.com' /tmp/info_home.html | sort -u | head -10
+            grep -oE 'accounts\.google\.com[^\"'\'' ]*' /tmp/info_home.html | sort -u | head -10
+            grep -oiE 'g_id_onload|data-client_id|gsi/client' /tmp/info_home.html | sort -u | head -10
+            echo ''
+            echo '=== 2. find any link/menu containing 1147 ==='
+            grep -oE '[^\"'\'' <>]*1147[^\"'\'' <>]*' /tmp/info_home.html | sort -u | head -20
+            grep -oE 'href=\"[^\"]*1147[^\"]*\"' /tmp/info_home.html | sort -u | head -20
+            echo ''
+            echo '=== 3. try common login paths for gsi client_id ==='
+            for p in /login /signin /auth /google /member /mypage /1147 /page/1147 /?page=1147 /bbs/board.php?bo_table=1147; do
+              code=$(curl -s -o /tmp/p.html -w '%{http_code}' --max-time 12 "$SITE$p")
+              cid=$(grep -oE '[0-9]{10,}-[a-z0-9]+\.apps\.googleusercontent\.com' /tmp/p.html | sort -u | head -1)
+              echo "$p -> $code  client_id=$cid"
+            done
+            echo ''
+            echo '=== 4. also check server-local files for a known client id ==='
+            sudo grep -roE '[0-9]{10,}-[a-z0-9]+\.apps\.googleusercontent\.com' /opt/gauth-full /var/www 2>/dev/null | sort -u | head -10 || true
