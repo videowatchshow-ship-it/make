@@ -723,6 +723,39 @@ function extractAccountsFromSheet(sheet, sourceFile, sourceMtime) {
   return accounts;
 }
 
+/* 컬럼 매핑은 시트 전체 기준 고정 컬럼이라, 개별 행에 컬럼이 더 있거나
+ * 값이 비어 예상 컬럼에서 못 찾은 password/totp/recovery가 extra로 밀려나는 경우가 있음.
+ * extra에 남은 값 중 해당 필드 후보를 찾아 비어있는 필드로 승격 (필드당 1회만) */
+function recoverMissingFieldsFromExtra(accounts) {
+  for (const a of accounts) {
+    if (!a.extra || !a.extra.length) continue;
+    const remaining = [];
+    for (const raw of a.extra) {
+      const v = String(raw || '').trim();
+      if (!v) continue;
+      if (!a.totp_secret && isTotpLike(v)) { a.totp_secret = normalizeTotp(v); continue; }
+      if (!a.recovery_email && isEmail(v) && normalizeEmail(v) !== normalizeEmail(a.email)) { a.recovery_email = v; continue; }
+      if (!a.password && !isEmail(v) && !isTotpLike(v) && !isUrlLike(v) && !isSixDigitCode(v) && !isPhoneNumber(v) && !/^\d+$/.test(v)) {
+        a.password = v;
+        continue;
+      }
+      remaining.push(v);
+    }
+    a.extra = remaining;
+  }
+  return accounts;
+}
+
+/* account_date는 엑셀 셀에 적힌 날짜만 사용 — 같은 파일 내에서 배치 단위로
+ * 한 행에만 날짜가 기입되는 경우가 있어(예: 문서 제목/작성일), 같은 파일의
+ * 나머지 행에도 그 날짜를 적용 (다운로드 날짜·파일 수정일과는 무관, 셀에 실제로 적힌 값) */
+function propagateBatchDateWithinFile(accounts) {
+  const found = accounts.find(a => a.account_date);
+  if (!found) return accounts;
+  for (const a of accounts) { if (!a.account_date) a.account_date = found.account_date; }
+  return accounts;
+}
+
 function parseExcelFile(filePath, originalName) {
   const wb = XLSX.readFile(filePath);
   const allAccounts = [];
@@ -745,6 +778,9 @@ function parseExcelFile(filePath, originalName) {
     const accounts = extractAccountsFromSheet(sheet, baseName, fileMtime);
     allAccounts.push(...accounts);
   }
+
+  recoverMissingFieldsFromExtra(allAccounts);
+  propagateBatchDateWithinFile(allAccounts);
 
   return allAccounts;
 }
