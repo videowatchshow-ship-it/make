@@ -35,8 +35,15 @@ jobs:
             ZONE="2601d4f4ab75c910f8d858ca036ff344"
             echo "token found: $([ -n "$CF_TOKEN" ] && echo yes || echo no)"
 
+            echo "=== verify token identity ==="
+            curl -s "https://api.cloudflare.com/client/v4/user/tokens/verify" -H "Authorization: Bearer $CF_TOKEN"
+            echo ""
+            echo "=== list zones this token can see ==="
+            curl -s "https://api.cloudflare.com/client/v4/zones" -H "Authorization: Bearer $CF_TOKEN" | python3 -c "import json,sys; d=json.load(sys.stdin); print([{'id':z['id'],'name':z['name']} for z in d.get('result',[])]); print('errors:', d.get('errors'))"
+
             EXISTING=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records?name=gauth.cent-solution.online" \
               -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json")
+            echo "raw EXISTING response: $EXISTING"
             TYPE=$(echo "$EXISTING" | python3 -c "import json,sys; print(json.load(sys.stdin)['result'][0]['type'])")
             CONTENT=$(echo "$EXISTING" | python3 -c "import json,sys; print(json.load(sys.stdin)['result'][0]['content'])")
             PROXIED=$(echo "$EXISTING" | python3 -c "import json,sys; print(str(json.load(sys.stdin)['result'][0]['proxied']).lower())")

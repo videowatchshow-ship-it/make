@@ -1,1 +1,1 @@
-trigger64-create-jump-dns-with-server-cf-token
+trigger65-debug-cf-token-zone-mismatch
