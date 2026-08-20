@@ -1,0 +1,34 @@
+name: gauth · diagnose which fetch returns HTML (unexpected <)
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-diag-fetch.txt']
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Grep fetch() calls in gauth index.html + probe each
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 60s
+          script: |
+            F=/var/www/sites/gauth/public/index.html
+            echo '=== 1. every fetch(...) call in gauth index.html ==='
+            sudo grep -oE "fetch\\(['\"\`][^'\"\`]+['\"\`]" "$F" | sort -u
+            echo ''
+            echo '=== 2. every URL literal (/api/... /excel/... etc) referenced ==='
+            sudo grep -oE '[/][a-zA-Z0-9_\-/.]+' "$F" | grep -E '^/(api|excel|totp|codes|tok|admin|users|master|lookup|subsite)' | sort -u
+            echo ''
+            echo '=== 3. probe each candidate URL and report content-type ==='
+            for u in /api/subsite-counts /api/subsite-accounts /api/accounts /api/lookup /api/master /api/users /api/status /excel/upload /excel/all /codes /tok /totp /api/auth /api/session; do
+              type=$(curl -s -o /tmp/o -w '%{http_code} %{content_type}' http://127.0.0.1:4000$u --max-time 4)
+              first=$(head -c 60 /tmp/o | tr -d '\n')
+              echo "[$type] $u  first60='$first'"
+            done
