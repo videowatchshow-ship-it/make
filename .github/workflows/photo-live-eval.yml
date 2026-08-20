@@ -1,0 +1,49 @@
+name: 실 페이지 안에서 wenlu/ask 라이브 값 직접 추출
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-live-eval.yml'
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm init -y >/dev/null 2>&1 && npm i -D playwright >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: 라이브 페이지에서 함수/상태 직접 조회
+        timeout-minutes: 1
+        run: |
+          cat > ev.js << 'EOF'
+          const { chromium } = require('playwright');
+          (async () => {
+            try {
+              const browser = await chromium.launch();
+              const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+              await page.goto('https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html', { waitUntil: 'domcontentloaded', timeout: 15000 });
+              await page.waitForTimeout(3000);
+              const info = await page.evaluate(() => {
+                const out = {};
+                out.hasAsk = typeof window.ask;
+                out.hasWenlu = typeof window.wenlu;
+                out.hasBGL = typeof window.BGL;
+                out.BGLinfo = (window.BGL && window.BGL.info) ? window.BGL.info : null;
+                out.windowKeys = Object.keys(window).filter(k => typeof window[k] === 'function' && !['alert','fetch','open'].includes(k)).slice(0, 60);
+                return out;
+              });
+              console.log('EVAL_RESULT_START');
+              console.log(JSON.stringify(info, null, 2));
+              console.log('EVAL_RESULT_END');
+              await browser.close();
+              process.exit(0);
+            } catch (e) {
+              console.error('ERR:', e.message);
+              process.exit(1);
+            }
+          })();
+          EOF
+          timeout 50 node ev.js || echo "타임아웃/에러"
