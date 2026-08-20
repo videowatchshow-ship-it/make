@@ -1,0 +1,54 @@
+name: 실제 렌더링 구조 진단 + 스크린샷 검증
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-diagnose-real-render.yml'
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          envs: CF_TOKEN,CF_ZONE
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+
+            echo "===== [1] write.php 안 CAH_1, box_R, signal_panel 실제 구조 ====="
+            sudo grep -n "CAH_1\|box_R\|signal_panel" "$P1/write.php" | head -50
+
+            echo ""
+            echo "===== [2] Live_height_kakao 와 h_side_banner 각각 어디서 참조되는지 ====="
+            sudo grep -n "Live_height_kakao\|h_side_banner" "$P1/write.php" | head -30
+
+            echo ""
+            echo "===== [3] SNW_1.html 안에서도 동일 검색 ====="
+            sudo grep -n "CAH_1\|box_R\|signal_panel\|Live_height_kakao\|h_side_banner" "$P1/SNW_1.html" | head -30
+
+            echo ""
+            echo "===== [4] 검은 영역이 실제 무슨 태그인지 - full_box, r1 주변 CSS 확인 ====="
+            sudo grep -n "\.r1\|\.full_box\|\.bead_wrap\|background" "$P1/SNW_1.html" | grep -v "chamgyo" | head -30
+
+            echo ""
+            echo "===== [5] write.php 에도 같은 CSS 클래스 있는지 ====="
+            sudo grep -n "\.r1\b\|\.full_box\|\.bead_wrap" "$P1/write.php" | head -20
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE
