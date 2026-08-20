@@ -1,0 +1,59 @@
+name: photo SNW_1.html Next.P/B z-index 누락 수정 (다른 요소에 가려짐)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-nextpb-zindex-fix.yml'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: next_row 에 z-index 추가 (chamgyoBanner 와 동일 스택 레벨로)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            F=/var/www/sites/chamgyo/public/photo/SNW_1.html
+            if [ ! -f "$F" ]; then
+              echo "파일 없음: $F"
+              exit 1
+            fi
+            sudo cp "$F" "${F}.bak_$(date +%s)"
+            sudo python3 << 'PYEOF'
+            path = "/var/www/sites/chamgyo/public/photo/SNW_1.html"
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+            old = '<div class="next_row" style="position:absolute;left:980px;top:267px;width:920px;height:104px;">'
+            new = '<div class="next_row" style="position:absolute;left:980px;top:267px;width:920px;height:104px;z-index:60;">'
+            if old not in content:
+                print("OLD_NOT_FOUND")
+                raise SystemExit(1)
+            new_content = content.replace(old, new, 1)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(new_content)
+            print("ZINDEX_PATCHED_OK")
+            PYEOF
+            sudo chown --reference="${F}.bak_"* "$F" 2>/dev/null || true
+            echo "===== 패치 후 next_row 확인 ====="
+            grep -oE '<div class="next_row"[^>]*>' "$F"
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
+
+      - name: 라이브 실측 확인
+        run: |
+          sleep 3
+          curl -sS "https://xn--9d0bw2fjtyymch7de9d.info/photo/SNW_1.html?ch=cent" | grep -oE '<div class="next_row"[^>]*>'
