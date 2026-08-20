@@ -1,0 +1,84 @@
+name: photo2 write.php 서브도메인 URL 버그 수정 (?ch= 쿼리 파라미터 방식으로 통일)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-writephp-subdomain-fix.yml'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: photo2/write.php 서브도메인 URL을 ?ch= 방식으로 수정
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            F=/var/www/sites/chamgyo/public/photo2/write.php
+            if [ ! -f "$F" ]; then
+              echo "파일 없음: $F"
+              exit 1
+            fi
+            echo "===== 수정 전 (문제의 서브도메인 URL 3줄) ====="
+            grep -nE "myUrlV|myUrlH|myUrlSN" "$F"
+            sudo cp "$F" "${F}.bak_$(date +%s)"
+            sudo python3 << 'PYEOF'
+            path = "/var/www/sites/chamgyo/public/photo2/write.php"
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+            replacements = [
+                (
+                    'https://<?= htmlspecialchars($__id) ?>.xn--9d0bw2fjtyymch7de9d.info/photo2/CAH_1.html',
+                    'https://xn--9d0bw2fjtyymch7de9d.info/photo2/CAH_1.html?ch=<?= htmlspecialchars($__id) ?>'
+                ),
+                (
+                    'https://<?= htmlspecialchars($__id) ?>.xn--9d0bw2fjtyymch7de9d.info/photo2/CAW_1.html',
+                    'https://xn--9d0bw2fjtyymch7de9d.info/photo2/CAW_1.html?ch=<?= htmlspecialchars($__id) ?>'
+                ),
+                (
+                    'https://<?= htmlspecialchars($__id) ?>.xn--9d0bw2fjtyymch7de9d.info/photo2/SNW_1.html',
+                    'https://xn--9d0bw2fjtyymch7de9d.info/photo2/SNW_1.html?ch=<?= htmlspecialchars($__id) ?>'
+                ),
+            ]
+            missing = []
+            for old, new in replacements:
+                if old not in content:
+                    missing.append(old)
+                    continue
+                content = content.replace(old, new, 1)
+            if missing:
+                print("OLD_NOT_FOUND_COUNT:", len(missing))
+                for m in missing:
+                    print("MISSING:", m)
+                raise SystemExit(1)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
+            print("SUBDOMAIN_URL_FIXED_OK")
+            PYEOF
+            sudo chown --reference="${F}.bak_"* "$F" 2>/dev/null || true
+            echo "===== 수정 후 (정상 쿼리 파라미터 방식) ====="
+            grep -nE "myUrlV|myUrlH|myUrlSN" "$F"
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
+
+      - name: 라이브 실측 확인 (photo2/write.php 응답에 서브도메인 URL이 더 이상 없는지)
+        run: |
+          sleep 3
+          curl -sS "https://xn--9d0bw2fjtyymch7de9d.info/photo2/write.php" -o /tmp/w.html || true
+          echo "===== 서브도메인 패턴(잘못된 형태) 잔존 여부 ====="
+          grep -oE 'https://<?[^"]*\.xn--9d0bw2fjtyymch7de9d\.info[^"]*' /tmp/w.html || echo "NO_SUBDOMAIN_PATTERN_FOUND (정상)"
+          echo "===== ?ch= 쿼리 파라미터 방식 URL 확인 ====="
+          grep -oE 'xn--9d0bw2fjtyymch7de9d\.info/photo2/[A-Za-z0-9_]+\.html\?ch=[^"<]*' /tmp/w.html || echo "패턴 못찾음 (로그인 필요 페이지일 수 있음)"
