@@ -1,0 +1,59 @@
+name: cham SSL retry (verbose)
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-cham-ssl.txt']
+
+jobs:
+  ssl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Retry certbot dns-cloudflare with 60s propagation + verbose logs
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 300s
+          script: |
+            set -e
+            CF_TOKEN="${{ secrets.CLOUDFLARE_TOKEN }}"
+
+            echo "=== 0. sanity: existing certs and DNS ==="
+            sudo ls -la /etc/letsencrypt/live/ 2>/dev/null || true
+            dig +short cham.cent-solution.online @1.1.1.1 || true
+
+            echo ""
+            echo "=== 1. write CF creds ==="
+            sudo mkdir -p /root/.secrets
+            echo "dns_cloudflare_api_token = $CF_TOKEN" | sudo tee /root/.secrets/cf-cham.ini > /dev/null
+            sudo chmod 600 /root/.secrets/cf-cham.ini
+
+            echo ""
+            echo "=== 2. certbot certonly with dns-propagation=60s and verbose ==="
+            sudo certbot certonly -v \
+              -d cham.cent-solution.online \
+              --dns-cloudflare \
+              --dns-cloudflare-credentials /root/.secrets/cf-cham.ini \
+              --dns-cloudflare-propagation-seconds 60 \
+              --non-interactive --agree-tos -m admin@cent-solution.online 2>&1 | tail -60 || true
+
+            sudo shred -u /root/.secrets/cf-cham.ini 2>/dev/null || sudo rm -f /root/.secrets/cf-cham.ini
+
+            echo ""
+            echo "=== 3. verify cert file present ==="
+            sudo ls -la /etc/letsencrypt/live/cham.cent-solution.online/ 2>&1 || echo NO_CERT_DIR
+
+            echo ""
+            echo "=== 4. reload apache (SSL vhost was already written by create-cham-site) ==="
+            sudo apachectl configtest && sudo systemctl reload apache2
+
+            echo ""
+            echo "=== 5. verify HTTPS status ==="
+            sleep 5
+            curl -sS -o /dev/null -w "cham status: %{http_code}\n" https://cham.cent-solution.online/ --max-time 15
+            curl -sS --max-time 15 https://cham.cent-solution.online/api/accounts | head -c 200
+            echo ""
