@@ -10,7 +10,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Sample raw_values for date patterns
+      - name: Verify server file hashes vs repo
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 30s
+          script: |
+            echo "=== SERVER hashes ==="
+            md5sum /var/www/sites/gauth/public/index.html
+            md5sum /opt/gauth-full/upload_excels.js
+            md5sum /opt/gauth-full/auto_deploy.js
+            echo "=== DONE ==="
+
+      - name: Verify raw_values date patterns
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -18,7 +32,7 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 60s
           script: |
-            echo "=== 1. raw_values samples across many accounts (looking for date-like values) ==="
+            echo "=== raw_values samples across many accounts (looking for date-like values) ==="
             sudo node -e "
             const d=JSON.parse(require('fs').readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
             const arr=Array.isArray(d)?d:(d.accounts||[]);
@@ -32,28 +46,7 @@ jobs:
               n++;
             }
             " 2>&1
-
             echo ""
-            echo "=== 2. isDateLike function body ==="
+            echo "=== isDateLike function body ==="
             sudo sed -n '333,347p' /opt/gauth-full/upload_excels.js 2>/dev/null
-
-            echo ""
-            echo "=== 3. Any archived excel files right now? Dump raw sheet ==="
-            sudo node -e "
-            const XLSX = require('/opt/gauth-full/node_modules/xlsx');
-            const fs = require('fs');
-            const dir = '/opt/gauth-full/uploads/archive';
-            let files = [];
-            try { files = fs.readdirSync(dir).filter(f=>f.toLowerCase().endsWith('.xlsx')); } catch(e) { console.log('no dir'); }
-            console.log('archive files:', files.length);
-            if(files.length){
-              const fp = dir + '/' + files[0];
-              console.log('Sample:', files[0]);
-              const wb = XLSX.readFile(fp);
-              const sh = wb.Sheets[wb.SheetNames[0]];
-              const rows = XLSX.utils.sheet_to_json(sh, {header:1, raw:true});
-              console.log(JSON.stringify(rows.slice(0,10)));
-            }
-            " 2>&1
-
             echo "=== DONE ==="
