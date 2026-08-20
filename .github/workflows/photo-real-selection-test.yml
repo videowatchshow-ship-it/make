@@ -1,0 +1,68 @@
+name: 방 선택 실제 동작 테스트 (write_select_room.php 실행 + 격리 확인)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-real-selection-test.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+            cd "$P1"
+
+            echo "===== [0] 테스트 전 원본 값 백업 (tak, cent) ====="
+            timeout 5 sudo cat data/sel_tak.json 2>&1
+            timeout 5 sudo cat data/sel_cent.json 2>&1
+            ORIG_TAK=$(sudo cat data/sel_tak.json 2>/dev/null)
+            ORIG_CENT=$(sudo cat data/sel_cent.json 2>/dev/null)
+
+            echo ""
+            echo "===== [1] tak 로 실제 로그인된 것처럼 write_select_room.php 직접 실행 (room_id=777) ====="
+            sudo -u www-data php -r '
+              $_SESSION = ["auth" => true, "id" => "tak"];
+              $_POST = ["room_id" => "777", "board" => "TESTBOARD", "ch" => "cent"];
+              $_SERVER["REQUEST_METHOD"] = "POST";
+              require "'"$P1"'/write_select_room.php";
+            ' 2>&1
+
+            echo ""
+            echo "===== [2] 결과 확인: tak 세션이 ch=cent 로 보내도 실제로는 sel_tak.json 만 바뀌어야 함(격리 증명) ====="
+            echo "--- sel_tak.json (바뀌어야 함) ---"
+            timeout 5 sudo cat data/sel_tak.json 2>&1
+            echo ""
+            echo "--- sel_cent.json (안 바뀌어야 함, 격리 성공 조건) ---"
+            timeout 5 sudo cat data/sel_cent.json 2>&1
+
+            echo ""
+            echo "===== [3] api_selected_room.php 로 실제 폴링 API 응답 확인 (bgl.js 가 쓰는 것과 동일) ====="
+            curl -sS "http://localhost/photo/api_selected_room.php?ch=tak" -H "Host: xn--9d0bw2fjtyymch7de9d.info" 2>&1
+            echo ""
+            curl -sS "https://xn--9d0bw2fjtyymch7de9d.info/photo/api_selected_room.php?ch=tak&_=$(date +%s)" 2>&1
+            echo ""
+
+            echo ""
+            echo "===== [4] 원상복구 (테스트 이전 값으로) ====="
+            if [ -n "$ORIG_TAK" ]; then echo "$ORIG_TAK" | sudo tee data/sel_tak.json >/dev/null; fi
+            echo "--- 복구 후 sel_tak.json ---"
+            timeout 5 sudo cat data/sel_tak.json 2>&1
+            echo ""
+            echo "--- sel_cent.json 최종 (테스트로 인한 변화 없어야 함) ---"
+            timeout 5 sudo cat data/sel_cent.json 2>&1
+            REMOTE
