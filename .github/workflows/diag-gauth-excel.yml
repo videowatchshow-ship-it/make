@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Compare byte encoding of real DB filename vs literal string (NFC/NFD check)
+      - name: Final validation after NFC fix - all 47 real filenames
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -20,18 +20,23 @@ jobs:
           script: |
             sudo node -e "
             const fs = require('fs');
+            const html = fs.readFileSync('/var/www/sites/gauth/public/index.html', 'utf8');
+            const start = html.indexOf('function _parseFilenameDate');
+            const end = html.indexOf('function _sortByExcelDate');
+            const fnSrc = html.slice(start, end);
+            eval(fnSrc);
+
             const d = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
             const arr = Array.isArray(d) ? d : (d.accounts||[]);
-            const cand = arr.map(a=>a.source_file).filter(f => f && f.replace(/[^0-9]/g,'')==='723');
-            cand.forEach(f => {
-              console.log('FOUND:', JSON.stringify(f));
-              console.log('  raw bytes:', Buffer.from(f,'utf8').toString('hex'));
-              console.log('  NFC bytes:', Buffer.from(f.normalize('NFC'),'utf8').toString('hex'));
-              console.log('  NFD bytes:', Buffer.from(f.normalize('NFD'),'utf8').toString('hex'));
-              const re = /(\d{1,2})\s*월\s*(\d{1,2})\s*일/;
-              console.log('  raw match:', f.match(re));
-              console.log('  NFC match:', f.normalize('NFC').match(re));
+            const uniqueFiles = [...new Set(arr.map(a => a.source_file || '(none)'))];
+            console.log('=== TOTAL UNIQUE FILENAMES:', uniqueFiles.length, '===');
+            let parsed = 0, unparsed = 0;
+            const results = uniqueFiles.map(f => {
+              const dt = _parseFilenameDate(f);
+              if(dt) parsed++; else unparsed++;
+              return { file: f, parsedDate: dt ? new Date(dt).toISOString().slice(0,10) : null };
             });
-            const literal = '7월23일.xlsx';
-            console.log('literal bytes:', Buffer.from(literal,'utf8').toString('hex'));
+            results.sort((a,b) => (a.parsedDate||'0000') < (b.parsedDate||'0000') ? 1 : -1);
+            console.log('=== PARSED:', parsed, '/ UNPARSED:', unparsed, '(AFTER NFC FIX) ===');
+            results.forEach(r => console.log((r.parsedDate||'NULL').padEnd(12), r.file));
             "
