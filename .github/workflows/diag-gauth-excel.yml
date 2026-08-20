@@ -92,4 +92,12 @@ jobs:
             koreanPw.forEach(a => { koreanBySrc[a.source_file] = (koreanBySrc[a.source_file]||0)+1; });
             console.log('by source_file:', JSON.stringify(koreanBySrc));
             console.log('sample password VALUES (these are just Korean words, not secrets, safe to show):', JSON.stringify(koreanPw.slice(0,15).map(a=>a.password)));
+
+            console.log('');
+            console.log('=== is the original excel file for 보물섬 체널 (8.15).xlsx still on disk? ===');
+            const { execSync } = require('child_process');
+            try {
+              const out = execSync(\"find /opt/gauth-full/uploads -iname '*8.15*' 2>/dev/null; find /opt/gauth-full -iname '*보물섬*' 2>/dev/null\").toString();
+              console.log(out || '(no matching file found anywhere under /opt/gauth-full)');
+            } catch(e) { console.log('find error:', e.message); }
             "
