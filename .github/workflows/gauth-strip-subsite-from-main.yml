@@ -1,0 +1,102 @@
+name: gauth · strip 하위 사이트 card from main (keep on /subsites.html)
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-strip-subsite.txt']
+
+jobs:
+  strip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Locate + remove subsite block from gauth main index.html
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 60s
+          script: |
+            F=/var/www/sites/gauth/public/index.html
+            sudo cp "$F" "$F.bak.strip.$(date +%s)"
+
+            echo '=== 1. locate all headings that mention 하위 사이트 ==='
+            sudo grep -nE '하위 사이트|subsite-list|subsite-accounts-body|tab-subsite|tab-master' "$F" | head -40
+
+            echo ''
+            echo '=== 2. strip precisely ==='
+            sudo python3 - <<'PYEOF'
+            import re
+            f = '/var/www/sites/gauth/public/index.html'
+            s = open(f, encoding='utf-8').read()
+            before = len(s)
+
+            def strip_enclosing(text, needle, open_tag_re):
+              out = text; changed = True
+              while changed:
+                changed = False
+                idx = out.find(needle)
+                if idx < 0: return out
+                # find nearest preceding open tag
+                m = None
+                for mm in re.finditer(open_tag_re, out[:idx]):
+                  m = mm
+                if not m: return out
+                start = m.start()
+                # find matching close tag by depth
+                i = start; depth = 0; end = -1
+                while i < len(out):
+                  if out.startswith('<div', i):
+                    j = out.find('>', i)
+                    if j < 0: break
+                    if not out[i:j].endswith('/'): depth += 1
+                    i = j+1; continue
+                  if out.startswith('</div>', i):
+                    depth -= 1; i += 6
+                    if depth == 0: end = i; break
+                    continue
+                  i += 1
+                if end < 0: return out
+                out = out[:start] + out[end:]
+                changed = True
+              return out
+
+            # Strip the entire card that contains '하위 사이트별 계정' or 'subsite-list'
+            s = strip_enclosing(s, '하위 사이트별 계정', r'<div[^>]*class="[^"]*card[^"]*"[^>]*>')
+            s = strip_enclosing(s, '하위 사이트 계정',   r'<div[^>]*class="[^"]*card[^"]*"[^>]*>')
+            s = strip_enclosing(s, 'subsite-list',        r'<div[^>]*class="[^"]*card[^"]*"[^>]*>')
+            s = strip_enclosing(s, 'subsite-accounts-body', r'<div[^>]*class="[^"]*card[^"]*"[^>]*>')
+            # Strip any leftover tab buttons that only tabbed to subsite view
+            s = re.sub(r'<button[^>]*id="tab-subsite"[^>]*>.*?</button>\s*', '', s, flags=re.S)
+            s = re.sub(r'<button[^>]*id="tab-master"[^>]*>.*?</button>\s*', '', s, flags=re.S)
+            # Also strip any inline <script> that only loads /api/subsite-accounts (leave shims alone)
+            after = len(s)
+            print(f'bytes stripped: {before-after}')
+
+            # Ensure nav link to /subsites.html exists
+            if 'id="nav-subsites"' not in s and '<body>' in s:
+                nav = ('<a id="nav-subsites" href="/subsites.html" '
+                       'style="position:fixed;top:12px;right:14px;z-index:9999;'
+                       'background:#161a20;color:#7dabff;border:1px solid #22282f;'
+                       'border-radius:999px;padding:6px 14px;font-size:12px;'
+                       'text-decoration:none;font-weight:700;font-family:sans-serif">'
+                       '📦 하위 계정 →</a>\n')
+                s = s.replace('<body>', '<body>\n' + nav, 1)
+                print('nav link added')
+
+            open(f, 'w', encoding='utf-8').write(s)
+            PYEOF
+
+            echo ''
+            echo '=== 3. verify ==='
+            echo 'residual subsite markers on main:'
+            curl -s --max-time 10 https://gauth.cent-solution.online/ | grep -oE '하위 사이트별 계정|subsite-list|subsite-accounts-body|tab-subsite' | sort -u
+            echo ''
+            echo 'main HTTPS:'
+            curl -s -o /dev/null -w '%{http_code}\n' https://gauth.cent-solution.online/ --max-time 10
+            echo 'subsites.html HTTPS:'
+            curl -s -o /dev/null -w '%{http_code}\n' https://gauth.cent-solution.online/subsites.html --max-time 10
+            echo 'nav link count (should be 1):'
+            curl -s --max-time 10 https://gauth.cent-solution.online/ | grep -c 'nav-subsites' || echo 0
