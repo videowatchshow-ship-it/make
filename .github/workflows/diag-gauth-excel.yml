@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Locate column-mapping bug for the 6 contaminated records
+      - name: Find all accounts with corrupted password/2FA fields
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -22,44 +22,33 @@ jobs:
             const fs = require('fs');
             const d = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
             const arr = Array.isArray(d) ? d : (d.accounts||[]);
+            console.log('total accounts:', arr.length);
 
-            const badEmail = arr.filter(a => a.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email));
-            const badPw = arr.filter(a => a.password && /%[0-9A-Fa-f]{2}/.test(String(a.password)));
+            // valid TOTP secret: base32 alphabet, typically 16-64 chars, no @ / % / spaces
+            const isValidTotp = s => !s || /^[A-Z2-7]{8,64}$/.test(String(s).replace(/\s+/g,''));
+            // corrupted password: contains url-encoding, an embedded email, or a pipe char
+            const isCorruptPw = s => !!s && (/%[0-9A-Fa-f]{2}/.test(s) || /@/.test(s) || /\|/.test(s));
+            // corrupted totp: non-empty but fails base32 shape, or contains url-encoding/email
+            const isCorruptTotp = s => !!s && (!isValidTotp(s) || /%[0-9A-Fa-f]{2}/.test(s) || /@/.test(s));
 
-            console.log('=== bad-email records: source_file + source_row + raw_values keys ===');
-            badEmail.forEach(a => {
-              console.log(JSON.stringify(a.source_file), '| row', a.source_row, '| raw_values keys:', a.raw_values ? Object.keys(a.raw_values) : 'none');
-            });
-
-            console.log('');
-            console.log('=== bad-password records: source_file + source_row + raw_values keys ===');
-            badPw.forEach(a => {
-              console.log(JSON.stringify(a.source_file), '| row', a.source_row, '| raw_values keys:', a.raw_values ? Object.keys(a.raw_values) : 'none');
-            });
+            const badPw = arr.filter(a => isCorruptPw(a.password));
+            const badTotp = arr.filter(a => isCorruptTotp(a.totp_secret));
 
             console.log('');
-            console.log('=== raw_values for ONE bad-email record (full, to see real column layout) ===');
-            if (badEmail[0]) console.log(JSON.stringify(badEmail[0].raw_values, null, 2));
+            console.log('=== accounts with corrupted password: count =', badPw.length, '===');
+            badPw.forEach((a,i) => console.log((i+1)+'.', a.email, '| source_file:', a.source_file, '| pw_len:', String(a.password).length));
 
             console.log('');
-            console.log('=== raw_values for ONE bad-password record (full) ===');
-            if (badPw[0]) console.log(JSON.stringify(badPw[0].raw_values, null, 2));
+            console.log('=== accounts with corrupted 2FA (totp_secret): count =', badTotp.length, '===');
+            badTotp.forEach((a,i) => console.log((i+1)+'.', a.email, '| source_file:', a.source_file, '| totp_len:', String(a.totp_secret).length));
 
+            const union = new Set([...badPw.map(a=>a.email), ...badTotp.map(a=>a.email)]);
             console.log('');
-            console.log('=== broad grep for literal %7C or old_totp across ALL .js in /opt/gauth-full ===');
-            const { execSync } = require('child_process');
-            try {
-              const out = execSync(\"grep -rn '%7C\\|old_totp' /opt/gauth-full --include='*.js' 2>/dev/null || true\").toString();
-              console.log(out || '(no matches found in any .js file)');
-            } catch(e) { console.log('grep error:', e.message); }
+            console.log('=== union (either password or 2FA broken): count =', union.size, '===');
 
-            console.log('');
-            console.log('=== recheck raw record (password/totp masked, structure only) ===');
-            const badPw2 = arr.find(a => a.email === 'GalissaZo.hir@gmail.com');
-            if (badPw2) {
-              const masked = Object.assign({}, badPw2);
-              ['password','totp_secret'].forEach(k => { if (masked[k]) masked[k] = '[MASKED len='+String(masked[k]).length+']'; });
-              if (masked.password_alts) masked.password_alts = masked.password_alts.map(v=>'[MASKED len='+String(v).length+']');
-              console.log(JSON.stringify(masked, null, 2));
-            }
+            fs.writeFileSync('/opt/gauth-full/corrupted_credentials_report.json', JSON.stringify({
+              badPassword: badPw.map(a=>({email:a.email, source_file:a.source_file, source_row:a.source_row})),
+              badTotp: badTotp.map(a=>({email:a.email, source_file:a.source_file, source_row:a.source_row}))
+            }, null, 2));
+            console.log('full report (with source_row for fixing) saved to /opt/gauth-full/corrupted_credentials_report.json');
             "
