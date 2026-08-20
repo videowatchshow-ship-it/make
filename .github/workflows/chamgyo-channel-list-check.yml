@@ -1,0 +1,39 @@
+name: chamgyo photo/data 실제 채널 목록 조회
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/chamgyo-channel-list-check.yml'
+jobs:
+  list:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: 데이터 폴더/채널 목록 실측
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            echo "===== photo/data 실체 경로 ====="
+            readlink -f /var/www/sites/chamgyo/public/photo/data
+            echo "===== data 폴더 내 채널(파일/디렉토리) 목록 ====="
+            sudo ls -la /var/www/sites/chamgyo/public/photo/data 2>&1 | head -100
+            echo "===== SNW_1.html 내 채널 관련 JS 변수(ch=, channel 등) 검색 ====="
+            sudo grep -oE "(ch|channel)[\"']?\s*[:=]\s*[\"'][a-zA-Z0-9_]+[\"']" /var/www/sites/chamgyo/public/photo/SNW_1.html 2>/dev/null | sort -u | head -50
+            echo "===== data 폴더 하위 json/js 파일에서 채널명 후보 검색 ====="
+            sudo find /var/www/sites/chamgyo/public/photo/data -maxdepth 2 -type f \( -name "*.json" -o -name "*.js" \) 2>/dev/null | head -30
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
