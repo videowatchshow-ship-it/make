@@ -1,0 +1,21 @@
+name: __stage 스케일링 로직 + chamgyoBanner 전체 컨텍스트 확인
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-stage-scale-check.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: __stage, __wrap, chamgyoBanner 관련 전체 코드 추출
+        run: |
+          curl -sS -o /tmp/snw1.html "https://xn--9d0bw2fjtyymch7de9d.info/photo/SNW_1.html?ch=cent"
+          echo "===== __stage / scale 관련 JS ====="
+          grep -n "__stage\|__wrap\|scale\|transform\|chamgyoBanner\|chamgyoImg\|viewport" /tmp/snw1.html | head -60
+          echo ""
+          echo "===== viewport meta 태그 ====="
+          grep -n "<meta name=\"viewport\"" /tmp/snw1.html
