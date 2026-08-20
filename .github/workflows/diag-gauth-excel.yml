@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Find accounts missing 2FA + scan for display/rendering bugs
+      - name: Full mojibake sweep across every field including raw_values
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -24,44 +24,43 @@ jobs:
             const arr = Array.isArray(d) ? d : (d.accounts||[]);
             console.log('total accounts:', arr.length);
 
-            const no2fa = arr.filter(a => !a.totp_secret || String(a.totp_secret).trim()==='');
-            console.log('=== accounts missing totp_secret (2FA): count =', no2fa.length, '===');
-            fs.writeFileSync('/opt/gauth-full/missing_2fa_report.json', JSON.stringify(no2fa.map(a=>({email:a.email, source_file:a.source_file})), null, 2));
-            console.log('full list written to /opt/gauth-full/missing_2fa_report.json (not printed here)');
+            // mojibake signatures: UTF-8 bytes misread as Latin-1/CP1252 (Ã.., â.., ì.., ê..),
+            // or URL-percent-encoding leftovers (%XX), or the literal replacement char.
+            const isMojibake = s => /[�]|Ã[\x80-\xBF]|â[\x80-\xBF]{2}|ì[\x80-\xBF]|ê[\x80-\xBF]|%[0-9A-Fa-f]{2}/.test(s);
 
-            console.log('');
-            console.log('=== scanning for display/rendering anomalies in each field ===');
-            const fields = ['email','password','totp_secret','recovery_email','recovery_phone','youtube_url','login_method','channel_status','channel_status_reason','channel_status_label'];
-            const isMojibake = s => /[�]|Ã.|â..|ì..|ê../.test(s);
-            const isSuspicious = s => /\bundefined\b|\bnull\b|\bNaN\b|\[object Object\]/i.test(s);
-            const issues = { mojibake: [], literalNull: [], badEmail: [], newlineOrTab: [], tooLong: [] };
+            let totalHits = 0;
+            const byField = {};
+            const bySourceFile = {};
+            const samples = [];
+
+            function scanValue(f, v, sourceFile) {
+              if (v === undefined || v === null) return;
+              const s = String(v);
+              if (isMojibake(s)) {
+                totalHits++;
+                byField[f] = (byField[f]||0) + 1;
+                bySourceFile[sourceFile] = (bySourceFile[sourceFile]||0) + 1;
+                if (samples.length < 20) samples.push({field:f, source_file: sourceFile, sample: s.slice(0,50)});
+              }
+            }
+
             arr.forEach(a => {
-              fields.forEach(f => {
-                const v = a[f];
-                if (v === undefined || v === null) return;
-                const s = String(v);
-                if (isMojibake(s)) issues.mojibake.push({field:f, email:a.email});
-                if (isSuspicious(s)) issues.literalNull.push({field:f, email:a.email, value:s.slice(0,60)});
-                if (/[\n\t\r]/.test(s)) issues.newlineOrTab.push({field:f, email:a.email});
-                if (s.length > 300) issues.tooLong.push({field:f, email:a.email, len:s.length});
+              Object.keys(a).forEach(f => {
+                if (f === 'raw_values' && a[f] && typeof a[f] === 'object') {
+                  Object.keys(a[f]).forEach(rk => scanValue('raw_values.'+rk, a[f][rk], a.source_file));
+                } else {
+                  scanValue(f, a[f], a.source_file);
+                }
               });
-              if (a.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email)) issues.badEmail.push(a.email);
             });
-            Object.keys(issues).forEach(k => console.log(k+':', issues[k].length));
-            fs.writeFileSync('/opt/gauth-full/display_bugs_report.json', JSON.stringify(issues, null, 2));
-            console.log('full details written to /opt/gauth-full/display_bugs_report.json (not printed here)');
 
             console.log('');
-            console.log('=== mojibake detail (field + garbled sample, no email) ===');
-            issues.mojibake.forEach(x => {
-              const rec = arr.find(a=>a.email===x.email);
-              const raw = String(rec[x.field]||'');
-              console.log('field:', x.field, '| sample:', JSON.stringify(raw.slice(0,40)));
-            });
+            console.log('=== TOTAL mojibake/broken-encoding hits across ALL fields:', totalHits, '===');
+            console.log('by field:', JSON.stringify(byField));
+            console.log('by source_file:', JSON.stringify(bySourceFile));
             console.log('');
-            console.log('=== badEmail detail (masked, structure only) ===');
-            issues.badEmail.forEach(e => {
-              const masked = e.replace(/^(.{2}).*(@.*)$/, (m,a,b)=>a+'***'+b);
-              console.log(masked);
-            });
+            console.log('=== sample (up to 20, non-PII fields only shown truncated) ===');
+            samples.forEach(x => console.log(x.field, '|', JSON.stringify(x.source_file), '|', JSON.stringify(x.sample)));
+
+            fs.writeFileSync('/opt/gauth-full/mojibake_full_report.json', JSON.stringify({totalHits, byField, bySourceFile}, null, 2));
             "
