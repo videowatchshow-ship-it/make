@@ -24,32 +24,39 @@ jobs:
             const arr = Array.isArray(d) ? d : (d.accounts||[]);
             console.log('total accounts:', arr.length);
 
-            // valid TOTP secret: base32 alphabet, typically 16-64 chars, no @ / % / spaces
-            const isValidTotp = s => !s || /^[A-Z2-7]{8,64}$/.test(String(s).replace(/\s+/g,''));
-            const looksLikeEmail = s => /[^\s@]+@[^\s@]+\.[^\s@]+/.test(s);
-            // corrupted password: url-encoding leftovers, OR an actual embedded email address, OR abnormally long (>25 chars, real passwords here run ~8-20)
-            const isCorruptPw = s => !!s && (/%[0-9A-Fa-f]{2}/.test(s) || looksLikeEmail(s) || String(s).length > 25);
-            // corrupted totp: non-empty but fails base32 shape, or contains url-encoding/email
-            const isCorruptTotp = s => !!s && (!isValidTotp(s) || /%[0-9A-Fa-f]{2}/.test(s) || looksLikeEmail(s));
+            // Ground truth only: does the raw excel row (raw_values) actually contain this exact
+            // password / totp string? If raw_values exists and the stored value is NOT among the
+            // raw cells, it was corrupted during merge/parse. No length/regex guessing.
+            const withRaw = arr.filter(a => Array.isArray(a.raw_values) && a.raw_values.length);
+            const noRaw = arr.filter(a => !Array.isArray(a.raw_values) || !a.raw_values.length);
+            console.log('records WITH raw_values (verifiable):', withRaw.length);
+            console.log('records WITHOUT raw_values (unverifiable, older ingestion):', noRaw.length);
 
-            const badPw = arr.filter(a => isCorruptPw(a.password));
-            const badTotp = arr.filter(a => isCorruptTotp(a.totp_secret));
+            function inRaw(a, val) {
+              if (!val) return true; // empty is not 'corrupted'
+              return a.raw_values.some(c => String(c).trim() === String(val).trim());
+            }
+
+            const confirmedBadPw = withRaw.filter(a => !inRaw(a, a.password));
+            const confirmedBadTotp = withRaw.filter(a => !inRaw(a, a.totp_secret));
 
             console.log('');
-            console.log('=== accounts with corrupted password: count =', badPw.length, '===');
-            badPw.forEach((a,i) => console.log((i+1)+'.', a.email, '| source_file:', a.source_file, '| pw_len:', String(a.password).length));
+            console.log('=== CONFIRMED corrupted password (value not found in its own raw excel row): count =', confirmedBadPw.length, '===');
+            confirmedBadPw.forEach((a,i) => console.log((i+1)+'.', a.email, '| source_file:', a.source_file, '| row:', a.source_row));
 
             console.log('');
-            console.log('=== accounts with corrupted 2FA (totp_secret): count =', badTotp.length, '===');
-            badTotp.forEach((a,i) => console.log((i+1)+'.', a.email, '| source_file:', a.source_file, '| totp_len:', String(a.totp_secret).length));
+            console.log('=== CONFIRMED corrupted 2FA (value not found in its own raw excel row): count =', confirmedBadTotp.length, '===');
+            confirmedBadTotp.forEach((a,i) => console.log((i+1)+'.', a.email, '| source_file:', a.source_file, '| row:', a.source_row));
 
-            const union = new Set([...badPw.map(a=>a.email), ...badTotp.map(a=>a.email)]);
+            const union = new Set([...confirmedBadPw.map(a=>a.email), ...confirmedBadTotp.map(a=>a.email)]);
             console.log('');
-            console.log('=== union (either password or 2FA broken): count =', union.size, '===');
+            console.log('=== CONFIRMED union (either broken), verifiable subset only: count =', union.size, '===');
+            console.log('(', noRaw.length, 'more accounts have no raw_values to verify against and are NOT included here)');
 
-            fs.writeFileSync('/opt/gauth-full/corrupted_credentials_report.json', JSON.stringify({
-              badPassword: badPw.map(a=>({email:a.email, source_file:a.source_file, source_row:a.source_row})),
-              badTotp: badTotp.map(a=>({email:a.email, source_file:a.source_file, source_row:a.source_row}))
+            fs.writeFileSync('/opt/gauth-full/confirmed_corrupted_report.json', JSON.stringify({
+              confirmedBadPassword: confirmedBadPw.map(a=>({email:a.email, source_file:a.source_file, source_row:a.source_row})),
+              confirmedBadTotp: confirmedBadTotp.map(a=>({email:a.email, source_file:a.source_file, source_row:a.source_row})),
+              unverifiableCount: noRaw.length
             }, null, 2));
-            console.log('full report (with source_row for fixing) saved to /opt/gauth-full/corrupted_credentials_report.json');
+            console.log('full report saved to /opt/gauth-full/confirmed_corrupted_report.json');
             "
