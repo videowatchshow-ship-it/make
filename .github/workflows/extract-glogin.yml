@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Curl the info site + grep for gsi client_id and 1147 menu
+      - name: Dump page 1147 + JS, find client_id + login code
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -20,26 +20,35 @@ jobs:
           command_timeout: 90s
           script: |
             SITE='https://xn--9d0bw2fjtyymch7de9d.info'
-            echo '=== 0. reachability ==='
-            curl -s -o /dev/null -w 'root: %{http_code}\n' --max-time 15 "$SITE/" || echo 'unreachable'
+            curl -s --max-time 15 "$SITE/?page=1147" > /tmp/p1147.html || true
+            echo '=== A. client_id in page 1147 ==='
+            grep -oE '[0-9]{10,}-[a-z0-9]+\.apps\.googleusercontent\.com' /tmp/p1147.html | sort -u
             echo ''
-            echo '=== 1. grep client_id / gsi / accounts.google from homepage ==='
-            curl -s --max-time 15 "$SITE/" > /tmp/info_home.html || true
-            grep -oE 'client_id[^,;\"]{0,120}' /tmp/info_home.html | head -10
-            grep -oE '[0-9]{10,}-[a-z0-9]+\.apps\.googleusercontent\.com' /tmp/info_home.html | sort -u | head -10
-            grep -oE 'accounts\.google\.com[^\"'\'' ]*' /tmp/info_home.html | sort -u | head -10
-            grep -oiE 'g_id_onload|data-client_id|gsi/client' /tmp/info_home.html | sort -u | head -10
+            echo '=== B. g_id_onload / data-client_id block ==='
+            grep -oiE 'g_id_onload[^>]{0,400}' /tmp/p1147.html | head -5
+            grep -oiE 'data-client_id="[^"]*"' /tmp/p1147.html | sort -u | head -5
+            grep -oiE 'data-login_uri="[^"]*"' /tmp/p1147.html | sort -u | head -5
+            grep -oiE 'data-callback="[^"]*"' /tmp/p1147.html | sort -u | head -5
             echo ''
-            echo '=== 2. find any link/menu containing 1147 ==='
-            grep -oE '[^\"'\'' <>]*1147[^\"'\'' <>]*' /tmp/info_home.html | sort -u | head -20
-            grep -oE 'href=\"[^\"]*1147[^\"]*\"' /tmp/info_home.html | sort -u | head -20
+            echo '=== C. accounts.google.initialize / renderButton snippets ==='
+            grep -oiE 'google\.accounts\.id\.[a-z]+\([^)]{0,200}' /tmp/p1147.html | head -10
+            grep -oiE 'client_id["'\'' :]{1,6}[^,;}"'\'' ]{10,120}' /tmp/p1147.html | head -10
             echo ''
-            echo '=== 3. try common login paths for gsi client_id ==='
-            for p in /login /signin /auth /google /member /mypage /1147 /page/1147 /?page=1147 /bbs/board.php?bo_table=1147; do
-              code=$(curl -s -o /tmp/p.html -w '%{http_code}' --max-time 12 "$SITE$p")
-              cid=$(grep -oE '[0-9]{10,}-[a-z0-9]+\.apps\.googleusercontent\.com' /tmp/p.html | sort -u | head -1)
-              echo "$p -> $code  client_id=$cid"
+            echo '=== D. list all .js srcs on page 1147 ==='
+            grep -oE 'src="[^"]+\.js[^"]*"' /tmp/p1147.html | sed 's/src="//;s/"$//' | sort -u | head -30
+            echo ''
+            echo '=== E. fetch each same-origin js and grep for googleusercontent client_id ==='
+            for j in $(grep -oE 'src="[^"]+\.js[^"]*"' /tmp/p1147.html | sed 's/src="//;s/"$//' | sort -u); do
+              case "$j" in
+                http*) U="$j" ;;
+                //*)   U="https:$j" ;;
+                /*)    U="$SITE$j" ;;
+                *)     U="$SITE/$j" ;;
+              esac
+              case "$U" in *xn--9d0bw2fjtyymch7de9d.info*) ;; *) continue ;; esac
+              cid=$(curl -s --max-time 10 "$U" | grep -oE '[0-9]{10,}-[a-z0-9]+\.apps\.googleusercontent\.com' | sort -u | head -1)
+              [ -n "$cid" ] && echo "FOUND in $U -> $cid"
             done
             echo ''
-            echo '=== 4. also check server-local files for a known client id ==='
-            sudo grep -roE '[0-9]{10,}-[a-z0-9]+\.apps\.googleusercontent\.com' /opt/gauth-full /var/www 2>/dev/null | sort -u | head -10 || true
+            echo '=== F. raw login-related HTML block (context around gsi) ==='
+            grep -n -iE 'gsi|g_id|google.accounts|signin|로그인|구글' /tmp/p1147.html | head -30
