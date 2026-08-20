@@ -1,0 +1,101 @@
+name: Playwright로 실제 라이브 보드 렌더링 확인
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-playwright-live-check.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Playwright
+        run: |
+          npm install playwright@latest
+          npx playwright install --with-deps chromium
+
+      - name: Load live board and capture console/network/screenshot
+        run: |
+          cat > check.js << 'EOF'
+          const { chromium } = require('playwright');
+
+          (async () => {
+            const browser = await chromium.launch();
+            const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+
+            const consoleMsgs = [];
+            const pageErrors = [];
+            const failedReqs = [];
+            const badResponses = [];
+
+            page.on('console', msg => consoleMsgs.push(`[${msg.type()}] ${msg.text()}`));
+            page.on('pageerror', err => pageErrors.push(String(err)));
+            page.on('requestfailed', req => failedReqs.push(`${req.url()} -- ${req.failure()?.errorText}`));
+            page.on('response', res => {
+              if (res.status() >= 400) badResponses.push(`${res.status()} ${res.url()}`);
+            });
+
+            const url = 'https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html?ch=tak';
+            console.log('LOADING: ' + url);
+            try {
+              await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+            } catch (e) {
+              console.log('GOTO ERROR: ' + e);
+            }
+
+            // wait for at least one tick cycle of BGL.start (1.2s interval)
+            await page.waitForTimeout(4000);
+
+            await page.screenshot({ path: 'live_board.png', fullPage: true });
+
+            // Extract BGL.info (room, done count, id, ver) set by bgl.js draw()
+            const bglInfo = await page.evaluate(() => window.BGL && window.BGL.info);
+            console.log('BGL.info: ' + JSON.stringify(bglInfo));
+
+            // Count actual canvas elements and their sizes
+            const canvasInfo = await page.evaluate(() => {
+              const cs = document.querySelectorAll('canvas');
+              return Array.from(cs).map(c => ({ id: c.id, w: c.width, h: c.height, cssW: c.style.width, cssH: c.style.height }));
+            });
+            console.log('canvases: ' + JSON.stringify(canvasInfo));
+
+            // Check if BGL object and key functions exist
+            const bglExists = await page.evaluate(() => ({
+              BGL: !!window.BGL,
+              start: typeof (window.BGL && window.BGL.start),
+              bigRoad: typeof (window.BGL && window.BGL.bigRoad),
+              drawFull: typeof (window.BGL && window.BGL.drawFull),
+            }));
+            console.log('BGL exists: ' + JSON.stringify(bglExists));
+
+            // sample pixel colors from the big-road area to see if anything was actually drawn
+            // (checking non-white/non-background pixels via toDataURL length as a crude signal)
+            const canvasDataLen = await page.evaluate(() => {
+              const c = document.querySelector('canvas');
+              if (!c) return null;
+              return c.toDataURL().length;
+            });
+            console.log('first canvas dataURL length: ' + canvasDataLen);
+
+            console.log('===CONSOLE===');
+            consoleMsgs.forEach(m => console.log(m));
+            console.log('===PAGEERRORS===');
+            pageErrors.forEach(m => console.log(m));
+            console.log('===FAILEDREQS===');
+            failedReqs.forEach(m => console.log(m));
+            console.log('===BADRESPONSES===');
+            badResponses.forEach(m => console.log(m));
+
+            await browser.close();
+          })();
+          EOF
+          node check.js
+
+      - name: Upload screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-board-screenshot
+          path: live_board.png
