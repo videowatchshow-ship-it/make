@@ -1,0 +1,47 @@
+name: chamgyo cent 채널 room 매핑 불일치(photo=110 vs photo2=105) 원인 조사
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/chamgyo-cent-room-mismatch-check.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: sel_cent.json / tables.json / room 매핑 실측
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            echo "===== photo/data 심볼릭 링크 대상 ====="
+            readlink -f /var/www/sites/chamgyo/public/photo/data
+            readlink -f /var/www/sites/chamgyo/public/photo2/data
+            echo "===== photo/data/sel_cent.json ====="
+            sudo cat /var/www/sites/chamgyo/public/photo/data/sel_cent.json 2>&1
+            echo ""
+            echo "===== photo2/data/sel_cent.json ====="
+            sudo cat /var/www/sites/chamgyo/public/photo2/data/sel_cent.json 2>&1
+            echo ""
+            echo "===== tables.json 안에서 cent 관련 항목 ====="
+            sudo cat /var/www/sites/chamgyo/public/photo/data/tables.json 2>&1 | head -c 2000
+            echo ""
+            echo "===== SNW_1.html(photo) 안에서 sel_ 파일 로드 로직 검색 ====="
+            sudo grep -nE "sel_|selected_room|\\\$ch|GET\['ch'\]" /var/www/sites/chamgyo/public/photo/SNW_1.html 2>/dev/null | head -30
+            echo "===== SNW_1.html(photo2) 안에서 sel_ 파일 로드 로직 검색 ====="
+            sudo grep -nE "sel_|selected_room|\\\$ch|GET\['ch'\]" /var/www/sites/chamgyo/public/photo2/SNW_1.html 2>/dev/null | head -30
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
