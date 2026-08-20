@@ -1,4 +1,4 @@
-name: nextboxP nextboxB 채우는 JS 로직 확인 + 실측 렌더
+name: BGL.wenlu / BGL.drawAsk 로직 + 실측 데이터 대조
 on:
   workflow_dispatch:
   push:
@@ -10,30 +10,69 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - name: cAskP cAskB 그리는 JS 로직 추출
+      - name: wenlu / drawAsk 함수 본문 + 현재 room 데이터
         run: |
           curl -sS -o /tmp/cah1.html "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html"
           BGLURL=$(grep -oE 'src="[^"]*bgl\.js[^"]*"' /tmp/cah1.html | head -1 | sed -E 's/src="([^"]*)"/\1/')
           curl -sS -o /tmp/bgl.js "https://xn--9d0bw2fjtyymch7de9d.info/photo/$BGLURL"
 
-          echo "===== CAH_1.html 안의 cAskP/cAskB 관련 JS 라인 번호 ====="
-          grep -n "cAskP\|cAskB" /tmp/cah1.html
+          echo "===== wenlu 함수 정의 위치 ====="
+          grep -n "wenlu" /tmp/bgl.js || echo "wenlu 없음"
 
           echo ""
-          echo "===== cAskP 첫 등장 지점 앞뒤 60줄 (script 태그 내부일 가능성) ====="
-          FIRSTLN=$(grep -n "cAskP" /tmp/cah1.html | grep -v "^[0-9]*:.*<canvas" | head -1 | cut -d: -f1)
-          if [ -n "$FIRSTLN" ]; then
-            START=$((FIRSTLN>20 ? FIRSTLN-20 : 1))
-            END=$((FIRSTLN+80))
-            sed -n "${START},${END}p" /tmp/cah1.html
-          else
-            echo "canvas 태그 외에는 cAskP 참조 없음 (외부 js 파일에 있을 가능성)"
-          fi
+          echo "===== wenlu 함수 본문 (정의 지점부터 250자 단위로 다음 함수 전까지) ====="
+          python3 -c "
+import re
+src = open('/tmp/bgl.js').read()
+m = re.search(r'wenlu\s*[:=]\s*function[^{]*\{', src)
+if not m:
+    m = re.search(r'function\s+wenlu[^{]*\{', src)
+if m:
+    start = m.start()
+    depth = 0
+    i = m.end()-1
+    while i < len(src):
+        if src[i] == '{': depth += 1
+        elif src[i] == '}':
+            depth -= 1
+            if depth == 0:
+                break
+        i += 1
+    print(src[start:i+1][:3000])
+else:
+    print('wenlu 함수 본문 못찾음')
+"
 
           echo ""
-          echo "===== bgl.js 안의 cAskP/cAskB 참조 ====="
-          grep -n "cAskP\|cAskB" /tmp/bgl.js
+          echo "===== drawAsk 함수 본문 ====="
+          python3 -c "
+import re
+src = open('/tmp/bgl.js').read()
+m = re.search(r'drawAsk\s*[:=]\s*function[^{]*\{', src)
+if not m:
+    m = re.search(r'function\s+drawAsk[^{]*\{', src)
+if m:
+    start = m.start()
+    depth = 0
+    i = m.end()-1
+    while i < len(src):
+        if src[i] == '{': depth += 1
+        elif src[i] == '}':
+            depth -= 1
+            if depth == 0:
+                break
+        i += 1
+    print(src[start:i+1][:3000])
+else:
+    print('drawAsk 함수 본문 못찾음')
+"
 
           echo ""
-          echo "===== CAH_1.html 안의 외부 script src 목록 ====="
-          grep -oE '<script[^>]*src="[^"]*"' /tmp/cah1.html
+          echo "===== 현재 tak 계정 room 데이터 (nums 개수, 최근 5개) ====="
+          curl -sS "https://xn--9d0bw2fjtyymch7de9d.info/photo/data/room_110.json" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+nums=d.get('nums',[])
+print('id=',d.get('id'),'ver=',d.get('ver'),'count=',len(nums))
+print('last10=',nums[-10:])
+"
