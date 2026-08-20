@@ -1,6 +1,9 @@
 name: Diagnose gauth excel encoding + sort
 on:
   workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-diag-gauth.txt']
 
 jobs:
   diag:
