@@ -1,4 +1,4 @@
-name: 계정 선택 방이 3뷰에 실제 반영되는지 실측 v2 (https + bundle 포함)
+name: 계정 선택 방 3뷰 반영 실측 v3 (--resolve + 뷰 HTML 전체 dump)
 
 on:
   workflow_dispatch:
@@ -27,71 +27,44 @@ jobs:
               --command='bash -s' << "REMOTE"
             set +u
             P1="/var/www/sites/chamgyo/public/photo"
+            DOM="xn--9d0bw2fjtyymch7de9d.info"
+            BASE="https://$DOM"
+            RESOLVE="--resolve $DOM:443:127.0.0.1"
 
-            # 로컬 https 로 self-cert 우회
-            LOCAL="https://localhost"
-            HOSTHDR="Host: xn--9d0bw2fjtyymch7de9d.info"
-            OPTS="-sSk -L -H"
-
-            echo "===== [1] api_selected_room.php 실제 응답 (https + -L 리다이렉트 따라감) ====="
-            for U in aass0707 abc01 cent gain jay otuki tak; do
-              R=$(curl $OPTS "$HOSTHDR" "$LOCAL/photo/api_selected_room.php?ch=$U")
+            echo "===== [1] api_selected_room.php 실응답 (SNI 정상) ====="
+            for U in cent tak gain aass0707 abc01 jay otuki; do
+              R=$(curl -sSk $RESOLVE "$BASE/photo/api_selected_room.php?ch=$U")
               printf "  %-10s | %s\n" "$U" "$R"
             done
 
             echo ""
-            echo "===== [2] api_selected_room.php 소스 확인 (파일 실제 읽는지) ====="
-            sudo cat "$P1/api_selected_room.php"
-
-            echo ""
-            echo "===== [3] 3개 뷰 HTML 안에 sel/api 관련 어떤 문자열이든 (bundle 참조 포함) ====="
-            for VIEW in CAH_1 CAW_1 SNW_1; do
-              echo "--- $VIEW.html ---"
-              sudo grep -nE "sel_|api_selected|room_id|selected_room|__ch|window\.__|bundle|src=\"modules|src=\"\." "$P1/$VIEW.html" 2>/dev/null | head -15
-              echo ""
-            done
-
-            echo ""
-            echo "===== [4] bundle.js / modules 안에 sel/api 참조 ====="
-            for BJ in "$P1/modules/dist/bundle.js" "$P1/bundle.js"; do
-              [ -f "$BJ" ] && echo "--- $BJ ---" && sudo grep -oE "sel_[a-z0-9_]+|api_selected_room[^\"'\`]*|selected_room\.json|api_all_rooms" "$BJ" 2>/dev/null | sort -u | head -20
-            done
-
-            echo ""
-            echo "===== [5] 강제 테스트: cent 를 room 999 로 변경 후 api 응답 (https) ====="
+            echo "===== [2] 강제 테스트: cent room 999 로 임시 후 api 반영 확인 ====="
             ORIG=$(sudo cat "$P1/data/sel_cent.json")
             echo "  원래: $ORIG"
             echo "{\"room_id\":999,\"board\":\"CAH_1\"}" | sudo tee "$P1/data/sel_cent.json" > /dev/null
             sudo chown www-data:www-data "$P1/data/sel_cent.json"
             sleep 1
-            R=$(curl $OPTS "$HOSTHDR" "$LOCAL/photo/api_selected_room.php?ch=cent")
-            echo "  변경 후 api: $R"
-            if echo "$R" | grep -q "999"; then
-              echo "  ✅ PASS: api 즉시 반영 (sel_cent.json 실시간 반영됨)"
-            else
-              echo "  ❌ FAIL"
-            fi
-
-            echo "  원상복구:"
+            R=$(curl -sSk $RESOLVE "$BASE/photo/api_selected_room.php?ch=cent")
+            echo "  변경 후: $R"
+            echo "$R" | grep -q "999" && echo "  ✅ PASS 즉시 반영" || echo "  ❌ FAIL"
             echo "$ORIG" | sudo tee "$P1/data/sel_cent.json" > /dev/null
             sudo chown www-data:www-data "$P1/data/sel_cent.json"
-            echo "    복구후: $(sudo cat "$P1/data/sel_cent.json")"
 
             echo ""
-            echo "===== [6] 결론 매트릭스: 계정별 sel_ vs api 응답 (https 정상 응답) ====="
-            printf "  %-10s | %-8s | %s\n" "계정" "sel파일" "api응답"
-            for U in cent tak gain aass0707 abc01; do
-              SEL=$(sudo cat "$P1/data/sel_$U.json" 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get(\"room_id\"))" 2>/dev/null)
-              API=$(curl $OPTS "$HOSTHDR" "$LOCAL/photo/api_selected_room.php?ch=$U" 2>/dev/null)
-              printf "  %-10s | %-8s | %s\n" "$U" "$SEL" "$API"
-            done
+            echo "===== [3] modules/dist 실체 리스트 ====="
+            sudo ls -la "$P1/modules/dist/" 2>/dev/null | head -20
 
             echo ""
-            echo "===== [7] 3뷰 HTML 실응답 코드 (https + -L) ====="
-            for VIEW in CAH_1 CAW_1 SNW_1; do
-              CODE=$(curl $OPTS "$HOSTHDR" -o /dev/null -w "%{http_code} %{size_download}B" "$LOCAL/photo/$VIEW.html?ch=cent")
-              echo "  $VIEW.html?ch=cent → $CODE"
-            done
+            echo "===== [4] CAH_1.html 전체 소스 (뷰가 어떻게 방을 결정하는지 확인) ====="
+            sudo cat "$P1/CAH_1.html"
+
+            echo ""
+            echo "===== [5] CAW_1.html 전체 소스 ====="
+            sudo cat "$P1/CAW_1.html"
+
+            echo ""
+            echo "===== [6] SNW_1.html 처음 100줄 ====="
+            sudo head -100 "$P1/SNW_1.html"
 
             echo ""
             echo "===== DONE ====="
