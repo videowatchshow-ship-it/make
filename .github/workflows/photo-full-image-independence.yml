@@ -1,0 +1,232 @@
+name: 이미지 완전 계정별 독립화 (참교육 배너 배포 + api + 3뷰 수정)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-full-image-independence.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 300s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set -uo pipefail
+            P1="/var/www/sites/chamgyo/public/photo"
+            TS=$(date +%s)
+
+            # 대상 계정 목록 (gain 제외 12개)
+            ACCTS="aass0707 abc01 abc02 abc03 abc04 abc05 abc06 abc07 cent jay otuki tak"
+
+            echo "===== [1] ImageMagick / 한글 폰트 존재 확인 ====="
+            which convert magick 2>/dev/null | head -3
+            sudo find /usr/share/fonts -iname "*nanum*" -o -iname "*malgun*" -o -iname "*hansans*" -o -iname "*noto*cjk*" 2>/dev/null | head -10
+            # photo 폴더 안 자체 폰트
+            sudo ls -la "$P1"/fonts/ 2>/dev/null | head -10
+
+            echo ""
+            echo "===== [2] 참교육 배너 생성 (1080x266 · SNW brand_logo 팔레트) ====="
+            OUT="/tmp/chamgyo_banner_$TS.png"
+
+            # 한글 폰트 우선순위: 로컬 BlackHanSans → NanumGothic Bold → Noto CJK
+            FONT=""
+            for F in "$P1/fonts/BlackHanSans.ttf" "$P1/fonts/BlackHanSans.woff2" \
+                     "/usr/share/fonts/truetype/nanum/NanumGothicExtraBold.ttf" \
+                     "/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf" \
+                     "/usr/share/fonts/truetype/nanum/NanumGothic.ttf" \
+                     "/usr/share/fonts/opentype/noto/NotoSansCJK-Black.ttc" \
+                     "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"; do
+              if [ -f "$F" ]; then FONT="$F"; break; fi
+            done
+            if [ -z "$FONT" ]; then
+              # 시스템에서 한글 지원 폰트 아무거나
+              FONT=$(sudo fc-match -f "%{file}" ":lang=ko:weight=heavy" 2>/dev/null | head -1)
+              [ -z "$FONT" ] && FONT=$(sudo fc-match -f "%{file}" "sans:lang=ko" 2>/dev/null | head -1)
+            fi
+            echo "선택된 폰트: $FONT"
+
+            # ImageMagick: 검정 그라디언트 배경 + 금색 텍스트 + 어두운 스트로크 + 글로우
+            sudo convert -size 1080x266 \
+              radial-gradient:"#1a1200"-"#000000" \
+              -font "$FONT" -pointsize 190 -gravity center \
+              -stroke "#1a1200" -strokewidth 8 -fill "#ffcc00" \
+              -annotate +0+0 "참교육" \
+              \( +clone -threshold 20% -morphology Dilate Disk:6 -blur 0x14 -level 0%,60% \) \
+              -compose Screen -composite \
+              -font "$FONT" -pointsize 190 -gravity center \
+              -stroke "#3a2a00" -strokewidth 4 -fill "#ffd633" \
+              -annotate +0+0 "참교육" \
+              -quality 95 "$OUT" 2>&1 | head -5
+
+            sudo ls -la "$OUT"
+            echo "  파일 크기: $(sudo stat -c %s "$OUT") bytes"
+
+            echo ""
+            echo "===== [3] 12계정 폴더 준비 + 공용 이미지 복제 + 참교육 배너 덮어쓰기 ====="
+            mkdir -p /tmp/wet && chmod 777 /tmp/wet
+            # 공용 이미지 중 뷰가 참조하는 것들
+            COMMON_IMGS="Live_height_kakao.gif Live_width_01_banner_kakao.gif Live_width_04_kakao.gif board_nextPB_2023_4.png nextPB_A4.png h_side_banner.png clock_cambodia.png live03_next_PB.png boardA3_nextPB.png"
+
+            for U in $ACCTS; do
+              DIR="$P1/images/ch/$U"
+              sudo mkdir -p "$DIR"
+              sudo chown www-data:www-data "$DIR"
+              sudo chmod 775 "$DIR"
+
+              # 공용 이미지 복제 (아직 개별 편집 안 한 것들은 공용 기본값으로 각 폴더에 자기 파일로 존재)
+              for F in $COMMON_IMGS; do
+                if [ -f "$P1/images/$F" ] && [ ! -f "$DIR/$F" ]; then
+                  sudo cp "$P1/images/$F" "$DIR/$F"
+                fi
+              done
+
+              # 참교육 배너로 Live_height_kakao.gif 덮어쓰기
+              sudo cp "$OUT" "$DIR/Live_height_kakao.gif"
+              sudo chown www-data:www-data "$DIR"/*
+              sudo chmod 644 "$DIR"/*
+
+              # img_ver_<계정>.json 생성/업데이트
+              VF="$P1/data/img_ver_$U.json"
+              sudo tee "$VF" > /dev/null << VJEOF
+            {"Live_height_kakao.gif":$TS,"_all":$TS}
+            VJEOF
+              sudo chown www-data:www-data "$VF"
+              sudo chmod 644 "$VF"
+
+              CNT=$(sudo ls "$DIR" 2>/dev/null | wc -l)
+              echo "  $U: 파일 $CNT개 배포 완료 (img_ver=$TS)"
+            done
+
+            echo ""
+            echo "===== [4] api_img_ver.php 를 ?ch 지원하도록 수정 ====="
+            sudo cp "$P1/api_img_ver.php" "$P1/api_img_ver.php.bak.$TS"
+            sudo tee "$P1/api_img_ver.php" > /dev/null << "APIEOF"
+            <?php
+            /* api_img_ver.php v2 — ?ch=<계정> 있으면 img_ver_<계정>.json 반환.
+             * 없거나 파일 없으면 공용 img_ver.json 폴백 (기존 뷰 호환).
+             * 계정별 이미지 캐시버스팅용. */
+            header("Content-Type: application/json; charset=utf-8");
+            header("Access-Control-Allow-Origin: *");
+            header("Cache-Control: no-cache, no-store, must-revalidate");
+            header("Pragma: no-cache");
+            $ch = preg_replace("/[^a-zA-Z0-9_]/", "", (string)($_GET["ch"] ?? ""));
+            if ($ch !== "") {
+                $f = __DIR__ . "/data/img_ver_$ch.json";
+                if (file_exists($f)) { echo file_get_contents($f); exit; }
+            }
+            $f = __DIR__ . "/data/img_ver.json";
+            echo file_exists($f) ? file_get_contents($f) : "{}";
+            APIEOF
+            sudo chown www-data:www-data "$P1/api_img_ver.php"
+            sudo chmod 644 "$P1/api_img_ver.php"
+
+            echo ""
+            echo "===== [5] 3뷰 HTML 에 계정별 이미지 강제 로더 스크립트 삽입 ====="
+            for VIEW in CAH_1 CAW_1 SNW_1; do
+              F="$P1/$VIEW.html"
+              sudo cp "$F" "$F.bak.imgindep.$TS"
+              sudo TARGET="$F" python3 << "PYEOF"
+            import os, re
+            p = os.environ["TARGET"]
+            s = open(p).read()
+
+            # 이미 삽입된 스크립트 있으면 skip
+            if "__perAccountImages" in s:
+                print(f"{p}: already patched, skip")
+                raise SystemExit(0)
+
+            inject = """
+            <script>
+            /* ▲ 계정별 이미지 완전 독립 로더
+             * ?ch=<계정> 이 있으면 모든 <img src="images/파일"> 를 <img src="images/ch/<계정>/파일"> 로 강제 교체.
+             * 계정 폴더에 파일이 없으면 이미지가 안 보인다 (fallback 없음 = 서로 절대 연관 없게).
+             * ver 캐시버스팅: api_img_ver.php?ch=<계정> 응답의 파일별 ts 를 붙임. */
+            (function(){
+              try {
+                var qs = new URLSearchParams(location.search);
+                var ch = (qs.get("ch") || "").replace(/[^a-zA-Z0-9_]/g, "");
+                if (!ch) return; /* ?ch 없으면 공용 그대로 (관리자 프리뷰 등) */
+                window.__perAccountImages = ch;
+                function rewrite(vers){
+                  var imgs = document.querySelectorAll("img[src^=\\"images/\\"]:not([src*=\\"images/ch/\\"])");
+                  for (var i=0; i<imgs.length; i++) {
+                    var raw = imgs[i].getAttribute("src");
+                    var m = raw.match(/^images\\/([^?]+)(\\?.*)?$/);
+                    if (!m) continue;
+                    var fname = m[1];
+                    var v = (vers && (vers[fname] || vers._all)) || Date.now();
+                    imgs[i].src = "images/ch/" + ch + "/" + fname + "?v=" + v;
+                  }
+                }
+                fetch("api_img_ver.php?ch=" + encodeURIComponent(ch), {cache:"no-store"})
+                  .then(function(r){return r.ok ? r.json() : {};})
+                  .then(function(v){ rewrite(v); })
+                  .catch(function(){ rewrite({}); });
+              } catch(e){ console.log("perAccountImages err", e); }
+            })();
+            </script>
+            """
+            # </body> 직전 삽입
+            if "</body>" in s:
+                s = s.replace("</body>", inject + "</body>", 1)
+            else:
+                s = s + inject
+            open(p, "w").write(s)
+            print(f"{p}: patched OK")
+            PYEOF
+              sudo chown www-data:www-data "$F"
+              sudo chmod 644 "$F"
+            done
+
+            echo ""
+            echo "===== [6] 배포 검증 ====="
+            echo "--- images/ch/ 하위 폴더 ---"
+            sudo ls -d "$P1/images/ch/"*/ 2>/dev/null | xargs -n1 basename
+
+            echo ""
+            echo "--- 각 계정 폴더 파일 개수 ---"
+            for U in $ACCTS gain; do
+              CNT=$(sudo ls "$P1/images/ch/$U/" 2>/dev/null | wc -l)
+              printf "  %-10s | 파일 %s개\n" "$U" "$CNT"
+            done
+
+            echo ""
+            echo "--- img_ver_*.json 리스트 ---"
+            sudo ls -la "$P1/data/"img_ver_*.json | head -20
+
+            echo ""
+            echo "--- api_img_ver.php 응답 (cent, tak, abc01) ---"
+            DOM="xn--9d0bw2fjtyymch7de9d.info"
+            for U in cent tak abc01; do
+              R=$(curl -sSk --resolve "$DOM:443:127.0.0.1" "https://$DOM/photo/api_img_ver.php?ch=$U")
+              printf "  ?ch=%s → %s\n" "$U" "$R"
+            done
+
+            echo ""
+            echo "--- 3뷰 HTML 에 __perAccountImages 삽입 확인 ---"
+            for VIEW in CAH_1 CAW_1 SNW_1; do
+              CNT=$(sudo grep -c "__perAccountImages" "$P1/$VIEW.html" 2>/dev/null)
+              printf "  %-12s | __perAccountImages 참조 %s회\n" "$VIEW" "$CNT"
+            done
+
+            echo ""
+            echo "--- cent 계정 참교육 배너 실제 파일 ---"
+            sudo ls -la "$P1/images/ch/cent/Live_height_kakao.gif"
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE
