@@ -1,0 +1,46 @@
+name: Diagnose gauth excel encoding + sort
+on:
+  workflow_dispatch:
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Inspect gauth server files
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 60s
+          script: |
+            echo "=== 1. upload_excels.js (parser) ==="
+            sudo cat /opt/gauth-full/upload_excels.js 2>/dev/null || echo NOT_FOUND
+
+            echo ""
+            echo "=== 2. rebrowser-login.js relevant excerpt (sort/list endpoints) ==="
+            sudo grep -n "sort\|order\|source_file\|title\|filename\|date" /opt/gauth-full/rebrowser-login.js 2>/dev/null | head -80
+
+            echo ""
+            echo "=== 3. accounts_normalized.json sample (first 2 entries) ==="
+            sudo node -e "const d=JSON.parse(require('fs').readFileSync('/opt/gauth-full/accounts_normalized.json','utf8')); const arr=Array.isArray(d)?d:(d.accounts||[]); console.log('total:',arr.length); console.log(JSON.stringify(arr.slice(0,2),null,2));" 2>&1
+
+            echo ""
+            echo "=== 4. source_file names (unique, check encoding) ==="
+            sudo node -e "const d=JSON.parse(require('fs').readFileSync('/opt/gauth-full/accounts_normalized.json','utf8')); const arr=Array.isArray(d)?d:(d.accounts||[]); const files=[...new Set(arr.map(a=>a.source_file))]; console.log(files.slice(0,30).join('\n'));" 2>&1
+
+            echo ""
+            echo "=== 5. parse_fail.log tail ==="
+            sudo tail -50 /opt/gauth-full/parse_fail.log 2>/dev/null || echo NOT_FOUND
+
+            echo ""
+            echo "=== 6. frontend index.html - list rendering + sort logic ==="
+            sudo grep -n "sort\|source_file\|title\|date\|filename" /var/www/sites/gauth/public/index.html 2>/dev/null | head -80
+
+            echo ""
+            echo "=== 7. Excel upload dir listing ==="
+            sudo ls -la /opt/gauth-full/uploads/ 2>/dev/null | head -30 || echo NOT_FOUND
+            sudo ls -la /opt/gauth-full/excels/ 2>/dev/null | head -30 || echo NOT_FOUND
+
+            echo "=== DONE ==="
