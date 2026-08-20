@@ -1,0 +1,65 @@
+name: cAskP cAskB 캔버스 실제 그리기 색상 가로채기
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-canvas-intercept.yml'
+jobs:
+  intercept:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm init -y >/dev/null 2>&1 && npm i -D playwright >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: 캔버스 draw call 가로채서 색상/좌표 기록
+        timeout-minutes: 1
+        run: |
+          cat > ic.js << 'EOF'
+          const { chromium } = require('playwright');
+          (async () => {
+            try {
+              const browser = await chromium.launch();
+              const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+              await page.addInitScript(() => {
+                window.__log = [];
+                const origGetContext = HTMLCanvasElement.prototype.getContext;
+                HTMLCanvasElement.prototype.getContext = function (type, ...args) {
+                  const ctx = origGetContext.call(this, type, ...args);
+                  const canvasId = this.id;
+                  if ((canvasId === 'cAskP' || canvasId === 'cAskB') && ctx && !ctx.__wrapped) {
+                    ctx.__wrapped = true;
+                    ['arc', 'stroke', 'fill', 'strokeText', 'fillText'].forEach(fn => {
+                      const orig = ctx[fn];
+                      ctx[fn] = function (...fnArgs) {
+                        window.__log.push({
+                          canvas: canvasId, fn,
+                          fillStyle: ctx.fillStyle, strokeStyle: ctx.strokeStyle, lineWidth: ctx.lineWidth
+                        });
+                        return orig.apply(ctx, fnArgs);
+                      };
+                    });
+                  }
+                  return ctx;
+                };
+              });
+              await page.goto('https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html', { waitUntil: 'domcontentloaded', timeout: 15000 });
+              await page.waitForTimeout(3000);
+              const log = await page.evaluate(() => window.__log);
+              const bglInfo = await page.evaluate(() => (window.BGL && window.BGL.info) ? window.BGL.info : null);
+              console.log('BGL_INFO', JSON.stringify(bglInfo));
+              console.log('DRAW_LOG_START');
+              console.log(JSON.stringify(log, null, 1));
+              console.log('DRAW_LOG_END');
+              await browser.close();
+              process.exit(0);
+            } catch (e) {
+              console.error('ERR:', e.message);
+              process.exit(1);
+            }
+          })();
+          EOF
+          timeout 50 node ic.js || echo "타임아웃/에러"
