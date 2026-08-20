@@ -6,151 +6,43 @@ on:
     paths: ['.github/trigger-diag-gauth.txt']
 
 jobs:
+  create-jump-subdomain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Create jump.cent-solution.online DNS record (mirrors gauth record)
+        run: |
+          EXISTING=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/dns_records?name=gauth.cent-solution.online" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" \
+            -H "Content-Type: application/json")
+          echo "$EXISTING" | python3 -c "import json,sys; d=json.load(sys.stdin); r=d['result'][0]; print('type='+r['type'], 'content='+r['content'], 'proxied='+str(r['proxied']))"
+          TYPE=$(echo "$EXISTING" | python3 -c "import json,sys; print(json.load(sys.stdin)['result'][0]['type'])")
+          CONTENT=$(echo "$EXISTING" | python3 -c "import json,sys; print(json.load(sys.stdin)['result'][0]['content'])")
+          PROXIED=$(echo "$EXISTING" | python3 -c "import json,sys; print(str(json.load(sys.stdin)['result'][0]['proxied']).lower())")
+
+          CHECK=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/dns_records?name=jump.cent-solution.online" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}")
+          COUNT=$(echo "$CHECK" | python3 -c "import json,sys; print(len(json.load(sys.stdin)['result']))")
+          if [ "$COUNT" -gt 0 ]; then
+            echo "jump.cent-solution.online already exists, skipping create"
+          else
+            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/dns_records" \
+              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              --data "{\"type\":\"$TYPE\",\"name\":\"jump.cent-solution.online\",\"content\":\"$CONTENT\",\"ttl\":1,\"proxied\":$PROXIED}" \
+              | python3 -c "import json,sys; d=json.load(sys.stdin); print('success='+str(d['success'])); print(d.get('errors'))"
+          fi
+
   diag:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Find all accounts with corrupted password/2FA fields
+      - name: Verify jump subdomain resolves
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 60s
+          command_timeout: 30s
           script: |
-            sudo node -e "
-            const fs = require('fs');
-            const d = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
-            const arr = Array.isArray(d) ? d : (d.accounts||[]);
-            console.log('total accounts:', arr.length);
-
-            // Ground truth only: does the raw excel row (raw_values) actually contain this exact
-            // password / totp string? If raw_values exists and the stored value is NOT among the
-            // raw cells, it was corrupted during merge/parse. No length/regex guessing.
-            const withRaw = arr.filter(a => Array.isArray(a.raw_values) && a.raw_values.length);
-            const noRaw = arr.filter(a => !Array.isArray(a.raw_values) || !a.raw_values.length);
-            console.log('records WITH raw_values (verifiable):', withRaw.length);
-            console.log('records WITHOUT raw_values (unverifiable, older ingestion):', noRaw.length);
-
-            function norm(s) { return String(s).trim().toLowerCase().replace(/\s+/g, ''); }
-            function inRaw(a, val) {
-              if (!val) return true; // empty is not 'corrupted'
-              const nv = norm(val);
-              return a.raw_values.some(c => norm(c) === nv || norm(c).includes(nv) || nv.includes(norm(c)) && norm(c).length > 4);
-            }
-
-            const confirmedBadPw = withRaw.filter(a => !inRaw(a, a.password));
-            const confirmedBadTotp = withRaw.filter(a => !inRaw(a, a.totp_secret));
-
-            console.log('');
-            console.log('=== CONFIRMED corrupted password (value not found in its own raw excel row): count =', confirmedBadPw.length, '===');
-            confirmedBadPw.forEach((a,i) => console.log((i+1)+'.', a.email, '| source_file:', a.source_file, '| row:', a.source_row));
-
-            console.log('');
-            console.log('=== CONFIRMED corrupted 2FA (value not found in its own raw excel row): count =', confirmedBadTotp.length, '===');
-            confirmedBadTotp.forEach((a,i) => console.log((i+1)+'.', a.email, '| source_file:', a.source_file, '| row:', a.source_row));
-
-            const union = new Set([...confirmedBadPw.map(a=>a.email), ...confirmedBadTotp.map(a=>a.email)]);
-            console.log('');
-            console.log('=== CONFIRMED union (either broken), verifiable subset only: count =', union.size, '===');
-            console.log('(', noRaw.length, 'more accounts have no raw_values to verify against and are NOT included here)');
-
-            fs.writeFileSync('/opt/gauth-full/confirmed_corrupted_report.json', JSON.stringify({
-              confirmedBadPassword: confirmedBadPw.map(a=>({email:a.email, source_file:a.source_file, source_row:a.source_row})),
-              confirmedBadTotp: confirmedBadTotp.map(a=>({email:a.email, source_file:a.source_file, source_row:a.source_row})),
-              unverifiableCount: noRaw.length
-            }, null, 2));
-            console.log('full report saved to /opt/gauth-full/confirmed_corrupted_report.json');
-
-            console.log('');
-            console.log('=== SPECIFIC LOOKUP: two accounts user flagged (password shows a Korean nickname, not a real password) ===');
-            const KOREAN = /[가-힣]/;
-            ['suxrobmogaew772@gmail.com','mirynowskihouda403@gmail.com','mogajifatiah@gmail.com','saeedmar349@gmail.com','aummi7027@gmail.com'].forEach(email => {
-              const rec = arr.find(a => a.email && a.email.toLowerCase() === email.toLowerCase());
-              if (!rec) { console.log(email, '-> NOT FOUND in accounts_normalized.json'); return; }
-              console.log('--- ' + email + ' ---');
-              console.log('password IS Korean text (confirms bug):', KOREAN.test(String(rec.password||'')), '| len:', String(rec.password||'').length);
-              console.log('totp_secret looks valid base32:', /^[A-Z2-7]{16,64}$/.test(String(rec.totp_secret||'').replace(/\s+/g,'')), '| len:', String(rec.totp_secret||'').length);
-              console.log('youtube_url:', JSON.stringify(rec.youtube_url));
-              console.log('source_file:', rec.source_file, '| source_row:', rec.source_row);
-              console.log('raw_values (original excel row, full - this is what the user already sees in the UI):', JSON.stringify(rec.raw_values));
-            });
-
-            console.log('');
-            console.log('=== how many accounts have totp_secret literally starting with TEST (placeholder pollution)? ===');
-            const testTotp = arr.filter(a => /^TEST/i.test(String(a.totp_secret||'')));
-            console.log('count:', testTotp.length);
-            const bySrc = {};
-            testTotp.forEach(a => { bySrc[a.source_file] = (bySrc[a.source_file]||0)+1; });
-            console.log('by source_file:', JSON.stringify(bySrc));
-
-            console.log('');
-            console.log('=== how many accounts have a Korean-only short password (label leaked into password, not the excel\\'s fault check) ===');
-            const koreanPw = arr.filter(a => a.password && KOREAN.test(String(a.password)) && String(a.password).length <= 10);
-            console.log('count:', koreanPw.length);
-            const koreanBySrc = {};
-            koreanPw.forEach(a => { koreanBySrc[a.source_file] = (koreanBySrc[a.source_file]||0)+1; });
-            console.log('by source_file:', JSON.stringify(koreanBySrc));
-            console.log('sample password VALUES (these are just Korean words, not secrets, safe to show):', JSON.stringify(koreanPw.slice(0,15).map(a=>a.password)));
-
-            console.log('');
-            console.log('=== is the original excel file for 보물섬 체널 (8.15).xlsx still on disk? ===');
-            const { execSync } = require('child_process');
-            try {
-              const out = execSync(\"find /opt/gauth-full/uploads -iname '*8.15*' 2>/dev/null; find /opt/gauth-full -iname '*보물섬*' 2>/dev/null\").toString();
-              console.log(out || '(no matching file found anywhere under /opt/gauth-full)');
-            } catch(e) { console.log('find error:', e.message); }
-
-            console.log('');
-            console.log('=== inspecting REAL column layout of the archived original excel (using the same xlsx lib the server uses) ===');
-            const XLSX = require('/opt/gauth-full/node_modules/xlsx');
-            const files = execSync(\"find /opt/gauth-full/uploads/archive -iname '*8.15*'\").toString().trim().split(String.fromCharCode(10)).filter(Boolean);
-            files.forEach(fp => {
-              console.log('--- ' + fp + ' ---');
-              const wb = XLSX.readFile(fp);
-              const sheetName = wb.SheetNames[0];
-              const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: '', raw: false });
-              console.log('sheet:', sheetName, '| total rows:', rows.length);
-              console.log('header row (row 0):', JSON.stringify(rows[0]));
-              function maskRow(r) {
-                return (r||[]).map(c => {
-                  const s = String(c);
-                  if (!s) return '';
-                  if (/@/.test(s)) return s; // emails are already visible elsewhere, safe
-                  return s.slice(0,2) + '***(len=' + s.length + ')';
-                });
-              }
-              console.log('sample data row (row 1, non-email cells masked):', JSON.stringify(maskRow(rows[1])));
-              console.log('sample data row (row 2, non-email cells masked):', JSON.stringify(maskRow(rows[2])));
-            });
-
-            console.log('');
-            console.log('=== APPLYING FIX: real password is column index 1 (not the nickname in column 7) ===');
-            const BACKUP = '/opt/gauth-full/accounts_normalized.backup.' + String(Date.now()) + '.json';
-            fs.writeFileSync(BACKUP, JSON.stringify(d, null, 2));
-            console.log('backup written to', BACKUP);
-
-            const fp = files[0];
-            const wb2 = XLSX.readFile(fp);
-            const rows2 = XLSX.utils.sheet_to_json(wb2.Sheets[wb2.SheetNames[0]], { header: 1, defval: '', raw: false });
-            const byEmailReal = {};
-            rows2.forEach(r => {
-              const email = String(r[0]||'').trim();
-              if (email && /@/.test(email)) byEmailReal[email.toLowerCase()] = String(r[1]||'').trim();
-            });
-            console.log('real passwords indexed from original excel:', Object.keys(byEmailReal).length);
-
-            let fixed = 0;
-            arr.forEach(a => {
-              if (!a.source_file || !a.source_file.includes('8.15')) return; // only this contaminated batch, matched by the ASCII-safe date fragment
-              const real = byEmailReal[String(a.email||'').toLowerCase()];
-              if (real && a.password !== real) {
-                a.password = real;
-                fixed++;
-              }
-            });
-            console.log('accounts fixed:', fixed);
-
-            fs.writeFileSync('/opt/gauth-full/accounts_normalized.json', JSON.stringify(arr, null, 2));
-            console.log('accounts_normalized.json updated and saved.');
-            "
+            echo "jump subdomain DNS check done in the create-jump-subdomain job"
