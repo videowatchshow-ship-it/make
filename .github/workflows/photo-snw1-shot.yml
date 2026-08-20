@@ -1,0 +1,55 @@
+name: SNW_1.html ch=cent 스크린샷 (base64)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-snw1-shot.yml'
+jobs:
+  shot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm init -y >/dev/null 2>&1 && npm i -D playwright >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: 스크린샷 + 캔버스 픽셀 non-blank 여부 확인
+        timeout-minutes: 1
+        run: |
+          cat > sn2.js << 'EOF'
+          const { chromium } = require('playwright');
+          (async () => {
+            try {
+              const browser = await chromium.launch();
+              const page = await browser.newPage({ viewport: { width: 1000, height: 900 } });
+              await page.goto('https://xn--9d0bw2fjtyymch7de9d.info/photo/SNW_1.html?ch=cent', { waitUntil: 'domcontentloaded', timeout: 15000 });
+              await page.waitForTimeout(3000);
+              const pixelCheck = await page.evaluate(() => {
+                const out = {};
+                ['cBead','cBig','cDrv'].forEach(id => {
+                  const c = document.getElementById(id);
+                  if (!c) { out[id] = 'canvas 없음'; return; }
+                  const ctx = c.getContext('2d');
+                  const data = ctx.getImageData(0, 0, c.width, c.height).data;
+                  let nonWhiteNonTransparent = 0;
+                  for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
+                    if (a > 0 && !(r > 250 && g > 250 && b > 250)) nonWhiteNonTransparent++;
+                  }
+                  out[id] = { width: c.width, height: c.height, coloredPixels: nonWhiteNonTransparent };
+                });
+                return out;
+              });
+              console.log('PIXEL_CHECK:', JSON.stringify(pixelCheck, null, 2));
+              await page.screenshot({ path: 'snw1.jpg', type: 'jpeg', quality: 30 });
+              await browser.close();
+              process.exit(0);
+            } catch (e) {
+              console.error('ERR:', e.message);
+              process.exit(1);
+            }
+          })();
+          EOF
+          timeout 50 node sn2.js || echo "타임아웃/에러"
