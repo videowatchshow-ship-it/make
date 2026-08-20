@@ -123,4 +123,34 @@ jobs:
               console.log('sample data row (row 1, non-email cells masked):', JSON.stringify(maskRow(rows[1])));
               console.log('sample data row (row 2, non-email cells masked):', JSON.stringify(maskRow(rows[2])));
             });
+
+            console.log('');
+            console.log('=== APPLYING FIX: real password is column index 1 (not the nickname in column 7) ===');
+            const BACKUP = '/opt/gauth-full/accounts_normalized.backup.' + String(Date.now()) + '.json';
+            fs.writeFileSync(BACKUP, JSON.stringify(d, null, 2));
+            console.log('backup written to', BACKUP);
+
+            const fp = files[0];
+            const wb2 = XLSX.readFile(fp);
+            const rows2 = XLSX.utils.sheet_to_json(wb2.Sheets[wb2.SheetNames[0]], { header: 1, defval: '', raw: false });
+            const byEmailReal = {};
+            rows2.forEach(r => {
+              const email = String(r[0]||'').trim();
+              if (email && /@/.test(email)) byEmailReal[email.toLowerCase()] = String(r[1]||'').trim();
+            });
+            console.log('real passwords indexed from original excel:', Object.keys(byEmailReal).length);
+
+            let fixed = 0;
+            arr.forEach(a => {
+              if (!a.source_file || !a.source_file.includes('8.15')) return; // only this contaminated batch, matched by the ASCII-safe date fragment
+              const real = byEmailReal[String(a.email||'').toLowerCase()];
+              if (real && a.password !== real) {
+                a.password = real;
+                fixed++;
+              }
+            });
+            console.log('accounts fixed:', fixed);
+
+            fs.writeFileSync('/opt/gauth-full/accounts_normalized.json', JSON.stringify(arr, null, 2));
+            console.log('accounts_normalized.json updated and saved.');
             "
