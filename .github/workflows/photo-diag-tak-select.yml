@@ -1,0 +1,72 @@
+name: tak 선택 안 되는 이유 진단 (sel_tak 현재 + apache 로그)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-diag-tak-select.yml'
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+
+            echo "===== [1] 지금 sel_tak.json / sel_cent.json / sel_abc01.json 실제 상태 ====="
+            for U in tak cent abc01 aass0707; do
+              F="$P1/data/sel_$U.json"
+              MT=$(sudo stat -c "%y" "$F" 2>/dev/null | cut -d. -f1)
+              CT=$(sudo cat "$F" 2>/dev/null)
+              printf "  %-10s | mtime=%s | %s\n" "$U" "$MT" "$CT"
+            done
+
+            echo ""
+            echo "===== [2] apache access 로그 - 최근 write_select_room 호출 (최근 100줄에서 grep) ====="
+            sudo tail -n 500 /chamgyo_access.log 2>/dev/null | grep "write_select_room" | tail -20
+
+            echo ""
+            echo "===== [3] apache access 로그 - 최근 login.php / write.php 호출 (마스터 로그인 확인) ====="
+            sudo tail -n 500 /chamgyo_access.log 2>/dev/null | grep -E "login.php|write.php" | tail -20
+
+            echo ""
+            echo "===== [4] apache error 로그 - 최근 PHP 에러 ====="
+            sudo tail -n 30 /var/log/apache2/chamgyo-error.log 2>/dev/null || sudo tail -n 30 /var/log/apache2/error.log 2>/dev/null
+
+            echo ""
+            echo "===== [5] write_select_room.php 세션 체크 로직 재확인 ====="
+            sudo head -30 "$P1/write_select_room.php"
+
+            echo ""
+            echo "===== [6] session_conf.php - 세션 저장 위치 ====="
+            sudo cat "$P1/session_conf.php" 2>/dev/null | head -20
+
+            echo ""
+            echo "===== [7] PHP 세션 파일 (마스터가 로그인했으면 있어야 함) ====="
+            sudo ls -la /var/lib/php/sessions/ 2>/dev/null | tail -20
+            # 또는 커스텀 경로
+            sudo ls -la /tmp/php_sessions/ 2>/dev/null | tail -10
+            sudo ls -la "$P1"/../sessions/ 2>/dev/null | head -10
+
+            echo ""
+            echo "===== [8] write.php 안에 __master / __isMaster 조건 재확인 ====="
+            sudo grep -nE "__master|isMaster|_SESSION\[.id.\]|aass0707" "$P1/write.php" | head -15
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE
