@@ -1,4 +1,4 @@
-name: denny 최종 제거 (login_check.php + write_url.php 잔재)
+name: write_url.php 남은 denny option 최종 제거
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ jobs:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 180s
+          command_timeout: 120s
           script: |
             /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
               --zone=asia-northeast1-a \
@@ -29,60 +29,58 @@ jobs:
             P1="/var/www/sites/chamgyo/public/photo"
             TS=$(date +%s)
 
-            echo "===== [1] BEFORE - denny 참조 grep ====="
-            for F in login_check.php write_url.php; do
-              echo "--- $F ---"
-              sudo grep -n "denny" "$P1/$F" 2>/dev/null | head -20
-            done
+            F="$P1/write_url.php"
+
+            echo "===== [1] BEFORE - line 161 ctlCh 셀렉트 원본 ====="
+            sudo sed -n "161p" "$F"
+
+            sudo cp "$F" "$F.bak.denny2.$TS"
 
             echo ""
-            echo "===== [2] login_check.php 소스 앞 60줄 (\$ACCOUNTS 확인) ====="
-            sudo head -60 "$P1/login_check.php"
-
-            echo ""
-            echo "===== [3] Python 으로 login_check.php + write_url.php 에서 denny 제거 ====="
-            for F in login_check.php write_url.php; do
-              sudo cp "$P1/$F" "$P1/$F.bak.denny.$TS"
-              sudo TARGET="$P1/$F" python3 << "PYEOF"
+            echo "===== [2] Python: <option>denny</option> 완전 제거 ====="
+            sudo TARGET="$F" python3 << "PYEOF"
             import os, re
             p = os.environ["TARGET"]
             s = open(p).read()
             before = len(s)
-            # 케이스: 배열 안에 "denny" => "..." 라인, 'denny' => 'xxx' 라인 (PHP), 그리고 "denny" 단독 리스트 항목
-            # PHP array key: "denny" => "value",  또는  'denny' => 'value',
-            s = re.sub(r'[\'"]denny[\'"]\s*=>\s*[\'"][^\'"]*[\'"]\s*,?\s*\n?', '', s)
-            # PHP array item: "denny",  또는 'denny',
-            s = re.sub(r'[\'"]denny[\'"]\s*,\s*', '', s)
-            # JS/HTML option: <option value="denny">...</option>
-            s = re.sub(r'<option value="denny">[^<]*</option>', '', s)
-            # Comma cleanup: trailing comma before ] or )
-            s = re.sub(r',(\s*[\]\)])', r'\1', s)
+            # value 없는 <option>denny</option> 도 잡기
+            s = re.sub(r'<option[^>]*>denny</option>', '', s)
             open(p, "w").write(s)
-            print(f"{p}: before={before}B after={len(s)}B diff={before-len(s)}B")
+            print(f"before={before}B after={len(s)}B diff={before-len(s)}B")
             PYEOF
-              sudo chown www-data:www-data "$P1/$F"
-              sudo chmod 644 "$P1/$F"
-            done
+
+            sudo chown www-data:www-data "$F"
+            sudo chmod 644 "$F"
 
             echo ""
-            echo "===== [4] AFTER - denny 참조 재확인 ====="
-            for F in login_check.php write_url.php; do
-              echo "--- $F ---"
-              CNT=$(sudo grep -c "denny" "$P1/$F" 2>/dev/null)
-              echo "  denny 잔존: $CNT (기대: 0)"
-              sudo grep -n "denny" "$P1/$F" 2>/dev/null | head -5
-            done
+            echo "===== [3] AFTER - line 161 ====="
+            sudo sed -n "161p" "$F"
 
             echo ""
-            echo "===== [5] 전체 photo/ 하위 denny grep 최종 스캔 ====="
-            sudo grep -rl "denny" "$P1"/*.php "$P1"/*.html 2>/dev/null || echo "  (denny 참조 완전 제거)"
+            echo "===== [4] denny 최종 grep ====="
+            CNT=$(sudo grep -c "denny" "$F" 2>/dev/null)
+            echo "  write_url.php denny 잔존: $CNT (기대: 0)"
+            echo ""
+            echo "전체 photo/ 스캔:"
+            sudo grep -rl "denny" "$P1"/*.php "$P1"/*.html 2>/dev/null || echo "  ✅ denny 완전 제거"
 
             echo ""
-            echo "===== [6] PHP 문법 검사 (혹시 정규식이 깨뜨렸으면 감지) ====="
-            for F in login_check.php write_url.php write.php write_select_room.php; do
-              echo "--- $F ---"
-              sudo /usr/bin/php -l "$P1/$F" 2>&1 | head -3
-            done
+            echo "===== [5] PHP 문법 검사 ====="
+            sudo /usr/bin/php -l "$F"
+
+            echo ""
+            echo "===== [6] 최종 요약 - photo 계정 시스템 상태 ====="
+            echo "  로그인 계정 (login_check.php \$ACCOUNTS):"
+            sudo grep -E "^\s*'[a-z0-9_]+'\s*=>" "$P1/login_check.php" | sed "s/^/    /"
+            echo ""
+            echo "  sel_*.json 파일 (관리 대상 채널):"
+            sudo ls "$P1/data/"sel_*.json 2>/dev/null | xargs -n1 basename | sed "s/^/    /"
+            echo ""
+            echo "  마스터 채널 드롭다운 (write.php):"
+            sudo grep -oE '<option value="[^"]*">[^<]*</option>' "$P1/write.php" | sed "s/^/    /"
+            echo ""
+            echo "  백엔드 write_select_room.php \$ALL_CH:"
+            sudo grep "^\\\$ALL_CH" "$P1/write_select_room.php" | sed "s/^/    /"
 
             echo ""
             echo "===== DONE ====="
