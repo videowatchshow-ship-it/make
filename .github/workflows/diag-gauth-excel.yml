@@ -77,4 +77,21 @@ jobs:
             const withFn = noDate.filter(a=>_parseFilenameDate(a.source_file));
             console.log('noDate with parseable filename date:', withFn.length);
             console.log('noDate without any date (stays at bottom, order-stable):', noDate.length - withFn.length);
+
+            console.log('');
+            console.log('=== Bottom 15 (last accounts in final sorted list) ===');
+            sorted.slice(-15).forEach((a,i) => {
+              const idx = sorted.length - 15 + i + 1;
+              console.log(idx+'.', a.email, '|', a.source_file, '| fnDate:', a._fnDate ? new Date(a._fnDate).toISOString().slice(0,10) : 'none');
+            });
+
+            console.log('');
+            console.log('=== Bottom-order correctness: is fnDate non-decreasing toward the end (ascending as we go down, i.e. oldest/none last)? ===');
+            let orderOk = true, firstBad = -1;
+            for (let i = withDate.length; i < sorted.length - 1; i++) {
+              const cur = sorted[i]._fnDate || 0;
+              const nxt = sorted[i+1]._fnDate || 0;
+              if (cur < nxt) { orderOk = false; firstBad = i; break; }
+            }
+            console.log('noDate portion strictly non-increasing fnDate:', orderOk, firstBad>=0 ? ('first violation at index '+firstBad) : '');
             "
