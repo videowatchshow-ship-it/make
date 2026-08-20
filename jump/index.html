@@ -67,6 +67,21 @@
 
   <div class="card">
     <div class="card-head">
+      <span class="label">📄 엑셀 업로드 (단일 파일)</span>
+    </div>
+    <form id="excel-form" style="display:flex;flex-direction:column;gap:10px">
+      <input type="file" id="excel-file" name="file" accept=".xlsx,.xls,.csv" required
+        style="background:var(--card);border:1px dashed var(--border2);border-radius:8px;padding:12px;color:var(--text);font-size:13px">
+      <button type="submit" id="excel-submit"
+        style="background:linear-gradient(135deg,var(--accent),#5a8dff);color:#0d1117;font-weight:800;border:none;border-radius:8px;padding:10px 14px;font-size:14px;cursor:pointer">
+        업로드 (엑셀 1개만)
+      </button>
+      <div id="excel-status" style="font-size:12px;color:var(--sub);white-space:pre-wrap"></div>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
       <span class="label">📦 하위 사이트별 계정</span>
       <div class="actions">
         <button class="icon-btn" id="refresh-subsites">🔄 새로고침</button>
@@ -199,6 +214,31 @@ async function loadSubsites(){
 }
 document.getElementById('refresh-subsites').addEventListener('click', loadSubsites);
 loadSubsites();
+
+// Excel upload (single file → gauth /api/excel/upload via jump vhost proxy)
+document.getElementById('excel-form').addEventListener('submit', async function(e){
+  e.preventDefault();
+  var st = document.getElementById('excel-status');
+  var btn = document.getElementById('excel-submit');
+  var input = document.getElementById('excel-file');
+  if(!input.files || !input.files[0]){ st.textContent='파일을 선택해주세요.'; return; }
+  var file = input.files[0];
+  st.textContent = '업로드 중: '+file.name+' ('+file.size+' bytes)';
+  btn.disabled = true;
+  try{
+    var fd = new FormData();
+    fd.append('file', file);
+    var r = await fetch('/api/excel/upload', {method:'POST', body: fd, cache:'no-store'});
+    var txt = await r.text();
+    if(!r.ok){ st.textContent = '❌ 실패 ('+r.status+'): '+txt.slice(0,400); return; }
+    st.textContent = '✅ 업로드 완료\n'+txt.slice(0,600);
+    setTimeout(loadSubsites, 1500);
+  }catch(err){
+    st.textContent = '❌ 오류: '+err.message;
+  }finally{
+    btn.disabled = false;
+  }
+});
 
 let deferredPrompt;
 const installBtn = document.getElementById('install-btn');
