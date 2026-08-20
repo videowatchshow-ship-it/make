@@ -16,63 +16,13 @@ jobs:
           BGLURL=$(grep -oE 'src="[^"]*bgl\.js[^"]*"' /tmp/cah1.html | head -1 | sed -E 's/src="([^"]*)"/\1/')
           curl -sS -o /tmp/bgl.js "https://xn--9d0bw2fjtyymch7de9d.info/photo/$BGLURL"
 
-          echo "===== wenlu 함수 정의 위치 ====="
-          grep -n "wenlu" /tmp/bgl.js || echo "wenlu 없음"
+          echo "===== wenlu 함수 본문 (앞부분 1500자) ====="
+          python3 -c "import re; src=open('/tmp/bgl.js').read(); m=re.search(r'wenlu\s*[:=]\s*function[^{]*\{|function\s+wenlu[^{]*\{', src); print(src[m.start():m.start()+1500] if m else 'wenlu 못찾음')"
 
           echo ""
-          echo "===== wenlu 함수 본문 (정의 지점부터 250자 단위로 다음 함수 전까지) ====="
-          python3 -c "
-import re
-src = open('/tmp/bgl.js').read()
-m = re.search(r'wenlu\s*[:=]\s*function[^{]*\{', src)
-if not m:
-    m = re.search(r'function\s+wenlu[^{]*\{', src)
-if m:
-    start = m.start()
-    depth = 0
-    i = m.end()-1
-    while i < len(src):
-        if src[i] == '{': depth += 1
-        elif src[i] == '}':
-            depth -= 1
-            if depth == 0:
-                break
-        i += 1
-    print(src[start:i+1][:3000])
-else:
-    print('wenlu 함수 본문 못찾음')
-"
+          echo "===== drawAsk 함수 본문 (앞부분 1500자) ====="
+          python3 -c "import re; src=open('/tmp/bgl.js').read(); m=re.search(r'drawAsk\s*[:=]\s*function[^{]*\{|function\s+drawAsk[^{]*\{', src); print(src[m.start():m.start()+1500] if m else 'drawAsk 못찾음')"
 
           echo ""
-          echo "===== drawAsk 함수 본문 ====="
-          python3 -c "
-import re
-src = open('/tmp/bgl.js').read()
-m = re.search(r'drawAsk\s*[:=]\s*function[^{]*\{', src)
-if not m:
-    m = re.search(r'function\s+drawAsk[^{]*\{', src)
-if m:
-    start = m.start()
-    depth = 0
-    i = m.end()-1
-    while i < len(src):
-        if src[i] == '{': depth += 1
-        elif src[i] == '}':
-            depth -= 1
-            if depth == 0:
-                break
-        i += 1
-    print(src[start:i+1][:3000])
-else:
-    print('drawAsk 함수 본문 못찾음')
-"
-
-          echo ""
-          echo "===== 현재 tak 계정 room 데이터 (nums 개수, 최근 5개) ====="
-          curl -sS "https://xn--9d0bw2fjtyymch7de9d.info/photo/data/room_110.json" | python3 -c "
-import sys,json
-d=json.load(sys.stdin)
-nums=d.get('nums',[])
-print('id=',d.get('id'),'ver=',d.get('ver'),'count=',len(nums))
-print('last10=',nums[-10:])
-"
+          echo "===== 현재 tak 계정 room 데이터 (nums 개수, 최근 10개) ====="
+          curl -sS "https://xn--9d0bw2fjtyymch7de9d.info/photo/data/room_110.json" | python3 -c "import sys,json; d=json.load(sys.stdin); nums=d.get('nums',[]); print('id=',d.get('id'),'ver=',d.get('ver'),'count=',len(nums)); print('last10=',nums[-10:])"
