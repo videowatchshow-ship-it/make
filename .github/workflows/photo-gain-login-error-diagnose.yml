@@ -1,0 +1,60 @@
+name: gain 서브도메인 로그인 에러 진단
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-gain-login-error-diagnose.yml'
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 도메인/서브도메인 실제 응답 확인
+        run: |
+          echo "===== gain 서브도메인 DNS 확인 ====="
+          getent hosts gain.xn--9d0bw2fjtyymch7de9d.info || echo "DNS resolve 실패"
+          echo ""
+          echo "===== write.php GET 응답 확인 ====="
+          curl -sS -o /dev/null -D - "https://gain.xn--9d0bw2fjtyymch7de9d.info/photo2/write.php" 2>&1 | head -20
+          echo ""
+          echo "===== 메인 도메인 비교용 ====="
+          curl -sS -o /dev/null -D - "https://xn--9d0bw2fjtyymch7de9d.info/photo2/write.php" 2>&1 | head -20
+
+      - name: 서버 - vhost/서브도메인 설정 + 로그인 로직 + 최근 에러 로그
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 90s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            echo "===== [1] Apache vhost 목록에 gain 서브도메인 있는지 ====="
+            sudo grep -rln "gain\." /etc/apache2/sites-enabled/ 2>&1
+            sudo apache2ctl -S 2>&1 | grep -i gain
+
+            echo ""
+            echo "===== [2] photo2/login_check.php 또는 계정 인증 로직 확인 ====="
+            sudo find /var/www/sites/chamgyo/public/photo2 -maxdepth 1 -iname "*login*" -o -iname "*auth*" 2>&1
+            sudo cat /var/www/sites/chamgyo/public/photo2/login_check.php 2>&1 | head -60
+
+            echo ""
+            echo "===== [3] gain 계정이 photo2 로그인 허용 목록에 있는지 ====="
+            sudo grep -rn "gain" /var/www/sites/chamgyo/public/photo2/*.php 2>&1 | grep -v Binary | head -20
+
+            echo ""
+            echo "===== [4] 최근 Apache/PHP 에러 로그 중 gain, write.php 관련 ====="
+            sudo tail -n 200 /var/log/apache2/error.log 2>&1 | grep -i "gain\|write.php" | tail -30
+            sudo find /var/log -iname "*chamgyo*" -newer /var/www/sites/chamgyo/public/photo2/write.php 2>&1
+
+            echo ""
+            echo "===== [5] write.php 로그인 폼 자체가 어디로 POST 하는지 ====="
+            sudo grep -n "action=\|login" /var/www/sites/chamgyo/public/photo2/write.php 2>&1 | head -20
+            REMOTE
