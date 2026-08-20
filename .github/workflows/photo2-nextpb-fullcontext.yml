@@ -1,0 +1,38 @@
+name: photo2 Next.P/B 전체 CSS+마크업+JS 컨텍스트 추출
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-nextpb-fullcontext.yml'
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: photo2 SNW_1.html 전체 다운로드 + 관련 라인 번호 매핑
+        run: |
+          curl -sS -o /tmp/p2snw1.html "https://xn--9d0bw2fjtyymch7de9d.info/photo2/SNW_1.html?ch=cent"
+          echo "===== 총 라인수 ====="
+          wc -l /tmp/p2snw1.html
+          echo ""
+          echo "===== .pill / .lbl / .dot 관련 CSS (P/B 글자 출력 위치 찾기) ====="
+          grep -n "\.pill\|\.lbl\|\.dot\|lbl\.p\|lbl\.b\|lbl p\|lbl b\|content:" /tmp/p2snw1.html
+          echo ""
+          echo "===== 1~60줄 (head+style 앞부분) ====="
+          sed -n '1,60p' /tmp/p2snw1.html
+          echo ""
+          echo "===== 330~350줄 (render 함수 부근) ====="
+          sed -n '330,350p' /tmp/p2snw1.html
+      - name: photo(원본) SNW_1.html 전체 다운로드 + 삽입 지점 확인
+        run: |
+          curl -sS -o /tmp/p1snw1.html "https://xn--9d0bw2fjtyymch7de9d.info/photo/SNW_1.html?ch=cent"
+          echo "===== 총 라인수 ====="
+          wc -l /tmp/p1snw1.html
+          echo ""
+          echo "===== 1~60줄 ====="
+          sed -n '1,60p' /tmp/p1snw1.html
+          echo ""
+          echo "===== render 함수 부근 (330~350줄) ====="
+          sed -n '330,350p' /tmp/p1snw1.html
