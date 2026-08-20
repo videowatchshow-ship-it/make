@@ -1,0 +1,55 @@
+name: fc-sinji-investigate
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/fc-sinji-investigate.yml'
+jobs:
+  investigate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            echo "=== 1. collector_sinji_new.php full content ==="
+            timeout 8 sudo cat /var/www/sites/chamgyo/public/photo/collector_sinji_new.php
+
+            echo "=== 2. discover_sinji_new.php full content ==="
+            timeout 8 sudo cat /var/www/sites/chamgyo/public/photo/discover_sinji_new.php
+
+            echo "=== 3. grep fc in data dir (json files only, maxdepth 2) ==="
+            timeout 10 sudo find /var/www/sites/chamgyo/public/photo/data -maxdepth 2 -iname "*.json" 2>/dev/null | timeout 10 xargs -I{} sudo grep -l "fc" {} 2>/dev/null | head -50
+
+            echo "=== 4. list data dir files sorted by mtime ==="
+            timeout 8 sudo ls -la --time-style=full-iso /var/www/sites/chamgyo/public/photo/data | head -60
+
+            echo "=== 5. lock file status ==="
+            timeout 5 sudo ls -la /tmp/sinji_new_coll.lock 2>&1
+            timeout 5 sudo lsof /tmp/sinji_new_coll.lock 2>&1
+            timeout 5 sudo fuser /tmp/sinji_new_coll.lock 2>&1
+
+            echo "=== 6. running php processes ==="
+            timeout 5 sudo ps aux | grep -i sinji
+
+            echo "=== 7. collector log tail ==="
+            timeout 8 sudo tail -n 200 /var/log/chamgyo-sinji-new-collector.log 2>&1
+
+            echo "=== 8. discover log tail ==="
+            timeout 8 sudo tail -n 200 /var/log/chamgyo-sinji-new-discover.log 2>&1
+
+            echo "=== 9. current date on server ==="
+            date -u
+            REMOTE
