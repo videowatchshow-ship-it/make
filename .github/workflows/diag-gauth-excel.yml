@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Recheck merge result + account 5211/5212 after merge completes
+      - name: Check what /api/normalized-accounts actually returns (frontend source)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -18,18 +18,9 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 60s
           script: |
-            echo "=== 1. Merge log for the most recent upload ==="
-            sudo journalctl -u gauth --since "-15 min" 2>/dev/null | grep -iE "upload-excels|merge done" | tail -20
+            echo "=== 1. find the route handler for /api/normalized-accounts ==="
+            sudo grep -rn "normalized-accounts" /opt/gauth-full/*.js 2>/dev/null
 
             echo ""
-            echo "=== 2. Current total count + accounts 5211/5212 (1-indexed) ==="
-            sudo node -e "
-            const fs = require('fs');
-            const d = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
-            const arr = Array.isArray(d) ? d : (d.accounts||[]);
-            console.log('Total accounts NOW:', arr.length);
-            console.log('=== Account #5211 (index 5210) ===');
-            console.log(JSON.stringify(arr[5210], null, 2));
-            console.log('=== Account #5212 (index 5211) ===');
-            console.log(JSON.stringify(arr[5211], null, 2));
-            "
+            echo "=== 2. actual live API response length (need auth - check route code first for auth requirement) ==="
+            sudo grep -n "app.get.*normalized-accounts" -A 30 /opt/gauth-full/rebrowser-login.js /opt/gauth-full/auto_deploy.js 2>/dev/null | head -60

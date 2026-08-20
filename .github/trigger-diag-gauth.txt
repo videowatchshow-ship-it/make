@@ -1,1 +1,1 @@
-trigger27-recheck-5211-after-merge
+trigger28-check-normalized-accounts-endpoint
