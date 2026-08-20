@@ -1,0 +1,91 @@
+name: write.php 마스터 채널 드롭다운 수정 (denny 제거 + abc01~07 추가) + write_select_room 검증
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-fix-master-dropdown.yml'
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set -uo pipefail
+            P1="/var/www/sites/chamgyo/public/photo"
+            TS=$(date +%s)
+
+            echo "===== [1] write_select_room.php 소스 확인 (마스터가 ch 지정 가능?) ====="
+            [ -f "$P1/write_select_room.php" ] && sudo cat "$P1/write_select_room.php" || echo "없음"
+
+            echo ""
+            echo "===== [2] BEFORE - write.php 드롭다운 라인 ====="
+            sudo grep -n "chSel\|option value=\"cent\|option value=\"denny\|option value=\"abc" "$P1/write.php" | head -20
+
+            sudo cp "$P1/write.php" "$P1/write.php.bak.dropdown.$TS"
+
+            echo ""
+            echo "===== [3] write.php 드롭다운 갱신 (Python 으로 옵션 리스트 교체) ====="
+            sudo TARGET="$P1/write.php" python3 << "PYEOF"
+            import os, re
+            p = os.environ["TARGET"]
+            s = open(p).read()
+
+            # 새 옵션 리스트: __all__ + 13 계정 (denny 삭제, abc01~07 추가)
+            new_opts = (
+                '<option value="__all__">🌐 전체 (모든 채널)</option>'
+                '<option value="aass0707">aass0707 (마스터)</option>'
+                '<option value="abc01">abc01</option>'
+                '<option value="abc02">abc02</option>'
+                '<option value="abc03">abc03</option>'
+                '<option value="abc04">abc04</option>'
+                '<option value="abc05">abc05</option>'
+                '<option value="abc06">abc06</option>'
+                '<option value="abc07">abc07</option>'
+                '<option value="cent">cent</option>'
+                '<option value="gain">gain</option>'
+                '<option value="jay">jay</option>'
+                '<option value="otuki">otuki</option>'
+                '<option value="tak">tak</option>'
+            )
+
+            # <select id="chSel" ...> ... </select> 안의 옵션 전체 교체
+            pat = re.compile(r'(<select id="chSel"[^>]*>)(.*?)(</select>)', re.DOTALL)
+            m = pat.search(s)
+            if m:
+                new = s[:m.start(2)] + new_opts + s[m.end(2):]
+                open(p, "w").write(new)
+                print(f"OK: 드롭다운 옵션 교체됨. before={len(s)}B after={len(new)}B")
+            else:
+                print("FAIL: chSel select 태그 못 찾음")
+            PYEOF
+
+            sudo chown www-data:www-data "$P1/write.php"
+            sudo chmod 644 "$P1/write.php"
+
+            echo ""
+            echo "===== [4] AFTER - 드롭다운 옵션 확인 ====="
+            sudo grep -oE '<option value="[^"]*">[^<]*</option>' "$P1/write.php" | head -20
+
+            echo ""
+            echo "===== [5] write_select_room.php 마스터 테스트 (aass0707 세션은 못 만드니 로직만 확인) ====="
+            # 파일 안에 세션 마스터 체크 로직 있는지
+            sudo grep -nE "aass0707|master|_SESSION\[.id.\]|target_ch|\\\$ch\s*=" "$P1/write_select_room.php" 2>/dev/null | head -20
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE
