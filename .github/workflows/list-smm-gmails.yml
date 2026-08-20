@@ -1,0 +1,136 @@
+name: List gauth gmails that match SMM order URLs
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/smm-urls.txt']
+
+jobs:
+  list-gmails:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ship URL list to gauth server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: ".github/smm-urls.txt"
+          target: "/tmp"
+          strip_components: 1
+      - name: Match URLs against gauth DB and print gmail list
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 60s
+          script: |
+            sudo python3 - <<'PYEOF'
+            import json, os, re, urllib.parse
+            URLS_FILE = "/tmp/smm-urls.txt"
+
+            def norm(u):
+                if not u: return ""
+                u = urllib.parse.unquote(u.strip())
+                u = re.sub(r'^https?://', '', u, flags=re.I).rstrip('/')
+                u = re.sub(r'^www\.', '', u, flags=re.I)
+                u = u.split('?')[0].split('|')[0]
+                # normalize /videos, /featured suffix
+                u = re.sub(r'/(videos|featured|about|shorts|streams|community)$', '', u, flags=re.I)
+                return u.lower()
+
+            urls = []
+            with open(URLS_FILE) as f:
+                for line in f:
+                    line = line.strip()
+                    if line: urls.append(line)
+            wanted = set(norm(u) for u in urls)
+            # also index by handle only (after @) and by channel id (after channel/)
+            wanted_handles = set()
+            wanted_cids = set()
+            for w in wanted:
+                m = re.search(r'youtube\.com/@([^/]+)', w)
+                if m: wanted_handles.add(m.group(1).lower())
+                m = re.search(r'youtube\.com/channel/([^/|]+)', w)
+                if m: wanted_cids.add(m.group(1).lower())
+
+            print(f"input URLs (unique-normalized): {len(wanted)}")
+            print(f"  handles: {len(wanted_handles)}, channel-ids: {len(wanted_cids)}")
+
+            base = "/var/www/sites"
+            hits = []
+            all_accounts = []
+
+            def scan_arr(site, arr):
+                for a in arr:
+                    if not isinstance(a, dict): continue
+                    email = a.get('email') or a.get('gmail') or a.get('id') or ''
+                    yurl = a.get('youtube_url') or a.get('youtube') or a.get('channel_url') or ''
+                    all_accounts.append((site, email, yurl))
+                    n = norm(yurl)
+                    if not n: continue
+                    if n in wanted:
+                        hits.append((site, email, yurl, 'url'))
+                        continue
+                    m = re.search(r'youtube\.com/@([^/]+)', n)
+                    if m and m.group(1).lower() in wanted_handles:
+                        hits.append((site, email, yurl, 'handle'))
+                        continue
+                    m = re.search(r'youtube\.com/channel/([^/|]+)', n)
+                    if m and m.group(1).lower() in wanted_cids:
+                        hits.append((site, email, yurl, 'cid'))
+
+            # per-site accounts.json
+            for name in sorted(os.listdir(base)):
+                if name == 'gauth': continue
+                p = os.path.join(base, name, 'accounts.json')
+                if not os.path.exists(p): continue
+                try:
+                    d = json.load(open(p, encoding='utf-8'))
+                    arr = d if isinstance(d, list) else d.get('accounts', [])
+                    scan_arr(name, arr)
+                except Exception as e:
+                    print(f"skip {name}: {e}")
+
+            # master DB
+            mp = "/opt/gauth-full/accounts_normalized.json"
+            if os.path.exists(mp):
+                try:
+                    d = json.load(open(mp, encoding='utf-8'))
+                    arr = d if isinstance(d, list) else d.get('accounts', [])
+                    scan_arr('_master', arr)
+                except Exception as e:
+                    print(f"skip master: {e}")
+
+            print(f"total accounts scanned: {len(all_accounts)}")
+            print(f"matched: {len(hits)}")
+            print("")
+            print("=== MATCHED GMAILS ===")
+            seen = set()
+            for site, email, yurl, mode in hits:
+                key = (site, email)
+                if key in seen: continue
+                seen.add(key)
+                print(f"{site:<12} {email:<40} [{mode}] {yurl}")
+
+            print("")
+            print("=== UNMATCHED URLS (present in SMM log, no gauth account has this channel) ===")
+            matched_norms = set()
+            for site, email, yurl, mode in hits:
+                matched_norms.add(norm(yurl))
+                m = re.search(r'youtube\.com/@([^/]+)', norm(yurl))
+                if m: matched_norms.add('@'+m.group(1).lower())
+                m = re.search(r'youtube\.com/channel/([^/|]+)', norm(yurl))
+                if m: matched_norms.add('cid:'+m.group(1).lower())
+            for w in sorted(wanted):
+                if w in matched_norms: continue
+                h = re.search(r'youtube\.com/@([^/]+)', w)
+                c = re.search(r'youtube\.com/channel/([^/|]+)', w)
+                if h and '@'+h.group(1).lower() in matched_norms: continue
+                if c and 'cid:'+c.group(1).lower() in matched_norms: continue
+                print(w)
+            PYEOF
