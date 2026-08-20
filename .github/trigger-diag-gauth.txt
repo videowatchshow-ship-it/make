@@ -1,1 +1,1 @@
-trigger82-jump-subsite-accounts-widget-plus-proxy
+trigger83-final-live-verify-jump-and-gauth
