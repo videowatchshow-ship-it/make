@@ -131,6 +131,34 @@ jobs:
             curl -s -o /dev/null -w "jump https status: %{http_code}\n" https://jump.cent-solution.online/ --max-time 10
             curl -s --max-time 10 https://jump.cent-solution.online/ | grep -o "참교육 스트리밍" | head -1
 
+  verify-gauth-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify gauth main page actually serves the subsite-accounts view
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 30s
+          script: |
+            echo "=== 1. does the deployed index.html on disk contain the widget? ==="
+            sudo grep -c "subsite-accounts-body\|tab-subsite" /var/www/sites/gauth/public/index.html || echo 0
+            echo ""
+            echo "=== 2. does the LIVE https response contain it? ==="
+            curl -s --max-time 10 https://gauth.cent-solution.online/ | grep -o "subsite-accounts-body\|tab-subsite" | sort -u
+            echo ""
+            echo "=== 3. live API check ==="
+            curl -s --max-time 10 https://gauth.cent-solution.online/api/subsite-accounts | head -c 300
+            echo ""
+            echo ""
+            echo "=== 4. file mtime + git info (is it actually the latest deploy?) ==="
+            ls -la /var/www/sites/gauth/public/index.html
+            echo ""
+            echo "=== 5. is there a CDN/cache in front (cf-cache-status header)? ==="
+            curl -s -D - --max-time 10 https://gauth.cent-solution.online/ -o /dev/null | grep -i "cf-cache-status\|cache-control\|age:"
+
   diag:
     runs-on: ubuntu-latest
     timeout-minutes: 5
