@@ -1,0 +1,131 @@
+name: 마스터 __all__ 공용 업로드 모드 제거 (write_upload.php + write.php UI)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-remove-master-allmode.yml'
+jobs:
+  edit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+            TS=$(date +%s)
+            WU="$P1/write_upload.php"
+            WP="$P1/write.php"
+
+            echo "===== [0] 백업 ====="
+            sudo cp "$WU" "$WU.bak.$TS"
+            sudo cp "$WP" "$WP.bak.$TS"
+            echo "  $WU.bak.$TS"
+            echo "  $WP.bak.$TS"
+
+            echo ""
+            echo "===== [1] write_upload.php: allMode(공용 업로드) 제거 ====="
+            sudo TARGET="$WU" python3 << "PYEOF"
+            import os
+            p = os.environ["TARGET"]
+            s = open(p, encoding="utf-8").read()
+            before = len(s)
+
+            old = '''/* ★ 마스터 '전체' 모드: 공용 기본 이미지(images/<파일명>)로 저장한다. 각 채널은
+   자기 이미지를 안 올렸으면 이 공용 기본으로 폴백하므로 = 모든 채널에 반영된다. */
+$allMode = ($isMaster && ($chRaw === '__all__' || $chRaw === 'all' || $chRaw === ''));
+$ch = preg_replace('/[^a-zA-Z0-9_]/', '', $chRaw);
+if (!$allMode && ($ch === '' || !$isMaster)) $ch = preg_replace('/[^a-zA-Z0-9_]/', '', $id);  /* 비마스터는 자기 채널 강제 */
+if (!$allMode && $ch === '') redir('error');'''
+
+            new = '''/* ★ 공용 '전체' 업로드 모드 완전 제거 (2026-08-20). 계정 간 완전 독립을 위해
+   마스터도 항상 실제 채널 하나에만 저장한다. 공용 images/<파일명> 폴백 저장은 더 이상
+   불가능 — __all__/all/빈값 은 전부 마스터 자기 채널(aass0707)로 강제한다. */
+$ch = preg_replace('/[^a-zA-Z0-9_]/', '', $chRaw);
+if ($ch === '__all__' || $ch === 'all') $ch = '';
+if ($ch === '' || !$isMaster) $ch = preg_replace('/[^a-zA-Z0-9_]/', '', $id);  /* 비마스터·전체선택 모두 자기 채널 강제 */
+if ($ch === '') redir('error');'''
+
+            assert old in s, "OLD BLOCK NOT FOUND - abort"
+            s = s.replace(old, new, 1)
+
+            old2 = '''if ($allMode) {
+    /* 공용 기본 이미지 = 모든 채널 폴백 대상 */
+    $dir = __DIR__ . '/images';
+    if (!is_dir($dir)) @mkdir($dir, 0755, true);
+    $dest = $dir . '/' . $target;
+    $ver_file = __DIR__ . '/data/img_ver.json';
+} else {
+    $dir = __DIR__ . '/images/ch/' . $ch;
+    if (!is_dir($dir)) @mkdir($dir, 0755, true);
+    $dest = $dir . '/' . $target;
+    $ver_file = __DIR__ . '/data/img_ver_' . $ch . '.json';
+}'''
+            new2 = '''$dir = __DIR__ . '/images/ch/' . $ch;
+if (!is_dir($dir)) @mkdir($dir, 0755, true);
+$dest = $dir . '/' . $target;
+$ver_file = __DIR__ . '/data/img_ver_' . $ch . '.json';'''
+            assert old2 in s, "OLD BLOCK2 NOT FOUND - abort"
+            s = s.replace(old2, new2, 1)
+
+            open(p, "w", encoding="utf-8").write(s)
+            print(f"write_upload.php: before={before}B after={len(s)}B diff={before-len(s)}B")
+            PYEOF
+            EDIT1=$?
+            echo "  python edit1 exit=$EDIT1"
+
+            sudo chown www-data:www-data "$WU"
+            sudo chmod 644 "$WU"
+
+            echo ""
+            echo "===== [2] write.php: chSel '__all__ (전체)' 옵션 제거 ====="
+            sudo TARGET="$WP" python3 << "PYEOF"
+            import os
+            p = os.environ["TARGET"]
+            s = open(p, encoding="utf-8").read()
+            before = len(s)
+            old = '<option value="__all__">🌐 전체 (모든 채널)</option>'
+            assert old in s, "OPTION NOT FOUND - abort"
+            s = s.replace(old, '', 1)
+            open(p, "w", encoding="utf-8").write(s)
+            print(f"write.php: before={before}B after={len(s)}B diff={before-len(s)}B (옵션 제거됨)")
+            PYEOF
+            EDIT2=$?
+            echo "  python edit2 exit=$EDIT2"
+
+            sudo chown www-data:www-data "$WP"
+            sudo chmod 644 "$WP"
+
+            echo ""
+            echo "===== [3] PHP 문법 검사 ====="
+            sudo /usr/bin/php -l "$WU"
+            sudo /usr/bin/php -l "$WP"
+
+            echo ""
+            echo "===== [4] 편집 후 write_upload.php 핵심 로직부 (grep) ====="
+            sudo grep -n "allMode\|__all__\|'all'\|\\\$ch \|\\\$id" "$WU"
+
+            echo ""
+            echo "===== [5] write.php chSel 옵션 목록 (전체 제거 확인) ====="
+            sudo grep -oE '<option value="[^"]*">[^<]*</option>' "$WP"
+
+            echo ""
+            echo "===== [6] curl write.php HTTP 상태 ====="
+            DOM="xn--9d0bw2fjtyymch7de9d.info"
+            curl -sSk --resolve "$DOM:443:127.0.0.1" -o /dev/null -w "write.php HTTP %{http_code}\n" "https://$DOM/photo/write.php"
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE
