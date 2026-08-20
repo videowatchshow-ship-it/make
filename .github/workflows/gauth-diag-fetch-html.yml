@@ -1,4 +1,4 @@
-name: gauth · diagnose which fetch returns HTML (unexpected <)
+name: gauth · fetch instrument + list URLs
 
 on:
   workflow_dispatch: {}
@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Grep fetch() calls in gauth index.html + probe each
+      - name: Inject fetch instrumentation + list fetch URLs
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -20,15 +20,46 @@ jobs:
           command_timeout: 60s
           script: |
             F=/var/www/sites/gauth/public/index.html
-            echo '=== 1. every fetch(...) call in gauth index.html ==='
-            sudo grep -oE "fetch\\(['\"\`][^'\"\`]+['\"\`]" "$F" | sort -u
+            echo '=== 1. list every fetch(...) URL (fixed grep) ==='
+            sudo grep -Eo "fetch\([^)]{0,200}\)" "$F" | sort -u | head -50
             echo ''
-            echo '=== 2. every URL literal (/api/... /excel/... etc) referenced ==='
-            sudo grep -oE '[/][a-zA-Z0-9_\-/.]+' "$F" | grep -E '^/(api|excel|totp|codes|tok|admin|users|master|lookup|subsite)' | sort -u
+            echo '=== 2. show apache gauth vhost SPA fallback rule (if any) ==='
+            sudo grep -RhnE 'RewriteRule|FallbackResource|ErrorDocument' /etc/apache2/sites-enabled/gauth* 2>/dev/null | head -20 || true
             echo ''
-            echo '=== 3. probe each candidate URL and report content-type ==='
-            for u in /api/subsite-counts /api/subsite-accounts /api/accounts /api/lookup /api/master /api/users /api/status /excel/upload /excel/all /codes /tok /totp /api/auth /api/session; do
-              type=$(curl -s -o /tmp/o -w '%{http_code} %{content_type}' http://127.0.0.1:4000$u --max-time 4)
-              first=$(head -c 60 /tmp/o | tr -d '\n')
-              echo "[$type] $u  first60='$first'"
-            done
+            echo '=== 3. inject fetch shim that names any URL returning HTML ==='
+            sudo cp "$F" "$F.bak.$(date +%s)"
+            sudo python3 - <<'PYEOF'
+            import re
+            f = "/var/www/sites/gauth/public/index.html"
+            s = open(f, encoding='utf-8').read()
+            s = re.sub(r'<script>\n// fetch-shim start.*?// fetch-shim end\n</script>\n', '', s, flags=re.S)
+            shim = (
+              '<script>\n'
+              '// fetch-shim start\n'
+              '(function(){\n'
+              '  var of = window.fetch;\n'
+              '  window.fetch = function(u, o){\n'
+              '    var url = (u && u.url) || String(u);\n'
+              '    return of.apply(this, arguments).then(function(r){\n'
+              '      var ct = (r.headers && r.headers.get && r.headers.get("content-type")) || "";\n'
+              '      if (ct.indexOf("text/html") >= 0) {\n'
+              '        console.error("[fetch-shim] HTML instead of JSON at", url, "status=", r.status);\n'
+              '        var boxes = document.querySelectorAll(".subsite-error, #subsite-error, [class*=\\"error\\"]");\n'
+              '        boxes.forEach(function(b){ if(b){ b.textContent = "화면 로드 실패 URL: " + url + " (HTML 응답)"; }});\n'
+              '      }\n'
+              '      return r;\n'
+              '    });\n'
+              '  };\n'
+              '})();\n'
+              '// fetch-shim end\n'
+              '</script>\n'
+            )
+            if '<body>' in s and 'fetch-shim start' not in s:
+                s = s.replace('<body>', '<body>\n' + shim, 1)
+                open(f, 'w', encoding='utf-8').write(s)
+                print('fetch-shim installed')
+            PYEOF
+            echo ''
+            echo '=== 4. verify present ==='
+            sudo grep -c 'fetch-shim' "$F"
+            curl -s --max-time 10 https://gauth.cent-solution.online/ | grep -c 'fetch-shim'
