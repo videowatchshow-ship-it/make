@@ -1,0 +1,59 @@
+name: fc-sinji-investigate6
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/fc-sinji-investigate6.yml'
+jobs:
+  investigate6:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            echo "=== A. does room_31.json exist? ==="
+            timeout 5 sudo ls -la /var/www/sites/chamgyo/public/photo/data/room_31.json 2>&1
+            timeout 5 sudo cat /var/www/sites/chamgyo/public/photo/data/room_31.json 2>&1
+
+            echo "=== B. api_selected_room.php full content ==="
+            timeout 6 sudo cat /var/www/sites/chamgyo/public/photo/api_selected_room.php 2>&1
+
+            echo "=== C. write_select_room.php full content ==="
+            timeout 6 sudo cat /var/www/sites/chamgyo/public/photo/write_select_room.php 2>&1
+
+            echo "=== D. live curl api_selected_room.php (no ch) ==="
+            timeout 5 curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo/api_selected_room.php"
+            echo ""
+            echo "=== D2. live curl api_selected_room.php ch=tak ==="
+            timeout 5 curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo/api_selected_room.php?ch=tak"
+            echo ""
+            echo "=== D3. live curl api_selected_room.php ch=otuki ==="
+            timeout 5 curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo/api_selected_room.php?ch=otuki"
+            echo ""
+            echo "=== D4. live curl api_selected_room.php ch=cent ==="
+            timeout 5 curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo/api_selected_room.php?ch=cent"
+            echo ""
+            echo "=== D5. live curl api_selected_room.php ch=jay ==="
+            timeout 5 curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo/api_selected_room.php?ch=jay"
+            echo ""
+
+            echo "=== E. selected_room.json / sel_*.json files in data dir ==="
+            timeout 6 sudo ls -la /var/www/sites/chamgyo/public/photo/data/ | grep -i "sel"
+            timeout 5 sudo cat /var/www/sites/chamgyo/public/photo/data/selected_room.json 2>&1
+
+            echo "=== F. current UTC time ==="
+            date -u
+            REMOTE
