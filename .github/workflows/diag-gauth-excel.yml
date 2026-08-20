@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Migrate existing accounts with filename date
+      - name: Verify health and sorted list
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -18,51 +18,20 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 60s
           script: |
+            echo "=== health retries ==="
+            for i in 1 2 3 4 5; do
+              HTTP=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4000/api/normalized-accounts 2>/dev/null || echo 000)
+              echo "attempt $i: HTTP $HTTP"
+              [ "$HTTP" = "200" ] && break
+              sleep 2
+            done
+            echo ""
+            echo "=== top 10 newest by account_date ==="
             sudo node -e "
-            const fs = require('fs');
-            const dataFile = '/opt/gauth-full/accounts_normalized.json';
-            const d = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
-            const arr = Array.isArray(d) ? d : (d.accounts || []);
-
-            function parseDateFromFilename(name, fallbackYear) {
-              if (!name) return null;
-              const str = String(name);
-              const year = fallbackYear || new Date().getFullYear();
-              let m = str.match(/(\d{4})[.\-_](\d{1,2})[.\-_](\d{1,2})/);
-              if (m) return new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3])).getTime();
-              m = str.match(/(\d{8})/);
-              if (m) {
-                const ds = m[1];
-                const y = parseInt(ds.slice(0,4)), mo = parseInt(ds.slice(4,6)), dd = parseInt(ds.slice(6,8));
-                if (y >= 2020 && y <= 2030 && mo >= 1 && mo <= 12 && dd >= 1 && dd <= 31) return new Date(y, mo-1, dd).getTime();
-              }
-              m = str.match(/(\d{1,2})월\s*(\d{1,2})일/);
-              if (m) {
-                const mo = parseInt(m[1]), dd = parseInt(m[2]);
-                if (mo >= 1 && mo <= 12 && dd >= 1 && dd <= 31) return new Date(year, mo-1, dd).getTime();
-              }
-              m = str.match(/[(（](\d{1,2})[.\-](\d{1,2})[)）]/);
-              if (m) {
-                const mo = parseInt(m[1]), dd = parseInt(m[2]);
-                if (mo >= 1 && mo <= 12 && dd >= 1 && dd <= 31) return new Date(year, mo-1, dd).getTime();
-              }
-              return null;
-            }
-
-            let fixed = 0;
-            for (const a of arr) {
-              if (a.account_date) continue;
-              const yr = a.source_mtime ? new Date(a.source_mtime).getFullYear() : undefined;
-              const fd = parseDateFromFilename(a.source_file, yr);
-              if (fd) { a.account_date = fd; fixed++; }
-            }
-            const tmp = dataFile + '.tmp.' + process.pid;
-            fs.writeFileSync(tmp, JSON.stringify(arr, null, 2));
-            fs.renameSync(tmp, dataFile);
-            console.log('Fixed from filename date:', fixed);
-            console.log('Total with account_date now:', arr.filter(a=>a.account_date).length, '/', arr.length);
+            const d=JSON.parse(require('fs').readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+            const arr=Array.isArray(d)?d:(d.accounts||[]);
+            const withDate = arr.filter(a=>a.account_date).sort((a,b)=>b.account_date-a.account_date);
+            console.log('with date:', withDate.length, '/', arr.length);
+            for (const a of withDate.slice(0,10)) console.log(' ', new Date(a.account_date).toISOString().slice(0,10), a.email, '|', a.source_file);
             " 2>&1
-            sudo systemctl restart gauth
-            sleep 2
-            curl -s -o /dev/null -w 'health: %{http_code}\n' http://localhost:4000/api/normalized-accounts
             echo "=== DONE ==="
