@@ -1,0 +1,23 @@
+name: CAH_1 Next.P Next.B 마크업 확인 (러너에서 직접, SSH 불필요)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-nextpb-check.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: CAH_1.html 원본 확인
+        run: |
+          curl -sS -o /tmp/cah1.html -w "http_code=%{http_code}\n" "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html"
+          echo "===== Next 관련 라인 ====="
+          grep -n "Next\." /tmp/cah1.html || echo "Next. 문자열 없음"
+          echo ""
+          echo "===== id/class 후보 (P/B/T 관련) ====="
+          grep -noE '(id|class)="[^"]*(next|Next|askP|askB|askT|nextP|nextB|nextT)[^"]*"' /tmp/cah1.html | sort -u | head -50
+          echo ""
+          echo "===== T(타이) 관련 문자열 존재 확인 ====="
+          grep -n "askT\|cAskT\|Next\.T\|타이\|Tie" /tmp/cah1.html || echo "T 관련 마크업 없음"
