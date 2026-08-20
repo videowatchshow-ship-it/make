@@ -1,4 +1,4 @@
-name: gauth · fix authQuery not defined
+name: gauth · fix auth* not defined (broad shim)
 
 on:
   workflow_dispatch: {}
@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Inspect + patch authQuery in gauth index.html
+      - name: Diagnose + install broad auth shim
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -20,41 +20,54 @@ jobs:
           command_timeout: 60s
           script: |
             F=/var/www/sites/gauth/public/index.html
-            echo "=== 1. lines referencing authQuery ==="
-            sudo grep -n "authQuery" "$F" | head -50 || echo "no matches"
+            echo "=== 1. every auth* identifier referenced in index.html ==="
+            sudo grep -oE 'auth[A-Za-z_]+' "$F" | sort -u
             echo ""
-            echo "=== 2. lines around function definitions related to subsite loading ==="
-            sudo grep -n "loadSubsite\|subsiteQuery\|renderSubsite\|filter\|search" "$F" | head -40
-            echo ""
-            echo "=== 3. define authQuery as safe no-op alias if undefined ==="
-            if sudo grep -q 'authQuery' "$F" && ! sudo grep -q 'window.authQuery' "$F"; then
-              sudo cp "$F" "$F.bak.$(date +%s)"
-              # Insert a safe shim right after <body> to define authQuery = subsiteQuery or empty string reader
-              sudo python3 - <<'PYEOF'
+            echo "=== 2. remove previous narrow shim (if any) and install broad one ==="
+            sudo cp "$F" "$F.bak.$(date +%s)"
+            sudo python3 - <<'PYEOF'
+            import re
             f = "/var/www/sites/gauth/public/index.html"
             s = open(f, encoding='utf-8').read()
+            # strip previous shim block if present
+            s = re.sub(r'<script>\n// auth[A-Za-z]* shim:.*?</script>\n', '', s, count=0, flags=re.S)
+            # strip broad shim marker too so we can reinstall
+            s = re.sub(r'<script>\n// auth-broad-shim start.*?// auth-broad-shim end\n</script>\n', '', s, count=0, flags=re.S)
+
             shim = (
-              "<script>\n"
-              "// authQuery shim: previous code referenced an undefined identifier; alias to the filter input value\n"
-              "window.authQuery = function(){\n"
-              "  var el = document.querySelector('input[placeholder*=\"필터\"], input[type=\"search\"], #subsite-filter, #filter-input');\n"
-              "  return el ? (el.value||'').trim().toLowerCase() : '';\n"
-              "};\n"
-              "</script>\n"
+              '<script>\n'
+              '// auth-broad-shim start\n'
+              '(function(){\n'
+              '  function getFilter(){\n'
+              '    var el = document.querySelector("input[placeholder*=\\"\uD544\\ud130\\"], input[type=\\"search\\"], #subsite-filter, #filter-input");\n'
+              '    return el ? (el.value||"").trim().toLowerCase() : "";\n'
+              '  }\n'
+              '  window.authQuery   = window.authQuery   || function(){ return getFilter(); };\n'
+              '  window.authHeaders = window.authHeaders || function(){ return { "Accept": "application/json" }; };\n'
+              '  window.authToken   = window.authToken   || function(){ return ""; };\n'
+              '  window.authUser    = window.authUser    || function(){ return null; };\n'
+              '  window.authEmail   = window.authEmail   || function(){ return ""; };\n'
+              '  window.authFetch   = window.authFetch   || function(u, o){ o=o||{}; o.headers=Object.assign({}, o.headers||{}, window.authHeaders()); o.cache="no-store"; return fetch(u, o); };\n'
+              '})();\n'
+              '// auth-broad-shim end\n'
+              '</script>\n'
             )
-            marker = "<body>"
-            if marker in s and 'authQuery shim' not in s:
-                s = s.replace(marker, marker + "\n" + shim, 1)
+            if '<body>' in s:
+                s = s.replace('<body>', '<body>\n' + shim, 1)
                 open(f, 'w', encoding='utf-8').write(s)
-                print('shim inserted')
+                print('broad shim installed')
             else:
-                print('shim already present or <body> not found')
+                print('no <body> tag; abort')
             PYEOF
-              echo "patch applied"
-            else
-              echo "authQuery already defined or not referenced; no patch needed"
-            fi
             echo ""
-            echo "=== 4. verify shim is present in served HTML ==="
-            sudo grep -c 'authQuery shim' "$F" || echo 0
-            curl -s --max-time 10 https://gauth.cent-solution.online/ | grep -c 'authQuery shim' || echo 0
+            echo "=== 3. verify shim in served HTML ==="
+            sudo grep -c 'auth-broad-shim' "$F"
+            curl -s --max-time 10 https://gauth.cent-solution.online/ | grep -c 'auth-broad-shim'
+            echo ""
+            echo "=== 4. purge CF cache for gauth ==="
+            CF_TOKEN="${{ secrets.CLOUDFLARE_TOKEN }}"
+            ZONE="2601d4f4ab75c910f8d858ca036ff344"
+            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE/purge_cache" \
+              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+              -d '{"files":["https://gauth.cent-solution.online/","https://gauth.cent-solution.online/index.html"]}'
+            echo ""
