@@ -36,15 +36,17 @@ Express :4000 (rebrowser-login.js)
 | 사이트 | 포트 | 경로 | 역할 |
 |--------|------|------|------|
 | gauth.cent-solution.online | 4000 | `/var/www/sites/gauth/public` | 마스터 계정 관리 (엑셀 업로드, 로그인, TOTP) |
-| jump.cent-solution.online | (정적) | `/var/www/sites/jump/public` | 참교육 스트리밍 전용 표시 페이지 (계정정보/방송 템플릿) — 로그인·API 기능 없음, gauth 전용 뷰 |
+| jump.cent-solution.online | (정적) | `/var/www/sites/jump/public` | **보물섬 채널 현황** — 하위 사이트별 계정(이메일) 조회 전용 뷰. 로그인·API 없음 |
 
-#### jump.cent-solution.online
+#### jump.cent-solution.online (보물섬 채널 현황)
 
 - 목적: 로그인/2FA/토큰 발급 등 실제 계정 조작 기능은 전혀 없는 **표시 전용(display-only)** 페이지. 실제 로그인/API는 gauth에서만 처리.
 - 소스: `jump/index.html`, `jump/manifest.json`, `jump/sw.js` (PWA 설치 지원)
-- 구성: 스트리밍 제목/설명 템플릿 카드 (복사 버튼), 새로고침으로 여러 템플릿 순환, 하위 13개 사이트 계정 배포 현황(읽기 전용)
-- 하위 사이트 계정 위젯: gauth의 `/api/subsite-counts`를 jump 자체 vhost에서 읽기 전용으로 프록시(`ProxyPass /api/subsite-counts`, `/api/subsite-accounts`)하여 표시. 로그인/2FA/토큰 관련 엔드포인트(`/codes`, `/tok`, `/totp`)는 프록시하지 않음
-- 배포: Cloudflare DNS(A, proxied) + Apache 정적 vhost(+API 읽기전용 프록시) + Let's Encrypt(dns-cloudflare, certonly + 수동 SSL vhost) — `.github/workflows/diag-gauth-excel.yml`을 통해 SSH로 배포
+- UI: 헤더 "보물섬 채널 현황". 하위 사이트 카드 목록 — 각 사이트는 이모지 + 영문명 + **한글 표기**(예: `aura(아우라)`, `woodong(우동)`) + 계정 개수. 카드를 누르면 펼쳐지면서 소속 지메일이 **10개 단위 페이지네이션**으로 표시됨(이전/다음 버튼)
+- 데이터: gauth의 `/api/subsite-accounts`(전체 계정 상세)를 jump 자체 vhost에서 읽기 전용으로 프록시. 실패 시 `/api/subsite-counts`로 자동 폴백. 로그인/2FA/토큰 관련 엔드포인트(`/codes`, `/tok`, `/totp`)는 프록시하지 않음
+- 캐시 방지: Apache vhost가 `.html/.json/.js`에 대해 `Cache-Control: no-store, no-cache, must-revalidate` + `Clear-Site-Data: "cache", "storage"` 헤더를 강제 → 브라우저의 이전 서비스 워커 캐시(옛 gauth 관리자 패널 잔재)를 자동 삭제. HTML 자체에도 `<meta http-equiv="Cache-Control">`과 서비스 워커 unregister + `caches.delete()` 스크립트 포함
+- 배포: Cloudflare DNS(A, proxied) + Apache 정적 vhost(+API 읽기전용 프록시 + no-cache 헤더) + Let's Encrypt(dns-cloudflare, certonly + 수동 SSL vhost) — `.github/workflows/diag-gauth-excel.yml`을 통해 SSH로 배포
+- 한글 라벨: gain(게인), woodong(우동), sunbi(선비), simmani(심마니), win(윈), aura(아우라), bacad(바캇), camstouch(캠스터치), james(제임스), misskim(미스김), naman(나만), romi(로미), second(세컨드), soktv(속TV)
 
 #### gauth 메인 화면 — 하위 사이트 계정 뷰
 

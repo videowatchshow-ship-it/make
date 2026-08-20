@@ -80,6 +80,12 @@ jobs:
                     AllowOverride All
                     Require all granted
                 </Directory>
+                <FilesMatch "\.(html|json|js)$">
+                    Header always set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+                    Header always set Pragma "no-cache"
+                    Header always set Expires "0"
+                    Header always set Clear-Site-Data "\"cache\", \"storage\""
+                </FilesMatch>
                 ProxyPreserveHost On
                 ProxyPass /api/subsite-counts http://127.0.0.1:4000/api/subsite-counts
                 ProxyPassReverse /api/subsite-counts http://127.0.0.1:4000/api/subsite-counts
@@ -87,7 +93,7 @@ jobs:
                 ProxyPassReverse /api/subsite-accounts http://127.0.0.1:4000/api/subsite-accounts
             </VirtualHost>
             VHOSTEOF
-            sudo a2enmod proxy proxy_http 2>/dev/null || true
+            sudo a2enmod proxy proxy_http headers 2>/dev/null || true
             sudo a2ensite jump.conf
             sudo apachectl configtest && sudo systemctl reload apache2
 
@@ -114,6 +120,12 @@ jobs:
                     AllowOverride All
                     Require all granted
                 </Directory>
+                <FilesMatch "\.(html|json|js)$">
+                    Header always set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+                    Header always set Pragma "no-cache"
+                    Header always set Expires "0"
+                    Header always set Clear-Site-Data "\"cache\", \"storage\""
+                </FilesMatch>
                 ProxyPreserveHost On
                 ProxyPass /api/subsite-counts http://127.0.0.1:4000/api/subsite-counts
                 ProxyPassReverse /api/subsite-counts http://127.0.0.1:4000/api/subsite-counts
@@ -125,7 +137,7 @@ jobs:
             </VirtualHost>
             </IfModule>
             SSLEOF
-              sudo a2enmod ssl proxy proxy_http 2>/dev/null || true
+              sudo a2enmod ssl proxy proxy_http headers 2>/dev/null || true
               sudo a2ensite jump-le-ssl.conf
             fi
 
@@ -140,7 +152,7 @@ jobs:
             echo "=== 4. verify ==="
             sleep 3
             curl -s -o /dev/null -w "jump https status: %{http_code}\n" https://jump.cent-solution.online/ --max-time 10
-            curl -s --max-time 10 https://jump.cent-solution.online/ | grep -o "참교육 스트리밍" | head -1
+            curl -s --max-time 10 https://jump.cent-solution.online/ | grep -o "보물섬 채널 현황" | head -1
             echo ""
             echo "=== 5. verify subsite-counts proxy through jump ==="
             curl -s --max-time 10 https://jump.cent-solution.online/api/subsite-counts
