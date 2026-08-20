@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Revert doc-date bulk application for 8.15 file
+      - name: Verify current state
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -18,30 +18,16 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 60s
           script: |
+            echo "=== account_date stats now ==="
             sudo node -e "
-            const fs = require('fs');
-            const dataFile = '/opt/gauth-full/accounts_normalized.json';
-            const d = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
-            const arr = Array.isArray(d) ? d : (d.accounts || []);
-            const docDate = new Date('2026-08-15T19:53:02.000Z').getTime();
-            let reverted = 0;
-            for (const a of arr) {
-              if ((a.source_file||'').includes('8.15') && a.account_date === docDate) { a.account_date = null; reverted++; }
-            }
-            const tmp = dataFile + '.tmp.' + process.pid;
-            fs.writeFileSync(tmp, JSON.stringify(arr, null, 2));
-            fs.renameSync(tmp, dataFile);
-            console.log('Reverted (set back to null):', reverted);
-            console.log('Remaining with account_date:', arr.filter(a=>a.account_date).length, '/', arr.length);
-
-            const labels = {};
-            for (const a of arr) {
-              if ((a.source_file||'').includes('8.15')) {
-                const lbl = (a.extra||[]).find(x=>!/^https?:/.test(x) && !/@/.test(x)) || (a.raw_values||[]).slice(-1)[0] || 'unknown';
-              }
-            }
+            const d=JSON.parse(require('fs').readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+            const arr=Array.isArray(d)?d:(d.accounts||[]);
+            console.log('total:', arr.length);
+            console.log('with account_date:', arr.filter(a=>a.account_date).length);
+            console.log('without account_date:', arr.filter(a=>!a.account_date).length);
             " 2>&1
-            sudo systemctl restart gauth
-            sleep 2
+            echo ""
+            echo "=== systemctl + health ==="
+            sudo systemctl is-active gauth
             curl -s -o /dev/null -w 'health: %{http_code}\n' http://localhost:4000/api/normalized-accounts
             echo "=== DONE ==="

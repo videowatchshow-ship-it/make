@@ -1,1 +1,1 @@
-trigger16-revert-doc-date
+trigger17-verify-current-state
