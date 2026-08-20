@@ -21,7 +21,7 @@ jobs:
           source: ".github/smm-urls.txt"
           target: "/tmp"
           strip_components: 1
-      - name: Distribute matched gmails one per sub-site
+      - name: Round-robin all matched gmails to REAL sub-sites, empty cham
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -76,14 +76,23 @@ jobs:
                 yurl = a.get('youtube_url') or a.get('youtube') or a.get('channel_url') or ''
                 if not matches(yurl): continue
                 seen.add(email); pool.append(a)
-            print(f"pool size (matched unique gmail.com from master): {len(pool)}")
+            print(f"pool size: {len(pool)}")
 
             sites = []
             for name in sorted(os.listdir(BASE)):
                 if name == 'gauth': continue
                 p = os.path.join(BASE, name, 'accounts.json')
                 if os.path.exists(p): sites.append(name)
-            print(f"sub-sites: {sites}")
+            print(f"sites: {sites}")
+
+            ts = str(int(time.time()))
+            # 1) empty cham first (owner wanted cham = 0)
+            cham_p = os.path.join(BASE, 'cham', 'accounts.json')
+            if os.path.exists(cham_p):
+                shutil.copy(cham_p, cham_p + f'.bak.{ts}')
+                with open(cham_p, 'w', encoding='utf-8') as fh:
+                    json.dump([], fh)
+                print(f"cham cleared -> [] (backup: {cham_p}.bak.{ts})")
 
             present = {}
             for site in sites:
@@ -110,16 +119,15 @@ jobs:
                         break
 
             print("")
-            print("=== DISTRIBUTION PLAN (round-robin, all placed) ===")
-            total_planned = 0
+            print("=== ROUND-ROBIN PLAN ===")
+            total = 0
             for site, arr in plan.items():
-                total_planned += len(arr)
+                total += len(arr)
                 print(f"{site:<12} +{len(arr)}")
                 for a in arr:
-                    print(f"    {a.get('email','?'):<40} yurl={a.get('youtube_url','')}")
-            print(f"total planned insertions: {total_planned}")
+                    print(f"    {a.get('email','?')}")
+            print(f"total planned: {total}")
 
-            ts = str(int(time.time()))
             for site, arr in plan.items():
                 if not arr: continue
                 p = os.path.join(BASE, site, 'accounts.json')
@@ -133,13 +141,5 @@ jobs:
                     out = d
                 with open(p, 'w', encoding='utf-8') as fh:
                     json.dump(out, fh, ensure_ascii=False, indent=2)
-                print(f"  ok {site}: appended {len(arr)} (backup: {p}.bak.{ts})")
-
-            print("")
-            print("=== INSERTED PER-SUBSITE RECORDS (owner view, unmasked pw) ===")
-            for site, arr in plan.items():
-                if not arr: continue
-                print(f"\n--- {site} ({len(arr)}) ---")
-                for a in arr:
-                    print(json.dumps(a, ensure_ascii=False, indent=2))
+                print(f"  ok {site}: +{len(arr)} (backup: {p}.bak.{ts})")
             PYEOF
