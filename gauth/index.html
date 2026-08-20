@@ -641,11 +641,27 @@ function authQuery(url){var t=getApiToken();if(!t)return url;return url+(url.ind
 function noCacheQuery(url){var u=authQuery(url);return u+(u.includes('?')?'&':'?')+'_t='+Date.now()}
 
 var escapeHtml = _esc
+function _parseFilenameDate(name){
+  if(!name) return null
+  var y = new Date().getFullYear()
+  var m
+  // "N월 M일" (Korean)
+  m = name.match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일/)
+  if(m) return new Date(y, parseInt(m[1],10)-1, parseInt(m[2],10)).getTime()
+  // "(N.M)" or "N.M" e.g. 8.15
+  m = name.match(/\(?(\d{1,2})\.(\d{1,2})\)?/)
+  if(m){
+    var mo = parseInt(m[1],10), da = parseInt(m[2],10)
+    if(mo>=1 && mo<=12 && da>=1 && da<=31) return new Date(y, mo-1, da).getTime()
+  }
+  return null
+}
 function _sortByExcelDate(arr){
   var withDate = arr.filter(function(a){ return a.account_date })
   var noDate   = arr.filter(function(a){ return !a.account_date })
   withDate.sort(function(a, b){ return b.account_date - a.account_date })
-  noDate.sort(function(a, b){ return (b.source_mtime||0) - (a.source_mtime||0) })
+  noDate.forEach(function(a){ if(a._fnDate===undefined) a._fnDate = _parseFilenameDate(a.source_file) })
+  noDate.sort(function(a, b){ return (b._fnDate||0) - (a._fnDate||0) })
   if(!withDate.length) return noDate
   return withDate.concat(noDate)
 }
