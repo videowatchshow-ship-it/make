@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: 15th account from today's excel
+      - name: Apply doc date to existing 8.15 file accounts
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -18,28 +18,23 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 60s
           script: |
-            echo "=== 1. Row 15 directly from raw excel (0-indexed row 14) ==="
             sudo node -e "
-            const XLSX = require('/opt/gauth-full/node_modules/xlsx');
             const fs = require('fs');
-            const dir = '/opt/gauth-full/uploads/archive';
-            const files = fs.readdirSync(dir).filter(f=>f.toLowerCase().endsWith('.xlsx'));
-            const fp = dir + '/' + files[0];
-            console.log('File:', files[0]);
-            const wb = XLSX.readFile(fp);
-            const sh = wb.Sheets[wb.SheetNames[0]];
-            const rows = XLSX.utils.sheet_to_json(sh, {header:1, raw:true, defval:''});
-            console.log('Row 15 (index 14):', JSON.stringify(rows[14]));
-            console.log('Row 16 (index 15) for context:', JSON.stringify(rows[15]));
+            const dataFile = '/opt/gauth-full/accounts_normalized.json';
+            const d = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
+            const arr = Array.isArray(d) ? d : (d.accounts || []);
+            const docDate = new Date('2026-08-15T19:53:02.000Z').getTime();
+            let fixed = 0;
+            for (const a of arr) {
+              if ((a.source_file||'').includes('8.15') && !a.account_date) { a.account_date = docDate; fixed++; }
+            }
+            const tmp = dataFile + '.tmp.' + process.pid;
+            fs.writeFileSync(tmp, JSON.stringify(arr, null, 2));
+            fs.renameSync(tmp, dataFile);
+            console.log('Fixed with doc ModifiedDate (2026-08-15):', fixed);
+            console.log('Total has account_date now:', arr.filter(a=>a.account_date).length, '/', arr.length);
             " 2>&1
-
-            echo ""
-            echo "=== 2. 15th account in accounts_normalized.json for this source_file ==="
-            sudo node -e "
-            const d=JSON.parse(require('fs').readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
-            const arr=Array.isArray(d)?d:(d.accounts||[]);
-            const fromFile = arr.filter(a=>(a.source_file||'').includes('8.15'));
-            console.log('Total accounts from this file:', fromFile.length);
-            console.log('15th account (index 14):', JSON.stringify(fromFile[14], null, 2));
-            " 2>&1
+            sudo systemctl restart gauth
+            sleep 2
+            curl -s -o /dev/null -w 'health: %{http_code}\n' http://localhost:4000/api/normalized-accounts
             echo "=== DONE ==="
