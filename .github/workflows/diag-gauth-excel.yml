@@ -26,52 +26,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Mirror gauth vhost as jump.cent-solution.online and issue SSL
+      - name: Issue SSL for jump.cent-solution.online using the working DNS-Edit token
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 120s
+          command_timeout: 90s
+          envs: CF_TOKEN
           script: |
             set -e
-            echo "=== find the conf file containing gauth's vhost blocks ==="
-            GAUTH_CONF=$(sudo grep -rl "ServerName gauth.cent-solution.online" /etc/apache2/sites-available/ | head -1)
-            echo "source conf: $GAUTH_CONF (NOTE: this file may contain OTHER sites' vhosts too - extracting gauth blocks only)"
+            echo "dns_cloudflare_api_token = $CF_TOKEN" | sudo tee /root/.secrets/cloudflare-jump.ini > /dev/null
+            sudo chmod 600 /root/.secrets/cloudflare-jump.ini
 
-            echo "=== extract ONLY the <VirtualHost> blocks that mention gauth.cent-solution.online ==="
-            sudo python3 -c "
-            import re
-            with open('$GAUTH_CONF') as f:
-                content = f.read()
-            blocks = re.findall(r'(?:<IfModule[^>]*>\s*)?<VirtualHost[^>]*>.*?</VirtualHost>\s*(?:</IfModule>)?', content, re.DOTALL)
-            gauth_blocks = [b for b in blocks if 'gauth.cent-solution.online' in b]
-            print(f'found {len(gauth_blocks)} gauth-related blocks', file=__import__('sys').stderr)
-            out = '\n\n'.join(gauth_blocks)
-            out = out.replace('gauth.cent-solution.online', 'jump.cent-solution.online')
-            with open('/tmp/jump_full.conf', 'w') as f:
-                f.write(out)
-            "
-            echo "--- extracted+renamed block preview ---"
-            sudo cat /tmp/jump_full.conf
-
-            echo "=== build HTTP-only version (strip SSL directives) for the pre-cert reload ==="
-            sudo python3 -c "
-            import re
-            content = open('/tmp/jump_full.conf').read()
-            content_http_only = re.sub(r'<IfModule mod_ssl\.c>.*?</IfModule>', '', content, flags=re.DOTALL)
-            open('/tmp/jump_http_only.conf', 'w').write(content_http_only)
-            "
-            sudo cp /tmp/jump_http_only.conf /etc/apache2/sites-available/jump.conf
-            sudo apache2ctl configtest
-            sudo a2ensite jump.conf
-            sudo systemctl reload apache2
-            echo "apache reloaded with jump vhost (HTTP only, no SSL yet)"
-
-            echo "=== issue SSL cert via certbot (dns-cloudflare, same method as other sites on this box) ==="
-            sudo certbot certonly --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.ini \
+            sudo certbot certonly --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare-jump.ini \
               -d jump.cent-solution.online --non-interactive --agree-tos -m admin@cent-solution.online \
               --cert-name jump.cent-solution.online || echo "CERTBOT_FAILED"
+
+            sudo shred -u /root/.secrets/cloudflare-jump.ini 2>/dev/null || sudo rm -f /root/.secrets/cloudflare-jump.ini
 
             if [ -f /etc/letsencrypt/live/jump.cent-solution.online/fullchain.pem ]; then
               echo "=== cert issued, swap in the full (HTTP+SSL) vhost ==="
@@ -79,8 +51,10 @@ jobs:
               sudo apache2ctl configtest && sudo systemctl reload apache2
               echo "SSL vhost active for jump.cent-solution.online"
             else
-              echo "certbot failed - DNS may not have propagated to Cloudflare's authoritative servers yet; HTTP vhost stays live, retry cert issuance later"
+              echo "certbot still failed - see log above"
             fi
 
             echo "=== verify ==="
-            curl -s -o /dev/null -w "http status: %{http_code}\n" http://jump.cent-solution.online/ || true
+            curl -s -o /dev/null -w "https status: %{http_code}\n" https://jump.cent-solution.online/ || true
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
