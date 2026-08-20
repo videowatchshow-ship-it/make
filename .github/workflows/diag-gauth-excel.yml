@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Strip login/action proxy endpoints from jump - display mirror only, gauth stays the only login/API surface
+      - name: Count accounts allocated to each sub-site (gain, woodong/우동카, etc)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -35,25 +35,19 @@ jobs:
           command_timeout: 60s
           script: |
             set -e
-            echo "=== current jump.conf before edit ==="
-            sudo cat /etc/apache2/sites-available/jump.conf
-
-            echo "=== remove /codes /tok /totp proxy blocks (action/credential endpoints) - keep /api (needed for the account list display) ==="
-            sudo python3 -c "
-            import re
-            content = open('/etc/apache2/sites-available/jump.conf').read()
-            for path in ['codes', 'tok', 'totp']:
-                content = re.sub(r'^\s*ProxyPass(Reverse)? /' + path + r'/?\s+http://127\.0\.0\.1:4000/' + path + r'/?\s*\n', '', content, flags=re.MULTILINE)
-            open('/tmp/jump_display_only.conf', 'w').write(content)
-            "
-            echo "--- new jump.conf (display-only) ---"
-            sudo cat /tmp/jump_display_only.conf
-
-            sudo cp /tmp/jump_display_only.conf /etc/apache2/sites-available/jump.conf
-            sudo apache2ctl configtest
-            sudo systemctl reload apache2
-            echo "jump.cent-solution.online is now display-only: /api stays (for the account list), /codes /tok /totp removed (login/action stays gauth-only)"
-
-            echo "=== verify jump still serves the page, and that /totp is now blocked ==="
-            curl -s -o /dev/null -w "jump / -> %{http_code}\n" https://jump.cent-solution.online/
-            curl -s -o /dev/null -w "jump /totp -> %{http_code} (should NOT be 200 proxied)\n" https://jump.cent-solution.online/totp
+            echo "=== discover sub-sites (same logic as add-account-all-sites.yml) ==="
+            for sjs in /var/www/sites/*/server.js; do
+              [ -f "$sjs" ] || continue
+              dir=$(dirname "$sjs")
+              name=$(basename "$dir")
+              [ "$name" = "gauth" ] && continue
+              if [ -f "$dir/accounts.json" ]; then
+                sudo node -e "
+                const d = JSON.parse(require('fs').readFileSync('$dir/accounts.json','utf8'));
+                const a = Array.isArray(d) ? d : (d.accounts||[]);
+                console.log('$name'.padEnd(12), a.length);
+                "
+              else
+                echo "$(printf '%-12s' "$name") 0 (no accounts.json)"
+              fi
+            done
