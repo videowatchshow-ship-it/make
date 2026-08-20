@@ -32,9 +32,11 @@ jobs:
             console.log('records WITH raw_values (verifiable):', withRaw.length);
             console.log('records WITHOUT raw_values (unverifiable, older ingestion):', noRaw.length);
 
+            function norm(s) { return String(s).trim().toLowerCase().replace(/\s+/g, ''); }
             function inRaw(a, val) {
               if (!val) return true; // empty is not 'corrupted'
-              return a.raw_values.some(c => String(c).trim() === String(val).trim());
+              const nv = norm(val);
+              return a.raw_values.some(c => norm(c) === nv || norm(c).includes(nv) || nv.includes(norm(c)) && norm(c).length > 4);
             }
 
             const confirmedBadPw = withRaw.filter(a => !inRaw(a, a.password));
