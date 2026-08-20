@@ -1,0 +1,107 @@
+name: SNW_1.html 배너 __stage 안 absolute 좌표로 정확히 배치
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-snw1-absolute-banner.yml'
+jobs:
+  fix2:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          envs: CF_TOKEN,CF_ZONE
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="bash -s -- '$CF_TOKEN' '$CF_ZONE'" << 'REMOTE'
+            set +u
+            CF_TOKEN="$1"
+            CF_ZONE="$2"
+            P1="/var/www/sites/chamgyo/public/photo"
+
+            echo "===== [1] 기존 주입 모두 제거 + __stage 안에 absolute 로 정확 배치 ====="
+            sudo python3 << "PYEOF"
+            import re
+            fp = "/var/www/sites/chamgyo/public/photo/SNW_1.html"
+            with open(fp, 'r', encoding='utf-8') as f:
+                html = f.read()
+
+            # 기존 오버레이/인라인 모두 제거
+            html = re.sub(r'\n?<!-- CHAMGYO_BANNER_INJECTED -->.*?<!-- /CHAMGYO_BANNER_INJECTED -->\n?', '', html, flags=re.DOTALL)
+            # 인라인 삽입 흔적 제거
+            html = re.sub(r'<div class="chamgyo_banner_inline">.*?</div>\s*', '', html, flags=re.DOTALL)
+            # r1 style 원복
+            html = html.replace('<div class="r1" style="display:flex;align-items:flex-start;gap:0;">', '<div class="r1">')
+
+            # __stage(1920x1080 좌표계) 안, cBead 962x521 옆 공간 = x:970~1900, y:0~521 근처
+            # <div id="__stage"> 여는 태그 바로 뒤에 삽입 → transform:scale 함께 적용됨
+            BANNER = '''<div id="chamgyoBanner" style="position:absolute;left:980px;top:20px;width:920px;height:227px;background:#000;overflow:hidden;z-index:50;"><img id="chamgyoImg" src="" alt="" style="width:100%;height:100%;object-fit:contain;display:block;"></div>'''
+
+            html = html.replace('<div id="__stage">', '<div id="__stage" style="position:relative;">' + BANNER, 1)
+
+            SNIPPET = '''
+            <!-- CHAMGYO_BANNER_INJECTED -->
+            <script>
+            (function(){
+              function apply(){
+                try{
+                  var q = new URLSearchParams(location.search);
+                  var ch = (q.get('ch') || '').replace(/[^a-zA-Z0-9_]/g, '');
+                  var v = Date.now();
+                  var url = ch
+                    ? ('/photo/images/ch/' + ch + '/Live_height_kakao.gif?v=' + v)
+                    : ('/photo/images/Live_height_kakao.gif?v=' + v);
+                  var img = document.getElementById('chamgyoImg');
+                  if(img){ img.src = url; }
+                }catch(e){ console.error('chamgyo banner err', e); }
+              }
+              if(document.readyState === 'loading'){
+                document.addEventListener('DOMContentLoaded', apply);
+              } else { apply(); }
+            })();
+            </script>
+            <!-- /CHAMGYO_BANNER_INJECTED -->
+            '''
+
+            if '</body>' in html:
+                html = html.replace('</body>', SNIPPET + '\n</body>')
+            else:
+                html += SNIPPET
+
+            with open(fp, 'w', encoding='utf-8') as f:
+                f.write(html)
+            print('  __stage 안 absolute 배너 삽입 완료 (left:980 top:20 920x227)')
+            PYEOF
+
+            sudo chown www-data:www-data "$P1/SNW_1.html"
+            sudo chmod 644 "$P1/SNW_1.html"
+
+            echo ""
+            echo "===== [2] 삽입 결과 확인 ====="
+            sudo grep -n "chamgyoBanner\|chamgyoImg\|CHAMGYO_BANNER\|__stage" "$P1/SNW_1.html" | head -12
+
+            echo ""
+            echo "===== [3] CF purge ====="
+            if [ -n "$CF_TOKEN" ] && [ -n "$CF_ZONE" ]; then
+              curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE/purge_cache" \
+                -H "Authorization: Bearer $CF_TOKEN" \
+                -H "Content-Type: application/json" \
+                --data '{"purge_everything":true}' 2>&1 | head -3
+            fi
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE
