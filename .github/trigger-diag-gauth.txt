@@ -1,1 +1,1 @@
-trigger51-case-insensitive-substring-match
+trigger52-korean-password-and-test-totp-scan

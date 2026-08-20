@@ -61,4 +61,35 @@ jobs:
               unverifiableCount: noRaw.length
             }, null, 2));
             console.log('full report saved to /opt/gauth-full/confirmed_corrupted_report.json');
+
+            console.log('');
+            console.log('=== SPECIFIC LOOKUP: two accounts user flagged (password shows a Korean nickname, not a real password) ===');
+            const KOREAN = /[가-힣]/;
+            ['suxrobmogaew772@gmail.com','mirynowskihouda403@gmail.com','mogajifatiah@gmail.com','saeedmar349@gmail.com','aummi7027@gmail.com'].forEach(email => {
+              const rec = arr.find(a => a.email && a.email.toLowerCase() === email.toLowerCase());
+              if (!rec) { console.log(email, '-> NOT FOUND in accounts_normalized.json'); return; }
+              console.log('--- ' + email + ' ---');
+              console.log('password IS Korean text (confirms bug):', KOREAN.test(String(rec.password||'')), '| len:', String(rec.password||'').length);
+              console.log('totp_secret looks valid base32:', /^[A-Z2-7]{16,64}$/.test(String(rec.totp_secret||'').replace(/\s+/g,'')), '| len:', String(rec.totp_secret||'').length);
+              console.log('youtube_url:', JSON.stringify(rec.youtube_url));
+              console.log('source_file:', rec.source_file, '| source_row:', rec.source_row);
+              console.log('raw_values (original excel row, full - this is what the user already sees in the UI):', JSON.stringify(rec.raw_values));
+            });
+
+            console.log('');
+            console.log('=== how many accounts have totp_secret literally starting with TEST (placeholder pollution)? ===');
+            const testTotp = arr.filter(a => /^TEST/i.test(String(a.totp_secret||'')));
+            console.log('count:', testTotp.length);
+            const bySrc = {};
+            testTotp.forEach(a => { bySrc[a.source_file] = (bySrc[a.source_file]||0)+1; });
+            console.log('by source_file:', JSON.stringify(bySrc));
+
+            console.log('');
+            console.log('=== how many accounts have a Korean-only short password (label leaked into password, not the excel\\'s fault check) ===');
+            const koreanPw = arr.filter(a => a.password && KOREAN.test(String(a.password)) && String(a.password).length <= 10);
+            console.log('count:', koreanPw.length);
+            const koreanBySrc = {};
+            koreanPw.forEach(a => { koreanBySrc[a.source_file] = (koreanBySrc[a.source_file]||0)+1; });
+            console.log('by source_file:', JSON.stringify(koreanBySrc));
+            console.log('sample password VALUES (these are just Korean words, not secrets, safe to show):', JSON.stringify(koreanPw.slice(0,15).map(a=>a.password)));
             "
