@@ -43,45 +43,20 @@ jobs:
             s = open(p, encoding="utf-8").read()
             before = len(s)
 
-            old = '''/* ★ 마스터 '전체' 모드: 공용 기본 이미지(images/<파일명>)로 저장한다. 각 채널은
-   자기 이미지를 안 올렸으면 이 공용 기본으로 폴백하므로 = 모든 채널에 반영된다. */
-$allMode = ($isMaster && ($chRaw === '__all__' || $chRaw === 'all' || $chRaw === ''));
-$ch = preg_replace('/[^a-zA-Z0-9_]/', '', $chRaw);
-if (!$allMode && ($ch === '' || !$isMaster)) $ch = preg_replace('/[^a-zA-Z0-9_]/', '', $id);  /* 비마스터는 자기 채널 강제 */
-if (!$allMode && $ch === '') redir('error');'''
+            old = "/* ★ 마스터 '전체' 모드: 공용 기본 이미지(images/<파일명>)로 저장한다. 각 채널은\n   자기 이미지를 안 올렸으면 이 공용 기본으로 폴백하므로 = 모든 채널에 반영된다. */\n$allMode = ($isMaster && ($chRaw === '__all__' || $chRaw === 'all' || $chRaw === ''));\n$ch = preg_replace('/[^a-zA-Z0-9_]/', '', $chRaw);\nif (!$allMode && ($ch === '' || !$isMaster)) $ch = preg_replace('/[^a-zA-Z0-9_]/', '', $id);  /* 비마스터는 자기 채널 강제 */\nif (!$allMode && $ch === '') redir('error');"
 
-            new = '''/* ★ 공용 '전체' 업로드 모드 완전 제거 (2026-08-20). 계정 간 완전 독립을 위해
-   마스터도 항상 실제 채널 하나에만 저장한다. 공용 images/<파일명> 폴백 저장은 더 이상
-   불가능 — __all__/all/빈값 은 전부 마스터 자기 채널(aass0707)로 강제한다. */
-$ch = preg_replace('/[^a-zA-Z0-9_]/', '', $chRaw);
-if ($ch === '__all__' || $ch === 'all') $ch = '';
-if ($ch === '' || !$isMaster) $ch = preg_replace('/[^a-zA-Z0-9_]/', '', $id);  /* 비마스터·전체선택 모두 자기 채널 강제 */
-if ($ch === '') redir('error');'''
+            new = "/* ★ 공용 '전체' 업로드 모드 완전 제거 (2026-08-20). 계정 간 완전 독립을 위해\n   마스터도 항상 실제 채널 하나에만 저장한다. 공용 images/<파일명> 폴백 저장은 더 이상\n   불가능 — __all__/all/빈값 은 전부 마스터 자기 채널(aass0707)로 강제한다. */\n$ch = preg_replace('/[^a-zA-Z0-9_]/', '', $chRaw);\nif ($ch === '__all__' || $ch === 'all') $ch = '';\nif ($ch === '' || !$isMaster) $ch = preg_replace('/[^a-zA-Z0-9_]/', '', $id);  /* 비마스터·전체선택 모두 자기 채널 강제 */\nif ($ch === '') redir('error');"
 
             assert old in s, "OLD BLOCK NOT FOUND - abort"
             s = s.replace(old, new, 1)
 
-            old2 = '''if ($allMode) {
-    /* 공용 기본 이미지 = 모든 채널 폴백 대상 */
-    $dir = __DIR__ . '/images';
-    if (!is_dir($dir)) @mkdir($dir, 0755, true);
-    $dest = $dir . '/' . $target;
-    $ver_file = __DIR__ . '/data/img_ver.json';
-} else {
-    $dir = __DIR__ . '/images/ch/' . $ch;
-    if (!is_dir($dir)) @mkdir($dir, 0755, true);
-    $dest = $dir . '/' . $target;
-    $ver_file = __DIR__ . '/data/img_ver_' . $ch . '.json';
-}'''
-            new2 = '''$dir = __DIR__ . '/images/ch/' . $ch;
-if (!is_dir($dir)) @mkdir($dir, 0755, true);
-$dest = $dir . '/' . $target;
-$ver_file = __DIR__ . '/data/img_ver_' . $ch . '.json';'''
+            old2 = "if ($allMode) {\n    /* 공용 기본 이미지 = 모든 채널 폴백 대상 */\n    $dir = __DIR__ . '/images';\n    if (!is_dir($dir)) @mkdir($dir, 0755, true);\n    $dest = $dir . '/' . $target;\n    $ver_file = __DIR__ . '/data/img_ver.json';\n} else {\n    $dir = __DIR__ . '/images/ch/' . $ch;\n    if (!is_dir($dir)) @mkdir($dir, 0755, true);\n    $dest = $dir . '/' . $target;\n    $ver_file = __DIR__ . '/data/img_ver_' . $ch . '.json';\n}"
+            new2 = "$dir = __DIR__ . '/images/ch/' . $ch;\nif (!is_dir($dir)) @mkdir($dir, 0755, true);\n$dest = $dir . '/' . $target;\n$ver_file = __DIR__ . '/data/img_ver_' . $ch . '.json';"
             assert old2 in s, "OLD BLOCK2 NOT FOUND - abort"
             s = s.replace(old2, new2, 1)
 
             open(p, "w", encoding="utf-8").write(s)
-            print(f"write_upload.php: before={before}B after={len(s)}B diff={before-len(s)}B")
+            print("write_upload.php: before=%dB after=%dB diff=%dB" % (before, len(s), before-len(s)))
             PYEOF
             EDIT1=$?
             echo "  python edit1 exit=$EDIT1"
@@ -96,11 +71,11 @@ $ver_file = __DIR__ . '/data/img_ver_' . $ch . '.json';'''
             p = os.environ["TARGET"]
             s = open(p, encoding="utf-8").read()
             before = len(s)
-            old = '<option value="__all__">🌐 전체 (모든 채널)</option>'
+            old = "<option value=\"__all__\">\U0001f310 전체 (모든 채널)</option>"
             assert old in s, "OPTION NOT FOUND - abort"
             s = s.replace(old, '', 1)
             open(p, "w", encoding="utf-8").write(s)
-            print(f"write.php: before={before}B after={len(s)}B diff={before-len(s)}B (옵션 제거됨)")
+            print("write.php: before=%dB after=%dB diff=%dB (옵션 제거됨)" % (before, len(s), before-len(s)))
             PYEOF
             EDIT2=$?
             echo "  python edit2 exit=$EDIT2"
@@ -129,3 +104,4 @@ $ver_file = __DIR__ . '/data/img_ver_' . $ch . '.json';'''
             echo ""
             echo "===== DONE ====="
             REMOTE
+
