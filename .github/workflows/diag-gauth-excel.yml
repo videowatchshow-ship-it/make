@@ -10,92 +10,38 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Migrate existing data + gap report
+      - name: Today uploads + service health
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 90s
+          command_timeout: 60s
           script: |
+            echo "=== Server date/time ==="
+            date -u
+            echo ""
+            echo "=== Archive dir (all files with mtime) ==="
+            sudo ls -la --time-style=full-iso /opt/gauth-full/uploads/archive/ 2>/dev/null
+            echo ""
+            echo "=== accounts_normalized.json source_mtime for most recent uploads (top 20) ==="
             sudo node -e "
-            const fs = require('fs');
-            const dataFile = '/opt/gauth-full/accounts_normalized.json';
-            const d = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
-            const arr = Array.isArray(d) ? d : (d.accounts || []);
-
-            function normalizeEmail(s) {
-              s = String(s || '').trim().toLowerCase();
-              const parts = s.split('@');
-              if (parts.length === 2) {
-                let local = parts[0]; const domain = parts[1];
-                if (domain === 'gmail.com' || domain === 'googlemail.com') { local = local.replace(/\./g, '').split('+')[0]; return local + '@gmail.com'; }
-              }
-              return s;
-            }
-            function isEmail(s) { s = String(s||'').trim(); return /^[^\s@]+@[^\s@]+\.[^\s@]+\$/.test(s) || /^[^\s@]+@[^\s@]+\.[^\s@]+/.test(s); }
-            function isUrlLike(s) { s=String(s||'').trim(); if(/^https?:\/\//i.test(s)){try{new URL(s);return true;}catch(_){return false;}} if(/^(www\.)?youtube\.com/i.test(s)||/^(www\.)?youtu\.be/i.test(s)) return true; return false; }
-            function isPhoneNumber(s){ s=String(s||'').trim(); return /^\+?\d[\d\-\s]{7,}\$/.test(s); }
-            function isSixDigitCode(s){ return /^\d{6}\$/.test(String(s||'').trim()); }
-            function isTotpLike(s) {
-              s = String(s||'').trim();
-              if (!s) return false;
-              if (/@/.test(s)) return false;
-              if (/^[\d\s\-]+\$/.test(s)) return false;
-              if (/^https?:\/\//i.test(s)) return false;
-              const norm = s.toUpperCase().replace(/[\s\-_=]/g,'').replace(/[^A-Z2-7]/g,'');
-              if (norm.length < 16 || norm.length > 128) return false;
-              const raw = s.replace(/[\s\-_=]/g,'');
-              if (raw.length>0 && norm.length/raw.length < 0.8) return false;
-              return true;
-            }
-            function normalizeTotp(s){ return String(s||'').toUpperCase().replace(/[\s\-_=]/g,'').replace(/[^A-Z2-7]/g,''); }
-
-            let pwRecovered=0, totpRecovered=0, recRecovered=0;
-            for (const a of arr) {
-              if (!a.extra || !a.extra.length) continue;
-              const remaining = [];
-              for (const raw of a.extra) {
-                const v = String(raw||'').trim();
-                if (!v) continue;
-                if (!a.totp_secret && isTotpLike(v)) { a.totp_secret = normalizeTotp(v); totpRecovered++; continue; }
-                if (!a.recovery_email && isEmail(v) && normalizeEmail(v) !== normalizeEmail(a.email)) { a.recovery_email = v; recRecovered++; continue; }
-                if (!a.password && !isEmail(v) && !isTotpLike(v) && !isUrlLike(v) && !isSixDigitCode(v) && !isPhoneNumber(v) && !/^\d+\$/.test(v)) { a.password = v; pwRecovered++; continue; }
-                remaining.push(v);
-              }
-              a.extra = remaining;
-            }
-
+            const d=JSON.parse(require('fs').readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+            const arr=Array.isArray(d)?d:(d.accounts||[]);
             const bySrc = {};
-            for (const a of arr) { const s = a.source_file||'?'; if(!bySrc[s]) bySrc[s]=[]; bySrc[s].push(a); }
-            let dateRecovered = 0;
-            for (const [src, accs] of Object.entries(bySrc)) {
-              const found = accs.find(a=>a.account_date);
-              if (!found) continue;
-              for (const a of accs) { if (!a.account_date) { a.account_date = found.account_date; dateRecovered++; } }
-            }
-
-            const tmp = dataFile + '.tmp.' + process.pid;
-            fs.writeFileSync(tmp, JSON.stringify(arr, null, 2));
-            fs.renameSync(tmp, dataFile);
-
-            console.log('=== Migration results ===');
-            console.log('Total accounts:', arr.length);
-            console.log('Passwords recovered from extra:', pwRecovered);
-            console.log('TOTP recovered from extra:', totpRecovered);
-            console.log('Recovery emails recovered from extra:', recRecovered);
-            console.log('account_date propagated within file:', dateRecovered);
-            console.log('');
-            console.log('=== Remaining gaps (after migration) ===');
-            console.log('No password:', arr.filter(a=>!a.password).length);
-            console.log('No totp_secret:', arr.filter(a=>!a.totp_secret).length);
-            console.log('No recovery_email:', arr.filter(a=>!a.recovery_email).length);
-            console.log('No account_date:', arr.filter(a=>!a.account_date).length);
-            console.log('Has account_date:', arr.filter(a=>a.account_date).length);
+            for (const a of arr) { const s=a.source_file||'?'; if(!bySrc[s]||a.source_mtime>bySrc[s]) bySrc[s]=a.source_mtime; }
+            const sorted = Object.entries(bySrc).sort((a,b)=>b[1]-a[1]).slice(0,20);
+            for (const [f,m] of sorted) console.log(new Date(m).toISOString(), '-', f);
             " 2>&1
-
-            echo "=== Restart service ==="
-            sudo systemctl restart gauth
-            sleep 2
-            curl -s -o /dev/null -w 'health: %{http_code}\n' http://localhost:4000/api/normalized-accounts
+            echo ""
+            echo "=== gauth service status ==="
+            sudo systemctl status gauth --no-pager -l 2>&1 | tail -20
+            echo ""
+            echo "=== Health check retry ==="
+            for i in 1 2 3; do
+              HTTP=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4000/api/normalized-accounts 2>/dev/null || echo 000)
+              echo "attempt $i: HTTP $HTTP"
+              [ "$HTTP" = "200" ] && break
+              sleep 2
+            done
             echo "=== DONE ==="
