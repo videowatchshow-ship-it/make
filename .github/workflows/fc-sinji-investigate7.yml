@@ -1,0 +1,47 @@
+name: fc-sinji-investigate7
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/fc-sinji-investigate7.yml'
+jobs:
+  investigate7:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            echo "=== A. cron.d file permissions ==="
+            timeout 5 sudo stat -c '%A %U:%G %n' /etc/cron.d/chamgyo-sinji-new-collector /etc/cron.d/chamgyo-sinji-new-discover 2>&1
+            echo "--- hexdump of last bytes (check trailing newline) ---"
+            timeout 5 sudo tail -c 30 /etc/cron.d/chamgyo-sinji-new-collector 2>&1 | xxd
+
+            echo "=== B. /var/log dir writability for www-data ==="
+            timeout 5 sudo -u www-data test -w /var/log && echo "www-data CAN write /var/log" || echo "www-data CANNOT write /var/log"
+            timeout 5 sudo ls -la /var/log/ | grep -i chamgyo
+
+            echo "=== C. root crontab (is it root's, not www-data's, running the /dev/null version?) ==="
+            timeout 5 sudo crontab -l -u root 2>&1
+
+            echo "=== D. journalctl cron errors mentioning sinji or chamgyo (last 50) ==="
+            timeout 8 sudo journalctl -u cron --no-pager -n 300 2>&1 | grep -i "sinji\|chamgyo" | tail -50
+
+            echo "=== E. try manually running the cron.d line as www-data to see if it errors ==="
+            timeout 5 sudo -u www-data /usr/bin/flock -n /tmp/test_sinji_manual.lock /bin/true 2>&1; echo "flock test exit=$?"
+
+            echo "=== F. current UTC time ==="
+            date -u
+            REMOTE
