@@ -1,0 +1,60 @@
+name: gauth · fix authQuery not defined
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-authquery-fix.txt']
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Inspect + patch authQuery in gauth index.html
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 60s
+          script: |
+            F=/var/www/sites/gauth/public/index.html
+            echo "=== 1. lines referencing authQuery ==="
+            sudo grep -n "authQuery" "$F" | head -50 || echo "no matches"
+            echo ""
+            echo "=== 2. lines around function definitions related to subsite loading ==="
+            sudo grep -n "loadSubsite\|subsiteQuery\|renderSubsite\|filter\|search" "$F" | head -40
+            echo ""
+            echo "=== 3. define authQuery as safe no-op alias if undefined ==="
+            if sudo grep -q 'authQuery' "$F" && ! sudo grep -q 'window.authQuery' "$F"; then
+              sudo cp "$F" "$F.bak.$(date +%s)"
+              # Insert a safe shim right after <body> to define authQuery = subsiteQuery or empty string reader
+              sudo python3 - <<'PYEOF'
+            f = "/var/www/sites/gauth/public/index.html"
+            s = open(f, encoding='utf-8').read()
+            shim = (
+              "<script>\n"
+              "// authQuery shim: previous code referenced an undefined identifier; alias to the filter input value\n"
+              "window.authQuery = function(){\n"
+              "  var el = document.querySelector('input[placeholder*=\"필터\"], input[type=\"search\"], #subsite-filter, #filter-input');\n"
+              "  return el ? (el.value||'').trim().toLowerCase() : '';\n"
+              "};\n"
+              "</script>\n"
+            )
+            marker = "<body>"
+            if marker in s and 'authQuery shim' not in s:
+                s = s.replace(marker, marker + "\n" + shim, 1)
+                open(f, 'w', encoding='utf-8').write(s)
+                print('shim inserted')
+            else:
+                print('shim already present or <body> not found')
+            PYEOF
+              echo "patch applied"
+            else
+              echo "authQuery already defined or not referenced; no patch needed"
+            fi
+            echo ""
+            echo "=== 4. verify shim is present in served HTML ==="
+            sudo grep -c 'authQuery shim' "$F" || echo 0
+            curl -s --max-time 10 https://gauth.cent-solution.online/ | grep -c 'authQuery shim' || echo 0
