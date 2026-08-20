@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check for false-positive date matches in the fallback N.M regex
+      - name: Find accounts missing a password
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -20,78 +20,21 @@ jobs:
           script: |
             sudo node -e "
             const fs = require('fs');
-            const html = fs.readFileSync('/var/www/sites/gauth/public/index.html', 'utf8');
-            const start = html.indexOf('function _parseFilenameDate');
-            const end = html.indexOf('function _sortByExcelDate');
-            eval(html.slice(start, end));
-
             const d = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
             const arr = Array.isArray(d) ? d : (d.accounts||[]);
-            const uniqueFiles = [...new Set(arr.map(a => a.source_file || '(none)'))];
 
-            console.log('=== files with a dot-number pattern that COULD false-positive ===');
-            uniqueFiles.forEach(f => {
-              const hasDot = /\d+\.\d+/.test(f);
-              const dt = _parseFilenameDate(f);
-              if (hasDot) {
-                console.log((dt ? new Date(dt).toISOString().slice(0,10) : 'NULL').padEnd(12), JSON.stringify(f));
-              }
+            console.log('total accounts:', arr.length);
+            console.log('sample record keys:', Object.keys(arr[0]||{}));
+
+            const pwKeys = Object.keys(arr[0]||{}).filter(k => /pass|pw/i.test(k));
+            console.log('password-like fields detected:', pwKeys);
+
+            const missing = arr.filter(a => {
+              return pwKeys.length ? pwKeys.every(k => !a[k] || String(a[k]).trim()==='') : true;
             });
 
             console.log('');
-            console.log('=== Full sort order preview (top 15 after fix, all accounts) ===');
-            function sortByExcelDate(arr){
-              var withDate = arr.filter(function(a){ return a.account_date })
-              var noDate   = arr.filter(function(a){ return !a.account_date })
-              withDate.sort(function(a, b){ return b.account_date - a.account_date })
-              noDate.forEach(function(a){ if(a._fnDate===undefined) a._fnDate = _parseFilenameDate(a.source_file) })
-              noDate.sort(function(a, b){ return (b._fnDate||0) - (a._fnDate||0) })
-              if(!withDate.length) return noDate
-              return withDate.concat(noDate)
-            }
-            const sorted = sortByExcelDate(arr.slice());
-            sorted.slice(0,15).forEach((a,i) => console.log((i+1)+'.', a.email, '|', a.source_file, '| fnDate:', a._fnDate ? new Date(a._fnDate).toISOString().slice(0,10) : 'none'));
-
-            console.log('');
-            console.log('=== Integrity check: no accounts lost/duplicated by sort ===');
-            console.log('input length :', arr.length);
-            console.log('output length:', sorted.length);
-            const inEmails = arr.map(a=>a.email).sort();
-            const outEmails = sorted.map(a=>a.email).sort();
-            const same = JSON.stringify(inEmails) === JSON.stringify(outEmails);
-            console.log('same email set (order-independent):', same);
-
-            console.log('');
-            console.log('=== withDate group: is it correctly sorted desc by account_date? ===');
-            const withDate = arr.filter(a=>a.account_date);
-            console.log('withDate count:', withDate.length);
-            const wdSorted = withDate.slice().sort((a,b)=>b.account_date-a.account_date);
-            let wdOk = true;
-            for (let i=0;i<wdSorted.length;i++){ if (sorted[i] !== wdSorted[i]) { wdOk = false; break; } }
-            console.log('withDate portion matches expected desc order:', wdOk);
-
-            console.log('');
-            console.log('=== noDate group total + fnDate coverage ===');
-            const noDate = arr.filter(a=>!a.account_date);
-            console.log('noDate count:', noDate.length);
-            const withFn = noDate.filter(a=>_parseFilenameDate(a.source_file));
-            console.log('noDate with parseable filename date:', withFn.length);
-            console.log('noDate without any date (stays at bottom, order-stable):', noDate.length - withFn.length);
-
-            console.log('');
-            console.log('=== Bottom 15 (last accounts in final sorted list) ===');
-            sorted.slice(-15).forEach((a,i) => {
-              const idx = sorted.length - 15 + i + 1;
-              console.log(idx+'.', a.email, '|', a.source_file, '| fnDate:', a._fnDate ? new Date(a._fnDate).toISOString().slice(0,10) : 'none');
-            });
-
-            console.log('');
-            console.log('=== Bottom-order correctness: is fnDate non-decreasing toward the end (ascending as we go down, i.e. oldest/none last)? ===');
-            let orderOk = true, firstBad = -1;
-            for (let i = withDate.length; i < sorted.length - 1; i++) {
-              const cur = sorted[i]._fnDate || 0;
-              const nxt = sorted[i+1]._fnDate || 0;
-              if (cur < nxt) { orderOk = false; firstBad = i; break; }
-            }
-            console.log('noDate portion strictly non-increasing fnDate:', orderOk, firstBad>=0 ? ('first violation at index '+firstBad) : '');
+            console.log('=== accounts missing password: count =', missing.length, '===');
+            fs.writeFileSync('/opt/gauth-full/missing_password_report.json', JSON.stringify(missing.map(a=>({email:a.email, source_file:a.source_file})), null, 2));
+            console.log('full list written to /opt/gauth-full/missing_password_report.json on server (not printed to CI log)');
             "
