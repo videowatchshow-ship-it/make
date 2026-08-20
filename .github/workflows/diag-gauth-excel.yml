@@ -51,4 +51,30 @@ jobs:
             }
             const sorted = sortByExcelDate(arr.slice());
             sorted.slice(0,15).forEach((a,i) => console.log((i+1)+'.', a.email, '|', a.source_file, '| fnDate:', a._fnDate ? new Date(a._fnDate).toISOString().slice(0,10) : 'none'));
+
+            console.log('');
+            console.log('=== Integrity check: no accounts lost/duplicated by sort ===');
+            console.log('input length :', arr.length);
+            console.log('output length:', sorted.length);
+            const inEmails = arr.map(a=>a.email).sort();
+            const outEmails = sorted.map(a=>a.email).sort();
+            const same = JSON.stringify(inEmails) === JSON.stringify(outEmails);
+            console.log('same email set (order-independent):', same);
+
+            console.log('');
+            console.log('=== withDate group: is it correctly sorted desc by account_date? ===');
+            const withDate = arr.filter(a=>a.account_date);
+            console.log('withDate count:', withDate.length);
+            const wdSorted = withDate.slice().sort((a,b)=>b.account_date-a.account_date);
+            let wdOk = true;
+            for (let i=0;i<wdSorted.length;i++){ if (sorted[i] !== wdSorted[i]) { wdOk = false; break; } }
+            console.log('withDate portion matches expected desc order:', wdOk);
+
+            console.log('');
+            console.log('=== noDate group total + fnDate coverage ===');
+            const noDate = arr.filter(a=>!a.account_date);
+            console.log('noDate count:', noDate.length);
+            const withFn = noDate.filter(a=>_parseFilenameDate(a.source_file));
+            console.log('noDate with parseable filename date:', withFn.length);
+            console.log('noDate without any date (stays at bottom, order-stable):', noDate.length - withFn.length);
             "
