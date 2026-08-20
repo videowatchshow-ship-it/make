@@ -27,7 +27,7 @@ jobs:
               exit 1
             fi
             sudo cp "$F" "${F}.bak_$(date +%s)"
-            python3 << 'PYEOF'
+            sudo python3 << 'PYEOF'
             path = "/var/www/sites/chamgyo/public/photo/SNW_1.html"
             with open(path, "r", encoding="utf-8") as f:
                 content = f.read()
