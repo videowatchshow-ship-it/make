@@ -50,4 +50,18 @@ jobs:
             Object.keys(issues).forEach(k => console.log(k+':', issues[k].length));
             fs.writeFileSync('/opt/gauth-full/display_bugs_report.json', JSON.stringify(issues, null, 2));
             console.log('full details written to /opt/gauth-full/display_bugs_report.json (not printed here)');
+
+            console.log('');
+            console.log('=== mojibake detail (field + garbled sample, no email) ===');
+            issues.mojibake.forEach(x => {
+              const rec = arr.find(a=>a.email===x.email);
+              const raw = String(rec[x.field]||'');
+              console.log('field:', x.field, '| sample:', JSON.stringify(raw.slice(0,40)));
+            });
+            console.log('');
+            console.log('=== badEmail detail (masked, structure only) ===');
+            issues.badEmail.forEach(e => {
+              const masked = e.replace(/^(.{2}).*(@.*)$/, (m,a,b)=>a+'***'+b);
+              console.log(masked);
+            });
             "
