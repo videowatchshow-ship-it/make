@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Hex-dump the regex line + test regex directly against known filename
+      - name: Compare byte encoding of real DB filename vs literal string (NFC/NFD check)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -18,19 +18,20 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 60s
           script: |
-            sudo grep -n "월" /var/www/sites/gauth/public/index.html | head -3
-            echo "--- hex of the regex line ---"
-            sudo sed -n '649p' /var/www/sites/gauth/public/index.html | xxd | head -5
-            echo "--- node direct regex test ---"
             sudo node -e "
-            const s = '7월23일.xlsx';
-            console.log('test string bytes:', Buffer.from(s,'utf8').toString('hex'));
-            const re = /(\d{1,2})\s*월\s*(\d{1,2})\s*일/;
-            console.log('unicode-escape regex match:', s.match(re));
             const fs = require('fs');
-            const html = fs.readFileSync('/var/www/sites/gauth/public/index.html','utf8');
-            const lineStart = html.indexOf('function _parseFilenameDate');
-            const snippet = html.slice(lineStart, lineStart+400);
-            console.log('deployed fn source bytes (first 400 chars):');
-            console.log(JSON.stringify(snippet));
+            const d = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+            const arr = Array.isArray(d) ? d : (d.accounts||[]);
+            const cand = arr.map(a=>a.source_file).filter(f => f && f.replace(/[^0-9]/g,'')==='723');
+            cand.forEach(f => {
+              console.log('FOUND:', JSON.stringify(f));
+              console.log('  raw bytes:', Buffer.from(f,'utf8').toString('hex'));
+              console.log('  NFC bytes:', Buffer.from(f.normalize('NFC'),'utf8').toString('hex'));
+              console.log('  NFD bytes:', Buffer.from(f.normalize('NFD'),'utf8').toString('hex'));
+              const re = /(\d{1,2})\s*월\s*(\d{1,2})\s*일/;
+              console.log('  raw match:', f.match(re));
+              console.log('  NFC match:', f.normalize('NFC').match(re));
+            });
+            const literal = '7월23일.xlsx';
+            console.log('literal bytes:', Buffer.from(literal,'utf8').toString('hex'));
             "

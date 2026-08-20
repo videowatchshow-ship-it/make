@@ -1,1 +1,1 @@
-trigger35-hexdump-regex-encoding-bug
+trigger36-nfc-nfd-check
