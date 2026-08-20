@@ -33,16 +33,22 @@ jobs:
               | python3 -c "import json,sys; d=json.load(sys.stdin); print('success='+str(d['success'])); print(d.get('errors'))"
           fi
 
-  diag:
+  setup-jump-vhost:
+    needs: create-jump-subdomain
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 3
     steps:
-      - name: Verify jump subdomain resolves
+      - name: Point jump.cent-solution.online at the same gauth app (mirror vhost)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 30s
+          command_timeout: 60s
           script: |
-            echo "jump subdomain DNS check done in the create-jump-subdomain job"
+            echo "=== find existing gauth vhost config ==="
+            sudo grep -rl "gauth.cent-solution.online" /etc/apache2/sites-available/ 2>/dev/null || sudo grep -rl "gauth.cent-solution.online" /etc/nginx/sites-available/ 2>/dev/null
+            echo "=== apache2 sites ==="
+            ls /etc/apache2/sites-available/ 2>/dev/null || echo "no apache2"
+            echo "=== nginx sites ==="
+            ls /etc/nginx/sites-available/ 2>/dev/null || echo "no nginx"

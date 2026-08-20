@@ -1,1 +1,1 @@
-trigger56-create-jump-subdomain
+trigger57-find-vhost-config
