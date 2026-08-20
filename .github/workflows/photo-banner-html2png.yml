@@ -1,0 +1,106 @@
+name: 참교육 배너 HTML+Puppeteer 로 생성 후 12계정 배포
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-banner-html2png.yml'
+
+jobs:
+  make:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 300s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+            TS=$(date +%s)
+            W=/tmp/banner$TS
+            mkdir -p $W
+            cd $W
+
+            echo "===== [1] HTML 배너 페이지 생성 (SNW brand_logo 스타일) ====="
+            cat > banner.html << "HTML"
+            <!DOCTYPE html><html><head><meta charset=UTF-8><style>
+            @font-face{font-family:"BrandHanSans";src:url("/var/www/sites/chamgyo/public/photo/fonts/BlackHanSans.woff2") format("woff2"),url("/var/www/sites/chamgyo/public/photo/fonts/BlackHanSans.woff") format("woff");font-weight:400;font-style:normal;font-display:block;}
+            html,body{margin:0;padding:0;width:1080px;height:266px;overflow:hidden;background:radial-gradient(ellipse at center,#1a1200 0%,#000 80%);display:flex;align-items:center;justify-content:center;}
+            .logo{font-family:"BrandHanSans","Black Han Sans","Malgun Gothic",sans-serif;font-size:200px;font-weight:400;line-height:1;letter-spacing:-14px;background:linear-gradient(180deg,#ffe75e 0%,#ffcc00 45%,#e0a000 72%,#a06a00 100%);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-stroke:5px #1a1200;filter:drop-shadow(4px 5px 0 #000) drop-shadow(0 0 18px rgba(255,204,0,0.75));padding:8px 24px;transform:translateY(-8px);}
+            </style></head><body><div class=logo>참교육</div></body></html>
+            HTML
+
+            echo "===== [2] Chromium 헤드리스로 스크린샷 ====="
+            CHROMIUM=""
+            for C in /opt/pw-browsers/chromium /usr/bin/chromium /usr/bin/chromium-browser /usr/bin/google-chrome; do
+              [ -x "$C" ] && CHROMIUM="$C" && break
+            done
+            if [ -z "$CHROMIUM" ]; then
+              sudo apt-get install -y chromium-browser 2>&1 | tail -3
+              CHROMIUM=/usr/bin/chromium-browser
+            fi
+            echo "  브라우저: $CHROMIUM"
+
+            "$CHROMIUM" --headless=new --no-sandbox --disable-gpu --hide-scrollbars \
+              --window-size=1080,266 \
+              --default-background-color=00000000 \
+              --screenshot=$W/chamgyo.png \
+              "file://$W/banner.html" 2>&1 | tail -3
+
+            ls -la $W/chamgyo.png
+            file $W/chamgyo.png
+
+            echo ""
+            echo "===== [3] 크롭 확인 (혹시 스크린샷이 실제 크기와 다르면) ====="
+            if [ -f $W/chamgyo.png ]; then
+              # ImageMagick 없어도 python PIL 로 크롭 가능
+              sudo python3 << "PYEOF"
+            from PIL import Image
+            im = Image.open("/tmp/banner${TS}/chamgyo.png")
+            print(f"  원본: {im.size}")
+            # 1080x266 아니면 리사이즈/크롭
+            if im.size != (1080, 266):
+                im2 = im.crop((0, 0, 1080, 266)) if im.size[0] >= 1080 and im.size[1] >= 266 else im.resize((1080, 266))
+                im2.save("/tmp/banner${TS}/chamgyo.png")
+                print(f"  crop/resize → {im2.size}")
+            PYEOF
+            fi
+
+            echo ""
+            echo "===== [4] 12계정 배포 (gain 제외) ====="
+            ACCTS="aass0707 abc01 abc02 abc03 abc04 abc05 abc06 abc07 cent jay otuki tak"
+            for U in $ACCTS; do
+              DIR="$P1/images/ch/$U"
+              [ -d "$DIR" ] || continue
+              sudo cp $W/chamgyo.png "$DIR/Live_height_kakao.gif"
+              sudo chown www-data:www-data "$DIR/Live_height_kakao.gif"
+              sudo chmod 644 "$DIR/Live_height_kakao.gif"
+              SZ=$(sudo stat -c %s "$DIR/Live_height_kakao.gif")
+              echo "  $U: ${SZ}B"
+
+              # img_ver 갱신
+              VF="$P1/data/img_ver_$U.json"
+              sudo tee "$VF" > /dev/null << VJEOF
+            {"Live_height_kakao.gif":$TS,"_all":$TS}
+            VJEOF
+              sudo chown www-data:www-data "$VF"
+            done
+
+            echo ""
+            echo "===== [5] gain 확인 (건드리지 말 것) ====="
+            sudo ls -la "$P1/images/ch/gain/Live_height_kakao.gif" 2>/dev/null || sudo ls -la "$P1/images/ch/gain/" | head -5
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE
