@@ -1,0 +1,32 @@
+name: 출목표 값 정확성 직접 계산 검증 (bigRoad/bigEye/small/cockroach)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-road-accuracy-check.yml'
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: bigRoad/bigEye/small/cockroach 함수만 추출해서 room 데이터로 직접 계산
+        run: |
+          curl -sS -o /tmp/snw1.html "https://xn--9d0bw2fjtyymch7de9d.info/photo/SNW_1.html?ch=cent"
+          BGLURL=$(grep -oE 'src="[^"]*bgl\.js[^"]*"' /tmp/snw1.html | head -1 | sed -E 's/src="([^"]*)"/\1/')
+          curl -sS -o /tmp/bgl.js "https://xn--9d0bw2fjtyymch7de9d.info/photo/$BGLURL"
+          echo "===== 어느 room 을 쓰는지 확인 ====="
+          grep -n "room\s*=\|api_room\|data/room_\|fetch(" /tmp/snw1.html | head -20
+          echo ""
+          echo "===== bigRoad 함수 정의 ====="
+          python3 -c "import re; src=open('/tmp/bgl.js').read(); m=re.search(r'function\s+bigRoad[^{]*\{', src); print(src[m.start():m.start()+800] if m else '못찾음')"
+          echo ""
+          echo "===== bigEye 함수 정의 ====="
+          python3 -c "import re; src=open('/tmp/bgl.js').read(); m=re.search(r'function\s+bigEye[^{]*\{', src); print(src[m.start():m.start()+800] if m else '못찾음')"
+          echo ""
+          echo "===== small 함수 정의 ====="
+          python3 -c "import re; src=open('/tmp/bgl.js').read(); m=re.search(r'function\s+small[^{]*\{', src); print(src[m.start():m.start()+800] if m else '못찾음')"
