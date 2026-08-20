@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Dump raw rows 15/16 from today's most recent uploaded excel
+      - name: Find real today upload events (not archive mtime)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -18,29 +18,35 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 60s
           script: |
-            cd /opt/gauth-full
-            echo "=== Most recently modified excel files (any dir) ==="
-            sudo find /opt/gauth-full -iname "*.xlsx" -o -iname "*.xls" 2>/dev/null | xargs -I{} sudo stat -c '%Y %n' {} 2>/dev/null | sort -rn | head -10
+            echo "=== 1. systemd journal for gauth service, today, upload-related lines ==="
+            sudo journalctl -u gauth --since "today" 2>/dev/null | grep -iE "upload|excel|parse" | tail -60
 
-            LATEST=$(sudo find /opt/gauth-full -iname "*.xlsx" -o -iname "*.xls" 2>/dev/null | xargs -I{} sudo stat -c '%Y {}' {} 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
             echo ""
-            echo "=== Using latest file: $LATEST ==="
-            sudo stat "$LATEST" 2>&1
+            echo "=== 2. uploads/ dir (pre-archive, not yet processed) ==="
+            sudo ls -la /opt/gauth-full/uploads/ 2>/dev/null | head -20
 
+            echo ""
+            echo "=== 3. archive/ dir sorted by ctime (creation/move time), today only ==="
+            sudo find /opt/gauth-full/uploads/archive -iname "*.xlsx" -newermt "today 00:00" 2>/dev/null -exec sudo stat -c '%Y %n' {} \; | sort -rn
+
+            echo ""
+            echo "=== 4. accounts_normalized.json - accounts with source_file matching today's archive file, count + upload-related meta fields ==="
             sudo node -e "
-            const XLSX = require('/opt/gauth-full/node_modules/xlsx');
-            const path = '$LATEST';
-            const wb = XLSX.readFile(path);
-            for (const sn of wb.SheetNames) {
-              const sheet = wb.Sheets[sn];
-              const rows = XLSX.utils.sheet_to_json(sheet, {header:1, raw:false, defval:''});
-              console.log('--- sheet:', sn, 'total rows:', rows.length, '---');
-              [14,15].forEach(idx => {
-                if (rows[idx]) {
-                  console.log('Row ' + (idx+1) + ' (0-idx ' + idx + '):', JSON.stringify(rows[idx]));
-                } else {
-                  console.log('Row ' + (idx+1) + ': (none)');
-                }
-              });
+            const fs = require('fs');
+            const d = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+            const arr = Array.isArray(d) ? d : (d.accounts||[]);
+            const bySource = {};
+            for (const a of arr) {
+              const sf = a.source_file || '(none)';
+              bySource[sf] = (bySource[sf]||0)+1;
             }
+            const sorted = Object.entries(bySource).sort((a,b)=>b[1]-a[1]).slice(0,10);
+            console.log('Top source_file counts:', JSON.stringify(sorted,null,2));
+            const sample = arr.find(a => (a.email||'')==='fovehuzomisu37067@gmail.com');
+            console.log('Sample account full record:', JSON.stringify(sample,null,2));
             "
+
+            echo ""
+            echo "=== 5. Apache/nginx access log for POST to upload endpoint today ==="
+            sudo grep -iE "upload" /var/log/apache2/*access*.log 2>/dev/null | grep "$(date +%d/%b/%Y)" | tail -20 || echo "no apache log match"
+            sudo grep -iE "upload" /var/log/nginx/*access*.log 2>/dev/null | grep "$(date +%d/%b/%Y)" | tail -20 || echo "no nginx log match"
