@@ -1,0 +1,189 @@
+name: 참교육 배너 Python PIL 로 생성 후 12계정 배포
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-chamgyo-banner.yml'
+
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set -uo pipefail
+            P1="/var/www/sites/chamgyo/public/photo"
+            TS=$(date +%s)
+
+            echo "===== [1] Python PIL / 폰트 확인 ====="
+            sudo python3 -c "from PIL import Image, ImageDraw, ImageFont, ImageFilter; print('PIL OK')" 2>&1
+
+            echo ""
+            echo "===== [2] 로컬 BlackHanSans woff2 → ttf 변환 시도 (PIL 은 ttf만) ====="
+            # BlackHanSans woff2 는 PIL 에서 직접 못 읽음. Nanum ttf 찾기
+            FONT=""
+            for F in "/usr/share/fonts/truetype/nanum/NanumGothicExtraBold.ttf" \
+                     "/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf" \
+                     "/usr/share/fonts/truetype/nanum/NanumGothic.ttf" \
+                     "/usr/share/fonts/truetype/nanum-square/NanumSquareRoundEB.ttf" \
+                     "/usr/share/fonts/opentype/noto/NotoSansCJK-Black.ttc" \
+                     "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc" \
+                     "/usr/share/fonts/truetype/noto/NotoSansCJKkr-Black.otf"; do
+              if [ -f "$F" ]; then FONT="$F"; break; fi
+            done
+
+            if [ -z "$FONT" ]; then
+              # apt 로 nanum 설치 시도 (sudo 권한 있으면)
+              sudo apt-get install -y fonts-nanum 2>&1 | tail -3
+              for F in /usr/share/fonts/truetype/nanum/NanumGothicExtraBold.ttf \
+                       /usr/share/fonts/truetype/nanum/NanumGothicBold.ttf \
+                       /usr/share/fonts/truetype/nanum/NanumGothic.ttf; do
+                if [ -f "$F" ]; then FONT="$F"; break; fi
+              done
+            fi
+            echo "선택 폰트: $FONT"
+
+            echo ""
+            echo "===== [3] PIL 로 참교육 배너 생성 (1080x266) ====="
+            OUT="/tmp/chamgyo_$TS.png"
+            sudo FONT_PATH="$FONT" OUT_PATH="$OUT" python3 << "PYEOF"
+            import os
+            from PIL import Image, ImageDraw, ImageFont, ImageFilter
+
+            W, H = 1080, 266
+            fpath = os.environ["FONT_PATH"]
+            out = os.environ["OUT_PATH"]
+
+            # 배경: 검정 라디얼 그라디언트 (중앙 약간 밝음)
+            img = Image.new("RGB", (W, H), (0, 0, 0))
+            px = img.load()
+            cx, cy = W//2, H//2
+            maxr = ((W//2)**2 + (H//2)**2) ** 0.5
+            for y in range(H):
+                for x in range(W):
+                    dx, dy = x - cx, y - cy
+                    r = (dx*dx + dy*dy) ** 0.5
+                    t = min(1.0, r/maxr)
+                    v = int(28 * (1 - t*0.9))
+                    r_ = min(30, v + 4)
+                    g_ = min(20, v + 2)
+                    b_ = 0
+                    px[x, y] = (r_, g_, b_)
+
+            text = "참교육"
+
+            # 폰트 로드 (glyph 안에 들어갈만한 크기 계산)
+            font_size = 200
+            font = ImageFont.truetype(fpath, font_size)
+            draw = ImageDraw.Draw(img)
+            bbox = draw.textbbox((0,0), text, font=font)
+            tw = bbox[2] - bbox[0]
+            th = bbox[3] - bbox[1]
+            # 폭이 화면의 92% 넘으면 축소
+            while tw > W * 0.92 and font_size > 60:
+                font_size -= 10
+                font = ImageFont.truetype(fpath, font_size)
+                bbox = draw.textbbox((0,0), text, font=font)
+                tw = bbox[2] - bbox[0]
+                th = bbox[3] - bbox[1]
+
+            # 텍스트 중앙 위치
+            tx = (W - tw) // 2 - bbox[0]
+            ty = (H - th) // 2 - bbox[1] - 8
+
+            # 1) 글로우 레이어 (밝은 노랑으로 큰 텍스트 → 블러)
+            glow = Image.new("RGB", (W, H), (0, 0, 0))
+            gd = ImageDraw.Draw(glow)
+            gd.text((tx, ty), text, font=font, fill=(255, 220, 60))
+            glow = glow.filter(ImageFilter.GaussianBlur(radius=18))
+            # add screen 합성
+            img = Image.blend(img, glow, 0.65)
+
+            # 2) 어두운 스트로크 (외곽선)
+            draw = ImageDraw.Draw(img)
+            for dx in [-4, -3, -2, -1, 0, 1, 2, 3, 4]:
+                for dy in [-4, -3, -2, -1, 0, 1, 2, 3, 4]:
+                    if dx*dx + dy*dy <= 16:
+                        draw.text((tx+dx, ty+dy), text, font=font, fill=(20, 12, 0))
+
+            # 3) 금색 텍스트 (그라디언트 흉내: 위쪽 밝고 아래쪽 어두운 두 층)
+            # 밝은 금색
+            draw.text((tx, ty), text, font=font, fill=(255, 214, 51))
+            # 아래쪽 어두운 층은 mask 로 (간단히 아래쪽 반절만 살짝 어둡게)
+            dark_layer = Image.new("RGBA", (W, H), (0,0,0,0))
+            dl = ImageDraw.Draw(dark_layer)
+            dl.text((tx, ty), text, font=font, fill=(224, 160, 0, 140))
+            # crop 아래쪽 절반만 사용
+            mask = Image.new("L", (W, H), 0)
+            for y in range(H//2, H):
+                for x in range(W):
+                    alpha = int(140 * (y - H//2) / (H//2))
+                    mask.putpixel((x, y), alpha)
+            img.paste(dark_layer, (0,0), mask)
+
+            img.save(out, "PNG", quality=95)
+            print(f"OK: saved {out} size={os.path.getsize(out)}")
+            PYEOF
+
+            sudo ls -la "$OUT"
+
+            echo ""
+            echo "===== [4] 12계정 폴더의 Live_height_kakao.gif 를 참교육 배너로 덮어쓰기 ====="
+            ACCTS="aass0707 abc01 abc02 abc03 abc04 abc05 abc06 abc07 cent jay otuki tak"
+            for U in $ACCTS; do
+              DIR="$P1/images/ch/$U"
+              if [ ! -d "$DIR" ]; then
+                echo "  $U: 폴더 없음 스킵"
+                continue
+              fi
+              sudo cp "$OUT" "$DIR/Live_height_kakao.gif"
+              sudo chown www-data:www-data "$DIR/Live_height_kakao.gif"
+              sudo chmod 644 "$DIR/Live_height_kakao.gif"
+              SZ=$(sudo stat -c %s "$DIR/Live_height_kakao.gif")
+              echo "  $U: Live_height_kakao.gif = ${SZ}B"
+            done
+
+            echo ""
+            echo "===== [5] img_ver_<계정>.json 타임스탬프 갱신 (프리즘 캐시 즉시 폭발) ====="
+            for U in $ACCTS; do
+              VF="$P1/data/img_ver_$U.json"
+              sudo tee "$VF" > /dev/null << VJEOF
+            {"Live_height_kakao.gif":$TS,"_all":$TS}
+            VJEOF
+              sudo chown www-data:www-data "$VF"
+              sudo chmod 644 "$VF"
+            done
+            echo "  img_ver_*.json 12개 갱신됨 (ts=$TS)"
+
+            echo ""
+            echo "===== [6] gain 검증 (건드리지 말 것 확인) ====="
+            echo "  gain 폴더:"
+            sudo ls -la "$P1/images/ch/gain/"
+            echo "  gain img_ver:"
+            sudo cat "$P1/data/img_ver_gain.json"
+
+            echo ""
+            echo "===== [7] https 로 실제 배너 크기 확인 ====="
+            DOM="xn--9d0bw2fjtyymch7de9d.info"
+            for U in cent tak abc01 gain; do
+              SZ=$(curl -sSk --resolve "$DOM:443:127.0.0.1" -o /dev/null -w "%{size_download}" "https://$DOM/photo/images/ch/$U/Live_height_kakao.gif")
+              echo "  $U/Live_height_kakao.gif = ${SZ}B"
+            done
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE
