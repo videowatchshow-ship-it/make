@@ -1,0 +1,79 @@
+name: 출목표/중국점 렌더링 로직 + 실데이터 shape 조사
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-road-render-investigate.yml'
+
+jobs:
+  investigate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+
+            echo "===== [1] bgl.js 전체 크기 / 라인수 ====="
+            timeout 8 sudo wc -l "$P1/bgl.js" 2>/dev/null
+            timeout 8 sudo ls -la "$P1"/*.js 2>/dev/null
+
+            echo ""
+            echo "===== [2] bgl.js FULL SOURCE (base64, 안전하게 통째로) ====="
+            timeout 10 sudo base64 -w0 "$P1/bgl.js" 2>/dev/null
+            echo ""
+            echo "===== [2 END] ====="
+
+            echo ""
+            echo "===== [3] CAH_1.html에서 road/중국점/bead 관련 script 태그, inline script 찾기 ====="
+            timeout 8 sudo grep -n "script src" "$P1/CAH_1.html" 2>/dev/null
+            timeout 8 sudo wc -l "$P1/CAH_1.html" 2>/dev/null
+
+            echo ""
+            echo "===== [4] room_103.json, room_110.json 실제 내용 (전체) ====="
+            for id in 103 110; do
+              echo "--- room_${id}.json ---"
+              timeout 8 sudo cat "$P1/data/room_${id}.json" 2>/dev/null | head -c 3000
+              echo ""
+              echo "--- (size) ---"
+              timeout 8 sudo ls -la "$P1/data/room_${id}.json" 2>/dev/null
+            done
+
+            echo ""
+            echo "===== [5] tables.json 내용 (room 목록) ====="
+            timeout 8 sudo cat "$P1/data/tables.json" 2>/dev/null | head -c 3000
+
+            echo ""
+            echo "===== [6] data/ 디렉토리 파일 목록 (room 관련 전체) ====="
+            timeout 8 sudo ls -la "$P1/data/" 2>/dev/null | head -60
+
+            echo ""
+            echo "===== [7] collector_sinji_new.php 에서 저장하는 JSON 구조(필드명) grep ====="
+            timeout 8 sudo grep -nE "history|road|results|json_encode|file_put_contents|'id'|\"id\"|ver|board" "$P1/collector_sinji_new.php" 2>/dev/null | head -60
+
+            echo ""
+            echo "===== [8] sel_ 파일 하나 예시 (채널->room 매핑) ====="
+            timeout 8 sudo ls "$P1/data/sel_"*.json 2>/dev/null | head -5
+            timeout 8 sudo cat "$P1/data/sel_tak.json" 2>/dev/null
+
+            echo ""
+            echo "===== [9] api_selected_room.php 소스 ====="
+            timeout 8 sudo cat "$P1/api_selected_room.php" 2>/dev/null | head -c 3000
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE
