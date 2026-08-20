@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check what /api/normalized-accounts actually returns (frontend source)
+      - name: Find accounts ending with 781@gmail.com or 433@gmail.com
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -18,9 +18,14 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 60s
           script: |
-            echo "=== 1. find the route handler for /api/normalized-accounts ==="
-            sudo grep -rn "normalized-accounts" /opt/gauth-full/*.js 2>/dev/null
-
-            echo ""
-            echo "=== 2. actual live API response length (need auth - check route code first for auth requirement) ==="
-            sudo grep -n "app.get.*normalized-accounts" -A 30 /opt/gauth-full/rebrowser-login.js /opt/gauth-full/auto_deploy.js 2>/dev/null | head -60
+            sudo node -e "
+            const fs = require('fs');
+            const d = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+            const arr = Array.isArray(d) ? d : (d.accounts||[]);
+            const matches781 = arr.filter(a => (a.email||'').endsWith('781@gmail.com'));
+            const matches433 = arr.filter(a => (a.email||'').endsWith('433@gmail.com'));
+            console.log('=== ending with 781@gmail.com ===', matches781.length, 'found');
+            matches781.forEach((a,i) => console.log(i+1, JSON.stringify(a, null, 2)));
+            console.log('=== ending with 433@gmail.com ===', matches433.length, 'found');
+            matches433.forEach((a,i) => console.log(i+1, JSON.stringify(a, null, 2)));
+            "
