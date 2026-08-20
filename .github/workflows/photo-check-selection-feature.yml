@@ -1,0 +1,49 @@
+name: 테이블 선택(sel_*.json) 기능 확인 + README 문서화 여부 확인
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-check-selection-feature.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+
+            echo "===== [1] README에 선택(select) 관련 문서화 여부 ====="
+            timeout 8 sudo grep -n "선택\|select\|sel_" "$P1/README.md" 2>&1 | head -30
+
+            echo ""
+            echo "===== [2] write_select_room.php 존재 및 내용 ====="
+            timeout 8 sudo find "$P1" -maxdepth 1 -iname "*select*" 2>&1
+            timeout 8 sudo cat "$P1/write_select_room.php" 2>&1 | head -80
+
+            echo ""
+            echo "===== [3] sel_<ch>.json 파일 실제 존재 확인 (계정별) ====="
+            timeout 8 sudo find "$P1/data" -maxdepth 1 -iname "sel_*.json" 2>&1
+            timeout 8 sudo find "$P1/data" -maxdepth 1 -iname "sel_*.json" -exec sh -c 'echo "--- {} ---"; sudo cat {}' \; 2>&1 | head -60
+
+            echo ""
+            echo "===== [4] CAH_1.html 안 선택 UI/JS 관련 부분 ====="
+            timeout 8 sudo grep -n "select\|선택\|onSel\|choose" "$P1/CAH_1.html" 2>&1 | head -30
+
+            echo ""
+            echo "===== [5] 계정별 독립 저장인지 write_select_room.php 로직 확인 ====="
+            timeout 8 sudo grep -n "SESSION\|\\\$ch\|\\\$id\|preg_replace" "$P1/write_select_room.php" 2>&1 | head -30
+            REMOTE
