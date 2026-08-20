@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Full mojibake sweep across every field including raw_values
+      - name: Locate column-mapping bug for the 6 contaminated records
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -22,45 +22,34 @@ jobs:
             const fs = require('fs');
             const d = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
             const arr = Array.isArray(d) ? d : (d.accounts||[]);
-            console.log('total accounts:', arr.length);
 
-            // mojibake signatures: UTF-8 bytes misread as Latin-1/CP1252 (Ã.., â.., ì.., ê..),
-            // or URL-percent-encoding leftovers (%XX), or the literal replacement char.
-            const isMojibake = s => /[�]|Ã[\x80-\xBF]|â[\x80-\xBF]{2}|ì[\x80-\xBF]|ê[\x80-\xBF]|%[0-9A-Fa-f]{2}/.test(s);
+            const badEmail = arr.filter(a => a.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email));
+            const badPw = arr.filter(a => a.password && /%[0-9A-Fa-f]{2}/.test(String(a.password)));
 
-            let totalHits = 0;
-            const byField = {};
-            const bySourceFile = {};
-            const samples = [];
-
-            function scanValue(f, v, sourceFile) {
-              if (v === undefined || v === null) return;
-              const s = String(v);
-              if (isMojibake(s)) {
-                totalHits++;
-                byField[f] = (byField[f]||0) + 1;
-                bySourceFile[sourceFile] = (bySourceFile[sourceFile]||0) + 1;
-                if (samples.length < 20) samples.push({field:f, source_file: sourceFile, sample: s.slice(0,50)});
-              }
-            }
-
-            arr.forEach(a => {
-              Object.keys(a).forEach(f => {
-                if (f === 'raw_values' && a[f] && typeof a[f] === 'object') {
-                  Object.keys(a[f]).forEach(rk => scanValue('raw_values.'+rk, a[f][rk], a.source_file));
-                } else {
-                  scanValue(f, a[f], a.source_file);
-                }
-              });
+            console.log('=== bad-email records: source_file + source_row + raw_values keys ===');
+            badEmail.forEach(a => {
+              console.log(JSON.stringify(a.source_file), '| row', a.source_row, '| raw_values keys:', a.raw_values ? Object.keys(a.raw_values) : 'none');
             });
 
             console.log('');
-            console.log('=== TOTAL mojibake/broken-encoding hits across ALL fields:', totalHits, '===');
-            console.log('by field:', JSON.stringify(byField));
-            console.log('by source_file:', JSON.stringify(bySourceFile));
-            console.log('');
-            console.log('=== sample (up to 20, non-PII fields only shown truncated) ===');
-            samples.forEach(x => console.log(x.field, '|', JSON.stringify(x.source_file), '|', JSON.stringify(x.sample)));
+            console.log('=== bad-password records: source_file + source_row + raw_values keys ===');
+            badPw.forEach(a => {
+              console.log(JSON.stringify(a.source_file), '| row', a.source_row, '| raw_values keys:', a.raw_values ? Object.keys(a.raw_values) : 'none');
+            });
 
-            fs.writeFileSync('/opt/gauth-full/mojibake_full_report.json', JSON.stringify({totalHits, byField, bySourceFile}, null, 2));
-            "
+            console.log('');
+            console.log('=== raw_values for ONE bad-email record (full, to see real column layout) ===');
+            if (badEmail[0]) console.log(JSON.stringify(badEmail[0].raw_values, null, 2));
+
+            console.log('');
+            console.log('=== raw_values for ONE bad-password record (full) ===');
+            if (badPw[0]) console.log(JSON.stringify(badPw[0].raw_values, null, 2));
+
+            console.log('');
+            console.log('=== upload_excels.js column-mapping logic (grep for header/column matching) ===');
+            const src = fs.readFileSync('/opt/gauth-full/upload_excels.js', 'utf8');
+            const lines = src.split(String.fromCharCode(10));
+            lines.forEach((l, i) => {
+              if (/email|password|column|header|idx|index/i.test(l)) console.log((i+1)+':', l);
+            });
+            " 2>&1 | head -300
