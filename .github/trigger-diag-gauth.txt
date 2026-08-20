@@ -1,1 +1,1 @@
-trigger75-insert-subsite-counts-route
+trigger76-delete-jump-subdomain-entirely
