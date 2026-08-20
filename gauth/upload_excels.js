@@ -746,31 +746,16 @@ function recoverMissingFieldsFromExtra(accounts) {
   return accounts;
 }
 
-/* account_date는 엑셀 셀에 적힌 날짜만 사용 — 같은 파일 내에서 배치 단위로
- * 한 행에만 날짜가 기입되는 경우가 있어(예: 문서 제목/작성일), 같은 파일의
- * 나머지 행에도 그 날짜를 적용 (다운로드 날짜·파일 수정일과는 무관, 셀에 실제로 적힌 값) */
-function propagateBatchDateWithinFile(accounts) {
-  const found = accounts.find(a => a.account_date);
-  if (!found) return accounts;
-  for (const a of accounts) { if (!a.account_date) a.account_date = found.account_date; }
-  return accounts;
-}
-
-/* 엑셀 문서 자체의 core.xml 메타데이터(생성일/수정일)는 다운로드 날짜나
- * 서버 파일 mtime과 무관하게 문서 자체에 기록되는 값 — 셀에 날짜가 전혀
- * 없는 파일의 최후 수단으로 사용. ModifiedDate 우선(최신 편집 시점), 없으면 CreatedDate.
- * ref: SheetJS Props (Document Properties) https://github.com/SheetJS/sheetjs */
-function excelDocumentDate(wb) {
-  const props = wb.Props || {};
-  const raw = props.ModifiedDate || props.CreatedDate;
-  if (!raw) return null;
-  const t = new Date(raw).getTime();
-  return Number.isFinite(t) ? t : null;
-}
+/* account_date는 엑셀 셀에 적힌 날짜만 사용한다.
+ * 같은 파일이라도 서로 다른 시기에 만들어진 배치가 섞여 하나로 합쳐진 경우가 있어
+ * (예: 이 파일 안에 '맛동산'·'미스김' 등 라벨이 다른 여러 배치가 공존),
+ * 한 파일 내 다른 행의 날짜나 문서 메타데이터(생성일/수정일)를 전체 행에
+ * 일괄 적용하면 실제로는 몇 년 전 데이터에 엉뚱한 최신 날짜가 붙는 문제가 있다.
+ * 그래서 전파/문서메타데이터 폴백은 사용하지 않고, 해당 행 자체의 셀 값에서
+ * 파싱된 날짜만 account_date로 인정한다. 셀에 날짜가 없으면 null(정렬 최하위)이 맞다. */
 
 function parseExcelFile(filePath, originalName) {
-  const wb = XLSX.readFile(filePath, { bookProps: true });
-  const docDate = excelDocumentDate(wb);
+  const wb = XLSX.readFile(filePath);
   const allAccounts = [];
   const baseName = originalName || path.basename(filePath);
   let fileMtime = Date.now();
