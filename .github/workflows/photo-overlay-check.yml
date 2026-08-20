@@ -1,0 +1,64 @@
+name: 캔버스 덮는 이미지/오버레이 요소 확인
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-overlay-check.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm init -y >/dev/null 2>&1 && npm i -D playwright >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: elementFromPoint 로 캔버스 위에 실제로 뭐가 있는지 확인
+        timeout-minutes: 1
+        run: |
+          cat > ov.js << 'EOF'
+          const { chromium } = require('playwright');
+          (async () => {
+            try {
+              const browser = await chromium.launch();
+              const page = await browser.newPage({ viewport: { width: 1000, height: 900 } });
+              await page.goto('https://xn--9d0bw2fjtyymch7de9d.info/photo/SNW_1.html?ch=cent', { waitUntil: 'domcontentloaded', timeout: 15000 });
+              await page.waitForTimeout(3000);
+              const result = await page.evaluate(() => {
+                const out = {};
+                ['cBead','cBig','cDrv'].forEach(id => {
+                  const c = document.getElementById(id);
+                  if (!c) { out[id] = 'no canvas'; return; }
+                  const rect = c.getBoundingClientRect();
+                  const cx = rect.left + rect.width/2;
+                  const cy = rect.top + rect.height/2;
+                  const topEl = document.elementFromPoint(cx, cy);
+                  const cs = topEl ? getComputedStyle(topEl) : null;
+                  out[id] = {
+                    canvasRect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height, visible: rect.width > 0 && rect.height > 0 },
+                    canvasComputed: (() => { const ccs = getComputedStyle(c); return { display: ccs.display, visibility: ccs.visibility, opacity: ccs.opacity, zIndex: ccs.zIndex, position: ccs.position }; })(),
+                    topElementAtCenter: topEl ? (topEl.tagName + (topEl.id ? '#'+topEl.id : '') + (topEl.className ? '.'+String(topEl.className).replace(/\s+/g,'.') : '')) : null,
+                    topElementIsCanvasItself: topEl === c,
+                    topElementStyle: cs ? { position: cs.position, zIndex: cs.zIndex, opacity: cs.opacity, display: cs.display } : null
+                  };
+                });
+                const allImgs = Array.from(document.querySelectorAll('img')).map(img => {
+                  const r = img.getBoundingClientRect();
+                  const cs = getComputedStyle(img);
+                  return { src: img.src.slice(-60), rect: {x:r.x,y:r.y,w:r.width,h:r.height}, position: cs.position, zIndex: cs.zIndex, opacity: cs.opacity };
+                });
+                out.allImages = allImgs;
+                return out;
+              });
+              console.log('OVERLAY_CHECK:', JSON.stringify(result, null, 2));
+              await browser.close();
+              process.exit(0);
+            } catch (e) {
+              console.error('ERR:', e.message);
+              process.exit(1);
+            }
+          })();
+          EOF
+          timeout 50 node ov.js || echo "타임아웃/에러"
