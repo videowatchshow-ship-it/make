@@ -777,7 +777,6 @@ function parseExcelFile(filePath, originalName) {
   const baseName = originalName || path.basename(filePath);
   let fileMtime = Date.now();
   try { fileMtime = fs.statSync(filePath).mtimeMs; } catch (_) {}
-  const filenameDate = parseDateFromFilename(baseName, new Date(fileMtime).getFullYear());
 
   for (const sheetName of wb.SheetNames) {
     const sheet = wb.Sheets[sheetName];
@@ -796,9 +795,6 @@ function parseExcelFile(filePath, originalName) {
   }
 
   recoverMissingFieldsFromExtra(allAccounts);
-  if (filenameDate) {
-    for (const a of allAccounts) { if (!a.account_date) a.account_date = filenameDate; }
-  }
 
   return allAccounts;
 }
