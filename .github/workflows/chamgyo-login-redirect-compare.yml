@@ -1,0 +1,39 @@
+name: chamgyo 로그인 리다이렉트 photo vs photo2 비교 (수정 전 정확한 라인 확보)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/chamgyo-login-redirect-compare.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: photo/auth_check.php, login_check.php 리다이렉트 로직 전문 확인
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            echo "===== photo/auth_check.php 전문 ====="
+            sudo cat -n /var/www/sites/chamgyo/public/photo/auth_check.php 2>&1
+            echo "===== photo/login_check.php 전문 ====="
+            sudo cat -n /var/www/sites/chamgyo/public/photo/login_check.php 2>&1
+            echo "===== photo2/auth_check.php 전문 ====="
+            sudo cat -n /var/www/sites/chamgyo/public/photo2/auth_check.php 2>&1
+            echo "===== photo2/login_check.php 전문 ====="
+            sudo cat -n /var/www/sites/chamgyo/public/photo2/login_check.php 2>&1
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
