@@ -10,30 +10,30 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - name: bgl.js / CAH_1.html 에서 nextbox 관련 JS 로직 추출
+      - name: cAskP cAskB 그리는 JS 로직 추출
         run: |
           curl -sS -o /tmp/cah1.html "https://xn--9d0bw2fjtyymch7de9d.info/photo/CAH_1.html"
-          echo "===== CAH_1.html 안의 nextbox 관련 JS (inline script 포함) ====="
-          grep -n "nextbox\|nextboxP\|nextboxB" /tmp/cah1.html | head -60
-          echo ""
-          echo "===== bgl.js 버전 확인 ====="
-          grep -oE 'bgl\.js\?v=[0-9]+' /tmp/cah1.html | head -3
           BGLURL=$(grep -oE 'src="[^"]*bgl\.js[^"]*"' /tmp/cah1.html | head -1 | sed -E 's/src="([^"]*)"/\1/')
-          echo "BGLURL=$BGLURL"
-          if [[ "$BGLURL" == /* ]]; then
-            FULLURL="https://xn--9d0bw2fjtyymch7de9d.info$BGLURL"
+          curl -sS -o /tmp/bgl.js "https://xn--9d0bw2fjtyymch7de9d.info/photo/$BGLURL"
+
+          echo "===== CAH_1.html 안의 cAskP/cAskB 관련 JS 라인 번호 ====="
+          grep -n "cAskP\|cAskB" /tmp/cah1.html
+
+          echo ""
+          echo "===== cAskP 첫 등장 지점 앞뒤 60줄 (script 태그 내부일 가능성) ====="
+          FIRSTLN=$(grep -n "cAskP" /tmp/cah1.html | grep -v "^[0-9]*:.*<canvas" | head -1 | cut -d: -f1)
+          if [ -n "$FIRSTLN" ]; then
+            START=$((FIRSTLN>20 ? FIRSTLN-20 : 1))
+            END=$((FIRSTLN+80))
+            sed -n "${START},${END}p" /tmp/cah1.html
           else
-            FULLURL="https://xn--9d0bw2fjtyymch7de9d.info/photo/$BGLURL"
+            echo "canvas 태그 외에는 cAskP 참조 없음 (외부 js 파일에 있을 가능성)"
           fi
-          echo "FULLURL=$FULLURL"
-          curl -sS -o /tmp/bgl.js "$FULLURL"
+
           echo ""
-          echo "===== bgl.js 안의 nextbox 관련 함수 (앞뒤 15줄) ====="
-          grep -n "nextbox\|nextboxP\|nextboxB\|next_road" /tmp/bgl.js | head -30
+          echo "===== bgl.js 안의 cAskP/cAskB 참조 ====="
+          grep -n "cAskP\|cAskB" /tmp/bgl.js
+
           echo ""
-          echo "===== nextboxP 정의부 앞뒤 문맥 ====="
-          grep -n "nextboxP" /tmp/bgl.js | head -1 | cut -d: -f1 | while read ln; do
-            START=$((ln>15 ? ln-15 : 1))
-            END=$((ln+30))
-            sed -n "${START},${END}p" /tmp/bgl.js
-          done
+          echo "===== CAH_1.html 안의 외부 script src 목록 ====="
+          grep -oE '<script[^>]*src="[^"]*"' /tmp/cah1.html
