@@ -25,10 +25,7 @@ jobs:
             echo "토큰길이: ${#CF_TOKEN}"
 
             ZONE_ID=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=xn--9d0bw2fjtyymch7de9d.info" \
-              -H "Authorization: Bearer $CF_TOKEN" | python3 -c "
-import sys,json; d=json.load(sys.stdin)
-print((d.get('result') or [{}])[0].get('id',''))
-")
+              -H "Authorization: Bearer $CF_TOKEN" | python3 -c "import sys,json; d=json.load(sys.stdin); print((d.get('result') or [{}])[0].get('id',''))")
             echo "ZONE_ID=$ZONE_ID"
             [ -z "$ZONE_ID" ] && echo "zone 못찾음" && exit 1
 
