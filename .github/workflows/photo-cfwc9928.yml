@@ -10,23 +10,6 @@ jobs:
   fix:
     runs-on: ubuntu-latest
     steps:
-      - uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.GAUTH_HOST }}
-          username: ${{ secrets.GAUTH_USER }}
-          key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 3m
-          script: |
-            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
-              --zone=asia-northeast1-a \
-              --project=quantum-bonus-455522-b4 \
-              --ssh-flag="-o StrictHostKeyChecking=no" \
-              --quiet \
-              --command='bash -s' << "REMOTE"
-            set +u
-            echo "gauth 서버 경유가 아니라 my-site-1 에서 직접 못 읽음 - 이 스텝은 스킵용 placeholder"
-            REMOTE
-
       - name: gauth cloudflare.ini 로 DNS + purge 실행
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -81,4 +64,4 @@ print((d.get('result') or [{}])[0].get('id',''))
           getent hosts gain.xn--9d0bw2fjtyymch7de9d.info || echo "아직 실패"
           getent hosts tak.xn--9d0bw2fjtyymch7de9d.info || echo "아직 실패"
           curl -sS -o /dev/null -D - "https://gain.xn--9d0bw2fjtyymch7de9d.info/photo2/write.php" 2>&1 | head -10
-# retry 1787198748
+# retry 2 - placeholder step 제거 (ssh-ping 성공 확인 후)
