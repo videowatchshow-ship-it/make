@@ -4,6 +4,11 @@ on:
   schedule:
     # 05:00 ICT (UTC+7) == 22:00 UTC (전날)
     - cron: '0 22 * * *'
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-cf-purge-daily.yml'
 jobs:
   daily-purge:
     runs-on: ubuntu-latest
