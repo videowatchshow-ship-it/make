@@ -22,20 +22,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Find vhost config + any cloudflare creds already on the server
+      - name: Find what got globally-installed / misplaced under chamgyo photo folders
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 30s
+          command_timeout: 60s
           script: |
-            echo "=== apache2 sites ==="
-            ls /etc/apache2/sites-available/ 2>/dev/null || echo "no apache2"
-            echo "=== nginx sites ==="
-            ls /etc/nginx/sites-available/ 2>/dev/null || echo "no nginx"
-            echo "=== gauth vhost content ==="
-            sudo grep -rl "gauth.cent-solution.online" /etc/apache2/sites-available/ 2>/dev/null | xargs -r sudo cat
-            sudo grep -rl "gauth.cent-solution.online" /etc/nginx/sites-available/ 2>/dev/null | xargs -r sudo cat
-            echo "=== any cloudflare env file on this server? (filenames only) ==="
-            sudo find / -maxdepth 4 -iname "*.env*" 2>/dev/null | xargs -r sudo grep -li "cloudflare" 2>/dev/null
+            echo "=== locate the chamgyo site root ==="
+            sudo find /var/www/sites -maxdepth 3 -iname "*chamgyo*" -o -iname "*photo*" 2>/dev/null
+            echo ""
+            echo "=== photo / photo2 / photo3 top-level listing ==="
+            for d in /var/www/sites/chamgyo/public/photo /var/www/sites/chamgyo/public/photo2 /var/www/sites/chamgyo/public/photo3; do
+              echo "--- $d ---"
+              ls -la "$d" 2>/dev/null || echo "(not found)"
+            done
+            echo ""
+            echo "=== anything recently modified (last 2 days) under chamgyo public/ ==="
+            sudo find /var/www/sites/chamgyo/public -maxdepth 4 -mtime -2 -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -50
+            echo ""
+            echo "=== any node_modules or global-looking installs misplaced under photo dirs ==="
+            sudo find /var/www/sites/chamgyo/public -iname "node_modules" -o -iname "package.json" 2>/dev/null

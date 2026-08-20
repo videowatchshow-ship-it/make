@@ -1,1 +1,1 @@
-trigger58-check-secrets-and-vhost
+trigger59-find-chamgyo-photo-misplaced-install
