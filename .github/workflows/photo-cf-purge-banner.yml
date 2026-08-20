@@ -1,0 +1,60 @@
+name: Cloudflare 캐시 실제 purge (참교육 배너 즉시 반영)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-cf-purge-banner.yml'
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cloudflare Purge - Live_height_kakao.gif (공용 + 12계정)
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          if [ -z "$CF_TOKEN" ] || [ -z "$CF_ZONE" ]; then
+            echo "CF 시크릿 없음"; exit 0
+          fi
+          DOM="xn--9d0bw2fjtyymch7de9d.info"
+
+          # 대상 URL 목록 만들기
+          URLS='["https://'"$DOM"'/photo/images/Live_height_kakao.gif"'
+          for U in aass0707 abc01 abc02 abc03 abc04 abc05 abc06 abc07 cent jay otuki tak; do
+            URLS="$URLS,\"https://$DOM/photo/images/ch/$U/Live_height_kakao.gif\""
+          done
+          URLS="$URLS,\"https://$DOM/photo/data/img_ver.json\""
+          for U in aass0707 abc01 abc02 abc03 abc04 abc05 abc06 abc07 cent jay otuki tak; do
+            URLS="$URLS,\"https://$DOM/photo/data/img_ver_$U.json\""
+          done
+          URLS="$URLS]"
+
+          echo "  purge 대상 URL 수: 26"
+          curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE/purge_cache" \
+            -H "Authorization: Bearer $CF_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data "{\"files\":$URLS}" | python3 -m json.tool | head -10
+
+          echo ""
+          echo "  전체 zone purge (참교육 배너가 오래된 캐시 다 지우게):"
+          curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE/purge_cache" \
+            -H "Authorization: Bearer $CF_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}' | python3 -m json.tool | head -8
+
+      - name: 최종 실측 - CF 통과한 응답 크기
+        run: |
+          DOM="xn--9d0bw2fjtyymch7de9d.info"
+          for U in cent tak abc01 gain; do
+            SZ=$(curl -sS -H "Cache-Control: no-cache" -o /dev/null -w "%{size_download}" "https://$DOM/photo/images/ch/$U/Live_height_kakao.gif?t=$(date +%s)")
+            echo "  $U/Live_height_kakao.gif = ${SZ}B"
+          done
+          echo "  공용:"
+          SZ=$(curl -sS -H "Cache-Control: no-cache" -o /dev/null -w "%{size_download}" "https://$DOM/photo/images/Live_height_kakao.gif?t=$(date +%s)")
+          echo "    공용 Live_height_kakao.gif = ${SZ}B"
+          echo ""
+          echo "  87917B 이면 참교육 배너 · 그 외면 옛 이미지"
