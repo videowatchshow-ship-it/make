@@ -362,17 +362,35 @@ function parseDateValue(s) {
   return null;
 }
 
-function parseDateFromFilename(name) {
+/* 파일 제목(파일명)에 적힌 날짜 — 사용자 지시로 account_date에 사용.
+ * 연도가 없는 표기(예: "(8.15)", "7월23일")는 파일 업로드 연도를 기준으로 보정. */
+function parseDateFromFilename(name, fallbackYear) {
   if (!name) return null;
   const str = String(name);
+  const year = fallbackYear || new Date().getFullYear();
+
   let m = str.match(/(\d{4})[\.\-_](\d{1,2})[\.\-_](\d{1,2})/);
   if (m) return new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3])).getTime();
+
   m = str.match(/(\d{8})/);
   if (m) {
     const ds = m[1];
     const y = parseInt(ds.slice(0,4)), mo = parseInt(ds.slice(4,6)), d = parseInt(ds.slice(6,8));
     if (y >= 2020 && y <= 2030 && mo >= 1 && mo <= 12 && d >= 1 && d <= 31) return new Date(y, mo-1, d).getTime();
   }
+
+  m = str.match(/(\d{1,2})월\s*(\d{1,2})일/);
+  if (m) {
+    const mo = parseInt(m[1]), d = parseInt(m[2]);
+    if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) return new Date(year, mo-1, d).getTime();
+  }
+
+  m = str.match(/[\(（](\d{1,2})[\.\-](\d{1,2})[\)）]/);
+  if (m) {
+    const mo = parseInt(m[1]), d = parseInt(m[2]);
+    if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) return new Date(year, mo-1, d).getTime();
+  }
+
   return null;
 }
 
@@ -746,13 +764,12 @@ function recoverMissingFieldsFromExtra(accounts) {
   return accounts;
 }
 
-/* account_date는 엑셀 셀에 적힌 날짜만 사용한다.
+/* account_date 우선순위: 1) 엑셀 셀에 적힌 날짜  2) 파일 제목(파일명)에 적힌 날짜.
  * 같은 파일이라도 서로 다른 시기에 만들어진 배치가 섞여 하나로 합쳐진 경우가 있어
  * (예: 이 파일 안에 '맛동산'·'미스김' 등 라벨이 다른 여러 배치가 공존),
- * 한 파일 내 다른 행의 날짜나 문서 메타데이터(생성일/수정일)를 전체 행에
- * 일괄 적용하면 실제로는 몇 년 전 데이터에 엉뚱한 최신 날짜가 붙는 문제가 있다.
- * 그래서 전파/문서메타데이터 폴백은 사용하지 않고, 해당 행 자체의 셀 값에서
- * 파싱된 날짜만 account_date로 인정한다. 셀에 날짜가 없으면 null(정렬 최하위)이 맞다. */
+ * 한 파일 내 다른 행의 셀 날짜나 문서 메타데이터(생성일/수정일)를 전체 행에
+ * 일괄 적용하면 실제로는 몇 년 전 데이터에 엉뚱한 최신 날짜가 붙는 문제가 있어
+ * 그 두 가지는 쓰지 않는다. 파일명 날짜는 셀 값이 없는 행에 한해 최후 수단으로 적용한다. */
 
 function parseExcelFile(filePath, originalName) {
   const wb = XLSX.readFile(filePath);
@@ -760,6 +777,7 @@ function parseExcelFile(filePath, originalName) {
   const baseName = originalName || path.basename(filePath);
   let fileMtime = Date.now();
   try { fileMtime = fs.statSync(filePath).mtimeMs; } catch (_) {}
+  const filenameDate = parseDateFromFilename(baseName, new Date(fileMtime).getFullYear());
 
   for (const sheetName of wb.SheetNames) {
     const sheet = wb.Sheets[sheetName];
@@ -778,9 +796,8 @@ function parseExcelFile(filePath, originalName) {
   }
 
   recoverMissingFieldsFromExtra(allAccounts);
-  propagateBatchDateWithinFile(allAccounts);
-  if (docDate) {
-    for (const a of allAccounts) { if (!a.account_date) a.account_date = docDate; }
+  if (filenameDate) {
+    for (const a of allAccounts) { if (!a.account_date) a.account_date = filenameDate; }
   }
 
   return allAccounts;
