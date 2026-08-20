@@ -1,0 +1,66 @@
+name: CAH_1.html 전체 소스 + ver.json 확인
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-cah1-full-fetch.yml'
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+
+            echo "===== [A] CAH_1.html FULL (base64) ====="
+            timeout 10 sudo base64 -w0 "$P1/CAH_1.html" 2>/dev/null
+            echo ""
+            echo "===== [A END] ====="
+
+            echo ""
+            echo "===== [B] ver.json ====="
+            timeout 8 sudo cat "$P1/ver.json" 2>/dev/null
+            echo ""
+
+            echo ""
+            echo "===== [C] 다른 room_ 파일 몇개 더 (json에 nums 필드 채워졌는지) ====="
+            for id in 100 101 105 106; do
+              echo "--- room_${id}.json ---"
+              timeout 8 sudo cat "$P1/data/room_${id}.json" 2>/dev/null
+              echo ""
+            done
+
+            echo ""
+            echo "===== [D] Apache 실제 응답 확인 (curl localhost, CAH_1.html?ch=tak) ====="
+            timeout 8 curl -sk "https://localhost/photo/CAH_1.html?ch=tak" -H "Host: xn--9d0bw2fjtyymch7de9d.info" -o /dev/null -w "http_code=%{http_code} size=%{size_download}\n" 2>&1
+            timeout 8 curl -sk "https://xn--9d0bw2fjtyymch7de9d.info/photo/api_selected_room.php?ch=tak" -w "\nhttp_code=%{http_code}\n" 2>&1
+            timeout 8 curl -sk "https://xn--9d0bw2fjtyymch7de9d.info/photo/data/room_110.json" -w "\nhttp_code=%{http_code}\n" 2>&1
+            timeout 8 curl -sk "https://xn--9d0bw2fjtyymch7de9d.info/photo/bgl.js" -o /dev/null -w "http_code=%{http_code} size=%{size_download}\n" 2>&1
+
+            echo ""
+            echo "===== [E] crontab -l (콜렉터가 실제로 도는지) ====="
+            timeout 8 sudo crontab -l 2>/dev/null | grep -i sinji
+
+            echo ""
+            echo "===== [F] 최근 콜렉터 로그 tail ====="
+            timeout 8 sudo tail -20 /var/www/sites/chamgyo/run/photo/sinji-new-collector.log 2>/dev/null
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE
