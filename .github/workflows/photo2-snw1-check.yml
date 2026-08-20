@@ -1,0 +1,30 @@
+name: photo2 SNW_1.html Next.P 존재 확인
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-snw1-check.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: photo2 SNW_1.html 구조 확인
+        run: |
+          echo "===== photo2/SNW_1.html?ch=cent ====="
+          curl -sS -o /tmp/p2snw1.html -w "http_code=%{http_code}\n" "https://xn--9d0bw2fjtyymch7de9d.info/photo2/SNW_1.html?ch=cent"
+          wc -c /tmp/p2snw1.html
+          echo "--- canvas ---"
+          grep -noE '<(svg|canvas)[^>]*(id|class)="[^"]*"[^>]*>' /tmp/p2snw1.html
+          echo "--- Next 관련 ---"
+          grep -n "Next\.\|cAskP\|cAskB\|chamgyoBanner" /tmp/p2snw1.html
+          echo ""
+          echo "===== photo2/CAH_1.html?ch=cent ====="
+          curl -sS -o /tmp/p2cah1.html -w "http_code=%{http_code}\n" "https://xn--9d0bw2fjtyymch7de9d.info/photo2/CAH_1.html?ch=cent"
+          wc -c /tmp/p2cah1.html
+          echo "--- canvas ---"
+          grep -noE '<(svg|canvas)[^>]*(id|class)="[^"]*"[^>]*>' /tmp/p2cah1.html
+          echo "--- Next 관련 ---"
+          grep -n "Next\.\|cAskP\|cAskB\|chamgyoBanner" /tmp/p2cah1.html
