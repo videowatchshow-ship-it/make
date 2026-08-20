@@ -1,0 +1,57 @@
+name: fc-sinji-fix
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/fc-sinji-fix.yml'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 150s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            TS=$(date +%s)
+
+            echo "=== 1. backup cron.d files ==="
+            timeout 5 sudo cp /etc/cron.d/chamgyo-sinji-new-collector /etc/cron.d/chamgyo-sinji-new-collector.bak.$TS
+            timeout 5 sudo cp /etc/cron.d/chamgyo-sinji-new-discover /etc/cron.d/chamgyo-sinji-new-discover.bak.$TS
+
+            echo "=== 2. create writable run/photo log dir owned by www-data ==="
+            timeout 5 sudo mkdir -p /var/www/sites/chamgyo/run/photo
+            timeout 5 sudo chown www-data:www-data /var/www/sites/chamgyo/run/photo
+            timeout 5 sudo chmod 755 /var/www/sites/chamgyo/run/photo
+
+            echo "=== 3. disable broken/duplicate cron.d entries (they silently no-op: www-data cannot write /var/log so the >> redirect fails and php never runs) ==="
+            timeout 5 sudo mv /etc/cron.d/chamgyo-sinji-new-collector /etc/cron.d/chamgyo-sinji-new-collector.disabled
+            timeout 5 sudo mv /etc/cron.d/chamgyo-sinji-new-discover /etc/cron.d/chamgyo-sinji-new-discover.disabled
+
+            echo "=== 4. backup + edit www-data personal crontab: redirect sinji_new collector/discover output from /dev/null to real writable log files ==="
+            timeout 5 sudo crontab -l -u www-data > /tmp/www-data-crontab.bak.$TS 2>&1
+            timeout 5 sudo bash -lc "cat /tmp/www-data-crontab.bak.$TS"
+            timeout 8 sudo bash -c "crontab -l -u www-data | \
+              sed 's#/usr/bin/php /var/www/sites/chamgyo/public/photo/collector_sinji_new.php >/dev/null 2>&1#/usr/bin/php /var/www/sites/chamgyo/public/photo/collector_sinji_new.php >> /var/www/sites/chamgyo/run/photo/sinji-new-collector.log 2>\&1#; s#/usr/bin/php /var/www/sites/chamgyo/public/photo/discover_sinji_new.php >/dev/null 2>&1#/usr/bin/php /var/www/sites/chamgyo/public/photo/discover_sinji_new.php >> /var/www/sites/chamgyo/run/photo/sinji-new-discover.log 2>\&1#' | crontab -u www-data -"
+
+            echo "=== 5. verify new crontab content ==="
+            timeout 5 sudo crontab -l -u www-data 2>&1
+
+            echo "=== 6. php -l syntax check on the two php scripts (untouched, sanity) ==="
+            timeout 5 sudo php -l /var/www/sites/chamgyo/public/photo/collector_sinji_new.php 2>&1
+            timeout 5 sudo php -l /var/www/sites/chamgyo/public/photo/discover_sinji_new.php 2>&1
+
+            echo "=== 7. current UTC time (before wait) ==="
+            date -u
+            REMOTE
