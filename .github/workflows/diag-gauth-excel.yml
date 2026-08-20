@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Final validation after NFC fix - all 47 real filenames
+      - name: Check for false-positive date matches in the fallback N.M regex
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -23,20 +23,32 @@ jobs:
             const html = fs.readFileSync('/var/www/sites/gauth/public/index.html', 'utf8');
             const start = html.indexOf('function _parseFilenameDate');
             const end = html.indexOf('function _sortByExcelDate');
-            const fnSrc = html.slice(start, end);
-            eval(fnSrc);
+            eval(html.slice(start, end));
 
             const d = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
             const arr = Array.isArray(d) ? d : (d.accounts||[]);
             const uniqueFiles = [...new Set(arr.map(a => a.source_file || '(none)'))];
-            console.log('=== TOTAL UNIQUE FILENAMES:', uniqueFiles.length, '===');
-            let parsed = 0, unparsed = 0;
-            const results = uniqueFiles.map(f => {
+
+            console.log('=== files with a dot-number pattern that COULD false-positive ===');
+            uniqueFiles.forEach(f => {
+              const hasDot = /\d+\.\d+/.test(f);
               const dt = _parseFilenameDate(f);
-              if(dt) parsed++; else unparsed++;
-              return { file: f, parsedDate: dt ? new Date(dt).toISOString().slice(0,10) : null };
+              if (hasDot) {
+                console.log((dt ? new Date(dt).toISOString().slice(0,10) : 'NULL').padEnd(12), JSON.stringify(f));
+              }
             });
-            results.sort((a,b) => (a.parsedDate||'0000') < (b.parsedDate||'0000') ? 1 : -1);
-            console.log('=== PARSED:', parsed, '/ UNPARSED:', unparsed, '(AFTER NFC FIX) ===');
-            results.forEach(r => console.log((r.parsedDate||'NULL').padEnd(12), r.file));
+
+            console.log('');
+            console.log('=== Full sort order preview (top 15 after fix, all accounts) ===');
+            function sortByExcelDate(arr){
+              var withDate = arr.filter(function(a){ return a.account_date })
+              var noDate   = arr.filter(function(a){ return !a.account_date })
+              withDate.sort(function(a, b){ return b.account_date - a.account_date })
+              noDate.forEach(function(a){ if(a._fnDate===undefined) a._fnDate = _parseFilenameDate(a.source_file) })
+              noDate.sort(function(a, b){ return (b._fnDate||0) - (a._fnDate||0) })
+              if(!withDate.length) return noDate
+              return withDate.concat(noDate)
+            }
+            const sorted = sortByExcelDate(arr.slice());
+            sorted.slice(0,15).forEach((a,i) => console.log((i+1)+'.', a.email, '|', a.source_file, '| fnDate:', a._fnDate ? new Date(a._fnDate).toISOString().slice(0,10) : 'none'));
             "
