@@ -1,0 +1,40 @@
+name: chamgyo-photo2-mirror.sh 스크립트 내용 확인 + 덮어쓰기 여부 재검사
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-mirror-script-check.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            echo "===== [1] 미러 스크립트 전체 내용 ====="
+            timeout 8 sudo cat /usr/local/sbin/chamgyo-photo2-mirror.sh 2>&1
+
+            echo ""
+            echo "===== [2] 현재 Live_height_kakao.gif 상태 재확인 (덮어써졌는지) ====="
+            timeout 8 sudo sha256sum /var/www/sites/chamgyo/public/photo/images/Live_height_kakao.gif 2>&1
+            timeout 8 sudo sha256sum /var/www/sites/chamgyo/public/photo/images/ch/cent/Live_height_kakao.gif 2>&1
+            timeout 8 sudo sha256sum /var/www/sites/chamgyo/public/photo/images/ch/tak/Live_height_kakao.gif 2>&1
+            timeout 8 sudo stat /var/www/sites/chamgyo/public/photo/images/ch/cent/Live_height_kakao.gif 2>&1 | grep Modify
+
+            echo ""
+            echo "===== [3] 미러 로그 최근 내용 (있다면) ====="
+            timeout 8 sudo find /var/log -iname "*chamgyo*mirror*" 2>&1
+            REMOTE

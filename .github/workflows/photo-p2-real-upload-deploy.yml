@@ -1,0 +1,115 @@
+name: photo2 어드민 업로드 원본 확인 + 계정별 독립 재배포 (gain 제외)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-p2-real-upload-deploy.yml'
+jobs:
+  redeploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: photo2 원본 확인 + 픽셀 검사 + 계정별 독립 배포
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          envs: CF_TOKEN,CF_ZONE
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            SITE="/var/www/sites/chamgyo/public"
+            SRC="$SITE/photo2/images/Live_height_kakao.gif"
+            P1="$SITE/photo"
+
+            echo "===== [1] photo2 원본 파일 정보 (www-data 소유 = 실제 웹 업로드) ====="
+            sudo ls -la "$SRC"
+            sudo sha256sum "$SRC"
+
+            echo ""
+            echo "===== [2] 파일 타입/크기(identify 대체: file, python PIL) ====="
+            sudo file "$SRC"
+            python3 - << "PYEOF"
+            try:
+                from PIL import Image
+                im = Image.open("/var/www/sites/chamgyo/public/photo2/images/Live_height_kakao.gif")
+                print("size:", im.size, "mode:", im.mode, "format:", im.format)
+                im2 = im.convert("RGB")
+                w,h = im2.size
+                # 중앙 및 여러 지점 픽셀 샘플
+                pts = [(w//2,h//2),(w//4,h//2),(3*w//4,h//2),(w//2,h//4),(w//2,3*h//4)]
+                for p in pts:
+                    print(p, im2.getpixel(p))
+            except Exception as e:
+                print("PIL error:", e)
+            PYEOF
+
+            echo ""
+            echo "===== [3] write_upload.php (photo2) 업로드 대상 경로 확인 ====="
+            sudo sed -n '1,70p' "$SITE/photo2/write_upload.php" 2>&1
+
+            echo ""
+            echo "===== [4] photo2 -> photo 미러 서비스/크론 확인 ====="
+            sudo find /etc/cron.d /etc/systemd/system -iname "*chamgyo*" -o -iname "*mirror*" 2>/dev/null | grep -i chamgyo
+            sudo crontab -l 2>/dev/null | grep -i chamgyo
+            sudo systemctl list-timers 2>/dev/null | grep -i chamgyo
+
+            echo ""
+            echo "===== [5] 계정 목록 확인 (gain 제외) ====="
+            ACCOUNTS=$(sudo find "$P1/images/ch" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' 2>/dev/null | grep -v '^gain$')
+            echo "$ACCOUNTS"
+
+            echo ""
+            echo "===== [6] 공용 + 계정별(gain 제외) 독립 배포 ====="
+            sudo cp -f "$SRC" "$P1/images/Live_height_kakao.gif"
+            sudo chown www-data:www-data "$P1/images/Live_height_kakao.gif"
+            sudo chmod 644 "$P1/images/Live_height_kakao.gif"
+
+            for acc in $ACCOUNTS; do
+              sudo cp -f "$SRC" "$P1/images/ch/$acc/Live_height_kakao.gif"
+              sudo chown www-data:www-data "$P1/images/ch/$acc/Live_height_kakao.gif"
+              sudo chmod 644 "$P1/images/ch/$acc/Live_height_kakao.gif"
+            done
+
+            echo ""
+            echo "===== [7] SHA256 전수 대조 ====="
+            sudo sha256sum "$SRC"
+            sudo sha256sum "$P1/images/Live_height_kakao.gif"
+            for acc in $ACCOUNTS; do
+              sudo sha256sum "$P1/images/ch/$acc/Live_height_kakao.gif"
+            done
+            echo "gain 은 제외됨 (아래 존재 확인만, 변경 안 함):"
+            sudo sha256sum "$P1/images/ch/gain/Live_height_kakao.gif" 2>&1
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE
+
+      - name: CF 전체 purge + 엣지 실측 검증 (13계정)
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE/purge_cache" \
+            -H "Authorization: Bearer $CF_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}' | python3 -m json.tool | head -5
+          sleep 10
+
+          DOM="xn--9d0bw2fjtyymch7de9d.info"
+          for acc in otuki cent jay tak abc01 abc02 abc03 abc04 abc05 abc06 abc07 aass0707; do
+            echo "----- $acc -----"
+            curl -sS -o /dev/null -D - "https://$DOM/photo/images/ch/$acc/Live_height_kakao.gif?_=$(date +%s)" \
+              | grep -Ei "^HTTP|cf-cache-status|content-length"
+          done

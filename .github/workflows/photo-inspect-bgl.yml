@@ -1,0 +1,62 @@
+name: bgl.js 소스에서 fetch/room 결정 로직 확인
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-inspect-bgl.yml'
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+
+            echo "===== [1] bgl.js 파일 존재 및 크기 ====="
+            sudo ls -la "$P1"/bgl.js* 2>/dev/null
+
+            echo ""
+            echo "===== [2] bgl.js 안에 fetch/XHR/URL/api/room 참조 ====="
+            sudo grep -oE "fetch\([^)]{0,80}|XMLHttpRequest|api_[a-z_]+\.php|selected_room|sel_|room_[0-9]+\.json|api_all_rooms|api_selected|window\.__|__ch|location\.search|URLSearchParams" "$P1/bgl.js" 2>/dev/null | sort -u | head -40
+
+            echo ""
+            echo "===== [3] BGL.start 함수 소스 ====="
+            sudo grep -n "BGL.start\|start:function\|start=function\|BGL\.start\s*=" "$P1/bgl.js" 2>/dev/null | head -10
+            echo "--- start 함수 컨텍스트 ---"
+            sudo awk "/start[: =]*function/,/^}/" "$P1/bgl.js" 2>/dev/null | head -80
+
+            echo ""
+            echo "===== [4] bgl.js 상단 30줄 (설정/상수) ====="
+            sudo head -30 "$P1/bgl.js"
+
+            echo ""
+            echo "===== [5] bgl.js 안에 있는 모든 문자열 URL 후보 ====="
+            sudo grep -oE "['\"\`][^'\"\`]{5,100}(\.php|\.json|/api_|/photo/)[^'\"\`]*['\"\`]" "$P1/bgl.js" 2>/dev/null | sort -u | head -20
+
+            echo ""
+            echo "===== [6] api_all_rooms.php 존재 및 소스 앞부분 ====="
+            [ -f "$P1/api_all_rooms.php" ] && sudo head -30 "$P1/api_all_rooms.php" || echo "  없음"
+
+            echo ""
+            echo "===== [7] ?ch= 파라미터 파싱 로직 (window.location) ====="
+            sudo grep -nE "location\.search|URLSearchParams|__ch|ch\s*=" "$P1/bgl.js" 2>/dev/null | head -10
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE

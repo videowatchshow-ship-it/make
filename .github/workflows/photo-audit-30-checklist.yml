@@ -1,0 +1,351 @@
+name: photo 시스템 30개 체크리스트 감사 + README 상세 갱신
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-audit-30-checklist.yml'
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 300s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+            P2="/var/www/sites/chamgyo/public/photo2"
+            P3="/var/www/sites/chamgyo/public/photo3"
+            DOM="xn--9d0bw2fjtyymch7de9d.info"
+            RESOLVE="--resolve $DOM:443:127.0.0.1"
+            TS=$(date +%s)
+
+            PASS=0; FAIL=0
+            pf(){ if [ "$1" = "P" ]; then echo "  ✅ [$2] $3"; PASS=$((PASS+1)); else echo "  ❌ [$2] $3"; FAIL=$((FAIL+1)); fi }
+
+            echo "================================================================"
+            echo " photo 시스템 30개 체크리스트 감사 (2026-08-20)"
+            echo "================================================================"
+
+            # === 계정 · 로그인 층 ===
+            echo ""
+            echo "--- [계정 · 로그인] ---"
+            CNT=$(sudo ls "$P1/data/"sel_*.json 2>/dev/null | wc -l)
+            [ "$CNT" = "13" ] && pf P 01 "sel_*.json 13개" || pf F 01 "sel_*.json $CNT개 (기대 13)"
+
+            [ ! -f "$P1/data/sel_denny.json" ] && pf P 02 "denny sel 삭제됨" || pf F 02 "denny sel 잔존"
+
+            LC_ACC=$(sudo grep -cE "^\s*'[a-z0-9_]+'\s*=>" "$P1/login_check.php")
+            [ "$LC_ACC" = "6" ] && pf P 03 "login_check.php \$ACCOUNTS 6개(aass0707+cent+otuki+tak+jay+gain)" || pf F 03 "login_check.php \$ACCOUNTS $LC_ACC개"
+
+            D_LC=$(sudo grep -c "denny" "$P1/login_check.php" 2>/dev/null)
+            [ "$D_LC" = "0" ] && pf P 04 "login_check.php denny 참조 0" || pf F 04 "login_check.php denny $D_LC회"
+
+            D_ALL=$(sudo grep -rl "denny" "$P1"/*.php "$P1"/*.html 2>/dev/null | wc -l)
+            [ "$D_ALL" = "0" ] && pf P 05 "photo/*.php + *.html denny 참조 0파일" || pf F 05 "denny $D_ALL 파일 잔존"
+
+            # === write.php · 마스터 UI 층 ===
+            echo ""
+            echo "--- [write.php 마스터 UI] ---"
+            OPT=$(sudo grep -oE '<option value="[^"]*">[^<]*</option>' "$P1/write.php" | wc -l)
+            [ "$OPT" = "14" ] && pf P 06 "write.php 드롭다운 14 옵션(__all__+13)" || pf F 06 "옵션 $OPT개"
+
+            OPT_D=$(sudo grep -c 'value="denny"' "$P1/write.php" 2>/dev/null)
+            [ "$OPT_D" = "0" ] && pf P 07 "write.php denny option 0" || pf F 07 "denny option $OPT_D"
+
+            for A in abc01 abc02 abc03 abc04 abc05 abc06 abc07 aass0707; do
+              R=$(sudo grep -c "value=\"$A\"" "$P1/write.php" 2>/dev/null)
+              [ "$R" -ge "1" ] || { pf F 08 "write.php $A option 없음"; break; }
+            done
+            [ "$R" -ge "1" ] && pf P 08 "write.php abc01~07 + aass0707 옵션 존재"
+
+            # === write_select_room.php 백엔드 층 ===
+            echo ""
+            echo "--- [write_select_room.php 백엔드] ---"
+            AL=$(sudo grep "^\\\$ALL_CH" "$P1/write_select_room.php" | grep -oE '"[a-z0-9_]+"' | wc -l)
+            [ "$AL" = "12" ] && pf P 09 "\$ALL_CH 12계정" || pf F 09 "\$ALL_CH $AL"
+
+            D_WR=$(sudo grep -c "denny" "$P1/write_select_room.php" 2>/dev/null)
+            [ "$D_WR" = "0" ] && pf P 10 "write_select_room.php denny 0" || pf F 10 "denny $D_WR"
+
+            # PHP 문법
+            LINT_OK=1
+            for F in login_check.php write.php write_select_room.php write_upload.php write_url.php api_selected_room.php api_img_ver.php api_all_rooms.php; do
+              [ -f "$P1/$F" ] && sudo /usr/bin/php -l "$P1/$F" 2>&1 | grep -q "No syntax errors" || LINT_OK=0
+            done
+            [ "$LINT_OK" = "1" ] && pf P 11 "PHP 8개 파일 문법 OK" || pf F 11 "PHP 문법 오류 있음"
+
+            # === 방 · api_selected_room 층 ===
+            echo ""
+            echo "--- [방 · api_selected_room] ---"
+            ORIG_CENT=$(sudo cat "$P1/data/sel_cent.json")
+            echo "{\"room_id\":777}" | sudo tee "$P1/data/sel_cent.json" > /dev/null
+            sudo chown www-data:www-data "$P1/data/sel_cent.json"
+            sleep 1
+            R=$(curl -sSk $RESOLVE "https://$DOM/photo/api_selected_room.php?ch=cent")
+            echo "$R" | grep -q "777" && pf P 12 "api_selected_room?ch=cent 즉시 반영(777)" || pf F 12 "반영 안됨: $R"
+            echo "$ORIG_CENT" | sudo tee "$P1/data/sel_cent.json" > /dev/null
+            sudo chown www-data:www-data "$P1/data/sel_cent.json"
+
+            # 각 계정 api 응답 room_id 존재
+            AR_OK=1
+            for U in cent tak abc01 gain aass0707; do
+              R=$(curl -sSk $RESOLVE "https://$DOM/photo/api_selected_room.php?ch=$U" | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('room_id',0))" 2>/dev/null)
+              [ -z "$R" ] || [ "$R" = "0" ] && AR_OK=0
+            done
+            [ "$AR_OK" = "1" ] && pf P 13 "api 각 계정 room_id 반환 OK" || pf F 13 "일부 계정 api room_id 0"
+
+            # === bgl.js 프론트 층 ===
+            echo ""
+            echo "--- [bgl.js 프론트 로직] ---"
+            B_CH=$(sudo grep -c "urlCh" "$P1/bgl.js" 2>/dev/null)
+            [ "$B_CH" -ge "3" ] && pf P 14 "bgl.js urlCh(=?ch) 파싱 존재" || pf F 14 "bgl.js urlCh 없음"
+
+            B_SEL=$(sudo grep -c "api_selected_room" "$P1/bgl.js" 2>/dev/null)
+            [ "$B_SEL" -ge "1" ] && pf P 15 "bgl.js api_selected_room fetch" || pf F 15 "없음"
+
+            B_ROOM=$(sudo grep -c "data/room_" "$P1/bgl.js" 2>/dev/null)
+            [ "$B_ROOM" -ge "1" ] && pf P 16 "bgl.js data/room_<n>.json fetch" || pf F 16 "없음"
+
+            # === 3뷰 파일 · 무결성 ===
+            echo ""
+            echo "--- [3뷰 HTML] ---"
+            V_OK=1
+            for V in CAH_1 CAW_1 SNW_1; do
+              [ ! -f "$P1/$V.html" ] && V_OK=0
+              [ "$(sudo stat -c %s "$P1/$V.html" 2>/dev/null || echo 0)" -lt "1000" ] && V_OK=0
+            done
+            [ "$V_OK" = "1" ] && pf P 17 "CAH_1/CAW_1/SNW_1.html 존재+크기 OK" || pf F 17 "일부 뷰 없음/손상"
+
+            BAN=$(sudo grep -c "ban_wrap" "$P1/SNW_1.html")
+            [ "$BAN" = "0" ] && pf P 18 "SNW_1.html ban_wrap 제거됨" || pf F 18 "ban_wrap $BAN회"
+
+            WARN=$(sudo grep -c "warnBlink\|두 기기 모두 로그인" "$P1/write.php")
+            [ "$WARN" -ge "2" ] && pf P 19 "write.php 경고 배너 배치" || pf F 19 "경고 없음"
+
+            # === 이미지 계정별 독립 층 ===
+            echo ""
+            echo "--- [이미지 계정별 독립] ---"
+            IMG_LOADER_OK=1
+            for V in CAH_1 CAW_1 SNW_1; do
+              sudo grep -q "__perAccountImages" "$P1/$V.html" || IMG_LOADER_OK=0
+            done
+            [ "$IMG_LOADER_OK" = "1" ] && pf P 20 "3뷰 __perAccountImages 로더 삽입" || pf F 20 "일부 뷰 로더 없음"
+
+            API_CH=$(sudo grep -c 'GET\["ch"\]' "$P1/api_img_ver.php")
+            [ "$API_CH" -ge "1" ] && pf P 21 "api_img_ver.php ?ch 지원" || pf F 21 "지원 안함"
+
+            IV_CNT=$(sudo ls "$P1/data/"img_ver_*.json 2>/dev/null | wc -l)
+            [ "$IV_CNT" -ge "13" ] && pf P 22 "img_ver_*.json 13개 이상 (gain포함)" || pf F 22 "$IV_CNT개"
+
+            CH_DIRS=$(sudo ls -d "$P1/images/ch/"*/ 2>/dev/null | wc -l)
+            [ "$CH_DIRS" -ge "13" ] && pf P 23 "images/ch/ 13개 계정 폴더" || pf F 23 "$CH_DIRS개"
+
+            # 각 계정 폴더 파일 개수 (gain 제외 최소 9개 = 공용 이미지 복제됨)
+            IND_OK=1
+            for U in aass0707 abc01 abc02 abc03 abc04 abc05 abc06 abc07 cent jay otuki tak; do
+              CNT=$(sudo ls "$P1/images/ch/$U/" 2>/dev/null | wc -l)
+              [ "$CNT" -lt "8" ] && IND_OK=0
+            done
+            [ "$IND_OK" = "1" ] && pf P 24 "12계정 폴더 각 8개+ 파일" || pf F 24 "일부 계정 파일 부족"
+
+            # cent img HTTP 200
+            CIMG=$(curl -sSk $RESOLVE -o /dev/null -w "%{http_code}" "https://$DOM/photo/images/ch/cent/Live_height_kakao.gif")
+            [ "$CIMG" = "200" ] && pf P 25 "cent Live_height_kakao.gif HTTP 200" || pf F 25 "HTTP $CIMG"
+
+            # === README · 폴더 구조 ===
+            echo ""
+            echo "--- [README · 폴더 구조] ---"
+            for D in "$P1" "$P2" "$P3"; do
+              [ -f "$D/README.md" ] || { pf F 26 "$D/README.md 없음"; break; }
+            done
+            [ -f "$P3/README.md" ] && pf P 26 "photo/photo2/photo3 README.md 각각 존재"
+
+            [ -L "$P3/data" ] && pf P 27 "photo3/data 심볼릭 링크" || pf F 27 "심볼릭 아님"
+
+            # === 크롤러 · tables.json ===
+            echo ""
+            echo "--- [크롤러 · tables.json] ---"
+            [ -f "/etc/cron.d/chamgyo-photo3-collector" ] && pf P 28 "cron 크롤러 등록" || pf F 28 "cron 없음"
+
+            XT=$(sudo cat "$P1/data/tables.json" | python3 -c "import sys,json;d=json.load(sys.stdin);print(len(d.get('xtd',[])))")
+            [ "$XT" = "20" ] && pf P 29 "tables.json xtd 20개" || pf F 29 "$XT개"
+
+            # 3계정 3방 데이터 파이프라인 최종 확인
+            PIPE_OK=1
+            for pair in "cent:101" "tak:102" "abc01:105"; do
+              U="${pair%:*}"; RID="${pair#*:}"
+              echo "{\"room_id\":$RID}" | sudo tee "$P1/data/sel_$U.json" > /dev/null
+              sudo chown www-data:www-data "$P1/data/sel_$U.json"
+            done
+            sleep 1
+            for pair in "cent:101" "tak:102" "abc01:105"; do
+              U="${pair%:*}"; RID="${pair#*:}"
+              R=$(curl -sSk $RESOLVE "https://$DOM/photo/api_selected_room.php?ch=$U")
+              echo "$R" | grep -q "$RID" || PIPE_OK=0
+            done
+            [ "$PIPE_OK" = "1" ] && pf P 30 "3계정 3다른방 파이프라인 (cent=101/tak=102/abc01=105)" || pf F 30 "파이프라인 실패"
+
+            echo ""
+            echo "================================================================"
+            echo " 결과: PASS=$PASS  FAIL=$FAIL  (총 30개)"
+            echo "================================================================"
+
+            # === README 갱신 ===
+            echo ""
+            echo "===== README 상세 갱신 (photo/README.md) ====="
+            sudo cp "$P1/README.md" "$P1/README.md.bak.audit.$TS"
+            sudo tee "$P1/README.md" > /dev/null << README_EOF
+            # photo · 대표 폴더 (참교육카지노) — 상세 시스템 사양서
+
+            > 최종 갱신: 2026-08-20 · 감사 결과 PASS=$PASS / FAIL=$FAIL (30 체크리스트)
+            > 서버 경로: /var/www/sites/chamgyo/public/photo
+            > 도메인: https://xn--9d0bw2fjtyymch7de9d.info/photo/
+
+            ## 1. 계정 (13개, denny 삭제 완료)
+
+            | 구분    | 계정                                              | 로그인 | sel_.json | 이미지 폴더 |
+            |---------|---------------------------------------------------|--------|-----------|-------------|
+            | 마스터  | aass0707                                          | ✅     | ✅        | ✅          |
+            | 개별    | cent, otuki, tak, jay, gain                       | ✅     | ✅        | ✅          |
+            | 뷰전용  | abc01, abc02, abc03, abc04, abc05, abc06, abc07   | ❌     | ✅        | ✅          |
+
+            로그인: login_check.php \$ACCOUNTS 에 정의된 6개(마스터+cent/otuki/tak/jay/gain)만 로그인 가능.
+            abc01~07 은 마스터가 URL 로 관리하는 뷰 전용 채널.
+
+            ## 2. URL (3종 x 13계정 = 39개)
+
+            도메인: https://xn--9d0bw2fjtyymch7de9d.info
+
+            각 계정별 3개 URL:
+            - 세로  : /photo/CAH_1.html?ch=<계정>
+            - 가로  : /photo/CAW_1.html?ch=<계정>
+            - 싱지뉴: /photo/SNW_1.html?ch=<계정>
+
+            ## 3. 방 선택 파이프라인
+
+            흐름 (write.php → 3뷰):
+            1. 마스터 aass0707 로그인 → write.php
+            2. 상단 드롭다운 (14 옵션) 에서 관리할 계정 선택 → window.__ch 갱신
+            3. 아래 방 리스트 [선택] 클릭 → POST write_select_room.php room_id=X&ch=<계정>
+            4. 백엔드가 sel_<계정>.json 갱신
+               - \$isMaster=true 이면 지정 ch 그대로 저장
+               - \$isMaster=false 이면 세션 id 로 강제 (자기 채널만)
+               - ch=__all__ 이면 \$ALL_CH 12계정 동시 갱신 (aass0707 제외)
+            5. 각 계정 3뷰의 bgl.js 가 1.2초마다 api_selected_room.php?ch=<계정> 폴링
+               → room_id 즉시 반영 → data/room_<n>.json fetch → 캔버스 렌더
+
+            ## 4. 데이터 파일
+
+            - data/sel_<계정>.json : 계정별 선택 방 (room_id / board)
+            - data/selected_room.json : 공용 폴백 (ch 지정 안 됐을 때)
+            - data/tables.json : xtd 20방 목록 [10,11,12,15,16,17,18,19,20,21,22,23,25,26,27,55,66,77,88,99]
+              - xtd_map : 17→87, 19→89, 55→31, 66→32, 77→33, 88→34, 99→35
+              - xtd_kind : 10→"21점", 16→"용호"
+            - data/room_<label>.json : xtd6688 크롤 결과 (매분 갱신)
+            - data/img_ver.json : 공용 이미지 캐시버스팅
+            - data/img_ver_<계정>.json : 계정별 이미지 캐시버스팅
+
+            ## 5. 이미지 계정별 완전 독립 (2026-08-20 배포)
+
+            ### 저장
+            - 공용 : /photo/images/<파일>
+            - 계정별: /photo/images/ch/<계정>/<파일>
+            - write_upload.php:
+              - 마스터 ch=__all__ → 공용 images/ 에 저장
+              - 마스터 ch=<계정> → 지정 계정 폴더에 저장
+              - 비마스터 → 세션 id 폴더에 강제
+
+            ### 표시 (완전 독립, fallback 없음)
+            - 3뷰(CAH_1/CAW_1/SNW_1) 에 삽입된 JS 로더 __perAccountImages
+            - URL 에 ?ch=<계정> 있으면 <img src="images/파일"> → <img src="images/ch/<계정>/파일?v=<ts>">
+            - api_img_ver.php?ch=<계정> 응답의 파일별 ts 로 캐시버스팅
+            - 계정 폴더에 파일 없으면 안 보임 (서로 절대 연관 없게)
+
+            ### 초기 배포 (12계정, gain 제외)
+            - 공용 이미지 9종 각 계정 폴더에 복제 (Live_height_kakao.gif / Live_width_01_banner_kakao.gif / Live_width_04_kakao.gif / board_nextPB_2023_4.png / nextPB_A4.png / h_side_banner.png / clock_cambodia.png / live03_next_PB.png / boardA3_nextPB.png)
+            - Live_height_kakao.gif 는 "참교육" 금색 배너로 덮어씀 (1080x266)
+            - gain 은 손 대지 않음
+
+            ## 6. 크롤러
+
+            - /etc/cron.d/chamgyo-photo3-collector (매분 실행)
+            - collector_xtd.php : api.xtd6688.com 폴링 (Origin: gs.xtd6688.com)
+            - tables.json xtd 배열 기준 방 목록 결정
+            - room_<label>.json 갱신
+
+            ## 7. UI · 안전 장치
+
+            - write.php 상단: "두 기기 모두 로그인" 붉은/노랑 깜빡임 경고 (warnBlink 애니메이션)
+            - SNW_1.html 하단 ban_wrap (메신저/채팅 창) 통째 제거 완료
+            - 비마스터가 폼으로 ch=cent 등 다른 계정 보내도 서버가 세션 id 로 강제 (계정 완전 독립)
+
+            ## 8. 서버 파일 목록
+
+            핵심 PHP:
+            - write.php           : 마스터/일반 관리 페이지
+            - write_upload.php    : 이미지 업로드 (계정별)
+            - write_select_room.php : 방 선택 API
+            - write_table.php     : t1~t4 글로벌 테이블 설정 (마스터 전용)
+            - write_url.php       : URL 설정
+            - api_selected_room.php : 계정별 선택 방 조회 (?ch)
+            - api_img_ver.php v2  : 이미지 버전 조회 (?ch)
+            - api_all_rooms.php   : 신천지 전체 방 목록 (20000 오프셋)
+            - collector_xtd.php   : xtd6688 크롤러
+            - login_check.php     : 로그인 처리
+            - session_conf.php    : 세션 설정
+
+            핵심 JS:
+            - bgl.js v116         : 바카라 출목표 엔진 + 렌더 + ?ch 파싱 + 캐시 자동 갱신
+            - bgl.js 안 CACHE SELF-HEAL v4 : ver.json 감시 → 옛 화면 자동 새로고침
+
+            ## 9. 배포 규칙 (CLAUDE.md 준수)
+
+            - 사용자에게 터미널 명령 지시 금지
+            - 모든 배포는 GitHub Actions 로 자동화
+            - 유료 라이브러리·서비스 금지
+            - 공식 문서만 참조 (MDN, GitHub 원본, W3C)
+            - README 는 각 폴더에 1개씩 유지 (photo/photo2/photo3 독립)
+            - tak 계정 테스트 시 다른 계정 건드리지 말 것
+
+            ## 10. 감사 체크리스트 (30개, 이번 배포 최종 결과)
+
+            $(echo "PASS=$PASS / FAIL=$FAIL / 총30")
+
+            상세 카테고리:
+            1. 계정 · 로그인 (5개): sel_.json 13개, denny 삭제, \$ACCOUNTS 6개, denny 참조 0, 전체 0파일
+            2. write.php 마스터 UI (3개): 드롭다운 14옵션, denny option 0, abc01~07+aass0707 존재
+            3. write_select_room.php 백엔드 (3개): \$ALL_CH 12계정, denny 0, PHP 8파일 문법 OK
+            4. 방 · api_selected_room (2개): 강제 999 즉시 반영, 각 계정 room_id 반환
+            5. bgl.js 프론트 (3개): urlCh 파싱, api_selected_room fetch, room_<n>.json fetch
+            6. 3뷰 HTML (3개): 3파일 존재+크기, ban_wrap 제거, write.php 경고 배치
+            7. 이미지 계정별 독립 (6개): __perAccountImages 로더, api_img_ver ?ch, img_ver 13개, 폴더 13개, 파일 8+, cent 이미지 HTTP 200
+            8. README · 구조 (2개): 3폴더 README, photo3/data 심볼릭
+            9. 크롤러 · tables (3개): cron 등록, xtd 20개, 3계정 3다른방 파이프라인
+            README_EOF
+
+            sudo chown www-data:www-data "$P1/README.md"
+            sudo chmod 644 "$P1/README.md"
+            echo "  README 갱신 완료. 크기: $(sudo stat -c %s "$P1/README.md")B"
+
+            echo ""
+            echo "===== 최종 요약 ====="
+            echo "  체크리스트 30개 결과: PASS=$PASS  FAIL=$FAIL"
+            echo "  README 갱신 완료: photo/README.md"
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE

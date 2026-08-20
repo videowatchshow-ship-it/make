@@ -1,0 +1,138 @@
+name: README 주장 vs 서버 실제 상태 대조 검증
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-verify-readme.yml'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+            P2="/var/www/sites/chamgyo/public/photo2"
+            P3="/var/www/sites/chamgyo/public/photo3"
+
+            pass() { echo "  ✅ PASS: $1"; }
+            fail() { echo "  ❌ FAIL: $1"; }
+
+            echo "===== [주장1] 계정 13개, denny 삭제 완료 ====="
+            CNT=$(sudo ls "$P1/data/"sel_*.json 2>/dev/null | wc -l)
+            echo "  photo/data sel_*.json 개수: $CNT"
+            sudo ls "$P1/data/"sel_*.json 2>/dev/null | xargs -n1 basename | sed "s/^sel_//;s/.json$//"
+            [ "$CNT" = "13" ] && pass "계정 13개" || fail "계정 $CNT개 (기대 13)"
+            [ ! -f "$P1/data/sel_denny.json" ] && pass "denny 삭제됨" || fail "denny 아직 존재"
+
+            echo ""
+            echo "===== [주장2] tables.json xtd 20방 ====="
+            sudo cat "$P1/data/tables.json" | python3 -c "
+            import sys, json
+            d = json.load(sys.stdin)
+            xtd = d.get(\"xtd\", [])
+            print(f\"  xtd 배열: {xtd}\")
+            print(f\"  개수: {len(xtd)} (기대: 20)\")
+            print(\"  ✅ PASS xtd 20개\" if len(xtd)==20 else f\"  ❌ FAIL xtd {len(xtd)}개\")
+            xm = d.get(\"xtd_map\", {})
+            expected = {\"17\":87,\"19\":89,\"55\":31,\"66\":32,\"77\":33,\"88\":34,\"99\":35}
+            ok = all(xm.get(k)==v for k,v in expected.items())
+            print(\"  ✅ PASS xtd_map 매핑\" if ok else f\"  ❌ FAIL xtd_map={xm}\")
+            "
+
+            echo ""
+            echo "===== [주장3] 이미지 계정별 구조 images/ch/<계정>/ ====="
+            if [ -d "$P1/images/ch" ]; then
+              pass "images/ch/ 디렉토리 존재"
+              sudo ls -d "$P1/images/ch/"*/ 2>/dev/null | xargs -n1 basename
+            else
+              fail "images/ch/ 없음"
+            fi
+            echo "  write_upload.php 에서 images/ch 참조:"
+            sudo grep -n "images/ch\|/ch/" "$P1/write_upload.php" 2>/dev/null | head -5
+
+            echo ""
+            echo "===== [주장4] write.php 상단 경고 배치 완료 ====="
+            if sudo grep -q "warn-blink-user-guide\|두 기기 모두 로그인\|warnBlink" "$P1/write.php"; then
+              pass "경고 배치 확인"
+              sudo grep -n "두 기기 모두 로그인\|warnBlink" "$P1/write.php" | head -3
+            else
+              fail "경고 문구/CSS 없음"
+            fi
+
+            echo ""
+            echo "===== [주장5] SNW_1.html ban_wrap 통째 제거 완료 ====="
+            if sudo grep -q "ban_wrap" "$P1/SNW_1.html"; then
+              fail "ban_wrap 여전히 존재"
+              sudo grep -n "ban_wrap" "$P1/SNW_1.html" | head -3
+            else
+              pass "ban_wrap 제거됨"
+            fi
+
+            echo ""
+            echo "===== [주장6] photo3/data → photo2/data 심볼릭 ====="
+            if [ -L "$P3/data" ]; then
+              TG=$(readlink -f "$P3/data")
+              echo "  photo3/data → $TG"
+              [ "$TG" = "$P2/data" ] && pass "심볼릭 방향 일치" || fail "심볼릭 다른 곳 가리킴"
+            else
+              fail "photo3/data 심볼릭 아님"
+            fi
+
+            echo ""
+            echo "===== [주장7] 각 폴더 README 1개씩 ====="
+            for D in "$P1" "$P2" "$P3"; do
+              CNT=$(sudo ls "$D"/README.md 2>/dev/null | wc -l)
+              NAME=$(basename "$D")
+              [ "$CNT" = "1" ] && pass "$NAME/README.md 1개" || fail "$NAME/README.md $CNT개"
+            done
+
+            echo ""
+            echo "===== [주장8] URL 3종 실제 파일 존재 ====="
+            for F in CAH_1.html CAW_1.html SNW_1.html; do
+              [ -f "$P1/$F" ] && pass "$F 존재 ($(sudo stat -c %s "$P1/$F")B)" || fail "$F 없음"
+            done
+
+            echo ""
+            echo "===== [주장9] 계정별 sel_*.json 실제 room_id 매핑 확인 ====="
+            for U in aass0707 abc01 abc02 abc03 abc04 abc05 abc06 abc07 cent gain jay otuki tak; do
+              F="$P1/data/sel_$U.json"
+              if [ -f "$F" ]; then
+                CONTENT=$(sudo cat "$F")
+                printf "  %-10s | %s\n" "$U" "$CONTENT"
+              else
+                printf "  %-10s | ❌ MISSING\n" "$U"
+              fi
+            done
+
+            echo ""
+            echo "===== [주장10] hot_patches.json 존재 (photo2) ====="
+            [ -f "$P2/hot_patches.json" ] && pass "hot_patches.json 존재 ($(sudo stat -c %s "$P2/hot_patches.json")B)" || fail "hot_patches.json 없음"
+
+            echo ""
+            echo "===== [주장11] cron 크롤러 등록 ====="
+            if [ -f "/etc/cron.d/chamgyo-photo3-collector" ]; then
+              pass "cron 등록됨"
+              sudo cat /etc/cron.d/chamgyo-photo3-collector
+            else
+              fail "cron 미등록"
+            fi
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE

@@ -1,0 +1,77 @@
+name: SNW 하단 창 (ban_wrap) 전체 삭제
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-remove-chat.yml'
+
+jobs:
+  nuke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 하단 ban_wrap 창 통째로 삭제 + ㅋㅌ/카톡/가능 등 모든 한글 문구 grep
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 300s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set -uo pipefail
+            P1="/var/www/sites/chamgyo/public/photo"
+            TS=$(date +%s)
+
+            echo "===== [1] SNW_1.html 하단 한글 문구 grep - ㅋㅌ/카톡/가능/텔레/문의/공지 ====="
+            sudo grep -n -E "ㅋㅌ|카톡|카카오|텔레|문의|공지|입장|가입|가능|안내|참여|배려|처음|메신저|SKY|채팅|@|친구|초대|배팅|입금|출금" "$P1/SNW_1.html" 2>/dev/null | head -50
+
+            echo ""
+            echo "===== [2] hot_patches.json / hot-patch.js (핫패치가 뭘 주입하는지) ====="
+            for HP in "$P1/hot_patches.json" "$P1/hot-patch.js"; do
+              [ -f "$HP" ] && echo "--- $HP ---" && sudo cat "$HP" | head -50
+            done
+
+            echo ""
+            echo "===== [3] bundle.js 안에 ㅋㅌ/카톡/가능 등 검색 ====="
+            sudo grep -oE "ㅋㅌ|카톡|가능|메신저|카카오|공지|안내|처음|배려|하시는" "$P1/modules/dist/bundle.js" 2>/dev/null | sort -u | head -30
+
+            echo ""
+            echo "===== [4] SNW_1.html - ban_wrap 블록 전체 (line 55~90) 확인 ====="
+            sudo sed -n "55,90p" "$P1/SNW_1.html"
+
+            echo ""
+            echo "===== [5] 백업 + ban_wrap div 통째로 삭제 (4개 파일) ====="
+            for f in SNW_1.html SNW_2.html NEWSJ.html NUSJ0814.html; do
+              [ -f "$P1/$f" ] || continue
+              sudo cp "$P1/$f" "$P1/$f.bak.nuke.$TS"
+              # Python으로 <div class="ban_wrap">…</div> 태그 블록 전체 제거
+              sudo TARGET="$P1/$f" python3 -c "
+            import re, os
+            p = os.environ[\"TARGET\"]
+            s = open(p).read()
+            # ban_wrap 블록 전체 매치 (여러 라인)
+            new = re.sub(r\"<div class=\\\"ban_wrap\\\".*?</div>\\s*</div>\", \"</div>\", s, flags=re.DOTALL)
+            # 더 안전: 라인 단위로 ban_wrap 시작부터 매칭되는 </div> 마감까지
+            open(p, \"w\").write(new)
+            print(f\"before={len(s)}B after={len(new)}B diff={len(s)-len(new)}B\")
+            "
+              echo "$f 이후 grep:"
+              sudo grep -n "ban_wrap\|brand_logo\|메신저\|처음\|배려" "$P1/$f" 2>/dev/null | head -10 || echo "  (완전 제거)"
+              sudo chown www-data:www-data "$P1/$f"
+            done
+
+            echo ""
+            echo "===== [6] AFTER 확인 - SNW_1.html 라인 55~90 ====="
+            sudo sed -n "55,90p" "$P1/SNW_1.html"
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE

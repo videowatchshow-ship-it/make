@@ -1,0 +1,206 @@
+name: Diagnose photo2 (HTTP-only, no SSH)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-http-diagnose.yml'
+
+jobs:
+  http-fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch public files
+        run: |
+          set +e
+          mkdir -p out
+          BASE="https://xn--9d0bw2fjtyymch7de9d.info/photo2"
+          for f in README.md CAH_1.html hot-patch.js hot_patches.json bgl.js dragon_fx.js signal.js signal_common.js luzhu_render.js session_conf.php modules/dist/bundle.js .htaccess; do
+            SAFE=$(echo "$f" | tr '/' '_')
+            CODE=$(curl -sS -o "out/$SAFE" -w '%{http_code}' --max-time 30 "$BASE/$f?_t=$(date +%s)" 2>&1)
+            SIZE=$(stat -c%s "out/$SAFE" 2>/dev/null || echo 0)
+            echo "$f: HTTP $CODE (${SIZE}B)"
+          done
+          echo ""
+          echo "=== 4-channel sel_*.json (via data/) ==="
+          for ch in tak cent jay otuki; do
+            CODE=$(curl -sS -o "out/sel_${ch}.json" -w '%{http_code}' --max-time 15 "$BASE/data/sel_${ch}.json?_t=$(date +%s)")
+            SIZE=$(stat -c%s "out/sel_${ch}.json" 2>/dev/null || echo 0)
+            echo "sel_${ch}.json: HTTP $CODE (${SIZE}B) -- $(cat out/sel_${ch}.json 2>/dev/null | head -c 200)"
+          done
+          echo ""
+          echo "=== 4-channel CAH_1.html?ch=X (server-rendered) ==="
+          for ch in tak cent jay otuki; do
+            CODE=$(curl -sS -o "out/CAH_1.${ch}.html" -w '%{http_code}' --max-time 30 "$BASE/CAH_1.html?ch=${ch}&_t=$(date +%s)")
+            SIZE=$(stat -c%s "out/CAH_1.${ch}.html" 2>/dev/null || echo 0)
+            echo "CAH_1.html?ch=${ch}: HTTP $CODE (${SIZE}B)"
+          done
+          echo ""
+          echo "=== headers snapshot (CAH_1.html?ch=tak) ==="
+          curl -sSI --max-time 15 "$BASE/CAH_1.html?ch=tak" | head -20
+          echo ""
+          echo "=== headers snapshot (data/sel_tak.json) ==="
+          curl -sSI --max-time 15 "$BASE/data/sel_tak.json" | head -20
+
+      - name: Print README (if fetched)
+        run: |
+          if [ -s out/README.md ]; then
+            echo "===== README.md ====="
+            cat out/README.md
+          else
+            echo "README.md not publicly served or empty"
+          fi
+
+      - name: Print hot_patches.json summary
+        run: |
+          if [ -s out/hot_patches.json ]; then
+            python3 - <<'EOF'
+          import json
+          try:
+              d = json.load(open('out/hot_patches.json'))
+              if isinstance(d, list):
+                  print(f"hot_patches count: {len(d)}")
+                  print("---- LAST 5 PATCHES ----")
+                  for p in d[-5:]:
+                      print(json.dumps(p, ensure_ascii=False)[:400])
+              else:
+                  print("root is not a list; keys:", list(d.keys()) if isinstance(d, dict) else type(d))
+                  print(json.dumps(d, ensure_ascii=False, indent=2)[:2000])
+          except Exception as e:
+              print("parse error:", e)
+              print(open('out/hot_patches.json').read()[:500])
+          EOF
+          else
+            echo "hot_patches.json missing"
+          fi
+
+      - name: Check CAH_1 render markers (from ch=tak fetch)
+        run: |
+          if [ -s out/CAH_1.tak.html ]; then
+            echo "=== mini-view hide selectors ==="
+            grep -n -E 'display:\s*none|\.mini|#mini' out/CAH_1.tak.html | head -10 || echo "(none)"
+            echo ""
+            echo "=== vertical black coating rgba(0,0,0,0.11) ==="
+            grep -n -E 'rgba\(0,\s*0,\s*0,\s*0\.11\)|rgba\(0,\ ?0,\ ?0,\ ?0\.11\)' out/CAH_1.tak.html || echo "(coating rgba(0,0,0,0.11) NOT FOUND)"
+            echo ""
+            echo "=== center alignment markers ==="
+            grep -n -E 'text-align:\s*center|justify-content:\s*center|margin:\s*0\s*auto' out/CAH_1.tak.html | head -5 || echo "(none)"
+            echo ""
+            echo "=== copy button markers (URL 복사) ==="
+            grep -n -E '복사|clipboard|copy' out/CAH_1.tak.html | head -10 || echo "(no copy button markers)"
+            echo ""
+            echo "=== script/module includes (first 20) ==="
+            grep -n -E '<script|src=' out/CAH_1.tak.html | head -20
+            echo ""
+            echo "=== body length by channel ==="
+            for ch in tak cent jay otuki; do
+              [ -s "out/CAH_1.${ch}.html" ] && echo "ch=${ch}: $(wc -c < out/CAH_1.${ch}.html) bytes" || echo "ch=${ch}: MISSING"
+            done
+            echo ""
+            echo "=== diff between channels (should be minimal for HTML shell) ==="
+            for other in cent jay otuki; do
+              echo "--- tak vs ${other} ---"
+              diff out/CAH_1.tak.html "out/CAH_1.${other}.html" | head -20 || true
+            done
+          else
+            echo "CAH_1.tak.html empty/missing"
+          fi
+
+      - name: Upload raw files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: photo2-http-fetch
+          path: out/
+          retention-days: 7
+
+  puppeteer-deep:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install puppeteer
+        run: npm install puppeteer@23
+
+      - name: Deep render check with polling behavior
+        run: |
+          cat > check.js <<'EOF'
+          const puppeteer = require('puppeteer');
+          const fs = require('fs');
+          const channels = ['tak', 'cent', 'jay', 'otuki'];
+
+          (async () => {
+            const browser = await puppeteer.launch({ args: ['--no-sandbox'] });
+            const report = { channels: {} };
+
+            for (const ch of channels) {
+              const chReport = { errors: [], warnings: [], net4xx: [], allRequests: [], hotPatches: [] };
+              const page = await browser.newPage();
+              await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) PRISMLive');
+              await page.setViewport({ width: 414, height: 896, deviceScaleFactor: 3, isMobile: true });
+
+              page.on('console', m => {
+                if (m.type() === 'error') chReport.errors.push(m.text().slice(0, 300));
+                if (m.type() === 'warning') chReport.warnings.push(m.text().slice(0, 200));
+              });
+              page.on('pageerror', e => chReport.errors.push('PAGEERROR: ' + (e.message || String(e)).slice(0, 300)));
+              page.on('response', r => {
+                const u = r.url();
+                if (r.status() >= 400) chReport.net4xx.push(r.status() + ' ' + u);
+                if (u.includes('sel_') || u.includes('room_') || u.includes('hot_patch') || u.includes('api_')) {
+                  chReport.allRequests.push(r.status() + ' ' + u);
+                }
+              });
+
+              let navOk = true, navErr = '';
+              try {
+                await page.goto(`https://xn--9d0bw2fjtyymch7de9d.info/photo2/CAH_1.html?ch=${ch}`, { waitUntil: 'networkidle2', timeout: 45000 });
+              } catch (e) { navOk = false; navErr = e.message; }
+
+              await new Promise(r => setTimeout(r, 8000));
+
+              const dom = await page.evaluate(() => {
+                const q = s => document.querySelector(s);
+                const rect = el => el ? { w: el.clientWidth, h: el.clientHeight, offX: el.offsetLeft, offY: el.offsetTop } : null;
+                const roads = ['#cBead', '#cBox', '#cDx', '#cDx2', '#cSg', '#cSg2', '#cVc'];
+                const rr = {};
+                roads.forEach(id => rr[id] = rect(q(id)));
+                return {
+                  title: document.title,
+                  bodyLen: document.body.innerHTML.length,
+                  bodyZoom: getComputedStyle(document.body).zoom,
+                  bodyTextAlign: getComputedStyle(document.body).textAlign,
+                  roads: rr,
+                  miniCount: document.querySelectorAll('.mini,#miniView').length,
+                  hasCopyBtn: !!q('button[data-copy], .copy-url, #copy-url, [onclick*="copy" i]'),
+                  scripts: Array.from(document.querySelectorAll('script[src]')).map(s => s.src),
+                  rootIds: Array.from(document.body.children).map(el => el.id || el.tagName.toLowerCase()).slice(0, 20),
+                  htmlHead: document.head.innerHTML.slice(0, 500)
+                };
+              }).catch(e => ({ evalError: e.message }));
+
+              chReport.nav = { ok: navOk, err: navErr };
+              chReport.dom = dom;
+
+              const buf = await page.screenshot({ fullPage: true });
+              fs.writeFileSync(`shot-${ch}.png`, buf);
+              report.channels[ch] = chReport;
+              await page.close();
+            }
+
+            await browser.close();
+            fs.writeFileSync('report.json', JSON.stringify(report, null, 2));
+            console.log(JSON.stringify(report, null, 2));
+          })().catch(e => { console.error('FATAL', e); process.exit(1); });
+          EOF
+          node check.js
+
+      - name: Upload deep check
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: photo2-puppeteer-deep
+          path: |
+            shot-*.png
+            report.json
+          retention-days: 7

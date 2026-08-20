@@ -1,0 +1,125 @@
+name: photo2 vs 원본 캄보디아 빈 write.php 대조
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-compare-original.yml'
+
+jobs:
+  fetch-original:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch 원본 write.php (캄보디아 빈)
+        run: |
+          set +e
+          mkdir -p out
+          ORIG="https://xn--2z1b92mg3alyphom.com"
+          MINE="https://xn--9d0bw2fjtyymch7de9d.info"
+          TS=$(date +%s)
+
+          echo "===== 원본 도메인 접근성 ====="
+          echo "Punycode: xn--2z1b92mg3alyphom.com"
+          # decode punycode → korean
+          python3 -c "print('Korean domain:', 'xn--2z1b92mg3alyphom.com'.encode().decode('idna'))" 2>&1
+
+          echo ""
+          echo "===== 원본 write.php HEAD ====="
+          curl -sSI --max-time 20 "$ORIG/write.php" | head -25
+
+          echo ""
+          echo "===== 원본 write.php body (GET, 로그인 리다이렉트일 수 있음) ====="
+          CODE=$(curl -sSL --max-time 30 -o out/original_write.html -w "%{http_code}" "$ORIG/write.php?_t=$TS")
+          echo "HTTP $CODE, size=$(wc -c < out/original_write.html)B"
+          echo ""
+          echo "--- 표 관련 grep ---"
+          grep -n -oE '방[[:space:]]*[0-9]+[^<]{0,40}|table[^<>]{0,60}|room_id["'"'"']?[[:space:]]*[:=][[:space:]]*[0-9]+|"[0-9]+"[[:space:]]*:[[:space:]]*[0-9]+' out/original_write.html | head -80
+          echo ""
+          echo "--- 첫 200줄 ---"
+          head -200 out/original_write.html
+
+          echo ""
+          echo "===== 원본 다른 예상 경로 시도 ====="
+          for p in "" "index.php" "CAH_1.html" "data/tables.json" "api_all_rooms.php" "photo/write.php" "photo/tables.json" "write_url.php"; do
+            CODE=$(curl -sS -o /tmp/tmp -w "%{http_code}" --max-time 15 "$ORIG/$p?_t=$TS")
+            SIZE=$(stat -c%s /tmp/tmp 2>/dev/null || echo 0)
+            echo "  $p → HTTP $CODE (${SIZE}B)"
+          done
+
+          echo ""
+          echo "===== 원본에서 우리 photo/photo2/photo3 매핑과 비교 가능한 데이터 fetch 시도 ====="
+          for path in "data/tables.json" "photo/data/tables.json" "photo2/data/tables.json"; do
+            echo "--- $ORIG/$path ---"
+            curl -sS --max-time 15 "$ORIG/$path?_t=$TS"
+            echo ""
+          done
+
+          echo ""
+          echo "===== 원본 20개 방 room_XX.json (write.php 화면 라벨 기준) ====="
+          PAIRS="10:10 11:11 12:12 15:15 16:16 17:87 18:18 19:89 20:20 21:21 22:22 23:23 25:25 26:26 27:27 55:31 66:32 77:33 88:34 99:35"
+          NOW=$(date +%s)
+          printf "%-6s %-6s %-8s %-8s %-8s %-10s %-8s %s\n" "label" "apiId" "orig(t)" "ours(t)" "orig_age" "ours_age" "match" "diff"
+          echo "------------------------------------------------------------------------------------"
+
+          for pair in $PAIRS; do
+            LABEL="${pair%%:*}"
+            APIID="${pair##*:}"
+            # 원본에서 fetch
+            for OPATH in "data/room_${LABEL}.json" "data/room_${APIID}.json" "photo/data/room_${LABEL}.json" "photo/data/room_${APIID}.json"; do
+              CODE=$(curl -sS --max-time 10 -o "/tmp/orig_${LABEL}.json" -w "%{http_code}" "$ORIG/$OPATH?_t=$TS")
+              [ "$CODE" = "200" ] && [ -s "/tmp/orig_${LABEL}.json" ] && break
+            done
+            CODE_O=$(cat /tmp/orig_code 2>/dev/null || echo "$CODE")
+            # 우리 서버 fetch
+            curl -sS --max-time 10 -o "/tmp/ours_${LABEL}.json" -w "%{http_code}" "$MINE/photo2/data/room_${LABEL}.json?_t=$TS" > /tmp/ours_code
+            CODE_M=$(cat /tmp/ours_code)
+
+            ORIG_INFO="MISSING"
+            OURS_INFO="MISSING"
+            MATCH="?"
+            DIFF="?"
+
+            if [ -s "/tmp/orig_${LABEL}.json" ]; then
+              ORIG_INFO=$(python3 -c "
+          import json
+          try:
+              d=json.load(open('/tmp/orig_${LABEL}.json'))
+              print(f\"t={d.get('t','?')}|nums_len={len(d.get('nums',[]))}\")
+          except: print('parse_err')
+          " 2>/dev/null)
+            fi
+            if [ -s "/tmp/ours_${LABEL}.json" ]; then
+              OURS_INFO=$(python3 -c "
+          import json
+          try:
+              d=json.load(open('/tmp/ours_${LABEL}.json'))
+              print(f\"t={d.get('t','?')}|nums_len={len(d.get('nums',[]))}\")
+          except: print('parse_err')
+          " 2>/dev/null)
+            fi
+
+            if [ -s "/tmp/orig_${LABEL}.json" ] && [ -s "/tmp/ours_${LABEL}.json" ]; then
+              MATCH=$(python3 -c "
+          import json
+          try:
+              o=json.load(open('/tmp/orig_${LABEL}.json'))
+              m=json.load(open('/tmp/ours_${LABEL}.json'))
+              on=o.get('nums',[])
+              mn=m.get('nums',[])
+              print('EQUAL' if on==mn else f'DIFF orig_len={len(on)} ours_len={len(mn)}')
+          except: print('cmp_err')
+          " 2>/dev/null)
+            fi
+
+            printf "%-6s %-6s %-30s %-30s %s\n" "$LABEL" "$APIID" "$ORIG_INFO" "$OURS_INFO" "$MATCH"
+          done
+
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: original-vs-ours
+          path: out/
+          retention-days: 7
