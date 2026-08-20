@@ -81,3 +81,4 @@ print((d.get('result') or [{}])[0].get('id',''))
           getent hosts gain.xn--9d0bw2fjtyymch7de9d.info || echo "아직 실패"
           getent hosts tak.xn--9d0bw2fjtyymch7de9d.info || echo "아직 실패"
           curl -sS -o /dev/null -D - "https://gain.xn--9d0bw2fjtyymch7de9d.info/photo2/write.php" 2>&1 | head -10
+# retry 1787198748
