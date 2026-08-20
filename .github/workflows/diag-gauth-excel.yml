@@ -10,50 +10,36 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Exhaustive date search in archived excel
+      - name: 15th account from today's excel
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 90s
+          command_timeout: 60s
           script: |
+            echo "=== 1. Row 15 directly from raw excel (0-indexed row 14) ==="
             sudo node -e "
             const XLSX = require('/opt/gauth-full/node_modules/xlsx');
             const fs = require('fs');
             const dir = '/opt/gauth-full/uploads/archive';
             const files = fs.readdirSync(dir).filter(f=>f.toLowerCase().endsWith('.xlsx'));
-            console.log('files:', files);
-            for (const fname of files) {
-              const fp = dir + '/' + fname;
-              console.log('');
-              console.log('===== FILE:', fname, '=====');
-              const wb = XLSX.readFile(fp, {cellDates:true, bookProps:true});
-              console.log('--- Workbook Props (core.xml metadata) ---');
-              console.log(JSON.stringify(wb.Props, null, 2));
-              console.log('--- Custom Props ---');
-              console.log(JSON.stringify(wb.Custprops || {}, null, 2));
-              console.log('--- Sheet names ---');
-              console.log(wb.SheetNames);
-              for (const sn of wb.SheetNames) {
-                const sh = wb.Sheets[sn];
-                console.log('--- Sheet:', sn, 'range:', sh['!ref'], '---');
-                const rows = XLSX.utils.sheet_to_json(sh, {header:1, raw:true, defval:''});
-                console.log('total rows:', rows.length);
-                console.log('first 3 rows:', JSON.stringify(rows.slice(0,3)));
-                console.log('last 3 rows:', JSON.stringify(rows.slice(-3)));
-                for (let r=0;r<Math.min(rows.length,30);r++){
-                  for (let c=0;c<(rows[r]||[]).length;c++){
-                    const v = rows[r][c];
-                    if (v && typeof v === 'number' && v>=36526 && v<=54789) {
-                      console.log('  DATE-LIKE at row', r, 'col', c, ':', v, '=', new Date((v-25569)*86400000).toISOString());
-                    }
-                    if (v && typeof v === 'string' && /\d{1,2}[.\/월]\s*\d{0,2}/.test(v) && v.length<20) {
-                      console.log('  KOREAN-DATE-LIKE at row', r, 'col', c, ':', JSON.stringify(v));
-                    }
-                  }
-                }
-              }
-            }
+            const fp = dir + '/' + files[0];
+            console.log('File:', files[0]);
+            const wb = XLSX.readFile(fp);
+            const sh = wb.Sheets[wb.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(sh, {header:1, raw:true, defval:''});
+            console.log('Row 15 (index 14):', JSON.stringify(rows[14]));
+            console.log('Row 16 (index 15) for context:', JSON.stringify(rows[15]));
+            " 2>&1
+
+            echo ""
+            echo "=== 2. 15th account in accounts_normalized.json for this source_file ==="
+            sudo node -e "
+            const d=JSON.parse(require('fs').readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+            const arr=Array.isArray(d)?d:(d.accounts||[]);
+            const fromFile = arr.filter(a=>(a.source_file||'').includes('8.15'));
+            console.log('Total accounts from this file:', fromFile.length);
+            console.log('15th account (index 14):', JSON.stringify(fromFile[14], null, 2));
             " 2>&1
             echo "=== DONE ==="
