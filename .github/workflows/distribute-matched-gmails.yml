@@ -1,0 +1,139 @@
+name: Distribute matched gmails one-per-subsite
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  distribute:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ship URL list
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: ".github/smm-urls.txt"
+          target: "/tmp"
+          strip_components: 1
+      - name: Distribute matched gmails one per sub-site
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 90s
+          script: |
+            sudo python3 - <<'PYEOF'
+            import json, os, re, urllib.parse, time, shutil
+
+            URLS_FILE = "/tmp/smm-urls.txt"
+            BASE = "/var/www/sites"
+            MASTER = "/opt/gauth-full/accounts_normalized.json"
+
+            def norm(u):
+                if not u: return ""
+                u = urllib.parse.unquote(u.strip())
+                u = re.sub(r'^https?://', '', u, flags=re.I).rstrip('/')
+                u = re.sub(r'^www\.', '', u, flags=re.I)
+                u = u.split('?')[0].split('|')[0]
+                u = re.sub(r'/(videos|featured|about|shorts|streams|community)$', '', u, flags=re.I)
+                return u.lower()
+
+            wanted = set(); wanted_h = set(); wanted_c = set()
+            for line in open(URLS_FILE):
+                s = line.strip()
+                if not s: continue
+                n = norm(s); wanted.add(n)
+                m = re.search(r'youtube\.com/@([^/]+)', n)
+                if m: wanted_h.add(m.group(1).lower())
+                m = re.search(r'youtube\.com/channel/([^/|]+)', n)
+                if m: wanted_c.add(m.group(1).lower())
+
+            def matches(yurl):
+                n = norm(yurl)
+                if not n: return False
+                if n in wanted: return True
+                m = re.search(r'youtube\.com/@([^/]+)', n)
+                if m and m.group(1).lower() in wanted_h: return True
+                m = re.search(r'youtube\.com/channel/([^/|]+)', n)
+                if m and m.group(1).lower() in wanted_c: return True
+                return False
+
+            master = json.load(open(MASTER, encoding='utf-8'))
+            master_arr = master if isinstance(master, list) else master.get('accounts', [])
+            pool = []; seen = set()
+            for a in master_arr:
+                if not isinstance(a, dict): continue
+                email = (a.get('email') or a.get('gmail') or '').strip().lower()
+                if not email.endswith('@gmail.com'): continue
+                if email in seen: continue
+                yurl = a.get('youtube_url') or a.get('youtube') or a.get('channel_url') or ''
+                if not matches(yurl): continue
+                seen.add(email); pool.append(a)
+            print(f"pool size (matched unique gmail.com from master): {len(pool)}")
+
+            sites = []
+            for name in sorted(os.listdir(BASE)):
+                if name == 'gauth': continue
+                p = os.path.join(BASE, name, 'accounts.json')
+                if os.path.exists(p): sites.append(name)
+            print(f"sub-sites: {sites}")
+
+            present = {}
+            for site in sites:
+                p = os.path.join(BASE, site, 'accounts.json')
+                try:
+                    d = json.load(open(p, encoding='utf-8'))
+                    arr = d if isinstance(d, list) else d.get('accounts', [])
+                    present[site] = set(((x.get('email') or x.get('gmail') or '').strip().lower()) for x in arr if isinstance(x, dict))
+                except Exception:
+                    present[site] = set()
+
+            placed = set()
+            for _, emails in present.items(): placed |= emails
+
+            plan = {}
+            for site in sites:
+                pick = None
+                for a in pool:
+                    e = (a.get('email') or a.get('gmail') or '').strip().lower()
+                    if e in present[site]: continue
+                    if e in placed: continue
+                    pick = a; break
+                if pick is None:
+                    for a in pool:
+                        e = (a.get('email') or a.get('gmail') or '').strip().lower()
+                        if e in present[site]: continue
+                        pick = a; break
+                if pick is not None:
+                    plan[site] = pick
+                    placed.add((pick.get('email') or pick.get('gmail') or '').strip().lower())
+
+            print("")
+            print("=== DISTRIBUTION PLAN ===")
+            for site, a in plan.items():
+                mpw = ('*' * min(6, len(a.get('password','')))) if a.get('password') else '(no-pw-field)'
+                print(f"{site:<12} {a.get('email','?'):<40} yurl={a.get('youtube_url','')}  pw={mpw}")
+
+            ts = str(int(time.time()))
+            for site, a in plan.items():
+                p = os.path.join(BASE, site, 'accounts.json')
+                shutil.copy(p, p + f'.bak.{ts}')
+                d = json.load(open(p, encoding='utf-8'))
+                if isinstance(d, list):
+                    d.append(a); out = d
+                else:
+                    d.setdefault('accounts', []).append(a); out = d
+                with open(p, 'w', encoding='utf-8') as fh:
+                    json.dump(out, fh, ensure_ascii=False, indent=2)
+                print(f"  ok {site}: appended {a.get('email')} (backup: {p}.bak.{ts})")
+
+            print("")
+            print("=== INSERTED RECORDS (full detail) ===")
+            for site, a in plan.items():
+                print(f"\n--- {site} ---")
+                print(json.dumps(a, ensure_ascii=False, indent=2))
+            PYEOF
