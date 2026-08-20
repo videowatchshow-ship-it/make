@@ -1,1 +1,1 @@
-trigger71-issue-ssl-with-working-token
+trigger72-strip-action-endpoints-from-jump

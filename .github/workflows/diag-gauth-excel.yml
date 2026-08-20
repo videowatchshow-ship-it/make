@@ -26,35 +26,34 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Issue SSL for jump.cent-solution.online using the working DNS-Edit token
+      - name: Strip login/action proxy endpoints from jump - display mirror only, gauth stays the only login/API surface
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 90s
-          envs: CF_TOKEN
+          command_timeout: 60s
           script: |
             set -e
-            echo "dns_cloudflare_api_token = $CF_TOKEN" | sudo tee /root/.secrets/cloudflare-jump.ini > /dev/null
-            sudo chmod 600 /root/.secrets/cloudflare-jump.ini
+            echo "=== current jump.conf before edit ==="
+            sudo cat /etc/apache2/sites-available/jump.conf
 
-            sudo certbot certonly --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare-jump.ini \
-              -d jump.cent-solution.online --non-interactive --agree-tos -m admin@cent-solution.online \
-              --cert-name jump.cent-solution.online || echo "CERTBOT_FAILED"
+            echo "=== remove /codes /tok /totp proxy blocks (action/credential endpoints) - keep /api (needed for the account list display) ==="
+            sudo python3 -c "
+            import re
+            content = open('/etc/apache2/sites-available/jump.conf').read()
+            for path in ['codes', 'tok', 'totp']:
+                content = re.sub(r'^\s*ProxyPass(Reverse)? /' + path + r'/?\s+http://127\.0\.0\.1:4000/' + path + r'/?\s*\n', '', content, flags=re.MULTILINE)
+            open('/tmp/jump_display_only.conf', 'w').write(content)
+            "
+            echo "--- new jump.conf (display-only) ---"
+            sudo cat /tmp/jump_display_only.conf
 
-            sudo shred -u /root/.secrets/cloudflare-jump.ini 2>/dev/null || sudo rm -f /root/.secrets/cloudflare-jump.ini
+            sudo cp /tmp/jump_display_only.conf /etc/apache2/sites-available/jump.conf
+            sudo apache2ctl configtest
+            sudo systemctl reload apache2
+            echo "jump.cent-solution.online is now display-only: /api stays (for the account list), /codes /tok /totp removed (login/action stays gauth-only)"
 
-            if [ -f /etc/letsencrypt/live/jump.cent-solution.online/fullchain.pem ]; then
-              echo "=== cert issued, swap in the full (HTTP+SSL) vhost ==="
-              sudo cp /tmp/jump_full.conf /etc/apache2/sites-available/jump.conf
-              sudo apache2ctl configtest && sudo systemctl reload apache2
-              echo "SSL vhost active for jump.cent-solution.online"
-            else
-              echo "certbot still failed - see log above"
-            fi
-
-            echo "=== verify ==="
-            curl -s -o /dev/null -w "https status: %{http_code}\n" https://jump.cent-solution.online/ || true
-        env:
-          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+            echo "=== verify jump still serves the page, and that /totp is now blocked ==="
+            curl -s -o /dev/null -w "jump / -> %{http_code}\n" https://jump.cent-solution.online/
+            curl -s -o /dev/null -w "jump /totp -> %{http_code} (should NOT be 200 proxied)\n" https://jump.cent-solution.online/totp
