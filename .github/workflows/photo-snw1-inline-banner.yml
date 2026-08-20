@@ -1,0 +1,125 @@
+name: SNW_1.html 배너 r1 행 안으로 인라인 삽입 (오버레이 X)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-snw1-inline-banner.yml'
+jobs:
+  inline:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          envs: CF_TOKEN,CF_ZONE
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="bash -s -- '$CF_TOKEN' '$CF_ZONE'" << 'REMOTE'
+            set +u
+            CF_TOKEN="$1"
+            CF_ZONE="$2"
+            P1="/var/www/sites/chamgyo/public/photo"
+
+            echo "===== [1] SNW_1.html r1 행 구조 정확히 확인 ====="
+            sudo sed -n '40,70p' "$P1/SNW_1.html"
+
+            echo ""
+            echo "===== [2] 기존 오버레이 제거 + r1 안의 bead_wrap 옆에 배너 인라인 삽입 ====="
+            sudo python3 << "PYEOF"
+            import re
+            fp = "/var/www/sites/chamgyo/public/photo/SNW_1.html"
+            with open(fp, 'r', encoding='utf-8') as f:
+                html = f.read()
+
+            # 기존 오버레이 완전 제거
+            html = re.sub(r'\n?<!-- CHAMGYO_BANNER_INJECTED -->.*?<!-- /CHAMGYO_BANNER_INJECTED -->\n?', '', html, flags=re.DOTALL)
+
+            # r1 행 안 bead_wrap 뒤에 참교육 배너 인라인 삽입
+            # bead_wrap 은 962x521 canvas. 옆에 검정 영역이 참교육 배너 자리
+            BANNER_INLINE = '<div class="chamgyo_banner_inline"><img id="chamgyoImg" src="" alt=""></div>'
+
+            # <div class="bead_wrap">...</div> 바로 뒤에 인라인 삽입
+            new_html = re.sub(
+                r'(<div class="bead_wrap">.*?</div>)',
+                r'\1' + BANNER_INLINE,
+                html, count=1
+            )
+            if new_html == html:
+                # 정규식 실패 시 </div>\n  </div> 앞에 삽입 시도
+                new_html = html.replace(
+                    '<div class="r1">',
+                    '<div class="r1" style="display:flex;align-items:flex-start;gap:0;">'
+                )
+                new_html = new_html.replace(
+                    '<div class="bead_wrap">',
+                    BANNER_INLINE + '<div class="bead_wrap">'
+                )
+            html = new_html
+
+            # 스타일 + 이미지 로더 스크립트를 </body> 앞에 삽입
+            SNIPPET = '''
+            <!-- CHAMGYO_BANNER_INJECTED -->
+            <style id="chamgyoBannerCss">
+            .r1{display:flex;align-items:stretch;gap:0;}
+            .chamgyo_banner_inline{flex:1 1 auto;min-width:200px;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+            .chamgyo_banner_inline #chamgyoImg{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;display:block;}
+            @media (max-width:900px){.r1{flex-direction:column;}}
+            </style>
+            <script>
+            (function(){
+              try{
+                var q = new URLSearchParams(location.search);
+                var ch = (q.get('ch') || '').replace(/[^a-zA-Z0-9_]/g, '');
+                var v = Date.now();
+                var url = ch
+                  ? ('/photo/images/ch/' + ch + '/Live_height_kakao.gif?v=' + v)
+                  : ('/photo/images/Live_height_kakao.gif?v=' + v);
+                var img = document.getElementById('chamgyoImg');
+                if(img) img.src = url;
+              }catch(e){}
+            })();
+            </script>
+            <!-- /CHAMGYO_BANNER_INJECTED -->
+            '''
+
+            if '</body>' in html:
+                html = html.replace('</body>', SNIPPET + '\n</body>')
+            else:
+                html += SNIPPET
+
+            with open(fp, 'w', encoding='utf-8') as f:
+                f.write(html)
+            print('  인라인 배너 삽입 완료 (r1 행 안 bead_wrap 옆)')
+            PYEOF
+
+            sudo chown www-data:www-data "$P1/SNW_1.html"
+            sudo chmod 644 "$P1/SNW_1.html"
+
+            echo ""
+            echo "===== [3] 삽입 검증 ====="
+            sudo grep -n "chamgyo_banner_inline\|chamgyoImg\|CHAMGYO_BANNER_INJECTED" "$P1/SNW_1.html" | head -10
+
+            echo ""
+            echo "===== [4] CF purge ====="
+            if [ -n "$CF_TOKEN" ] && [ -n "$CF_ZONE" ]; then
+              curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE/purge_cache" \
+                -H "Authorization: Bearer $CF_TOKEN" \
+                -H "Content-Type: application/json" \
+                --data '{"purge_everything":true}' 2>&1 | head -3
+            fi
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE
