@@ -30,12 +30,11 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 60s
           script: |
-            echo "=== does /var/www/sites even exist here, and what is in it? ==="
-            ls -la /var/www/sites 2>/dev/null || echo "no /var/www/sites"
+            echo "=== read the chamgyo-photo memory note ==="
+            sudo cat /opt/claude-mem-sync/proj1/chamgyo-photo-baccarat.md 2>/dev/null || echo "(not found)"
             echo ""
-            echo "=== broad search across whole filesystem for chamgyo / photo3 / my-site-1 ==="
-            sudo find / -maxdepth 6 \( -iname "*chamgyo*" -o -iname "*my-site-1*" -o -iname "photo3" \) 2>/dev/null
+            echo "=== /home/chamgyo contents ==="
+            sudo ls -la /home/chamgyo 2>/dev/null
             echo ""
-            echo "=== all vhosts on this box (server names only) ==="
-            sudo grep -rh "ServerName" /etc/apache2/sites-available/ 2>/dev/null | sort -u
-            sudo grep -rh "server_name" /etc/nginx/sites-available/ 2>/dev/null | sort -u
+            echo "=== gain vhost config (user typo'd 'gain' for this?) ==="
+            sudo grep -rl "gain.cent-solution.online" /etc/apache2/sites-available/ 2>/dev/null | xargs -r sudo cat

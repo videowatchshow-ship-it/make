@@ -1,1 +1,1 @@
-trigger60-broad-find-chamgyo-and-list-vhosts
+trigger61-read-chamgyo-memo-and-gain-vhost
