@@ -1,0 +1,54 @@
+name: fc-sinji-investigate3
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/fc-sinji-investigate3.yml'
+jobs:
+  investigate3:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            echo "=== A. find bgl.js location ==="
+            timeout 8 sudo find /var/www/sites/chamgyo/public/photo -maxdepth 1 -iname "bgl*.js" 2>&1
+
+            echo "=== B. bgl.js sinji_new parsing section (grep with context) ==="
+            timeout 8 sudo grep -n "sinji_new" /var/www/sites/chamgyo/public/photo/bgl.js 2>&1 | head -60
+
+            echo "=== C. tables.json sinji_new_map raw ==="
+            timeout 6 sudo php -r '$t=json_decode(file_get_contents("/var/www/sites/chamgyo/public/photo/data/tables.json"),true); echo json_encode($t["sinji_new_map"]??"UNSET")."\n"; echo "keys: ".implode(",", array_keys($t))."\n";'
+
+            echo "=== D. SNW_1.html - how it fetches/renders room data (grep fetch/room_ referenced JS) ==="
+            timeout 8 sudo grep -n "room_\|fetch(\|sinji_new\|data/room" /var/www/sites/chamgyo/public/photo/SNW_1.html 2>&1 | head -60
+
+            echo "=== E. any other JS files referencing sinji_new ==="
+            timeout 10 sudo grep -rl "sinji_new" /var/www/sites/chamgyo/public/photo/*.js 2>&1
+
+            echo "=== F. live page curl (first 300 lines) to see structure ==="
+            timeout 8 curl -s "https://xn--9d0bw2fjtyymch7de9d.info/photo/SNW_1.html" | head -c 4000
+
+            echo ""
+            echo "=== G. re-check room_23 / room_100 / room_110 NOW vs fresh upstream curl (staleness check across time gap) ==="
+            timeout 5 sudo cat /var/www/sites/chamgyo/public/photo/data/room_110.json 2>&1
+            echo ""
+            timeout 6 curl -s -H "Origin: https://fcj6.oqogyf.com" -H "Referer: https://fcj6.oqogyf.com/" "https://xjh.liveview2024.vip/api/pub/get_newly_issue?room_id=110"
+            echo ""
+
+            echo "=== H. current UTC time ==="
+            date -u
+            REMOTE
