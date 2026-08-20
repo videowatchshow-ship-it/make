@@ -22,19 +22,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Find what got globally-installed / misplaced under chamgyo photo folders
+      - name: Check for existing SSH access from this box to my-site-1 (34.104.233.35)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 60s
+          command_timeout: 30s
           script: |
-            echo "=== read the chamgyo-photo memory note ==="
-            sudo cat /opt/claude-mem-sync/proj1/chamgyo-photo-baccarat.md 2>/dev/null || echo "(not found)"
+            echo "=== ssh keys present on this box (filenames only) ==="
+            sudo find / -maxdepth 6 -iname "google_compute_engine*" 2>/dev/null
+            find ~ -maxdepth 3 -iname "*.pem" -o -iname "id_*" 2>/dev/null
             echo ""
-            echo "=== /home/chamgyo contents ==="
-            sudo ls -la /home/chamgyo 2>/dev/null
+            echo "=== known_hosts entries mentioning the my-site-1 IP ==="
+            grep -l "34.104.233.35\|34.85.126.48" ~/.ssh/known_hosts /root/.ssh/known_hosts 2>/dev/null
             echo ""
-            echo "=== gain vhost config (user typo'd 'gain' for this?) ==="
-            sudo grep -rl "gain.cent-solution.online" /etc/apache2/sites-available/ 2>/dev/null | xargs -r sudo cat
+            echo "=== try a quick reachability test (3s timeout, no auth attempt) ==="
+            timeout 3 bash -c "echo > /dev/tcp/34.104.233.35/22" && echo "port 22 reachable from this box" || echo "NOT reachable from this box"

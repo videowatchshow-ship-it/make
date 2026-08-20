@@ -1,1 +1,1 @@
-trigger61-read-chamgyo-memo-and-gain-vhost
+trigger62-check-ssh-access-to-my-site-1
