@@ -1,0 +1,73 @@
+name: 방 110 서버 데이터 vs 원본 싱지뉴(fcj6) 실시간 비교
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-room110-mapping.yml'
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+
+            echo "===== [1] 서버 room_110.json (현재 우리 데이터) ====="
+            R=$(sudo cat "$P1/data/room_110.json")
+            echo "$R"
+            echo ""
+            SERVER_ID=$(echo "$R" | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))")
+            echo "  upstream id (원본 방번호): $SERVER_ID"
+
+            echo ""
+            echo "===== [2] collector_sinji_new.php 소스 - 원본 API 엔드포인트 확인 ====="
+            sudo grep -nE "curl|fetch|url|http|Origin|Referer|api|endpoint" "$P1/collector_sinji_new.php" 2>/dev/null | head -20
+
+            echo ""
+            echo "===== [3] collector_sinji_new.php 전체 (짧으면 다) ====="
+            sudo cat "$P1/collector_sinji_new.php" 2>/dev/null | head -120
+
+            echo ""
+            echo "===== [4] 원본 사이트 (fcj6.oqogyf.com / xjh.liveview2024.vip) 에 직접 요청 ====="
+            # collector 와 같은 방식으로 원본 fetch (Origin/Referer 필요)
+            for BASE in "https://xjh.liveview2024.vip" "https://fcj6.oqogyf.com" "https://api.xjh.liveview2024.vip"; do
+              for PATH_TRY in "/api/room/$SERVER_ID" "/data/room/$SERVER_ID" "/room/$SERVER_ID"; do
+                URL="$BASE$PATH_TRY"
+                R=$(curl -sS --max-time 6 \
+                  -H "Origin: https://fcj6.oqogyf.com" \
+                  -H "Referer: https://fcj6.oqogyf.com/" \
+                  -H "User-Agent: Mozilla/5.0" \
+                  "$URL" 2>&1 | head -c 500)
+                echo "  $URL"
+                echo "    → $R"
+                echo ""
+              done
+            done
+
+            echo ""
+            echo "===== [5] discover_sinji_new.php - 원본 방 목록 어떻게 가져오는지 ====="
+            sudo cat "$P1/discover_sinji_new.php" 2>/dev/null | head -100
+
+            echo ""
+            echo "===== [6] collector 로그 - 최근 room 110 크롤 결과 ====="
+            sudo tail -n 100 /var/log/chamgyo-sinji-new-collector.log 2>/dev/null | grep -iE "110|100853|room" | tail -20
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE
