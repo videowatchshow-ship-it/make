@@ -1,4 +1,4 @@
-name: tak 선택 안 되는 이유 진단 (sel_tak 현재 + apache 로그)
+name: Live_height_kakao.gif 원본 공용으로 즉시 원복 (12계정)
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ on:
       - '.github/workflows/photo-diag-tak-select.yml'
 
 jobs:
-  diag:
+  restore:
     runs-on: ubuntu-latest
     steps:
       - uses: appleboy/ssh-action@v1.0.3
@@ -25,47 +25,54 @@ jobs:
               --ssh-flag="-o StrictHostKeyChecking=no" \
               --quiet \
               --command='bash -s' << "REMOTE"
-            set +u
+            set -uo pipefail
             P1="/var/www/sites/chamgyo/public/photo"
+            TS=$(date +%s)
 
-            echo "===== [1] 지금 sel_tak.json / sel_cent.json / sel_abc01.json 실제 상태 ====="
-            for U in tak cent abc01 aass0707; do
-              F="$P1/data/sel_$U.json"
-              MT=$(sudo stat -c "%y" "$F" 2>/dev/null | cut -d. -f1)
-              CT=$(sudo cat "$F" 2>/dev/null)
-              printf "  %-10s | mtime=%s | %s\n" "$U" "$MT" "$CT"
+            SRC="$P1/images/Live_height_kakao.gif"
+            echo "===== [1] 원본 공용 이미지 정보 ====="
+            sudo ls -la "$SRC"
+            sudo file "$SRC"
+
+            echo ""
+            echo "===== [2] 12계정 Live_height_kakao.gif 원본으로 즉시 덮어쓰기 ====="
+            ACCTS="aass0707 abc01 abc02 abc03 abc04 abc05 abc06 abc07 cent jay otuki tak"
+            for U in $ACCTS; do
+              DIR="$P1/images/ch/$U"
+              if [ ! -d "$DIR" ]; then continue; fi
+              # 지금 파일 백업 (검은 판때기)
+              [ -f "$DIR/Live_height_kakao.gif" ] && sudo cp "$DIR/Live_height_kakao.gif" "$DIR/Live_height_kakao.gif.blackbak.$TS"
+              # 원본으로 덮어쓰기
+              sudo cp "$SRC" "$DIR/Live_height_kakao.gif"
+              sudo chown www-data:www-data "$DIR/Live_height_kakao.gif"
+              sudo chmod 644 "$DIR/Live_height_kakao.gif"
+              SZ=$(sudo stat -c %s "$DIR/Live_height_kakao.gif")
+              echo "  $U: 복구 완료 (${SZ}B)"
             done
 
             echo ""
-            echo "===== [2] apache access 로그 - 최근 write_select_room 호출 (최근 100줄에서 grep) ====="
-            sudo tail -n 500 /chamgyo_access.log 2>/dev/null | grep "write_select_room" | tail -20
+            echo "===== [3] img_ver 타임스탬프 갱신 (즉시 브라우저 캐시 폭발) ====="
+            for U in $ACCTS; do
+              VF="$P1/data/img_ver_$U.json"
+              sudo tee "$VF" > /dev/null << VJEOF
+            {"Live_height_kakao.gif":$TS,"_all":$TS}
+            VJEOF
+              sudo chown www-data:www-data "$VF"
+              sudo chmod 644 "$VF"
+            done
+            echo "  img_ver_*.json 12개 갱신 (ts=$TS)"
 
             echo ""
-            echo "===== [3] apache access 로그 - 최근 login.php / write.php 호출 (마스터 로그인 확인) ====="
-            sudo tail -n 500 /chamgyo_access.log 2>/dev/null | grep -E "login.php|write.php" | tail -20
+            echo "===== [4] gain 확인 (건드리지 말 것) ====="
+            sudo ls -la "$P1/images/ch/gain/" | head -5
 
             echo ""
-            echo "===== [4] apache error 로그 - 최근 PHP 에러 ====="
-            sudo tail -n 30 /var/log/apache2/chamgyo-error.log 2>/dev/null || sudo tail -n 30 /var/log/apache2/error.log 2>/dev/null
-
-            echo ""
-            echo "===== [5] write_select_room.php 세션 체크 로직 재확인 ====="
-            sudo head -30 "$P1/write_select_room.php"
-
-            echo ""
-            echo "===== [6] session_conf.php - 세션 저장 위치 ====="
-            sudo cat "$P1/session_conf.php" 2>/dev/null | head -20
-
-            echo ""
-            echo "===== [7] PHP 세션 파일 (마스터가 로그인했으면 있어야 함) ====="
-            sudo ls -la /var/lib/php/sessions/ 2>/dev/null | tail -20
-            # 또는 커스텀 경로
-            sudo ls -la /tmp/php_sessions/ 2>/dev/null | tail -10
-            sudo ls -la "$P1"/../sessions/ 2>/dev/null | head -10
-
-            echo ""
-            echo "===== [8] write.php 안에 __master / __isMaster 조건 재확인 ====="
-            sudo grep -nE "__master|isMaster|_SESSION\[.id.\]|aass0707" "$P1/write.php" | head -15
+            echo "===== [5] https 실측 - 파일 크기 재확인 ====="
+            DOM="xn--9d0bw2fjtyymch7de9d.info"
+            for U in cent tak abc01 aass0707 gain; do
+              SZ=$(curl -sSk --resolve "$DOM:443:127.0.0.1" -o /dev/null -w "%{size_download}" "https://$DOM/photo/images/ch/$U/Live_height_kakao.gif?v=$TS")
+              printf "  %-10s | %sB\n" "$U" "$SZ"
+            done
 
             echo ""
             echo "===== DONE ====="
