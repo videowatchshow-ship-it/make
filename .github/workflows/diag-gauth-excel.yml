@@ -144,6 +144,26 @@ jobs:
             echo ""
             echo "=== 5. verify subsite-counts proxy through jump ==="
             curl -s --max-time 10 https://jump.cent-solution.online/api/subsite-counts
+            echo ""
+            echo ""
+            echo "=== 6. what's actually on disk at the DocumentRoot? ==="
+            ls -la /var/www/sites/jump/public/
+            echo ""
+            echo "=== 7. does the ON-DISK file contain OLD gauth-admin-panel strings? ==="
+            sudo grep -c "엑셀 일괄 업로드\|API 토큰\|미로그인만 로그인" /var/www/sites/jump/public/index.html || echo "0 (clean)"
+            echo ""
+            echo "=== 8. does the LIVE https response (bypassing browser cache) contain OLD strings? ==="
+            curl -s --max-time 10 https://jump.cent-solution.online/ | grep -o "엑셀 일괄 업로드\|API 토큰\|미로그인만 로그인" | sort -u
+            echo "(empty above = clean)"
+            echo ""
+            echo "=== 9. purge Cloudflare cache for jump (in case edge cache is stale) ==="
+            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE/purge_cache" \
+              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+              -d '{"files":["https://jump.cent-solution.online/"]}'
+            echo ""
+            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE/purge_cache" \
+              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+              -d '{"purge_everything":true}'
 
   verify-gauth-live:
     runs-on: ubuntu-latest
