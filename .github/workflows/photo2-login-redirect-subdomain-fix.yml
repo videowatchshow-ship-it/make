@@ -1,0 +1,69 @@
+name: photo2 로그인 리다이렉트 서브도메인 제거 (auth_check.php, login_check.php)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-login-redirect-subdomain-fix.yml'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: auth_check.php / login_check.php 서브도메인 리다이렉트 제거
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            A=/var/www/sites/chamgyo/public/photo2/auth_check.php
+            L=/var/www/sites/chamgyo/public/photo2/login_check.php
+            echo "===== 수정 전 auth_check.php ====="
+            grep -nE "header\('Location: https" "$A"
+            echo "===== 수정 전 login_check.php ====="
+            grep -nE "header\('Location: https" "$L"
+            sudo cp "$A" "${A}.bak_$(date +%s)"
+            sudo cp "$L" "${L}.bak_$(date +%s)"
+            sudo python3 << 'PYEOF'
+            import re
+
+            targets = [
+                ("/var/www/sites/chamgyo/public/photo2/auth_check.php",
+                 "header('Location: https://' . $sessId . '.' . $domain . '/photo2/write.php');",
+                 "header('Location: https://' . $domain . '/photo2/write.php');"),
+                ("/var/www/sites/chamgyo/public/photo2/login_check.php",
+                 "header('Location: https://' . $id . '.' . $domain . '/photo2/write.php');",
+                 "header('Location: https://' . $domain . '/photo2/write.php');"),
+            ]
+
+            for path, old, new in targets:
+                with open(path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                count = content.count(old)
+                if count == 0:
+                    print("OLD_NOT_FOUND:", path)
+                    raise SystemExit(1)
+                content = content.replace(old, new)
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(content)
+                print(f"FIXED_OK: {path} ({count}건 치환)")
+            PYEOF
+            sudo chown --reference="${A}.bak_"* "$A" 2>/dev/null || true
+            sudo chown --reference="${L}.bak_"* "$L" 2>/dev/null || true
+            echo "===== 수정 후 auth_check.php ====="
+            grep -nE "header\('Location: https" "$A"
+            echo "===== 수정 후 login_check.php ====="
+            grep -nE "header\('Location: https" "$L"
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
