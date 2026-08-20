@@ -1,0 +1,50 @@
+name: CAH1.html 실제 파일에 정확한 크기로 배너 배포
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-fix-real-file-cah1.yml'
+jobs:
+  fixreal:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          envs: CF_TOKEN,CF_ZONE
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="bash -s -- '$CF_TOKEN' '$CF_ZONE'" << 'REMOTE'
+            set +u
+            CF_TOKEN="$1"
+            CF_ZONE="$2"
+            P1="/var/www/sites/chamgyo/public/photo"
+
+            echo "===== [1] CAH_1.html 존재 확인 ====="
+            sudo ls -la "$P1/CAH_1.html" 2>&1
+            sudo ls -la "$P1"/*.html 2>&1 | head -20
+
+            echo ""
+            echo "===== [2] CAH_1.html 안 r1/bead_wrap/signal_panel 구조 확인 ====="
+            sudo grep -n "\.r1\b\|bead_wrap\|signal_panel\|\.full_box" "$P1/CAH_1.html" 2>&1 | head -30
+
+            echo ""
+            echo "===== [3] CAH_1.html 안 __stage 유무 확인 ====="
+            sudo grep -n "__stage\|__wrap" "$P1/CAH_1.html" 2>&1 | head -10
+
+            echo ""
+            echo "===== [4] CAH_1.html 이 기존에 Live_height_kakao 참조하는지 ====="
+            sudo grep -n "Live_height_kakao\|signal_panel" "$P1/CAH_1.html" 2>&1 | head -10
+            REMOTE
