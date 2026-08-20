@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: 50th row from today's excel
+      - name: Simulate frontend sort exactly
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -18,16 +18,28 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 60s
           script: |
-            sudo node -e "
-            const XLSX = require('/opt/gauth-full/node_modules/xlsx');
-            const fs = require('fs');
-            const dir = '/opt/gauth-full/uploads/archive';
-            const files = fs.readdirSync(dir).filter(f=>f.toLowerCase().endsWith('.xlsx'));
-            const fp = dir + '/' + files[0];
-            console.log('File:', files[0]);
-            const wb = XLSX.readFile(fp);
-            const sh = wb.Sheets[wb.SheetNames[0]];
-            const rows = XLSX.utils.sheet_to_json(sh, {header:1, raw:true, defval:''});
-            console.log('Row 50 (index 49):', JSON.stringify(rows[49]));
-            " 2>&1
+            echo "=== API /api/normalized-accounts first 5 items as returned (pre-sort) ==="
+            curl -s http://localhost:4000/api/normalized-accounts | node -e "
+            let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
+            const j=JSON.parse(d);
+            const accs=j.accounts||[];
+            console.log('total from API:', accs.length);
+            console.log('first 5 as API returns them (no sort):');
+            for (const a of accs.slice(0,5)) console.log(' ', a.email, '| account_date:', a.account_date?new Date(a.account_date).toISOString():'null');
+            });
+            "
+            echo ""
+            echo "=== Frontend _sortByExcelDate logic replicated ==="
+            curl -s http://localhost:4000/api/normalized-accounts | node -e "
+            let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
+            const j=JSON.parse(d);
+            const accs=j.accounts||[];
+            const withDate = accs.filter(a=>a.account_date);
+            const noDate = accs.filter(a=>!a.account_date);
+            withDate.sort((a,b)=>b.account_date-a.account_date);
+            const ALL = withDate.concat(noDate);
+            console.log('After _sortByExcelDate (what frontend actually shows):');
+            for (const a of ALL.slice(0,5)) console.log(' #'+(ALL.indexOf(a)+1), a.email, '| account_date:', a.account_date?new Date(a.account_date).toISOString():'null');
+            });
+            "
             echo "=== DONE ==="
