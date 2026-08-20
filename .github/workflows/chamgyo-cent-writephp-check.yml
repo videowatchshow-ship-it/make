@@ -1,0 +1,26 @@
+name: chamgyo cent.도메인/photo2/write.php 실측 확인
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/chamgyo-cent-writephp-check.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: cent 서브도메인 write.php 응답 실측 (3종 세트)
+        run: |
+          echo "===== 응답 헤더 ====="
+          curl -sS -D /tmp/h.txt -o /tmp/b.html -L "https://cent.xn--9d0bw2fjtyymch7de9d.info/photo2/write.php"
+          cat /tmp/h.txt
+          echo "===== SHA256/size ====="
+          sha256sum /tmp/b.html
+          wc -c /tmp/b.html
+          echo "===== title/에러 문자열 검색 ====="
+          grep -ioE '<title>[^<]*</title>' /tmp/b.html || echo "NO_TITLE"
+          grep -ioE '(error|오류|실패|denied|forbidden|undefined|warning|fatal)[^<\"]{0,80}' /tmp/b.html | head -20
+          echo "===== body 앞부분 500자 ====="
+          head -c 500 /tmp/b.html
