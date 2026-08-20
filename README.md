@@ -42,8 +42,9 @@ Express :4000 (rebrowser-login.js)
 
 - 목적: 로그인/2FA/토큰 발급 등 실제 계정 조작 기능은 전혀 없는 **표시 전용(display-only)** 페이지. 실제 로그인/API는 gauth에서만 처리.
 - 소스: `jump/index.html`, `jump/manifest.json`, `jump/sw.js` (PWA 설치 지원)
-- 구성: 스트리밍 제목/설명 템플릿 카드 (복사 버튼), 새로고침으로 여러 템플릿 순환
-- 배포: Cloudflare DNS(A, proxied) + Apache 정적 vhost + Let's Encrypt(dns-cloudflare) — `.github/workflows/diag-gauth-excel.yml`을 통해 SSH로 배포
+- 구성: 스트리밍 제목/설명 템플릿 카드 (복사 버튼), 새로고침으로 여러 템플릿 순환, 하위 13개 사이트 계정 배포 현황(읽기 전용)
+- 하위 사이트 계정 위젯: gauth의 `/api/subsite-counts`를 jump 자체 vhost에서 읽기 전용으로 프록시(`ProxyPass /api/subsite-counts`, `/api/subsite-accounts`)하여 표시. 로그인/2FA/토큰 관련 엔드포인트(`/codes`, `/tok`, `/totp`)는 프록시하지 않음
+- 배포: Cloudflare DNS(A, proxied) + Apache 정적 vhost(+API 읽기전용 프록시) + Let's Encrypt(dns-cloudflare, certonly + 수동 SSL vhost) — `.github/workflows/diag-gauth-excel.yml`을 통해 SSH로 배포
 
 #### gauth 메인 화면 — 하위 사이트 계정 뷰
 
