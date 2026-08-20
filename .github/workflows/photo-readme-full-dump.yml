@@ -1,0 +1,49 @@
+name: photo/photo2/photo3 README.md 전체 원문 덤프
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-readme-full-dump.yml'
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 90s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P="/var/www/sites/chamgyo/public"
+
+            echo "===== photo2/README.md 전체 ====="
+            timeout 5 sudo cat "$P/photo2/README.md" 2>&1
+
+            echo ""
+            echo "===== photo3/README.md 전체 ====="
+            timeout 5 sudo cat "$P/photo3/README.md" 2>&1
+
+            echo ""
+            echo "===== write_upload.php 실제 위치 찾기 (photo 하위, maxdepth 3) ====="
+            timeout 8 sudo find "$P/photo" "$P/photo2" "$P/photo3" -maxdepth 1 -iname "write_upload.php" 2>/dev/null
+            timeout 8 sudo find "$P" -maxdepth 1 -iname "write_upload.php" 2>/dev/null
+
+            echo ""
+            echo "===== 다른 에이전트가 최근 수정한 write_upload.php / write.php mtime 확인 ====="
+            timeout 5 sudo ls -la "$P/photo/write_upload.php" 2>&1
+            timeout 5 sudo ls -la "$P/photo/write.php" 2>&1
+
+            echo ""
+            echo "===== photo/write_upload.php 안에 __all__ 남아있는지 (읽기전용 확인) ====="
+            timeout 5 sudo grep -n "__all__" "$P/photo/write_upload.php" 2>&1 | head -10
+            REMOTE
