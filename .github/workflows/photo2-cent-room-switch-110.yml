@@ -1,0 +1,57 @@
+name: photo2 cent 채널 테이블을 110번으로 변경
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-cent-room-switch-110.yml'
+jobs:
+  switch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: photo2/data/sel_cent.json room_id 를 110으로 변경
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            F=/var/www/sites/chamgyo/public/photo2/data/sel_cent.json
+            echo "===== 변경 전 ====="
+            sudo cat "$F"
+            echo ""
+            sudo cp "$F" "${F}.bak_$(date +%s)"
+            sudo python3 << 'PYEOF'
+            import json
+            path = "/var/www/sites/chamgyo/public/photo2/data/sel_cent.json"
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            data["room_id"] = 110
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False)
+            print("SWITCHED_TO_110_OK")
+            PYEOF
+            sudo chown --reference="${F}.bak_"* "$F" 2>/dev/null || true
+            echo "===== 변경 후 ====="
+            sudo cat "$F"
+            echo ""
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
+
+      - name: 라이브 실측 확인 (photo2 ?ch=cent 가 room 110 을 쓰는지)
+        run: |
+          sleep 3
+          curl -sS "https://xn--9d0bw2fjtyymch7de9d.info/photo2/SNW_1.html?ch=cent" -o /tmp/p2.html
+          wc -c /tmp/p2.html
+          echo "확인은 페이지 내부 JS/API 실측이 필요할 수 있음 (아래는 참고용 응답 크기)"
