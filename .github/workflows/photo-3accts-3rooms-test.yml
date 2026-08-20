@@ -1,0 +1,101 @@
+name: cent/tak/abc01 3계정 각 다른방 지정 후 3뷰 실측
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-3accts-3rooms-test.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+            DOM="xn--9d0bw2fjtyymch7de9d.info"
+            RESOLVE="--resolve $DOM:443:127.0.0.1"
+
+            echo "===== [0] BEFORE 원본 저장 ====="
+            for U in cent tak abc01; do
+              printf "  sel_%s.json = %s\n" "$U" "$(sudo cat "$P1/data/sel_$U.json" 2>/dev/null)"
+            done
+
+            echo ""
+            echo "===== [1] 3계정 각각 다른방 강제 지정 ====="
+            # 실제 존재 확인된 방 중 3개 픽: 101, 102, 105
+            echo "{\"room_id\":101}" | sudo tee "$P1/data/sel_cent.json" > /dev/null
+            echo "{\"room_id\":102}" | sudo tee "$P1/data/sel_tak.json" > /dev/null
+            echo "{\"room_id\":105}" | sudo tee "$P1/data/sel_abc01.json" > /dev/null
+            for U in cent tak abc01; do
+              sudo chown www-data:www-data "$P1/data/sel_$U.json"
+            done
+            sleep 1
+            echo "  cent  → room 101"
+            echo "  tak   → room 102"
+            echo "  abc01 → room 105"
+
+            echo ""
+            echo "===== [2] 각 계정 URL 3종 및 api 실응답 (https + SNI) ====="
+            for U in cent tak abc01; do
+              echo ""
+              echo "  === 계정: $U ==="
+              echo "    세로  : https://$DOM/photo/CAH_1.html?ch=$U"
+              echo "    가로  : https://$DOM/photo/CAW_1.html?ch=$U"
+              echo "    싱지뉴: https://$DOM/photo/SNW_1.html?ch=$U"
+
+              # api 응답
+              A=$(curl -sSk $RESOLVE "https://$DOM/photo/api_selected_room.php?ch=$U")
+              RID=$(echo "$A" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get(\"room_id\",\"?\"))" 2>/dev/null)
+              echo "    api_selected_room?ch=$U → $A (room_id=$RID)"
+
+              # 3뷰 HTTP 코드 (Cloudflare 프록시 통해서도 확인)
+              for VIEW in CAH_1 CAW_1 SNW_1; do
+                CODE=$(curl -sSk $RESOLVE -o /dev/null -w "%{http_code}" "https://$DOM/photo/$VIEW.html?ch=$U")
+                echo "      $VIEW.html?ch=$U → HTTP $CODE"
+              done
+
+              # 실제 room_<rid>.json 존재 및 nums 확인 (뷰가 여기서 데이터 가져옴)
+              DAT=$(curl -sSk $RESOLVE "https://$DOM/photo/data/room_${RID}.json" -o /tmp/r.json -w "%{http_code}")
+              NUMS=$(cat /tmp/r.json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); n=d.get(\"nums\",[]); print(f'len={len(n)} tail={n[-3:] if n else []}')" 2>/dev/null)
+              echo "      data/room_${RID}.json → HTTP $DAT $NUMS"
+            done
+
+            echo ""
+            echo "===== [3] 결론 매트릭스 ====="
+            printf "  %-8s | %-8s | %-40s | %s\n" "계정" "room_id" "api_selected_room 응답" "room파일 상태"
+            for U in cent tak abc01; do
+              SEL=$(sudo cat "$P1/data/sel_$U.json" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get(\"room_id\"))" 2>/dev/null)
+              API=$(curl -sSk $RESOLVE "https://$DOM/photo/api_selected_room.php?ch=$U" 2>/dev/null)
+              RD=$(curl -sSk $RESOLVE "https://$DOM/photo/data/room_${SEL}.json" 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); n=d.get(\"nums\",[]); print(f'nums={len(n)} mtime_id={d.get(\"ver\",\"?\")}')" 2>/dev/null)
+              printf "  %-8s | %-8s | %-40s | %s\n" "$U" "$SEL" "$API" "$RD"
+            done
+
+            echo ""
+            echo "===== [4] 각 계정 URL 최종 리스트 (사용자용) ====="
+            for U in cent tak abc01; do
+              SEL=$(sudo cat "$P1/data/sel_$U.json" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get(\"room_id\"))" 2>/dev/null)
+              echo ""
+              echo "  ▼ $U (현재 room=$SEL)"
+              echo "    https://$DOM/photo/CAH_1.html?ch=$U   ← 세로"
+              echo "    https://$DOM/photo/CAW_1.html?ch=$U   ← 가로"
+              echo "    https://$DOM/photo/SNW_1.html?ch=$U   ← 싱지뉴"
+            done
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE
