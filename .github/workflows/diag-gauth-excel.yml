@@ -10,21 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Verify server file hashes vs repo
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.GAUTH_HOST }}
-          username: ${{ secrets.GAUTH_USER }}
-          key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 30s
-          script: |
-            echo "=== SERVER hashes ==="
-            md5sum /var/www/sites/gauth/public/index.html
-            md5sum /opt/gauth-full/upload_excels.js
-            md5sum /opt/gauth-full/auto_deploy.js
-            echo "=== DONE ==="
-
-      - name: Verify raw_values date patterns
+      - name: Investigate password bug
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -32,21 +18,38 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 60s
           script: |
-            echo "=== raw_values samples across many accounts (looking for date-like values) ==="
+            echo "=== 1. mmzz2491988 full record ==="
             sudo node -e "
             const d=JSON.parse(require('fs').readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
             const arr=Array.isArray(d)?d:(d.accounts||[]);
+            const a = arr.find(x=>(x.email||'').toLowerCase().includes('mmzz2491988'));
+            console.log(a?JSON.stringify(a,null,2):'NOT FOUND');
+            " 2>&1
+
+            echo ""
+            echo "=== 2. Aggregate: accounts with totp but no password ==="
+            sudo node -e "
+            const d=JSON.parse(require('fs').readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+            const arr=Array.isArray(d)?d:(d.accounts||[]);
+            const noPwWithTotp = arr.filter(a=>!a.password && a.totp_secret);
+            const noPwTotal = arr.filter(a=>!a.password);
+            console.log('total:', arr.length);
+            console.log('no password (any):', noPwTotal.length);
+            console.log('no password but HAS totp:', noPwWithTotp.length);
             const bySrc = {};
-            for (const a of arr) { const s=a.source_file||'?'; if(!bySrc[s]) bySrc[s]=a; }
-            let n=0;
-            for (const [src,a] of Object.entries(bySrc)) {
-              if (n>=15) break;
-              console.log('--- file:', src, '---');
-              console.log('raw_values:', JSON.stringify(a.raw_values));
-              n++;
+            for (const a of noPwWithTotp) { const s=a.source_file||'?'; bySrc[s]=(bySrc[s]||0)+1; }
+            const sorted = Object.entries(bySrc).sort((a,b)=>b[1]-a[1]).slice(0,20);
+            console.log('Top files with no-password-but-totp accounts:');
+            for (const [f,c] of sorted) console.log(' ', f, ':', c);
+            console.log('');
+            console.log('Sample 5 no-password raw_values:');
+            for (const a of noPwWithTotp.slice(0,5)) {
+              console.log(' email:', a.email, '| raw_values:', JSON.stringify(a.raw_values), '| source_row:', a.source_row);
             }
             " 2>&1
+
             echo ""
-            echo "=== isDateLike function body ==="
-            sudo sed -n '333,347p' /opt/gauth-full/upload_excels.js 2>/dev/null
+            echo "=== 3. password extraction + merge logic (relevant lines) ==="
+            sudo grep -n "password\s*=\|mapping.password\|cur.password\|a.password" /opt/gauth-full/upload_excels.js | head -40
+
             echo "=== DONE ==="

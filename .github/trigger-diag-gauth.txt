@@ -1,1 +1,1 @@
-trigger5-hash-verify
+trigger6-password-bug
