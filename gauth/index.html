@@ -645,9 +645,9 @@ function _sortByExcelDate(arr){
   var withDate = arr.filter(function(a){ return a.account_date })
   var noDate   = arr.filter(function(a){ return !a.account_date })
   withDate.sort(function(a, b){ return b.account_date - a.account_date })
-  if(!withDate.length) return noDate.slice()
-  var mid = Math.ceil(withDate.length / 2)
-  return withDate.slice(0, mid).concat(noDate).concat(withDate.slice(mid))
+  noDate.sort(function(a, b){ return (b.source_mtime||0) - (a.source_mtime||0) })
+  if(!withDate.length) return noDate
+  return withDate.concat(noDate)
 }
 let FAILED = {}
 async function load(){
