@@ -13,7 +13,7 @@ jobs:
   daily-purge:
     runs-on: ubuntu-latest
     steps:
-      - name: zone id 조회 (공식 API: GET /zones?name=...)
+      - name: "zone id 조회 (공식 API: GET /zones?name=...)"
         env:
           CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
         run: |
@@ -36,7 +36,7 @@ jobs:
               print('zone_id:', result[0]['id'])
           "
 
-      - name: purge_cache 실행 (공식 API: POST /zones/{zone_id}/purge_cache)
+      - name: "purge_cache 실행 (공식 API: POST /zones/{zone_id}/purge_cache)"
         env:
           CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
         run: |
