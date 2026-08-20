@@ -78,6 +78,16 @@
 필리핀 아님XX ❌🇵🇭</div>
   </div>
 
+  <div class="card" id="subsite-card">
+    <div class="card-head">
+      <span class="label">📦 하위 사이트별 계정</span>
+      <div class="actions">
+        <button class="icon-btn" id="refresh-subsites">🔄 새로고침</button>
+      </div>
+    </div>
+    <div id="subsite-list" style="display:flex;flex-direction:column;gap:10px;font-size:13px;color:var(--sub)">불러오는 중…</div>
+  </div>
+
   <div class="footer-note">gauth.cent-solution.online 계정 데이터를 함께 표시하는 전용 뷰입니다.<br>로그인/2FA/토큰 발급은 <b>gauth</b>에서만 처리됩니다.</div>
 </div>
 
@@ -153,6 +163,33 @@ window.addEventListener('appinstalled', function(){ installBtn.style.display = '
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('/sw.js').catch(function(){});
 }
+
+// 하위 사이트 계정 목록 (읽기 전용, jump 자체 vhost의 /api 프록시를 통해 gauth에서 가져옴)
+const SITE_STYLE = {
+  gain:{emoji:'🟣'}, woodong:{emoji:'🚕'}, sunbi:{emoji:'📘'}, simmani:{emoji:'🎬'},
+  win:{emoji:'🏆'}, aura:{emoji:'✨'}, bacad:{emoji:'🎓'}, camstouch:{emoji:'📷'},
+  james:{emoji:'👤'}, misskim:{emoji:'👩'}, naman:{emoji:'🧑'}, romi:{emoji:'🐾'},
+  second:{emoji:'2️⃣'}, soktv:{emoji:'📺'}
+};
+async function loadSubsites(){
+  var el = document.getElementById('subsite-list');
+  try{
+    var r = await fetch('/api/subsite-counts', {cache:'no-store'});
+    var d = await r.json();
+    var sites = d.sites || [];
+    if(!sites.length){ el.textContent = '데이터 없음'; return; }
+    el.innerHTML = sites.map(function(s){
+      var st = SITE_STYLE[s.site] || {emoji:'📁'};
+      return '<div style="display:flex;justify-content:space-between;align-items:center;background:var(--card);border:1px solid var(--border2);border-radius:8px;padding:8px 12px">'
+        + '<span>'+st.emoji+' '+s.site+'</span>'
+        + '<b style="color:var(--accent2)">'+s.count+'개</b></div>';
+    }).join('') + '<div style="text-align:right;color:var(--sub);font-size:11px;margin-top:2px">총 '+d.total+'개</div>';
+  }catch(e){
+    el.textContent = '불러오기 실패 (' + e.message + ')';
+  }
+}
+document.getElementById('refresh-subsites').onclick = loadSubsites;
+loadSubsites();
 </script>
 </body>
 </html>

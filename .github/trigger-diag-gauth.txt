@@ -1,1 +1,1 @@
-trigger81-verify-gauth-subsite-view-live-readonly
+trigger82-jump-subsite-accounts-widget-plus-proxy
