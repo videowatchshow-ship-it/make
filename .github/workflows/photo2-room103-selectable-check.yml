@@ -1,0 +1,48 @@
+name: photo2 103번 방이 jay/tak 등에서 선택 가능한지 원인 조사
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-room103-selectable-check.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: write_select_room.php / api_all_rooms.php / tables.json 안에서 103번 방 존재 여부 확인
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            echo "===== photo2/write_select_room.php 전문 ====="
+            sudo cat -n /var/www/sites/chamgyo/public/photo2/write_select_room.php 2>&1
+            echo ""
+            echo "===== photo2/api_all_rooms.php 전문 ====="
+            sudo cat -n /var/www/sites/chamgyo/public/photo2/api_all_rooms.php 2>&1
+            echo ""
+            echo "===== photo2/data 안에서 103번 방 관련 파일(room_103 등) 검색 ====="
+            sudo find /var/www/sites/chamgyo/public/photo2/data -iname "*103*" 2>&1
+            echo ""
+            echo "===== tables.json 안에서 103번 항목 검색 ====="
+            sudo grep -n "103" /var/www/sites/chamgyo/public/photo2/data/tables.json 2>&1 | head -20
+            echo ""
+            echo "===== jay/tak 현재 sel_*.json ====="
+            sudo cat /var/www/sites/chamgyo/public/photo2/data/sel_jay.json 2>&1
+            echo ""
+            sudo cat /var/www/sites/chamgyo/public/photo2/data/sel_tak.json 2>&1
+            echo ""
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
