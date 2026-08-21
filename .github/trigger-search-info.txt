@@ -1,1 +1,1 @@
-run2-direct-ssh
+run3-fast-targeted
