@@ -151,6 +151,27 @@ romi(로미), second(세컨드), soktv(속TV), cham(참)
 - **종료 방송 피크/최저 시청자**: Data API 미제공 (생방송 중 `concurrentViewers`만)
 - **Google 2SV 유무·전화번호**: 계정 보안설정 API 없음 → Puppeteer 자동화로만
 
+### 공식 문서 원본 주소 (모든 백엔드 코드의 출처 · 추측 코딩 금지)
+백엔드 API 호출은 전부 아래 공식 레퍼런스의 엔드포인트·필드를 그대로 사용한다.
+
+| 코드/기능 | 실제 호출 | 공식 문서 원본 주소 |
+|---|---|---|
+| 채널 통계(구독·영상·조회·공개상태) | `GET youtube/v3/channels?part=statistics,status,snippet` | https://developers.google.com/youtube/v3/docs/channels/list |
+| 핸들→채널ID 변환 | `channels?part=id&forHandle=@..` / `forUsername=..` | https://developers.google.com/youtube/v3/docs/channels/list |
+| 생방송 목록·횟수·날짜 | `GET youtube/v3/search?eventType=completed&type=video` | https://developers.google.com/youtube/v3/docs/search/list |
+| 영상 진행시간·라이브상세 | `GET youtube/v3/videos?part=contentDetails,liveStreamingDetails` | https://developers.google.com/youtube/v3/docs/videos/list |
+| liveStreamingDetails(동시시청자·시작/종료) | `videos.list part=liveStreamingDetails` | https://developers.google.com/youtube/v3/docs/videos#liveStreamingDetails |
+| 커뮤니티/저작권 양호여부 | `channels.list part=auditDetails` (OAuth) | https://developers.google.com/youtube/v3/docs/channels#auditDetails |
+| 구글 로그인 버튼 | `accounts.google.com/gsi/client` renderButton | https://developers.google.com/identity/gsi/web/guides/display-button |
+| id_token 검증 | `GET oauth2.googleapis.com/tokeninfo?id_token=` | https://developers.google.com/identity/gsi/web/guides/verify-google-id-token |
+| Identity Platform authorizedDomains | `PATCH identitytoolkit/admin/v2/.../config?updateMask=authorizedDomains` | https://cloud.google.com/identity-platform/docs/reference/rest/v2/projects/updateConfig |
+| Google IdP 설정 | `defaultSupportedIdpConfigs (google.com)` | https://cloud.google.com/identity-platform/docs/reference/rest/v2/projects.defaultSupportedIdpConfigs |
+| Firebase 웹 로그인(대안) | `signInWithPopup(GoogleAuthProvider)` | https://firebase.google.com/docs/auth/web/google-signin |
+| Puppeteer(자동화 엔진) | `puppeteer.launch/connect` | https://pptr.dev/api/puppeteer.launchoptions |
+| TOTP 생성 | `otplib authenticator.generate` | https://github.com/yeojz/otplib |
+
+> ⚠️ **2단계 인증 유무·전화번호·스트라이크 상세는 공식 API/문서가 존재하지 않는다.** 따라서 "공식 문서 카피" 원칙상 백엔드로 구현 불가 — 오직 브라우저 자동화(리버스 엔지니어링)로만 가능하며, 이는 공식 근거가 없으므로 추측 코딩 금지 범위에 해당한다.
+
 ### 로직 연결 (코드 간 의존)
 - 계정 DB(`accounts_normalized.json`: email·password·totp_secret·youtube_url)
   → ①은 `youtube_url`로 채널 조회, ②③은 `email`+`password`+`totp_secret(/codes)`로 Puppeteer 로그인
