@@ -1,4 +1,4 @@
-name: deploy login-results backend (엑셀↔실로그인 분리)
+name: deploy login-results backend
 
 on:
   workflow_dispatch: {}
@@ -26,7 +26,7 @@ jobs:
             echo "=== 1. Initialize login_results.json if missing ==="
             if [ ! -f "$DATA" ]; then
               echo '{}' | sudo tee "$DATA" > /dev/null
-              sudo chown $(whoami):$(whoami) "$DATA"
+              sudo chown "$(whoami):$(whoami)" "$DATA"
               echo "created $DATA"
             else
               echo "$DATA exists ($(wc -c < "$DATA") bytes)"
@@ -39,53 +39,9 @@ jobs:
               echo "=== 3. Patch: save login result + read + export API ==="
               sudo cp "$APP" "${APP}.bak.loginresults"
 
-              cat > /tmp/login_results_patch.js << 'PATCH_EOF'
+              PATCH_B64="Ci8vIOKUgOKUgCBsb2dpbl9yZXN1bHRzLmpzb246IOyLpCDroZzqt7jsnbgg6rKw6rO8IOyYgeq1rCDsoIDsnqUgKOyXkeyFgCBEQuyZgCDrs4Trj4QpIOKUgOKUgApjb25zdCBMT0dJTl9SRVNVTFRTX1BBVEggPSAnL29wdC9nYXV0aC1mdWxsL2xvZ2luX3Jlc3VsdHMuanNvbic7CmZ1bmN0aW9uIHJlYWRMb2dpblJlc3VsdHMoKSB7CiAgdHJ5IHsgcmV0dXJuIEpTT04ucGFyc2UocmVxdWlyZSgnZnMnKS5yZWFkRmlsZVN5bmMoTE9HSU5fUkVTVUxUU19QQVRILCAndXRmOCcpKTsgfQogIGNhdGNoKGUpIHsgcmV0dXJuIHt9OyB9Cn0KZnVuY3Rpb24gc2F2ZUxvZ2luUmVzdWx0KGVtYWlsLCByZXN1bHQpIHsKICBjb25zdCBkYXRhID0gcmVhZExvZ2luUmVzdWx0cygpOwogIGRhdGFbZW1haWxdID0geyAuLi5yZXN1bHQsIHRzOiBEYXRlLm5vdygpIH07CiAgcmVxdWlyZSgnZnMnKS53cml0ZUZpbGVTeW5jKExPR0lOX1JFU1VMVFNfUEFUSCwgSlNPTi5zdHJpbmdpZnkoZGF0YSwgbnVsbCwgMikpOwp9CgovLyBHRVQgL2FwaS9sb2dpbi1yZXN1bHRzCmFwcC5nZXQoJy9hcGkvbG9naW4tcmVzdWx0cycsIChyZXEsIHJlcykgPT4gewogIHJlcy5qc29uKHJlYWRMb2dpblJlc3VsdHMoKSk7Cn0pOwoKLy8gR0VUIC9hcGkvZXhwb3J0L2xvZ2luLXJlc3VsdHM/Zm9ybWF0PWpzb258Y3N2CmFwcC5nZXQoJy9hcGkvZXhwb3J0L2xvZ2luLXJlc3VsdHMnLCAocmVxLCByZXMpID0+IHsKICBjb25zdCBkYXRhID0gcmVhZExvZ2luUmVzdWx0cygpOwogIGNvbnN0IGVudHJpZXMgPSBPYmplY3QuZW50cmllcyhkYXRhKS5tYXAoKFtlbWFpbCwgcl0pID0+ICh7CiAgICBlbWFpbCwKICAgIG9rOiByLm9rID8gJ1lFUycgOiAnTk8nLAogICAgdGltZXN0YW1wOiByLnRzID8gbmV3IERhdGUoci50cykudG9JU09TdHJpbmcoKSA6ICcnLAogICAgZXJyb3I6IHIuZXJyIHx8IHIuZXJyb3IgfHwgJycsCiAgICBtZXNzYWdlOiByLm1zZyB8fCByLm1lc3NhZ2UgfHwgJycKICB9KSk7CiAgY29uc3QgZm10ID0gKHJlcS5xdWVyeS5mb3JtYXQgfHwgJ2pzb24nKS50b0xvd2VyQ2FzZSgpOwogIGlmIChmbXQgPT09ICdjc3YnKSB7CiAgICBjb25zdCBoZWFkZXIgPSAnZW1haWwsb2ssdGltZXN0YW1wLGVycm9yLG1lc3NhZ2UnOwogICAgY29uc3Qgcm93cyA9IGVudHJpZXMubWFwKGUgPT4KICAgICAgW2UuZW1haWwsIGUub2ssIGUudGltZXN0YW1wLCBlLmVycm9yLCBlLm1lc3NhZ2VdCiAgICAgICAgLm1hcCh2ID0+ICciJyArIFN0cmluZyh2KS5yZXBsYWNlKC8iL2csICciIicpICsgJyInKS5qb2luKCcsJykKICAgICk7CiAgICByZXMuc2V0SGVhZGVyKCdDb250ZW50LVR5cGUnLCAndGV4dC9jc3Y7IGNoYXJzZXQ9dXRmLTgnKTsKICAgIHJlcy5zZXRIZWFkZXIoJ0NvbnRlbnQtRGlzcG9zaXRpb24nLCAnYXR0YWNobWVudDsgZmlsZW5hbWU9ImxvZ2luX3Jlc3VsdHMuY3N2IicpOwogICAgcmVzLnNlbmQoaGVhZGVyICsgJ1xuJyArIHJvd3Muam9pbignXG4nKSk7CiAgfSBlbHNlIHsKICAgIHJlcy5zZXRIZWFkZXIoJ0NvbnRlbnQtRGlzcG9zaXRpb24nLCAnYXR0YWNobWVudDsgZmlsZW5hbWU9ImxvZ2luX3Jlc3VsdHMuanNvbiInKTsKICAgIHJlcy5qc29uKGVudHJpZXMpOwogIH0KfSk7Cg=="
 
-// ── login_results.json: 실 로그인 결과 영구 저장 (엑셀 DB와 별도) ──
-// ref: https://nodejs.org/api/fs.html#fswritefilesyncfile-data-options
-const LOGIN_RESULTS_PATH = '/opt/gauth-full/login_results.json';
-function readLoginResults() {
-  try { return JSON.parse(require('fs').readFileSync(LOGIN_RESULTS_PATH, 'utf8')); }
-  catch(e) { return {}; }
-}
-function saveLoginResult(email, result) {
-  const data = readLoginResults();
-  data[email] = { ...result, ts: Date.now() };
-  require('fs').writeFileSync(LOGIN_RESULTS_PATH, JSON.stringify(data, null, 2));
-}
-
-// GET /api/login-results — 실 로그인 결과 전체 조회
-app.get('/api/login-results', (req, res) => {
-  res.json(readLoginResults());
-});
-
-// GET /api/export/login-results?format=json|csv
-// ref: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Disposition
-app.get('/api/export/login-results', (req, res) => {
-  const data = readLoginResults();
-  const entries = Object.entries(data).map(([email, r]) => ({
-    email,
-    ok: r.ok ? 'YES' : 'NO',
-    timestamp: r.ts ? new Date(r.ts).toISOString() : '',
-    error: r.err || r.error || '',
-    message: r.msg || r.message || ''
-  }));
-  const fmt = (req.query.format || 'json').toLowerCase();
-  if (fmt === 'csv') {
-    const header = 'email,ok,timestamp,error,message';
-    const rows = entries.map(e =>
-      [e.email, e.ok, e.timestamp, e.error, e.message]
-        .map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')
-    );
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="login_results.csv"');
-    res.send(header + '\n' + rows.join('\n'));
-  } else {
-    res.setHeader('Content-Disposition', 'attachment; filename="login_results.json"');
-    res.json(entries);
-  }
-});
-PATCH_EOF
+              echo "$PATCH_B64" | base64 -d > /tmp/login_results_patch.js
 
               LISTEN_LINE=$(sudo grep -n 'app\.listen\|server\.listen' "$APP" | head -1 | cut -d: -f1)
               if [ -z "$LISTEN_LINE" ]; then
@@ -97,15 +53,7 @@ PATCH_EOF
               echo "login-results routes patched"
             fi
 
-            echo "=== 4. Patch login-one to save results ==="
-            if grep -q 'saveLoginResult' "$APP"; then
-              echo "saveLoginResult already called in login-one"
-            else
-              echo "Note: saveLoginResult integration with login-one requires manual review of the route structure"
-              echo "The saveLoginResult function is available for use"
-            fi
-
-            echo "=== 5. Restart gauth ==="
+            echo "=== 4. Restart gauth ==="
             sudo systemctl restart gauth
             sleep 2
             if systemctl is-active --quiet gauth; then
@@ -117,7 +65,7 @@ PATCH_EOF
               exit 1
             fi
 
-            echo "=== 6. Verify ==="
+            echo "=== 5. Verify ==="
             curl -sf http://localhost:4000/api/login-results | head -c 200
             echo ""
             echo "DONE"

@@ -119,6 +119,8 @@ nav a.active{background:#1e3a5f;color:var(--accent)}
     <option value="login_fail">로그인 실패</option>
   </select>
   <span id="result-count"></span>
+  <a href="/api/export/login-results?format=csv" style="font-size:11px;color:var(--accent);text-decoration:none;white-space:nowrap" title="실 로그인 결과 CSV 다운로드">⬇ CSV</a>
+  <a href="/api/export/login-results?format=json" style="font-size:11px;color:var(--accent);text-decoration:none;white-space:nowrap" title="실 로그인 결과 JSON 다운로드">⬇ JSON</a>
 </div>
 
 <div class="summary-bar" id="summaryBar"></div>
@@ -147,6 +149,23 @@ var ytCache = {};
 var loginStore = {};
 try { loginStore = JSON.parse(localStorage.getItem('gauth_logins')||'{}'); } catch(e){ loginStore={}; }
 function saveLoginStore(){ try { localStorage.setItem('gauth_logins', JSON.stringify(loginStore)); } catch(e){} }
+function mergeServerLogins(){
+  fetch('/api/login-results',{cache:'no-store'})
+    .then(function(r){ return r.ok ? r.json() : {}; })
+    .then(function(server){
+      var changed = false;
+      Object.keys(server).forEach(function(email){
+        var s = server[email];
+        var local = loginStore[email];
+        if (!local || (s.ts && (!local.ts || s.ts > local.ts))) {
+          loginStore[email] = {ok:!!s.ok, ts:s.ts||0, msg:s.msg||s.message||'', err:s.err||s.error||''};
+          changed = true;
+        }
+      });
+      if (changed) { saveLoginStore(); renderList(); }
+    })
+    .catch(function(){});
+}
 
 var META = {
   gain:{e:'🟣',k:'게인'},woodong:{e:'🚕',k:'우동'},sunbi:{e:'📘',k:'선비'},
@@ -182,12 +201,12 @@ function renderList(){
     if (a.youtube_url||a.youtube||a.channel_url) badges += '<span class="mbadge mb-ch">CH</span>';
 
     buf.push(
-      '<div class="row" data-i="'+a._idx+'" onclick="openDetail('+a._idx+')">' +
-        '<span class="row-num">'+(i+1)+'</span>' +
-        '<span class="row-dot '+loginDot(email)+'"></span>' +
-        '<span class="row-email">'+esc(email)+'</span>' +
-        '<span class="row-site">'+m.e+'</span>' +
-        '<span class="row-badges">'+badges+'</span>' +
+      '<div class="row" data-i="'+a._idx+'" onclick="openDetail('+a._idx+')">'+
+        '<span class="row-num">'+(i+1)+'</span>'+
+        '<span class="row-dot '+loginDot(email)+'"></span>'+
+        '<span class="row-email">'+esc(email)+'</span>'+
+        '<span class="row-site">'+m.e+'</span>'+
+        '<span class="row-badges">'+badges+'</span>'+
       '</div>'
     );
   }
@@ -251,6 +270,7 @@ window.openDetail = function(idx){
   if (a.phone || a.recovery_phone) grid += '<div class="dp-label">전화</div><div class="dp-val">'+esc(a.phone||a.recovery_phone)+'</div>';
   if (a.status) grid += '<div class="dp-label">상태</div><div class="dp-val">'+esc(a.status)+'</div>';
 
+  // login section
   var stored = loginStore[email];
   var storedHtml = '';
   var btnClass = 'login-btn';
@@ -267,14 +287,15 @@ window.openDetail = function(idx){
     }
   }
   var loginHtml = '<div class="dp-section"><div class="dp-section-title">🔑 계정 로그인</div>'+
-    '<div class="login-actions"><button class="'+btnClass+'" id="dp-login-btn" onclick="loginOne('+idx+',\''+esc(email)+'\')">' +btnText+'</button></div>'+
+    '<div class="login-actions"><button class="'+btnClass+'" id="dp-login-btn" onclick="loginOne('+idx+',\''+esc(email)+'\')">'+btnText+'</button></div>'+
     '<div class="login-status" id="dp-login-status">'+storedHtml+'</div></div>';
 
+  // yt section
   var yurl = a.youtube_url || a.youtube || a.channel_url || '';
   var ytHtml = '';
   if (yurl) {
     ytHtml = '<div class="dp-section"><div class="dp-section-title">📺 채널 정보</div>'+
-      '<div class="yt-info" id="dp-yt"><button onclick="loadYt(\'dp-yt\',\''+esc(yurl)+'\')") style="background:var(--card);border:1px solid var(--border2);color:var(--accent);border-radius:5px;padding:4px 10px;font-size:11px;cursor:pointer">📊 채널 상태 불러오기</button></div></div>';
+      '<div class="yt-info" id="dp-yt"><button onclick="loadYt(\'dp-yt\',\''+esc(yurl)+'\')" style="background:var(--card);border:1px solid var(--border2);color:var(--accent);border-radius:5px;padding:4px 10px;font-size:11px;cursor:pointer">📊 채널 상태 불러오기</button></div></div>';
   }
 
   document.getElementById('dp-body').innerHTML = '<div class="dp-grid">'+grid+'</div>'+loginHtml+ytHtml;
@@ -282,6 +303,7 @@ window.openDetail = function(idx){
   document.getElementById('overlay').classList.add('open');
   document.getElementById('detailPanel').classList.add('open');
 
+  // highlight row
   document.querySelectorAll('.row.selected').forEach(function(r){r.classList.remove('selected');});
   var row = document.querySelector('.row[data-i="'+idx+'"]');
   if (row) row.classList.add('selected');
@@ -343,6 +365,7 @@ window.loginOne = function(idx, email){
       loginStore[email] = {ok:false, ts:Date.now(), err:d.error||d.message||''};
     }
     saveLoginStore();
+    // update the dot in the list row
     var dot = document.querySelector('.row[data-i="'+idx+'"] .row-dot');
     if (dot) dot.className = 'row-dot '+(loginStore[email].ok?'dot-ok':'dot-fail');
     updateSummary();
@@ -355,6 +378,7 @@ window.loginOne = function(idx, email){
   });
 };
 
+// keyboard: Escape closes panel
 document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeDetail(); });
 
 var debounceTimer;
@@ -384,6 +408,7 @@ fetch('/api/subsite-accounts',{cache:'no-store'})
     });
     filtered = allAccounts.slice();
     renderList();
+    mergeServerLogins();
   })
   .catch(function(e){
     document.getElementById('list').innerHTML = '<div style="color:var(--err);padding:20px">로드 실패: '+esc(e.message)+'</div>';
