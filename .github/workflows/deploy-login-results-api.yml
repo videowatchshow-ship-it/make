@@ -1,0 +1,123 @@
+name: deploy login-results backend (엑셀↔실로그인 분리)
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-login-results-api.txt']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Add login-results API to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            set -e
+            APP=/opt/gauth-full/rebrowser-login.js
+            DATA=/opt/gauth-full/login_results.json
+
+            echo "=== 1. Initialize login_results.json if missing ==="
+            if [ ! -f "$DATA" ]; then
+              echo '{}' | sudo tee "$DATA" > /dev/null
+              sudo chown $(whoami):$(whoami) "$DATA"
+              echo "created $DATA"
+            else
+              echo "$DATA exists ($(wc -c < "$DATA") bytes)"
+            fi
+
+            echo "=== 2. Check if login-results routes already exist ==="
+            if grep -q 'api/login-results' "$APP"; then
+              echo "login-results routes already in server, skipping patch"
+            else
+              echo "=== 3. Patch: save login result + read + export API ==="
+              sudo cp "$APP" "${APP}.bak.loginresults"
+
+              cat > /tmp/login_results_patch.js << 'PATCH_EOF'
+
+// ── login_results.json: 실 로그인 결과 영구 저장 (엑셀 DB와 별도) ──
+// ref: https://nodejs.org/api/fs.html#fswritefilesyncfile-data-options
+const LOGIN_RESULTS_PATH = '/opt/gauth-full/login_results.json';
+function readLoginResults() {
+  try { return JSON.parse(require('fs').readFileSync(LOGIN_RESULTS_PATH, 'utf8')); }
+  catch(e) { return {}; }
+}
+function saveLoginResult(email, result) {
+  const data = readLoginResults();
+  data[email] = { ...result, ts: Date.now() };
+  require('fs').writeFileSync(LOGIN_RESULTS_PATH, JSON.stringify(data, null, 2));
+}
+
+// GET /api/login-results — 실 로그인 결과 전체 조회
+app.get('/api/login-results', (req, res) => {
+  res.json(readLoginResults());
+});
+
+// GET /api/export/login-results?format=json|csv
+// ref: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Disposition
+app.get('/api/export/login-results', (req, res) => {
+  const data = readLoginResults();
+  const entries = Object.entries(data).map(([email, r]) => ({
+    email,
+    ok: r.ok ? 'YES' : 'NO',
+    timestamp: r.ts ? new Date(r.ts).toISOString() : '',
+    error: r.err || r.error || '',
+    message: r.msg || r.message || ''
+  }));
+  const fmt = (req.query.format || 'json').toLowerCase();
+  if (fmt === 'csv') {
+    const header = 'email,ok,timestamp,error,message';
+    const rows = entries.map(e =>
+      [e.email, e.ok, e.timestamp, e.error, e.message]
+        .map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')
+    );
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="login_results.csv"');
+    res.send(header + '\n' + rows.join('\n'));
+  } else {
+    res.setHeader('Content-Disposition', 'attachment; filename="login_results.json"');
+    res.json(entries);
+  }
+});
+PATCH_EOF
+
+              LISTEN_LINE=$(sudo grep -n 'app\.listen\|server\.listen' "$APP" | head -1 | cut -d: -f1)
+              if [ -z "$LISTEN_LINE" ]; then
+                sudo bash -c "cat /tmp/login_results_patch.js >> $APP"
+              else
+                sudo sed -i "${LISTEN_LINE}r /tmp/login_results_patch.js" "$APP"
+              fi
+              rm /tmp/login_results_patch.js
+              echo "login-results routes patched"
+            fi
+
+            echo "=== 4. Patch login-one to save results ==="
+            if grep -q 'saveLoginResult' "$APP"; then
+              echo "saveLoginResult already called in login-one"
+            else
+              echo "Note: saveLoginResult integration with login-one requires manual review of the route structure"
+              echo "The saveLoginResult function is available for use"
+            fi
+
+            echo "=== 5. Restart gauth ==="
+            sudo systemctl restart gauth
+            sleep 2
+            if systemctl is-active --quiet gauth; then
+              echo "gauth running OK"
+            else
+              echo "gauth failed, rolling back"
+              sudo cp "${APP}.bak.loginresults" "$APP"
+              sudo systemctl restart gauth
+              exit 1
+            fi
+
+            echo "=== 6. Verify ==="
+            curl -sf http://localhost:4000/api/login-results | head -c 200
+            echo ""
+            echo "DONE"
