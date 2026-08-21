@@ -11,26 +11,33 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
-      - name: Find token + 5 real logins
+      - name: Inspect auth code on server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 600s
+          command_timeout: 60s
           script: |
-            B=http://localhost:4000
-            echo '=== find how auth is checked (unauthorized) ==='
-            sudo grep -nE "unauthorized|API_TOKEN|ADMIN_TOKEN|req.query.token|checkAuth|requireAuth|Bearer|x-api-token" /opt/gauth-full/rebrowser-login.js | head -20
-            echo ''
-            echo '=== token value from .env ==='
-            TOK=$(sudo grep -oE '(API_TOKEN|ADMIN_TOKEN|AUTH_TOKEN|TOKEN)=[A-Za-z0-9_-]+' /opt/gauth-full/.env 2>/dev/null | head -1 | cut -d= -f2)
-            echo "token length: ${#TOK}"
-            echo ''
-            echo '=== 5 REAL LOGINS with token (query + header) ==='
-            for em in lethivan2023ht@gmail.com ngodangkhoa3985@gmail.com sikendarsikendar650@gmail.com mail.akashkumar.ak4211@gmail.com chhinsothearith31@gmail.com; do
-              echo "--- $em ---"
-              R=$(curl -s --max-time 120 -X POST "$B/api/login-one?token=$TOK" -H 'Content-Type: application/json' -H "x-api-token: $TOK" -H "Authorization: Bearer $TOK" -d "{\"email\":\"$em\"}")
-              echo "$R" | head -c 500; echo ''
-            done
-            echo 'done'
+            echo "=== 1. Auth routes in rebrowser-login.js ==="
+            sudo grep -n 'auth\|currentUser\|loggedIn\|session\|cookie\|id_token\|google.auth\|verifyIdToken\|credential' /opt/gauth-full/rebrowser-login.js | head -60
+
+            echo ""
+            echo "=== 2. Full auth section (around auth/me) ==="
+            sudo grep -n -B5 -A10 'auth/me\|auth/logout\|auth/config\|auth/login' /opt/gauth-full/rebrowser-login.js
+
+            echo ""
+            echo "=== 3. How currentUser is stored ==="
+            sudo grep -n 'let current\|var current\|const current\|let logged\|let user\b\|Map(\|new Map\|sessions\[' /opt/gauth-full/rebrowser-login.js | head -20
+
+            echo ""
+            echo "=== 4. Google auth library usage ==="
+            sudo grep -rn 'google-auth-library\|OAuth2Client\|verifyIdToken' /opt/gauth-full/*.js 2>/dev/null | head -20
+
+            echo ""
+            echo "=== 5. index.html auth section ==="
+            sudo grep -n 'currentUser\|loggedInUser\|auth/me\|auth/logout\|handleCredentialResponse\|google.accounts.id' /var/www/sites/gauth/public/index.html | head -30
+
+            echo ""
+            echo "=== 6. Cookie/session middleware ==="
+            sudo grep -n 'cookie\|express-session\|cookieParser\|req.session' /opt/gauth-full/rebrowser-login.js | head -20
