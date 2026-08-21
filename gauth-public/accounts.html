@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>gauth · 계정 상세</title>
+<meta http-equiv="Cache-Control" content="no-store">
+<style>
+:root{--bg:#0d1117;--panel:#0f1620;--card:#161a20;--border:#22282f;--border2:#2a323c;--text:#e8ecef;--sub:#8a95a5;--accent:#7dabff;--accent2:#3ddc84;--warn:#ffb469;--err:#f47070}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo",sans-serif;min-height:100vh}
+
+/* ── nav ── */
+nav{position:sticky;top:0;z-index:10;background:#111418;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;height:48px;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+nav::-webkit-scrollbar{display:none}
+nav a{color:var(--sub);text-decoration:none;font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;white-space:nowrap;transition:background .15s,color .15s}
+nav a:hover{background:#1a1f27;color:var(--text)}
+nav a.active{background:#1e3a5f;color:var(--accent)}
+
+/* ── toolbar ── */
+.toolbar{padding:12px 16px;background:#0f1216;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.toolbar input{background:var(--card);border:1px solid var(--border2);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px;flex:1;min-width:140px}
+.toolbar input:focus{outline:0;border-color:var(--accent)}
+.toolbar select{background:var(--card);border:1px solid var(--border2);color:var(--text);padding:8px 10px;border-radius:6px;font-size:12px}
+#result-count{color:var(--sub);font-size:11px;white-space:nowrap}
+
+/* ── details accordion ── */
+.wrap{max-width:680px;margin:0 auto;padding:12px 16px 80px}
+details{background:var(--panel);border:1px solid var(--border);border-radius:10px;margin-bottom:6px;overflow:hidden}
+details[open]{border-color:var(--border2)}
+details[open] summary{background:#1a1f27;border-bottom:1px solid var(--border)}
+summary{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;list-style:none;font-size:13px;transition:background .15s}
+summary::-webkit-details-marker{display:none}
+summary::after{content:'▶';color:var(--sub);font-size:10px;transition:transform .2s}
+details[open] summary::after{transform:rotate(90deg)}
+summary:hover{background:#151a22}
+.s-email{font-weight:600;word-break:break-all;flex:1;min-width:0}
+.s-right{display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:8px}
+.badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:999px;font-weight:600}
+.b-ok{background:#0f2a1a;color:var(--accent2);border:1px solid #1f5c39}
+.b-warn{background:#2a1a00;color:var(--warn);border:1px solid #6b4a1f}
+.b-err{background:#2a1515;color:var(--err);border:1px solid #5c2020}
+.b-2fa{background:#1c2740;color:var(--accent);border:1px solid #2a4070}
+
+/* ── card body ── */
+.acc-body{padding:12px 14px;background:#12171e;font-size:12.5px;line-height:1.8}
+.acc-grid{display:grid;grid-template-columns:80px 1fr;gap:4px 10px}
+.acc-label{color:var(--sub);font-weight:600;font-size:11px;text-align:right}
+.acc-val{word-break:break-all}
+.acc-section{margin-top:10px;padding-top:8px;border-top:1px solid var(--border)}
+.acc-section-title{font-size:11px;color:var(--accent);font-weight:700;margin-bottom:6px}
+.yt-info{background:#0b0f14;border:1px solid var(--border);border-radius:6px;padding:8px 10px;line-height:1.7;font-size:11.5px}
+.yt-info b{color:var(--accent)}
+.live-item{display:flex;gap:8px;font-size:11px;padding:3px 0;color:#9fb3c8}
+.live-date{color:var(--text);min-width:70px}
+
+/* ── pager ── */
+.pager{position:fixed;bottom:0;left:0;right:0;background:#111418;border-top:1px solid var(--border);padding:10px 16px;display:flex;justify-content:center;align-items:center;gap:12px;z-index:10}
+.pager button{background:var(--card);border:1px solid var(--border2);color:var(--text);border-radius:6px;padding:6px 14px;font-size:13px;cursor:pointer}
+.pager button:disabled{opacity:.3;cursor:default}
+.pager span{color:var(--sub);font-size:12px}
+
+/* ── loading ── */
+.loading{text-align:center;padding:40px;color:var(--sub)}
+.dot-pulse{display:inline-block;animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+
+/* ── mobile ── */
+@media(max-width:600px){
+  nav{height:42px;padding:0 8px}
+  nav a{font-size:12px;padding:5px 10px}
+  .toolbar{padding:8px 10px}
+  .wrap{padding:8px 10px 72px}
+  summary{padding:10px 12px;font-size:12.5px}
+  .acc-grid{grid-template-columns:70px 1fr;gap:3px 8px}
+  .acc-body{padding:10px 12px}
+  .pager{padding:8px 10px}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/">🏠 메인</a>
+  <a href="/subsites.html">📦 사이트별</a>
+  <a href="/accounts.html" class="active">📋 계정 상세</a>
+</nav>
+
+<div class="toolbar">
+  <input type="text" id="q" placeholder="이메일·사이트 검색…" autocomplete="off">
+  <select id="siteFilter"><option value="">전체 사이트</option></select>
+  <select id="statusFilter">
+    <option value="">전체 상태</option>
+    <option value="has_yt">채널 있음</option>
+    <option value="no_yt">채널 없음</option>
+    <option value="has_2fa">2FA 있음</option>
+  </select>
+  <span id="result-count"></span>
+</div>
+
+<div class="wrap">
+  <div id="list"><div class="loading"><span class="dot-pulse">불러오는 중…</span></div></div>
+</div>
+
+<div class="pager">
+  <button id="prevBtn" disabled>◀ 이전</button>
+  <span id="pageInfo">–</span>
+  <button id="nextBtn" disabled>다음 ▶</button>
+</div>
+
+<script>
+/* ref: https://developer.mozilla.org/en-US/docs/Web/HTML/Element/details
+ * ref: https://developer.mozilla.org/en-US/blog/html-details-exclusive-accordions/ (name attr)
+ * ref: https://developer.mozilla.org/en-US/docs/Web/API/HTMLDetailsElement */
+
+var PER_PAGE = 20;
+var allAccounts = [];
+var filtered = [];
+var page = 0;
+var ytCache = {};
+
+var META = {
+  gain:{e:'🟣',k:'게인'},woodong:{e:'🚕',k:'우동'},sunbi:{e:'📘',k:'선비'},
+  simmani:{e:'🎬',k:'심마니'},win:{e:'🏆',k:'윈'},aura:{e:'✨',k:'아우라'},
+  bacad:{e:'🎓',k:'바캇'},camstouch:{e:'📷',k:'캠스터치'},james:{e:'👤',k:'제임스'},
+  misskim:{e:'👩',k:'미스김'},naman:{e:'🧑',k:'나만'},romi:{e:'🐾',k:'로미'},
+  second:{e:'2️⃣',k:'세컨드'},soktv:{e:'📺',k:'속TV'},cham:{e:'🐘',k:'참'}
+};
+
+function esc(s){ var d=document.createElement('div'); d.textContent=String(s==null?'':s); return d.innerHTML; }
+
+function fmtDur(s){ return s||'-'; }
+
+function badge(cls, txt){ return '<span class="badge '+cls+'">'+esc(txt)+'</span>'; }
+
+function statusBadge(a){
+  var b = '';
+  if (a.totp_secret) b += badge('b-2fa','2FA');
+  if (a.youtube_url) b += badge('b-ok','채널');
+  if (a.status === 'failed') b += badge('b-err','실패');
+  return b || badge('b-warn','대기');
+}
+
+function renderCard(a, idx){
+  var email = a.email || a.gmail || '?';
+  var site = a.site || a.source_site || '?';
+  var m = META[site] || {e:'📁',k:site};
+  var yurl = a.youtube_url || a.youtube || a.channel_url || '';
+  var id = 'acc-'+idx;
+
+  var grid = '';
+  grid += '<div class="acc-label">사이트</div><div class="acc-val">'+m.e+' '+esc(site)+' ('+esc(m.k)+')</div>';
+  grid += '<div class="acc-label">이메일</div><div class="acc-val">'+esc(email)+'</div>';
+  if (a.password) grid += '<div class="acc-label">비밀번호</div><div class="acc-val" style="color:#c9d2dc;font-family:monospace">'+esc(a.password)+'</div>';
+  if (a.totp_secret) grid += '<div class="acc-label">2FA</div><div class="acc-val"><span class="badge b-2fa">TOTP</span> <span style="font-family:monospace;font-size:11px;color:var(--sub)">'+esc(a.totp_secret.slice(0,6))+'…</span></div>';
+  if (a.recovery_email) grid += '<div class="acc-label">복구메일</div><div class="acc-val">'+esc(a.recovery_email)+'</div>';
+  if (a.phone || a.recovery_phone) grid += '<div class="acc-label">전화</div><div class="acc-val">'+esc(a.phone||a.recovery_phone)+'</div>';
+  if (a.status) grid += '<div class="acc-label">상태</div><div class="acc-val">'+esc(a.status)+'</div>';
+
+  var ytSection = '';
+  if (yurl) {
+    ytSection = '<div class="acc-section"><div class="acc-section-title">📺 채널 정보</div><div class="yt-info" id="yt-'+idx+'"><button onclick="loadYt('+idx+',\''+esc(yurl)+'\')">📊 채널 상태 불러오기</button></div></div>';
+  }
+
+  return '<details name="acc"><summary><span class="s-email">'+esc(email)+'</span><span class="s-right">'+statusBadge(a)+'</span></summary><div class="acc-body"><div class="acc-grid">'+grid+'</div>'+ytSection+'</div></details>';
+}
+
+function renderPage(){
+  var el = document.getElementById('list');
+  var start = page * PER_PAGE;
+  var slice = filtered.slice(start, start + PER_PAGE);
+  var totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
+
+  if (!slice.length) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--sub)">결과 없음</div>';
+  } else {
+    el.innerHTML = slice.map(function(a, i){ return renderCard(a, start + i); }).join('');
+  }
+
+  document.getElementById('pageInfo').textContent = (start+1)+'–'+Math.min(start+PER_PAGE, filtered.length)+' / '+filtered.length;
+  document.getElementById('prevBtn').disabled = page === 0;
+  document.getElementById('nextBtn').disabled = page >= totalPages - 1;
+  document.getElementById('result-count').textContent = filtered.length+'개';
+  window.scrollTo(0, 0);
+}
+
+function applyFilter(){
+  var q = document.getElementById('q').value.toLowerCase().trim();
+  var sf = document.getElementById('siteFilter').value;
+  var stf = document.getElementById('statusFilter').value;
+  filtered = allAccounts.filter(function(a){
+    var email = (a.email || a.gmail || '').toLowerCase();
+    var site = a.site || a.source_site || '';
+    if (q && email.indexOf(q) < 0 && site.indexOf(q) < 0) return false;
+    if (sf && site !== sf) return false;
+    if (stf === 'has_yt' && !(a.youtube_url || a.youtube || a.channel_url)) return false;
+    if (stf === 'no_yt' && (a.youtube_url || a.youtube || a.channel_url)) return false;
+    if (stf === 'has_2fa' && !a.totp_secret) return false;
+    return true;
+  });
+  page = 0;
+  renderPage();
+}
+
+window.loadYt = function(idx, url){
+  var box = document.getElementById('yt-'+idx);
+  if (!box) return;
+  if (ytCache[url]) { box.innerHTML = ytCache[url]; return; }
+  box.innerHTML = '<span style="color:var(--sub)">불러오는 중…</span>';
+  fetch('/api/youtube/channel-status?url='+encodeURIComponent(url),{cache:'no-store'})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if (!d.ok) { box.innerHTML = '⚠ '+esc(d.warn||d.error||'조회 실패'); return; }
+      var lives = (d.recentLives||[]).map(function(v){
+        return '<div class="live-item"><span class="live-date">'+(v.date?esc(v.date.slice(0,10)):'?')+'</span><span>'+esc(fmtDur(v.duration))+(v.concurrentViewers?' · 동시 '+esc(v.concurrentViewers):'')+'</span></div>';
+      }).join('');
+      var html =
+        '<b>'+esc(d.title||'')+'</b> '+
+        (d.privacyStatus==='public'?badge('b-ok','공개'):badge('b-warn',d.privacyStatus||'?'))+'<br>'+
+        '구독 '+esc(d.subscriberCount||'-')+' · 영상 '+esc(d.videoCount||'-')+' · 조회 '+esc(d.viewCount||'-')+'<br>'+
+        '생방송 '+esc(d.completedLiveCount||0)+'회'+
+        (d.lastLiveDaysAgo!=null?' · <b style="color:var(--warn)">마지막 '+esc(d.lastLiveDaysAgo)+'일 전</b>':'')+
+        (lives?'<div style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px">'+lives+'</div>':'');
+      ytCache[url] = html;
+      box.innerHTML = html;
+    })
+    .catch(function(e){ box.innerHTML = '오류: '+esc(e.message); });
+};
+
+document.getElementById('prevBtn').addEventListener('click', function(){ if(page>0){page--;renderPage();} });
+document.getElementById('nextBtn').addEventListener('click', function(){ page++;renderPage(); });
+
+var debounceTimer;
+document.getElementById('q').addEventListener('input', function(){ clearTimeout(debounceTimer); debounceTimer=setTimeout(applyFilter, 200); });
+document.getElementById('siteFilter').addEventListener('change', applyFilter);
+document.getElementById('statusFilter').addEventListener('change', applyFilter);
+
+fetch('/api/subsite-accounts',{cache:'no-store'})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    var sites = d.sites || [];
+    var sel = document.getElementById('siteFilter');
+    var siteSet = {};
+    sites.forEach(function(s){
+      var name = s.site || '';
+      if (!name) return;
+      siteSet[name] = true;
+      var m = META[name]||{e:'📁',k:name};
+      var opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = m.e+' '+name+' ('+m.k+') — '+(s.accounts?s.accounts.length:s.count||0)+'개';
+      sel.appendChild(opt);
+
+      (s.accounts||[]).forEach(function(a){
+        a.site = a.site || name;
+        allAccounts.push(a);
+      });
+    });
+    filtered = allAccounts.slice();
+    renderPage();
+  })
+  .catch(function(e){
+    document.getElementById('list').innerHTML = '<div style="color:var(--err);padding:20px">로드 실패: '+esc(e.message)+'</div>';
+  });
+</script>
+</body>
+</html>
