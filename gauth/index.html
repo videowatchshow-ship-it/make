@@ -196,7 +196,9 @@ function copyStreamTitle(e){
 }
 function copyStreamDesc(e){
   var el=document.getElementById('streamDesc');
-  var text=el.innerHTML.replace(/<br\s*\/?>/gi,'\n').replace(/<[^>]*>/g,'').replace(/&amp;/g,'&');
+  /* MDN DOMParser: https://developer.mozilla.org/en-US/docs/Web/API/DOMParser/parseFromString */
+  var html=el.innerHTML.replace(/<br\s*\/?>/gi,'\n');
+  var text=(new DOMParser()).parseFromString(html,'text/html').body.textContent||'';
   _siCopy(text,e.currentTarget||e);
 }
 </script>

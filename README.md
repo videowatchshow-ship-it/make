@@ -332,6 +332,29 @@ const url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURICompo
 | Express | `express@4.21.2` | https://expressjs.com/en/4x/api.html |
 | 엑셀 파서 | `xlsx@0.18.5` | https://docs.sheetjs.com/ |
 
+### 정규식·검증 로직 (upload_excels.js / index.html)
+| 검증 대상 | 근거 스펙 | 공식 문서 |
+|---|---|---|
+| 이메일 (`isEmail`) | RFC 5322 §3.4.1 + WHATWG HTML5 email | https://datatracker.ietf.org/doc/html/rfc5322#section-3.4.1 / https://html.spec.whatwg.org/#valid-e-mail-address |
+| Gmail 정규화 (점·플러스·googlemail) | Google 지원 문서 | https://support.google.com/mail/answer/7436150 / https://support.google.com/mail/answer/22370 / https://support.google.com/mail/answer/10313 |
+| 전화번호 (`isPhoneNumber`) | ITU-T E.164 (7-15자리) | https://www.itu.int/rec/T-REC-E.164-201011-I/en |
+| Base32 TOTP (`normalizeTotp`, `isTotpLike`) | RFC 4648 §6 (A-Z, 2-7) | https://datatracker.ietf.org/doc/html/rfc4648#section-6 |
+| TOTP 최소 길이 | RFC 4226 §4 (128-bit = 20 Base32 char, Google은 80-bit/16 char 허용) | https://datatracker.ietf.org/doc/html/rfc4226#section-4 |
+| 6-8자리 코드 (`isSixDigitCode`) | RFC 6238 §4 (TOTP 6자리) + Google 백업코드 8자리 | https://datatracker.ietf.org/doc/html/rfc6238#section-4 / https://support.google.com/accounts/answer/1187538 |
+| otpauth URI 파싱 | Google Authenticator Key URI Format | https://github.com/google/google-authenticator/wiki/Key-Uri-Format |
+| URL 판별 (`isUrlLike`) | WHATWG URL Standard + `new URL()` | https://url.spec.whatwg.org/#urls |
+| mailto: 링크 | RFC 6068 | https://datatracker.ietf.org/doc/html/rfc6068 |
+| HTML 이스케이프 (`_esc`) | MDN innerHTML XSS 방지 | https://developer.mozilla.org/en-US/docs/Web/API/Element/innerHTML#security_considerations |
+| HTML→텍스트 변환 | MDN DOMParser | https://developer.mozilla.org/en-US/docs/Web/API/DOMParser/parseFromString |
+| 한글 유니코드 범위 (U+AC00-U+D7A3) | Unicode Standard Ch.3 Hangul Syllables | https://www.unicode.org/versions/Unicode15.0.0/ch03.pdf |
+| Excel 날짜 시리얼 (25569 오프셋) | Microsoft Excel 날짜 시스템 | https://support.microsoft.com/en-us/office/date-systems-in-excel-e7fe7167-48a9-4b96-bb53-5612a800b487 |
+| ISO 8601 날짜 형식 | ISO 8601 | https://www.iso.org/iso-8601-date-and-time-format.html |
+| Excel 임시파일 `~$` 접두사 | Microsoft 지원 | https://support.microsoft.com/en-us/topic/description-of-the-tilde-file-43b45e3b-1c35-4460-a04e-8c02a999d3c1 |
+| 클립보드 API | MDN Clipboard API | https://developer.mozilla.org/en-US/docs/Web/API/Clipboard/writeText |
+| 파일 API (`webkitdirectory`) | MDN webkitRelativePath (비표준, Chrome/Edge/Firefox 지원) | https://developer.mozilla.org/en-US/docs/Web/API/File/webkitRelativePath |
+
+> **heuristic (표준 없음)**: 헤더 패턴 매칭(`HEADER_PATTERNS`), 파일명 날짜 추출(`parseDateFromFilename`), 반복숫자 전화번호 제외 — Excel 파일에 공식 포맷이 없으므로 코드 주석에 heuristic 명시
+
 ### API로 불가능 (공식 확인) — 자동화로만 또는 불가
 | 항목 | 사유 |
 |---|---|

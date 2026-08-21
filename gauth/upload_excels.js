@@ -67,10 +67,14 @@ function isPhoneNumber(s) {
   if (!/^[\+]?[\d\s\-()]{7,20}$/.test(s)) return false;
   const digits = s.replace(/[^\d]/g, '');
   if (digits.length < 7 || digits.length > 15) return false;
+  // heuristic: 1111111 등 반복 숫자 제외 (E.164에 없는 실용 필터)
   if (/^(\d)\1+$/.test(digits)) return false;
+  // heuristic: 포맷 문자(괄호/하이픈) 또는 +접두사 또는 10-15자리 → 전화번호 판별
   return /[\s\-()]+/.test(s) || /^\+/.test(s) || (digits.length >= 10 && digits.length <= 15);
 }
 
+/* RFC 6238 TOTP: 6자리 (https://datatracker.ietf.org/doc/html/rfc6238#section-4)
+ * Google 백업 코드: 8자리 (https://support.google.com/accounts/answer/1187538) */
 function isSixDigitCode(s) {
   return /^\d{6,8}$/.test(String(s || '').trim());
 }
@@ -82,7 +86,9 @@ function isTotpLike(s) {
   if (/^[0-9]+$/.test(s)) return false;
   if (/^https?:\/\//i.test(s)) return false;
   if (isPhoneNumber(s)) return false;
+  // heuristic: 특수문자 포함 시 Base32 패딩(=) 아니면 제외
   if (/[\/\\:;!#$%^&*()+=\[\]{}|<>?]/.test(s) && !/^[A-Z2-7]+=*$/i.test(s)) return false;
+  // heuristic: 공백 포함 시 Base32 문자+공백만 허용 (일부 앱이 공백 구분 표시)
   if (/\s/.test(s) && !/^[A-Z2-7\s]+$/i.test(s)) return false;
   const upper = s.toUpperCase().replace(/[\s\-_=]/g, '');
   /* Base32: A-Z, 2-7 only (RFC 4648 Section 6)
@@ -96,6 +102,7 @@ function isTotpLike(s) {
    * ref: https://datatracker.ietf.org/doc/html/rfc4226#section-4
    * 단, Google Authenticator는 80-bit(16자)도 허용하므로 16 유지 */
   if (n.length < 16) return false;
+  // practical upper bound (스펙에 최대 길이 없음, 실사용 기준)
   if (n.length > 128) return false;
   const raw = String(s).replace(/[\s\-_=]/g, '');
   if (raw.length > 0 && n.length / raw.length < 0.6) return false;
