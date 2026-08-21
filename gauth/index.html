@@ -284,16 +284,120 @@ refreshAccStats();
 })();
 </script>
 
-<style>#excelUpProg::-webkit-progress-bar{background:#1a1f26;border-radius:10px}#excelUpProg::-webkit-progress-value{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px;transition:width .2s}#excelUpProg::-moz-progress-bar{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px}#excelUpProg{-webkit-appearance:none;appearance:none;border:none;border-radius:10px;background:#1a1f26}</style><div id="excelUpBox" style="display:block;margin:16px 20px;padding:16px;background:#161a20;border:1px solid #2a323c;border-radius:8px">
-  <h3 style="margin:0 0 10px 0;color:#3ddc84;font-size:14px">📤 엑셀 일괄 업로드 (한번에 여러 파일)</h3>
+<style>#excelUpProg::-webkit-progress-bar{background:#1a1f26;border-radius:10px}#excelUpProg::-webkit-progress-value{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px;transition:width .2s}#excelUpProg::-moz-progress-bar{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px}#excelUpProg{-webkit-appearance:none;appearance:none;border:none;border-radius:10px;background:#1a1f26}
+.up-tabs{display:flex;gap:0;margin:16px 20px 0;}.up-tab{flex:1;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid #2a323c;background:#0f1216;color:#8a95a5;text-align:center;transition:background .15s,color .15s}.up-tab:first-child{border-radius:8px 0 0 0}.up-tab:last-child{border-radius:0 8px 0 0}.up-tab.active{background:#161a20;color:#3ddc84;border-bottom-color:#161a20}.up-box{display:none;margin:0 20px;padding:16px;background:#161a20;border:1px solid #2a323c;border-top:0;border-radius:0 0 8px 8px}.up-box.active{display:block}
+</style>
+<div class="up-tabs">
+  <div class="up-tab active" onclick="switchUpTab('archive')">📦 보관용 엑셀</div>
+  <div class="up-tab" onclick="switchUpTab('subsites')">🔀 하위사이트용 엑셀</div>
+</div>
+
+<div class="up-box active" id="upBoxArchive">
+  <p style="margin:0 0 10px;font-size:11px;color:#8a95a5">마스터 DB에 보관 · <code>accounts_normalized.json</code></p>
   <input type="file" id="excelFiles" multiple accept=".xlsx,.xls,.csv" style="color:#e8ecef;font-size:13px">
-  <label for="folderInput" style="margin-left:10px;padding:4px 10px;background:#1a1f26;border:1px solid #2a323c;border-radius:6px;color:#9fb3e0;font-size:12px;cursor:pointer;display:inline-block">📁 폴더 전체 스캔</label>
-  <!-- ref: webkitdirectory (비표준이나 Chrome/Edge/Firefox 지원) https://developer.mozilla.org/en-US/docs/Web/API/HTMLInputElement/webkitdirectory -->
+  <label for="folderInput" style="margin-left:10px;padding:4px 10px;background:#1a1f26;border:1px solid #2a323c;border-radius:6px;color:#9fb3e0;font-size:12px;cursor:pointer;display:inline-block">📁 폴더 스캔</label>
   <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none">
   <div id="excelFileList" style="margin-top:8px;font-size:12px;color:#9fb3e0;font-family:monospace"></div>
-  <button id="excelUpBtn" style="margin-left:10px">▶ 업로드 &amp; 취합</button>
-  <div id="excelUpProgWrap" style="margin-top:10px;display:none"><progress id="excelUpProg" value="0" max="100" style="width:100%;height:20px"></progress><div id="excelUpProgTxt" style="margin-top:4px;font-size:12px;color:#3ddc84;text-align:right;font-family:monospace">0%</div></div><div id="excelUpResult" style="margin-top:12px;font-size:12.5px;color:#c9d2dc;font-family:'SF Mono',monospace;white-space:pre-wrap"></div>
+  <button id="excelUpBtn" style="margin-left:10px">▶ 업로드 &amp; 취합 (보관용)</button>
+  <div id="excelUpProgWrap" style="margin-top:10px;display:none"><progress id="excelUpProg" value="0" max="100" style="width:100%;height:20px"></progress><div id="excelUpProgTxt" style="margin-top:4px;font-size:12px;color:#3ddc84;text-align:right;font-family:monospace">0%</div></div>
+  <div id="excelUpResult" style="margin-top:12px;font-size:12.5px;color:#c9d2dc;font-family:'SF Mono',monospace;white-space:pre-wrap"></div>
 </div>
+
+<div class="up-box" id="upBoxSubsites">
+  <p style="margin:0 0 10px;font-size:11px;color:#8a95a5">하위사이트 배분 전용 · <code>accounts_subsites.json</code> · 보관용과 완전 분리</p>
+  <input type="file" id="subsiteFiles" multiple accept=".xlsx,.xls,.csv" style="color:#e8ecef;font-size:13px">
+  <label for="subsiteFolderInput" style="margin-left:10px;padding:4px 10px;background:#1a1f26;border:1px solid #2a323c;border-radius:6px;color:#9fb3e0;font-size:12px;cursor:pointer;display:inline-block">📁 폴더 스캔</label>
+  <input type="file" id="subsiteFolderInput" webkitdirectory directory multiple style="display:none">
+  <div id="subsiteFileList" style="margin-top:8px;font-size:12px;color:#9fb3e0;font-family:monospace"></div>
+  <button id="subsiteUpBtn" style="margin-top:8px">▶ 업로드 (하위사이트용)</button>
+  <button id="splitBtn" style="margin-left:8px;background:#1e3a5f;color:#7dabff;border:1px solid #2a4070;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer">🔀 엑셀 나누기 (15사이트 배분)</button>
+  <div id="subsiteUpResult" style="margin-top:12px;font-size:12.5px;color:#c9d2dc;font-family:'SF Mono',monospace;white-space:pre-wrap"></div>
+  <div id="splitResult" style="margin-top:8px"></div>
+</div>
+
+<script>
+function switchUpTab(tab){
+  document.querySelectorAll('.up-tab').forEach(function(t,i){
+    t.classList.toggle('active', (tab==='archive'?i===0:i===1));
+  });
+  document.getElementById('upBoxArchive').classList.toggle('active', tab==='archive');
+  document.getElementById('upBoxSubsites').classList.toggle('active', tab==='subsites');
+}
+(function(){
+  var sfi = document.getElementById('subsiteFiles');
+  var sfdi = document.getElementById('subsiteFolderInput');
+  var subBtn = document.getElementById('subsiteUpBtn');
+  var splitBtn = document.getElementById('splitBtn');
+  var subOut = document.getElementById('subsiteUpResult');
+  var excelExt = /\.(xlsx|xls|csv)$/i;
+  window._pickedSub = [];
+  function renderSubList(){
+    var el = document.getElementById('subsiteFileList');
+    if(!el) return;
+    if(!window._pickedSub.length){ el.innerHTML=''; return; }
+    var arr = window._pickedSub.map(function(f,i){ return (i+1)+'. '+_esc(f.name)+' ('+Math.round(f.size/1024)+'KB)'; });
+    el.innerHTML = '📎 <b>'+window._pickedSub.length+'개:</b> <button onclick="window._pickedSub=[];document.getElementById(\'subsiteFileList\').innerHTML=\'\'" style="padding:2px 8px;font-size:11px">🗑</button><br>'+arr.join('<br>');
+  }
+  if(sfi) sfi.addEventListener('change', function(){
+    for(var i=0;i<sfi.files.length;i++){
+      var f=sfi.files[i];
+      var dup=window._pickedSub.some(function(x){return x.name===f.name&&x.size===f.size;});
+      if(!dup) window._pickedSub.push(f);
+    }
+    renderSubList();
+  });
+  if(sfdi) sfdi.addEventListener('change', function(){
+    for(var i=0;i<sfdi.files.length;i++){
+      var f=sfdi.files[i];
+      if(!excelExt.test(f.name)) continue;
+      var dup=window._pickedSub.some(function(x){return x.name===f.name&&x.size===f.size;});
+      if(!dup) window._pickedSub.push(f);
+    }
+    try{sfdi.value='';}catch(_){}
+    renderSubList();
+  });
+  if(subBtn) subBtn.addEventListener('click', function(){
+    if(!window._pickedSub.length){ subOut.textContent='파일 선택 먼저'; return; }
+    subBtn.disabled=true;
+    var fd=new FormData();
+    for(var i=0;i<window._pickedSub.length;i++) fd.append('files', window._pickedSub[i]);
+    subOut.innerHTML='<span style="color:#ffb469">업로드 중…</span>';
+    var xhr=new XMLHttpRequest();
+    xhr.open('POST',authQuery('/api/upload-subsites'),true);
+    xhr.timeout=300000;
+    var t=getApiToken();if(t)xhr.setRequestHeader('Authorization','Bearer '+t);
+    xhr.onreadystatechange=function(){
+      if(xhr.readyState===4){
+        subBtn.disabled=false;
+        try{
+          var d=JSON.parse(xhr.responseText);
+          if(d.ok){
+            subOut.innerHTML='<div style="color:#3ddc84;font-weight:700">하위사이트 풀에 저장 완료: '+d.total+'개 (추가 '+d.added+' / 갱신 '+d.updated+')</div>';
+            window._pickedSub=[];renderSubList();
+          } else { subOut.innerHTML='<span style="color:#f47070">오류: '+(d.error||'')+'</span>'; }
+        }catch(_){ subOut.innerHTML='<span style="color:#f47070">서버 응답 오류</span>'; }
+      }
+    };
+    xhr.send(fd);
+  });
+  if(splitBtn) splitBtn.addEventListener('click', function(){
+    splitBtn.disabled=true;
+    var sr=document.getElementById('splitResult');
+    sr.innerHTML='<span style="color:#ffb469">나누기 진행 중…</span>';
+    fetch(authQuery('/api/split-to-subsites'),{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
+      .then(function(r){return r.json();})
+      .then(function(d){
+        splitBtn.disabled=false;
+        if(!d.ok){ sr.innerHTML='<span style="color:#f47070">'+_esc(d.error||'실패')+'</span>'; return; }
+        var rows=(d.distribution||[]).map(function(s){
+          return '<tr><td style="padding:3px 8px;font-size:12px">'+_esc(s.site)+'</td><td style="padding:3px 8px;text-align:right;font-weight:700;color:#3ddc84">'+s.count+'개</td></tr>';
+        }).join('');
+        sr.innerHTML='<div style="color:#3ddc84;font-weight:700;margin-bottom:6px">15사이트 배분 완료 — 총 '+d.total+'개 (신규 배분 '+d.newly_assigned+'개)</div><table style="width:100%;border-collapse:collapse">'+rows+'</table>';
+      })
+      .catch(function(e){ splitBtn.disabled=false; sr.innerHTML='<span style="color:#f47070">오류: '+_esc(e.message)+'</span>'; });
+  });
+})();
+</script>
 <script>
 /* MDN: KST 자정 = 오늘 00:00 Asia/Seoul → epoch ms
  * ref: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat */

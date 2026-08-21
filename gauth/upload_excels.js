@@ -1136,6 +1136,116 @@ function mountRoutes(app) {
     });
   });
 
+  // ── 보관용: accounts_normalized.json (기존, 마스터 DB) ──
+  // ── 하위사이트용: accounts_subsites.json (별도 저장) ──
+
+  const SUBSITES_FILE = '/opt/gauth-full/accounts_subsites.json';
+  const SITE_KEYS = ['gain','woodong','sunbi','simmani','win','aura','bacad','camstouch','james','misskim','naman','romi','second','soktv','cham'];
+
+  function readSubsitesFile() {
+    try {
+      const raw = fs.readFileSync(SUBSITES_FILE, 'utf8');
+      if (!raw.trim()) return [];
+      const d = JSON.parse(raw);
+      return Array.isArray(d) ? d : (d.accounts || []);
+    } catch (_) { return []; }
+  }
+
+  function writeSubsitesFile(accounts) {
+    const tmpFile = SUBSITES_FILE + '.tmp.' + process.pid + '.' + Date.now();
+    fs.writeFileSync(tmpFile, JSON.stringify(accounts, null, 2));
+    fs.renameSync(tmpFile, SUBSITES_FILE);
+  }
+
+  app.post('/api/upload-subsites', async (req, res) => {
+    req.setTimeout(600000);
+    res.setTimeout(600000);
+    let files;
+    try { files = await parseMultipartManual(req); }
+    catch (err) { return res.status(500).json({ ok: false, error: 'upload failed' }); }
+    if (!files || !files.length) return res.status(400).json({ ok: false, error: 'no files' });
+
+    const parsedFiles = [];
+    for (const f of files) {
+      try {
+        const accounts = parseExcelFile(f.path, f.originalname);
+        parsedFiles.push({ name: f.originalname, accounts });
+      } catch(e) {
+        parsedFiles.push({ name: f.originalname, accounts: [], error: e.message });
+      }
+      try { fs.unlinkSync(f.path); } catch (_) {}
+    }
+
+    await withFileLock(() => {
+      try {
+        const existing = readSubsitesFile();
+        const byEmail = {};
+        for (const a of existing) { if (a && a.email) byEmail[normalizeEmail(a.email)] = a; }
+        let totalParsed = 0, totalAdded = 0, totalUpdated = 0;
+        const fileResults = [];
+        for (const pf of parsedFiles) {
+          if (pf.error) { fileResults.push({ name: pf.name, accounts: 0, error: pf.error }); continue; }
+          let added = 0, updated = 0;
+          for (const a of pf.accounts) {
+            if (!a.email) continue;
+            const key = normalizeEmail(a.email);
+            if (byEmail[key]) {
+              const e = byEmail[key];
+              if (a.password) e.password = a.password;
+              if (a.totp_secret && isTotpLike(a.totp_secret)) e.totp_secret = normalizeTotp(a.totp_secret);
+              if (a.recovery_email && isEmail(a.recovery_email)) e.recovery_email = a.recovery_email;
+              if (a.youtube_url) e.youtube_url = a.youtube_url;
+              updated++;
+            } else {
+              byEmail[key] = a;
+              added++;
+            }
+          }
+          totalParsed += pf.accounts.length;
+          totalAdded += added;
+          totalUpdated += updated;
+          fileResults.push({ name: pf.name, accounts: pf.accounts.length, added, updated });
+        }
+        const allAccounts = Object.values(byEmail);
+        writeSubsitesFile(allAccounts);
+        res.json({ ok: true, total: allAccounts.length, total_parsed: totalParsed, added: totalAdded, updated: totalUpdated, files: fileResults });
+      } catch(e) {
+        if (!res.headersSent) res.status(500).json({ ok: false, error: 'internal error' });
+      }
+    });
+  });
+
+  app.get('/api/subsites-pool', (req, res) => {
+    res.json({ ok: true, accounts: readSubsitesFile(), sites: SITE_KEYS });
+  });
+
+  app.post('/api/split-to-subsites', async (req, res) => {
+    await withFileLock(() => {
+      try {
+        const accounts = readSubsitesFile();
+        if (!accounts.length) return res.json({ ok: false, error: 'no accounts in subsites pool' });
+        const unassigned = accounts.filter(a => !a.site);
+        const assigned = accounts.filter(a => a.site);
+        const siteCounts = {};
+        for (const s of SITE_KEYS) siteCounts[s] = 0;
+        for (const a of assigned) { if (siteCounts[a.site] !== undefined) siteCounts[a.site]++; }
+        for (const a of unassigned) {
+          let minSite = SITE_KEYS[0], minCount = siteCounts[SITE_KEYS[0]];
+          for (const s of SITE_KEYS) {
+            if (siteCounts[s] < minCount) { minSite = s; minCount = siteCounts[s]; }
+          }
+          a.site = minSite;
+          siteCounts[minSite]++;
+        }
+        writeSubsitesFile(accounts);
+        const distribution = SITE_KEYS.map(s => ({ site: s, count: siteCounts[s] }));
+        res.json({ ok: true, total: accounts.length, newly_assigned: unassigned.length, distribution });
+      } catch(e) {
+        if (!res.headersSent) res.status(500).json({ ok: false, error: 'internal error' });
+      }
+    });
+  });
+
   app.post('/api/rescan-uploads', async (req, res) => {
     req.setTimeout(600000);
     res.setTimeout(600000);

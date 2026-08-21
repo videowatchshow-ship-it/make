@@ -14,50 +14,54 @@
 
 ---
 
-## 데이터 2계층: 엑셀 계정 vs 실 로그인 계정
+## 데이터 3계층 구조
 
-이 시스템은 **두 종류의 데이터**를 반드시 구분한다.
+이 시스템은 **세 종류의 데이터 저장소**를 완전 분리한다.
 
-| | 엑셀 계정 (원시) | 실 로그인 계정 (검증됨) |
-|---|---|---|
-| **정의** | 엑셀 업로드로 DB에 들어온 계정 정보 | `/api/login-one`으로 실제 Google 로그인 성공한 계정 |
-| **서버 저장소** | `/opt/gauth-full/accounts_normalized.json` | `/opt/gauth-full/login_results.json` (별도 파일) |
-| **데이터 형태** | `{email, password, totp_secret, youtube_url, site}` | `{email, ts, ok, sessionPath, error}` |
-| **신뢰도** | 미검증 — 비밀번호 틀림·계정 잠김 가능 | 검증됨 — Puppeteer로 실제 로그인 성공 확인 |
-| **프론트 표시** | 회색 점 (미시도) | 초록 점 (성공) / 빨강 점 (실패) |
-| **프론트 저장** | 서버 API에서 로드 | `localStorage('gauth_logins')` + 서버 `login_results.json` |
-| **다운로드** | 원본 엑셀 그대로 | `/api/export/login-results` → 엑셀/JSON 다운로드 |
-| **백엔드 API** | `GET /api/subsite-accounts`, `GET /api/accounts` | `GET /api/login-results`, `POST /api/login-one` |
+| | 보관용 엑셀 (마스터 DB) | 하위사이트용 엑셀 (배분 풀) | 실 로그인 결과 |
+|---|---|---|---|
+| **용도** | 원본 데이터 영구 보관 | 15개 하위사이트에 배분할 계정 | 실제 로그인 성공/실패 기록 |
+| **서버 저장소** | `accounts_normalized.json` | `accounts_subsites.json` | `login_results.json` |
+| **업로드 API** | `POST /api/upload-excels` | `POST /api/upload-subsites` | 자동 (login-one 결과) |
+| **읽기 API** | `GET /api/subsite-accounts` | `GET /api/subsites-pool` | `GET /api/login-results` |
+| **다운로드** | 원본 엑셀 그대로 | `GET /api/subsites-pool` | `GET /api/export/login-results` |
+| **프론트 탭** | 📦 보관용 엑셀 | 🔀 하위사이트용 엑셀 | accounts.html 로그인 상태 |
+| **나누기 기능** | 없음 | `POST /api/split-to-subsites` (15사이트 균등 배분) | 없음 |
+
+### 15개 하위사이트
+
+gain · woodong · sunbi · simmani · win · aura · bacad · camstouch · james · misskim · naman · romi · second · soktv · cham
 
 ### 아키텍처 다이어그램
 
 ```
-엑셀 업로드 ──► upload_excels.js ──► accounts_normalized.json (원시 DB)
-                                           │
-                                           ▼
-                               /api/subsite-accounts (읽기)
-                               /api/accounts (읽기)
-                                           │
-                                    ┌──────┴──────┐
-                                    ▼              ▼
-                              subsites.html    accounts.html
-                              (사이트별 카드)   (전체 리스트 + 로그인)
-                                                   │
-                                          🔑 로그인 시도 클릭
-                                                   │
-                                                   ▼
-                                       POST /api/login-one
-                                       (Puppeteer 실행)
-                                                   │
-                                          ┌────────┴────────┐
-                                          ▼                  ▼
-                                   login_results.json    localStorage
-                                   (서버 영구 저장)      (브라우저 임시)
-                                          │
-                                          ▼
-                               GET /api/login-results
-                               GET /api/export/login-results?format=xlsx
-                               (엑셀/JSON 다운로드)
+   ┌─────────────────────────────────────────────────────────┐
+   │  index.html 업로드 UI (탭 2분할)                         │
+   │                                                         │
+   │  📦 보관용 탭              🔀 하위사이트용 탭              │
+   │  ┌──────────────┐         ┌──────────────────┐          │
+   │  │ 엑셀 읽기    │         │ 엑셀 읽기        │          │
+   │  │ 폴더 읽기    │         │ 폴더 읽기        │          │
+   │  │ ▶ 업로드     │         │ ▶ 업로드         │          │
+   │  └──────┬───────┘         │ 🔀 엑셀 나누기   │          │
+   │         │                 └──────┬───────────┘          │
+   └─────────┼────────────────────────┼──────────────────────┘
+             │                        │
+             ▼                        ▼
+   POST /api/upload-excels    POST /api/upload-subsites
+             │                        │
+             ▼                        ▼
+   accounts_normalized.json   accounts_subsites.json
+   (보관용 마스터 DB)          (하위사이트 배분 풀)
+                                      │
+                            POST /api/split-to-subsites
+                                      │
+                                      ▼
+                              15사이트 균등 배분
+                              (site 필드 자동 할당)
+
+   accounts.html ──► POST /api/login-one ──► login_results.json
+                                              (실 로그인 결과, 별도 파일)
 ```
 
 ### 프론트엔드 구분 표시 (accounts.html)
@@ -119,7 +123,8 @@
 | `/opt/gauth-full/login_results.json` | 실 로그인 결과 영구 저장 (엑셀 DB와 별도) |
 | `/opt/gauth-full/rebrowser-login.js` | Express 서버 (port 4000) |
 | `/opt/gauth-full/upload_excels.js` | 엑셀 파서 (latin1→UTF-8 보정 포함) |
-| `/opt/gauth-full/accounts_normalized.json` | 마스터 데이터 (4,875건) |
+| `/opt/gauth-full/accounts_normalized.json` | 보관용 마스터 데이터 |
+| `/opt/gauth-full/accounts_subsites.json` | 하위사이트 배분용 (보관용과 별도) |
 | `/opt/gauth-full/google_users.json` | GIS 로그인 사용자 저장소 |
 | `/opt/gauth-full/.env` | 환경변수 (GOOGLE_OAUTH_CLIENT_ID, YT_API_KEY, GOCSPX) |
 | systemd: `gauth` | 서비스 단위 |
@@ -157,6 +162,9 @@
 | `GET` | `/api/search-account?q=` | 계정 검색 | - |
 | `GET` | `/api/login-results` | 실 로그인 결과 전체 조회 (login_results.json) | - |
 | `GET` | `/api/export/login-results?format=xlsx` | 로그인 성공 계정 엑셀/JSON 다운로드 | - |
+| `POST` | `/api/upload-subsites` | 하위사이트용 엑셀 업로드 → `accounts_subsites.json` | - |
+| `GET` | `/api/subsites-pool` | 하위사이트 배분 풀 조회 | - |
+| `POST` | `/api/split-to-subsites` | 15사이트 균등 배분 (site 필드 자동 할당) | - |
 | `GET` | `/codes/:secret` | TOTP 6자리 코드 생성 | - |
 
 ### 구글 로그인 동작 흐름 (GIS raw id_token)
