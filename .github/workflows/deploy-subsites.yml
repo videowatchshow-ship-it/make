@@ -1,0 +1,37 @@
+name: deploy subsites html
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['gauth-public/subsites.html', '.github/trigger-deploy-subsites.txt']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: SCP subsites.html
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: "gauth-public/subsites.html"
+          target: "/var/www/sites/gauth/public/"
+          strip_components: 1
+      - name: verify
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 40s
+          script: |
+            sudo chown www-data:www-data /var/www/sites/gauth/public/subsites.html 2>/dev/null || true
+            curl -s -o /dev/null -w 'subsites: %{http_code}\n' https://gauth.cent-solution.online/subsites.html --max-time 10
+            echo 'button present:'
+            curl -s --max-time 10 https://gauth.cent-solution.online/subsites.html | grep -c 'channel-status\|yt-btn' || echo 0
+            echo 'live api recheck:'
+            curl -s --max-time 25 'http://localhost:4000/api/youtube/channel-status?url=https://www.youtube.com/@blackorwhite4371' | head -c 500
