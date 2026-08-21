@@ -14,6 +14,63 @@
 
 ---
 
+## 데이터 2계층: 엑셀 계정 vs 실 로그인 계정
+
+이 시스템은 **두 종류의 데이터**를 반드시 구분한다.
+
+| | 엑셀 계정 (원시) | 실 로그인 계정 (검증됨) |
+|---|---|---|
+| **정의** | 엑셀 업로드로 DB에 들어온 계정 정보 | `/api/login-one`으로 실제 Google 로그인 성공한 계정 |
+| **서버 저장소** | `/opt/gauth-full/accounts_normalized.json` | `/opt/gauth-full/login_results.json` (별도 파일) |
+| **데이터 형태** | `{email, password, totp_secret, youtube_url, site}` | `{email, ts, ok, sessionPath, error}` |
+| **신뢰도** | 미검증 — 비밀번호 틀림·계정 잠김 가능 | 검증됨 — Puppeteer로 실제 로그인 성공 확인 |
+| **프론트 표시** | 회색 점 (미시도) | 초록 점 (성공) / 빨강 점 (실패) |
+| **프론트 저장** | 서버 API에서 로드 | `localStorage('gauth_logins')` + 서버 `login_results.json` |
+| **다운로드** | 원본 엑셀 그대로 | `/api/export/login-results` → 엑셀/JSON 다운로드 |
+| **백엔드 API** | `GET /api/subsite-accounts`, `GET /api/accounts` | `GET /api/login-results`, `POST /api/login-one` |
+
+### 아키텍처 다이어그램
+
+```
+엑셀 업로드 ──► upload_excels.js ──► accounts_normalized.json (원시 DB)
+                                           │
+                                           ▼
+                               /api/subsite-accounts (읽기)
+                               /api/accounts (읽기)
+                                           │
+                                    ┌──────┴──────┐
+                                    ▼              ▼
+                              subsites.html    accounts.html
+                              (사이트별 카드)   (전체 리스트 + 로그인)
+                                                   │
+                                          🔑 로그인 시도 클릭
+                                                   │
+                                                   ▼
+                                       POST /api/login-one
+                                       (Puppeteer 실행)
+                                                   │
+                                          ┌────────┴────────┐
+                                          ▼                  ▼
+                                   login_results.json    localStorage
+                                   (서버 영구 저장)      (브라우저 임시)
+                                          │
+                                          ▼
+                               GET /api/login-results
+                               GET /api/export/login-results?format=xlsx
+                               (엑셀/JSON 다운로드)
+```
+
+### 프론트엔드 구분 표시 (accounts.html)
+- **리스트 행**: 번호 · 로그인상태점(●) · 이메일 · 사이트이모지 · 배지
+  - `●` 회색 = 미시도 (엑셀만 있음)
+  - `●` 초록 = 실 로그인 성공
+  - `●` 빨강 = 로그인 실패
+- **상단 요약바**: `성공 N · 실패 N · 미시도 N · 전체 N`
+- **필터**: "로그인 성공" / "로그인 실패" 필터 선택 가능
+- **상세 패널**: 클릭 시 오른쪽 슬라이드로 계정 정보 + 로그인 버튼 + 채널 정보
+
+---
+
 ## 계정 정보
 
 ### GCP 프로젝트
@@ -51,13 +108,15 @@
 
 ---
 
-## https://gauth.cent-solution.online/ (쉼이)
+## https://gauth.cent-solution.online/ (쉴이)
 
 ### 서버 경로
 | 경로 | 설명 |
 |---|---|
 | `/var/www/sites/gauth/public/index.html` | 메인 프론트엔드 |
 | `/var/www/sites/gauth/public/subsites.html` | 하위 계정 조회 페이지 |
+| `/var/www/sites/gauth/public/accounts.html` | 전체 계정 리스트 + 개별 로그인 |
+| `/opt/gauth-full/login_results.json` | 실 로그인 결과 영구 저장 (엑셀 DB와 별도) |
 | `/opt/gauth-full/rebrowser-login.js` | Express 서버 (port 4000) |
 | `/opt/gauth-full/upload_excels.js` | 엑셀 파서 (latin1→UTF-8 보정 포함) |
 | `/opt/gauth-full/accounts_normalized.json` | 마스터 데이터 (4,875건) |
@@ -96,6 +155,8 @@
 | `POST` | `/api/login-one` | 단일 계정 Puppeteer 로그인 시도 | - |
 | `GET` | `/api/lookup` | 이메일 조회 | - |
 | `GET` | `/api/search-account?q=` | 계정 검색 | - |
+| `GET` | `/api/login-results` | 실 로그인 결과 전체 조회 (login_results.json) | - |
+| `GET` | `/api/export/login-results?format=xlsx` | 로그인 성공 계정 엑셀/JSON 다운로드 | - |
 | `GET` | `/codes/:secret` | TOTP 6자리 코드 생성 | - |
 
 ### 구글 로그인 동작 흐름 (GIS raw id_token)
@@ -104,7 +165,7 @@
 [브라우저]                        [gauth 서버]                     [Google]
     │                                 │                              │
     ├─ GET /api/auth/me ──────────────►│                              │
-    │◄─ {user:null} ──────────────────│                              │
+    │◄─ {user:null} ────────────────│                              │
     │                                 │                              │
     ├─ GET /api/auth/config ──────────►│                              │
     │◄─ {client_id:"<see .env>"}      │                              │
@@ -289,6 +350,7 @@ const url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURICompo
 ### 배포·운영 (핵심)
 | 파일 | 이름 | 트리거 | 동작 |
 |---|---|---|---|
+| `deploy-accounts-page.yml` | accounts.html 배포 | `gauth-public/accounts.html` 변경 | SCP → 서버 설치 + 3페이지 nav 메뉴 주입 |
 | `diag-gauth-excel.yml` | jump 배포 | `trigger-deploy-jump.txt` 변경 | jump/ → 서버 SCP + Apache vhost + no-store + Clear-Site-Data + Let's Encrypt |
 | `deploy-subsites.yml` | subsites 배포 | `trigger-deploy-subsites.txt` | `gauth-public/subsites.html` → 서버 SCP |
 | `deploy-gauth.yml` | gauth 배포 | workflow_dispatch | 메인 프론트 배포 |
@@ -310,7 +372,7 @@ const url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURICompo
 | 파일 | 동작 |
 |---|---|
 | `gauth-excel-fix.yml` | mojibake 복구 + password↔youtube_url 스왈 |
-| `gauth-excel-diag.yml` | 엑셀 파서 컬럼 매핑 진단 |
+| `gauth-excel-diag.yml` | 엑셀 파서 컨럼 매핑 진단 |
 | `gauth-audit.yml` | 4,875건 무결성 버킷 집계 |
 
 ### 테스트·진단
@@ -393,7 +455,8 @@ make/
 ├── package.json                  ← 의존성 정의
 ├── advanced-google-login-v2.js   ← 고급 로그인 엔진
 ├── gauth-public/
-│   └── subsites.html             ← 하위 사이트 계정 조회 페이지
+│   ├── subsites.html             ← 하위 사이트 계정 조회 페이지
+│   └── accounts.html             ← 전체 계정 리스트 + 개별 로그인 + 상태 표시
 ├── gauth-signup/
 │   └── signup.html               ← 가입 페이지
 ├── jump/
