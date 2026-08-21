@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>gauth · 하위 사이트 계정 + 채널 상태</title>
+<meta http-equiv="Cache-Control" content="no-store">
+<style>
+  :root{--bg:#0d1117;--panel:#0f1620;--card:#161a20;--border:#22282f;--border2:#2a323c;--text:#e8ecef;--sub:#8a95a5;--accent:#7dabff;--accent2:#3ddc84}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo",sans-serif;min-height:100vh;padding:24px 16px}
+  .wrap{max-width:620px;margin:0 auto}
+  .brand{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+  h1{margin:0;font-size:20px}
+  a.back{color:var(--sub);font-size:12px;text-decoration:none;border:1px solid var(--border);border-radius:999px;padding:5px 12px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .site-row{background:var(--card);border:1px solid var(--border2);border-radius:10px;overflow:hidden;margin-bottom:8px}
+  .site-head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer}
+  .site-head:hover{background:#1a1f27}
+  .site-count{color:var(--accent2);font-weight:800;font-size:14px}
+  .site-body{display:none;border-top:1px solid var(--border2);padding:10px 14px;background:#12171e}
+  .site-row.open .site-body{display:block}
+  .site-row.open .caret{transform:rotate(90deg)}
+  .caret{transition:.2s;color:var(--sub)}
+  ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px;font-size:12.5px;font-family:ui-monospace,Menlo,monospace}
+  li{padding:6px 8px;border-radius:6px;background:#0d1218}
+  .li-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .yt-btn{background:#161a20;border:1px solid #2a3140;color:var(--accent);border-radius:5px;font-size:10px;padding:3px 8px;cursor:pointer;flex-shrink:0}
+  .yt-btn:hover{border-color:var(--accent)}
+  .ytbox{margin-top:6px;font-size:11px;color:#9fb3c8;background:#0b0f14;border:1px solid #22282f;border-radius:6px;padding:7px 9px;line-height:1.7}
+  .pager{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:var(--sub)}
+  .pager button{background:var(--card);border:1px solid var(--border2);color:var(--text);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer}
+  .pager button:disabled{opacity:.35}
+  .badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:999px;margin-left:4px}
+  .b-ok{background:#0f2a1a;color:#3ddc84;border:1px solid #1f5c39}
+  .b-warn{background:#2a1a00;color:#ffb469;border:1px solid #6b4a1f}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">
+      <h1>📦 하위 사이트별 계정 · 채널 상태</h1>
+      <a class="back" href="/">← 메인</a>
+    </div>
+    <div class="card"><div id="list">불러오는 중…</div></div>
+  </div>
+<script>
+var META={gain:{e:'🟣',k:'게인'},woodong:{e:'🚕',k:'우동'},sunbi:{e:'📘',k:'선비'},simmani:{e:'🎬',k:'심마니'},win:{e:'🏆',k:'윈'},aura:{e:'✨',k:'아우라'},bacad:{e:'🎓',k:'바캇'},camstouch:{e:'📷',k:'캠스터치'},james:{e:'👤',k:'제임스'},misskim:{e:'👩',k:'미스김'},naman:{e:'🧑',k:'나만'},romi:{e:'🐾',k:'로미'},second:{e:'2️⃣',k:'세컨드'},soktv:{e:'📺',k:'속TV'},cham:{e:'🐘',k:'참'}};
+var PS=10, pg={}, cache=null;
+function esc(s){var d=document.createElement('div');d.textContent=String(s==null?'':s);return d.innerHTML;}
+function renderPage(site, arr){
+  var p=pg[site]||0, tot=arr.length, pages=Math.max(1,Math.ceil(tot/PS));
+  if(p>=pages)p=pages-1; if(p<0)p=0; pg[site]=p;
+  var stt=p*PS, sl=arr.slice(stt,stt+PS);
+  if(!sl.length) return '<div style="color:var(--sub);padding:6px">계정 없음</div>';
+  var items=sl.map(function(a){
+    var e=a.email||a.gmail||'?';
+    var yurl=a.youtube_url||a.youtube||a.channel_url||'';
+    var right = yurl
+      ? '<button class="yt-btn" data-url="'+esc(yurl)+'">📊 채널상태</button>'
+      : '<span style="color:var(--sub);font-size:10px">'+esc(a.status||'')+'</span>';
+    return '<li><div class="li-top"><span>'+esc(e)+'</span>'+right+'</div></li>';
+  }).join('');
+  var pager='<div class="pager"><button data-s="'+esc(site)+'" data-d="-1" '+(p===0?'disabled':'')+'>◀</button><span>'+(stt+1)+'–'+Math.min(stt+PS,tot)+' / '+tot+'</span><button data-s="'+esc(site)+'" data-d="1" '+(p>=pages-1?'disabled':'')+'>▶</button></div>';
+  return '<ul>'+items+'</ul>'+pager;
+}
+function fmtDur(s){return s||'-';}
+function loadYt(btn){
+  var url=btn.getAttribute('data-url');
+  var box=btn.parentNode.parentNode.querySelector('.ytbox');
+  if(box){ box.style.display = box.style.display==='none'?'block':'none'; if(box.dataset.loaded) return; }
+  else { box=document.createElement('div'); box.className='ytbox'; btn.parentNode.parentNode.appendChild(box); }
+  box.textContent='불러오는 중…';
+  fetch('/api/youtube/channel-status?url='+encodeURIComponent(url),{cache:'no-store'}).then(function(r){return r.json();}).then(function(d){
+    box.dataset.loaded='1';
+    if(!d.ok){ box.innerHTML='⚠ '+esc(d.warn||d.error||'조회 실패'); return; }
+    var lives=(d.recentLives||[]).map(function(v){
+      return '• '+(v.date?esc(v.date.slice(0,10)):'?')+' · '+esc(fmtDur(v.duration))+(v.concurrentViewers?' · 동시'+esc(v.concurrentViewers):'');
+    }).join('<br>');
+    box.innerHTML =
+      '<b style="color:var(--accent)">'+esc(d.title||'')+'</b>'+
+      (d.privacyStatus==='public'?'<span class="badge b-ok">공개</span>':'<span class="badge b-warn">'+esc(d.privacyStatus||'?')+'</span>')+'<br>'+
+      '구독 '+esc(d.subscriberCount||'-')+' · 영상 '+esc(d.videoCount||'-')+' · 조회 '+esc(d.viewCount||'-')+'<br>'+
+      '생방송 '+esc(d.completedLiveCount||0)+'회'+(d.lastLiveDaysAgo!=null?' · 마지막 '+esc(d.lastLiveDaysAgo)+'일 전':'')+'<br>'+
+      (lives?lives+'<br>':'')+
+      '<span style="color:#6b7280">⚠ 스트라이크·피크시청자·2단계인증은 YouTube API 미제공(자동화 필요)</span>';
+  }).catch(function(e){ box.textContent='오류: '+e.message; });
+}
+function render(sites){
+  var el=document.getElementById('list');
+  if(!sites.length){el.textContent='데이터 없음';return;}
+  cache=sites;
+  el.innerHTML=sites.map(function(s){
+    var m=META[s.site]||{e:'📁',k:''};
+    var c=(s.accounts&&s.accounts.length)||s.count||0;
+    return '<div class="site-row" data-s="'+esc(s.site)+'"><div class="site-head"><div>'+m.e+' <b>'+esc(s.site)+'</b> <span style="color:var(--sub);font-size:12px">('+m.k+')</span></div><div><span class="site-count">'+c+'개</span> <span class="caret">▶</span></div></div><div class="site-body"></div></div>';
+  }).join('');
+  el.querySelectorAll('.site-row').forEach(function(row){
+    row.querySelector('.site-head').addEventListener('click',function(){
+      var open=row.classList.contains('open');
+      if(open){row.classList.remove('open');return;}
+      row.classList.add('open');
+      var site=row.getAttribute('data-s'), obj=cache.find(function(x){return x.site===site;});
+      var body=row.querySelector('.site-body');
+      body.innerHTML=renderPage(site,obj.accounts||[]);
+      wire(body,obj);
+    });
+  });
+}
+function wire(body,obj){
+  body.querySelectorAll('.pager button').forEach(function(b){
+    b.addEventListener('click',function(e){e.stopPropagation();var s=b.getAttribute('data-s'),d=parseInt(b.getAttribute('data-d'),10);pg[s]=(pg[s]||0)+d;body.innerHTML=renderPage(s,obj.accounts||[]);wire(body,obj);});
+  });
+  body.querySelectorAll('.yt-btn').forEach(function(b){
+    b.addEventListener('click',function(e){e.stopPropagation();loadYt(b);});
+  });
+}
+fetch('/api/subsite-accounts',{cache:'no-store'}).then(function(r){return r.json();}).then(function(d){render(d.sites||[]);}).catch(function(e){document.getElementById('list').textContent='오류: '+e.message;});
+</script>
+</body>
+</html>
