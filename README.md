@@ -53,6 +53,24 @@
 - `CLOUDFLARE_TOKEN` / `CLOUDFLARE_ZONE_ID`
 - `GOOGLE_OAUTH_CLIENT_ID` — 구글 로그인 위젯이 렌더되려면 필요 (없으면 "미설정" 표시)
 
+### 구글 로그인 (진행 상태 · 백엔드는 gauth 자체)
+
+백엔드는 **gauth의 Node 서버**(`/opt/gauth-full/rebrowser-login.js`)에만 둔다. 다른 사이트에 두지 않는다.
+
+- **GCP 프로젝트**: `quantum-bonus-455522-b4` (client_id 앞자리 `956283750273`와 동일 프로젝트).
+  gauth 박스에 gcloud가 서비스 계정 `956283750273-compute@developer.gserviceaccount.com`로 인증돼 있어 콘솔 없이 API 조작 가능.
+- **origin_mismatch 원인**: raw GSI(`google.accounts.id`) 버튼은 OAuth 클라이언트의 "승인된 JavaScript 원본"을 검사하는데, 이건 콘솔에서만 편집 가능(공개 API 없음 — clientauthconfig 404, IAP admin 폐기예정/org 필요).
+- **콘솔 0클릭 해결책 = GCIP(Firebase Auth) 전환**:
+  1. `gcloud services enable identitytoolkit.googleapis.com` — 완료
+  2. `POST /v2/projects/{p}/identityPlatform:initializeAuth` — 완료
+  3. `PATCH /admin/v2/projects/{p}/config?updateMask=authorizedDomains` 로
+     `gauth.cent-solution.online` 추가 — **완료** (현재 authorizedDomains에 포함됨)
+- **Firebase 웹 config (실측)**: `apiKey=AIzaSy…`(브라우저 키), `authDomain=quantum-bonus-455522-b4.firebaseapp.com`, `projectId=quantum-bonus-455522-b4`
+- **남은 단 하나의 입력**: GCIP Google IdP(`defaultSupportedIdpConfigs/google.com`) 활성화에 OAuth **client_secret(`GOCSPX-…`)**이 필요.
+  기존 클라이언트의 secret을 읽는 공개 API가 없어 프로젝트 소유자만 제공 가능. secret 확보 시 프론트를 공식 문서(`firebase.google.com/docs/auth/web/google-signin`)의 `signInWithPopup(GoogleAuthProvider)`로 전환하면 로그인 완료.
+- **세션 정책**: 로그인 1회 → Firebase `browserLocalPersistence`(영구) 또는 gauth 10년 httpOnly 쿠키. 로그아웃 버튼 누르기 전까지 유지.
+- **로그인 후 계정 점검(읽기 전용, 삭제 없음)**: YouTube Data API로 계정별 ① 삭제/경고 상태 ② 스트리밍 방송 횟수 ③ 마지막 생방송 경과일 조회 — 로그인 작동 후 구현.
+
 ---
 
 ## https://jump.cent-solution.online/ (오른쪽)
