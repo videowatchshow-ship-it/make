@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
-      - name: Enable YouTube Data API + add channel-status route + test
+      - name: Enrich channel-status + wire subsites.html
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -20,36 +20,26 @@ jobs:
           command_timeout: 150s
           script: |
             set -e
-            PROJECT=quantum-bonus-455522-b4
             EX=/opt/gauth-full/rebrowser-login.js
-            gcloud services enable youtube.googleapis.com --project=$PROJECT 2>&1 | tail -2 || true
+            sudo cp "$EX" "$EX.bak.yt2.$(date +%s)"
 
-            echo '=== 1. store a YouTube API key in gauth .env if not present ==='
-            if ! sudo grep -q 'YT_API_KEY' /opt/gauth-full/.env 2>/dev/null; then
-              echo 'YT_API_KEY=AIzaSyBahECe4THRJVR1h8bfRyTEvWHgz3Jqn9Y' | sudo tee -a /opt/gauth-full/.env > /dev/null
-            fi
-            KEY=$(sudo grep -oE 'YT_API_KEY=[A-Za-z0-9_-]+' /opt/gauth-full/.env | head -1 | cut -d= -f2)
-            echo "key length: ${#KEY}"
-
-            echo ''
-            echo '=== 2. inject /api/youtube/channel-status route ==='
-            sudo cp "$EX" "$EX.bak.yt.$(date +%s)"
+            echo '=== 1. replace channel-status route with enriched version (recent lives + durations) ==='
             sudo python3 - <<'PYEOF'
+            import re
             f='/opt/gauth-full/rebrowser-login.js'
             s=open(f,encoding='utf-8').read()
-            if '/api/youtube/channel-status' in s:
-                print('route present, skipping')
-            else:
-                marker="app.get('/api/subsite-counts'"
-                idx=s.index(marker)
-                route=r'''
-            // === YouTube channel status (Data API v3, public data via API key) ===
+            # remove old block between markers if present
+            s=re.sub(r"\n *// === YouTube channel status.*?app\.get\('/api/youtube/channel-status'.*?\n *\}\);\n", '\n', s, flags=re.S)
+            marker="app.get('/api/subsite-counts'"
+            idx=s.index(marker)
+            route=r'''
             function _yt_get(u){ const https=require('https'); return new Promise(function(res,rej){ https.get(u,function(r){ let d=''; r.on('data',function(c){d+=c;}); r.on('end',function(){ try{res(JSON.parse(d));}catch(e){rej(e);} }); }).on('error',rej); }); }
+            function _yt_iso_dur(iso){ if(!iso) return ''; var m=String(iso).match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/); if(!m) return iso; var h=m[1]?m[1]+'\uc2dc\uac04 ':''; var mi=m[2]?m[2]+'\ubd84 ':''; var se=m[3]?m[3]+'\ucd08':''; return (h+mi+se).trim(); }
             async function _yt_resolveChannelId(raw, key){
               let u=String(raw||'').trim();
               let m=u.match(/youtube\.com\/channel\/(UC[0-9A-Za-z_-]{20,})/i); if(m) return m[1];
               m=u.match(/youtube\.com\/@([^\/?#\s]+)/i);
-              if(m){ const h=m[1]; const j=await _yt_get('https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=@'+encodeURIComponent(h)+'&key='+key); if(j.items&&j.items[0]) return j.items[0].id; }
+              if(m){ const j=await _yt_get('https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=@'+encodeURIComponent(m[1])+'&key='+key); if(j.items&&j.items[0]) return j.items[0].id; }
               m=u.match(/youtube\.com\/user\/([^\/?#\s]+)/i);
               if(m){ const j=await _yt_get('https://www.googleapis.com/youtube/v3/channels?part=id&forUsername='+encodeURIComponent(m[1])+'&key='+key); if(j.items&&j.items[0]) return j.items[0].id; }
               return '';
@@ -58,40 +48,75 @@ jobs:
               try {
                 const key=process.env.YT_API_KEY||'';
                 if(!key) return res.status(500).json({error:'YT_API_KEY not set'});
-                const url=req.query.url||req.query.channel||'';
-                if(!url) return res.status(400).json({error:'missing url'});
+                const url=req.query.url||''; if(!url) return res.status(400).json({error:'missing url'});
                 const cid=await _yt_resolveChannelId(url, key);
-                if(!cid) return res.json({ ok:false, warn:'channel not found (삭제/비공개 가능)', url:url });
+                if(!cid) return res.json({ ok:false, warn:'\ucc44\ub110 \ubbf8\ud655\uc778 (\uc0ad\uc81c/\ube44\uacf5\uac1c \uac00\ub2a5)', url:url });
                 const c=await _yt_get('https://www.googleapis.com/youtube/v3/channels?part=statistics,status,snippet&id='+cid+'&key='+key);
-                if(!c.items||!c.items[0]) return res.json({ ok:false, warn:'채널 응답 없음 (삭제됨?)', channelId:cid });
-                const it=c.items[0]; const st=it.statistics||{};
-                // last completed live + count
-                const sr=await _yt_get('https://www.googleapis.com/youtube/v3/search?part=snippet&channelId='+cid+'&eventType=completed&type=video&order=date&maxResults=1&key='+key);
-                let lastLive=null, lastLiveDaysAgo=null, liveCount=null;
-                if(sr.pageInfo) liveCount=sr.pageInfo.totalResults;
-                if(sr.items&&sr.items[0]){ lastLive=sr.items[0].snippet.publishedAt; lastLiveDaysAgo=Math.floor((Date.now()-new Date(lastLive).getTime())/86400000); }
-                res.json({ ok:true, channelId:cid, title:(it.snippet||{}).title||'', subscriberCount:st.subscriberCount||null, videoCount:st.videoCount||null, viewCount:st.viewCount||null, privacyStatus:(it.status||{}).privacyStatus||'', lastLive:lastLive, lastLiveDaysAgo:lastLiveDaysAgo, completedLiveCount:liveCount, server_time:new Date().toISOString() });
+                if(!c.items||!c.items[0]) return res.json({ ok:false, warn:'\ucc44\ub110 \uc751\ub2f5 \uc5c6\uc74c (\uc0ad\uc81c\ub428?)', channelId:cid });
+                const it=c.items[0]; const stx=it.statistics||{};
+                const sr=await _yt_get('https://www.googleapis.com/youtube/v3/search?part=snippet&channelId='+cid+'&eventType=completed&type=video&order=date&maxResults=5&key='+key);
+                let liveCount=(sr.pageInfo&&sr.pageInfo.totalResults)||0; let recent=[];
+                if(sr.items&&sr.items.length){
+                  const ids=sr.items.map(function(x){return x.id.videoId;}).filter(Boolean).join(',');
+                  const vd=await _yt_get('https://www.googleapis.com/youtube/v3/videos?part=contentDetails,liveStreamingDetails,snippet&id='+ids+'&key='+key);
+                  recent=(vd.items||[]).map(function(v){ var lsd=v.liveStreamingDetails||{}; return { title:(v.snippet||{}).title||'', date:(v.snippet||{}).publishedAt||'', duration:_yt_iso_dur((v.contentDetails||{}).duration), actualStart:lsd.actualStartTime||'', actualEnd:lsd.actualEndTime||'', concurrentViewers:lsd.concurrentViewers||null }; });
+                }
+                var last=recent[0]||null;
+                res.json({ ok:true, channelId:cid, title:(it.snippet||{}).title||'', subscriberCount:stx.subscriberCount||null, videoCount:stx.videoCount||null, viewCount:stx.viewCount||null, privacyStatus:(it.status||{}).privacyStatus||'', completedLiveCount:liveCount, lastLive:last?last.date:null, lastLiveDaysAgo:last?Math.floor((Date.now()-new Date(last.date).getTime())/86400000):null, recentLives:recent, note_strikes:'\uc2a4\ud2b8\ub77c\uc774\ud06c/\uacbd\uace0\ub294 YouTube API \ubbf8\uc81c\uacf5(\uc18c\uc720\uc790 \uc2a4\ud29c\ub514\uc624 \uc804\uc6a9)', note_viewers:'\uc885\ub8cc \ubc29\uc1a1 \ud53c\ud06c \uc2dc\uccad\uc790\ub294 API \ubbf8\uc81c\uacf5', server_time:new Date().toISOString() });
               } catch(e){ res.status(500).json({ error:String(e&&e.message||e) }); }
             });
             '''
-                s=s[:idx]+route+'\n'+s[idx:]
-                open(f,'w',encoding='utf-8').write(s)
-                print('route inserted')
+            s=s[:idx]+route+'\n'+s[idx:]
+            open(f,'w',encoding='utf-8').write(s)
+            print('enriched route in place')
             PYEOF
-
-            echo ''
-            echo '=== 3. inject YT_API_KEY into systemd env ==='
-            sudo mkdir -p /etc/systemd/system/gauth.service.d
-            printf '[Service]\nEnvironment="YT_API_KEY=%s"\n' "$KEY" | sudo tee /etc/systemd/system/gauth.service.d/yt.conf > /dev/null
-            sudo systemctl daemon-reload
             sudo node -c "$EX" && echo 'syntax OK'
-            sudo systemctl restart gauth
-            sleep 2
-            sudo systemctl is-active gauth
+            sudo systemctl restart gauth; sleep 2; sudo systemctl is-active gauth
 
             echo ''
-            echo '=== 4. LIVE TEST against a known channel from DB ==='
-            curl -s --max-time 25 'http://localhost:4000/api/youtube/channel-status?url=https://www.youtube.com/channel/UCap3AC4d894Z14uLSY7gfvA' | head -c 600
+            echo '=== 2. wire per-account YT status into /subsites.html ==='
+            SF=/var/www/sites/gauth/public/subsites.html
+            if [ -f "$SF" ]; then
+              sudo python3 - <<'PYEOF'
+            f='/var/www/sites/gauth/public/subsites.html'
+            s=open(f,encoding='utf-8').read()
+            import re
+            s=re.sub(r'<!-- ytstat start -->.*?<!-- ytstat end -->\n','',s,flags=re.S)
+            inj=(
+              '<!-- ytstat start -->\n'
+              '<script>\n'
+              'window.loadYtStatus=function(btn, url){\n'
+              '  var box=btn.nextElementSibling; if(box && box.className==="ytbox"){ box.style.display = box.style.display==="none"?"block":"none"; if(box.dataset.loaded) return; }\n'
+              '  else { box=document.createElement("div"); box.className="ytbox"; box.style.cssText="margin-top:4px;font-size:11px;color:#9fb3c8;background:#0d1218;border:1px solid #22282f;border-radius:6px;padding:6px 8px;line-height:1.6"; btn.parentNode.insertBefore(box, btn.nextSibling); }\n'
+              '  box.textContent="\ubd88\ub7ec\uc624\ub294 \uc911\u2026";\n'
+              '  fetch("/api/youtube/channel-status?url="+encodeURIComponent(url),{cache:"no-store"}).then(function(r){return r.json();}).then(function(d){\n'
+              '    box.dataset.loaded="1";\n'
+              '    if(!d.ok){ box.innerHTML="\u26a0 "+(d.warn||d.error||"\uc870\ud68c \uc2e4\ud328"); return; }\n'
+              '    var lives=(d.recentLives||[]).map(function(v){ return "\u2022 "+(v.date?v.date.slice(0,10):"?")+" \u00b7 "+(v.duration||"-")+(v.concurrentViewers?" \u00b7 \ub3d9\uc2dc"+v.concurrentViewers:""); }).join("<br>");\n'
+              '    box.innerHTML="<b style=\\"color:#7dabff\\">"+(d.title||"")+"</b><br>"+\n'
+              '      "\uad6c\ub3c5 "+(d.subscriberCount||"-")+" \u00b7 \uc601\uc0c1 "+(d.videoCount||"-")+" \u00b7 \uc870\ud68c "+(d.viewCount||"-")+"<br>"+\n'
+              '      "\uc0dd\ubc29\uc1a1 "+(d.completedLiveCount||0)+"\ud68c"+(d.lastLiveDaysAgo!=null?" \u00b7 \ub9c8\uc9c0\ub9c9 "+d.lastLiveDaysAgo+"\uc77c \uc804":"")+"<br>"+\n'
+              '      (lives?lives+"<br>":"")+\n'
+              '      "<span style=\\"color:#6b7280\\">\u26a0 \uc2a4\ud2b8\ub77c\uc774\ud06c/\ud53c\ud06c\uc2dc\uccad\uc790\ub294 YouTube API \ubbf8\uc81c\uacf5</span>";\n'
+              '  }).catch(function(e){ box.textContent="\uc624\ub958: "+e.message; });\n'
+              '};\n'
+              '</script>\n'
+              '<!-- ytstat end -->\n'
+            )
+            s=s.replace('</body>', inj+'</body>',1) if '</body>' in s else s+inj
+            # add a status button next to each email row: patch renderPage li to include a button
+            s=s.replace("return '<li><span>'+esc(e)+'</span><span style=\"color:var(--sub);font-size:10px\">'+esc(a.status||'')+'</span></li>';",
+                        "var yurl=a.youtube_url||a.youtube||a.channel_url||''; return '<li style=\"flex-direction:column;align-items:stretch\"><div style=\"display:flex;justify-content:space-between;gap:8px\"><span>'+esc(e)+'</span>'+(yurl?'<button onclick=\"loadYtStatus(this,\\''+esc(yurl).replace(/\x27/g,\"\\\\'\")+'\\')\" style=\"background:#161a20;border:1px solid #2a3140;color:#7dabff;border-radius:5px;font-size:10px;padding:2px 6px;cursor:pointer\">\ud83d\udcca \uc0c1\ud0dc</button>':'<span style=\"color:var(--sub);font-size:10px\">'+esc(a.status||'')+'</span>')+'</div></li>';")
+            open(f,'w',encoding='utf-8').write(s)
+            print('subsites.html wired')
+            PYEOF
+            else
+              echo 'subsites.html not found'
+            fi
+
             echo ''
-            curl -s --max-time 25 'http://localhost:4000/api/youtube/channel-status?url=https://www.youtube.com/@blackorwhite4371' | head -c 600
+            echo '=== 3. verify ==='
+            curl -s --max-time 25 'http://localhost:4000/api/youtube/channel-status?url=https://www.youtube.com/@blackorwhite4371' | head -c 700
             echo ''
+            curl -s -o /dev/null -w 'subsites: %{http_code}\n' https://gauth.cent-solution.online/subsites.html --max-time 10
+            curl -s --max-time 10 https://gauth.cent-solution.online/subsites.html | grep -c 'loadYtStatus' || echo 0
