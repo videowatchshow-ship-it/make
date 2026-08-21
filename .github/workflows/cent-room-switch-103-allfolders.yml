@@ -1,0 +1,56 @@
+name: cent 채널 테이블 103번으로 전환 (photo + photo2)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/cent-room-switch-103-allfolders.yml'
+jobs:
+  switch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: photo/data/sel_cent.json + photo2/data/sel_cent.json room_id 를 103으로 변경
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            F1=/var/www/sites/chamgyo/public/photo/data/sel_cent.json
+            F2=/var/www/sites/chamgyo/public/photo2/data/sel_cent.json
+            echo "===== 변경 전 ====="
+            sudo cat "$F1"; echo ""
+            sudo cat "$F2"; echo ""
+            sudo cp "$F1" "${F1}.bak_$(date +%s)"
+            sudo cp "$F2" "${F2}.bak_$(date +%s)"
+            sudo python3 << 'PYEOF'
+            import json
+            for path in [
+                "/var/www/sites/chamgyo/public/photo/data/sel_cent.json",
+                "/var/www/sites/chamgyo/public/photo2/data/sel_cent.json",
+            ]:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                data["room_id"] = 103
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False)
+                print("SWITCHED_TO_103_OK:", path)
+            PYEOF
+            sudo chown --reference="${F1}.bak_"* "$F1" 2>/dev/null || true
+            sudo chown --reference="${F2}.bak_"* "$F2" 2>/dev/null || true
+            echo "===== 변경 후 ====="
+            sudo cat "$F1"; echo ""
+            sudo cat "$F2"; echo ""
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
