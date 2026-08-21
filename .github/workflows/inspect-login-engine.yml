@@ -1,0 +1,35 @@
+name: inspect login engine
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-inspect-engine.txt']
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Grep login engine structure
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 60s
+          script: |
+            echo '=== files in /opt/gauth-full ==='
+            sudo ls -la /opt/gauth-full/*.js | head -40
+            echo ''
+            echo '=== puppeteer/rebrowser version in package.json ==='
+            sudo grep -iE 'puppeteer|rebrowser|playwright' /opt/gauth-full/package.json 2>/dev/null || echo 'no package.json match'
+            echo ''
+            echo '=== exported/async login functions in advanced-google-login-v2.js ==='
+            sudo grep -nE 'module.exports|exports\.|async function|function [a-zA-Z_]+\(|require\(' /opt/gauth-full/advanced-google-login-v2.js 2>/dev/null | head -40 || echo 'file missing'
+            echo ''
+            echo '=== how rebrowser-login.js invokes the login engine ==='
+            sudo grep -nE "require\('\./advanced|loginOne|doLogin|performLogin|/api/login|puppeteer|launch\(|totp|authenticator" /opt/gauth-full/rebrowser-login.js 2>/dev/null | head -40
+            echo ''
+            echo '=== accounts_normalized sample record keys ==='
+            sudo python3 -c "import json;d=json.load(open('/opt/gauth-full/accounts_normalized.json'));a=d if isinstance(d,list) else d.get('accounts',[]);print(list(a[0].keys()) if a else 'empty')"
