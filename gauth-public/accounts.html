@@ -11,48 +11,55 @@
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo",sans-serif;min-height:100vh}
 
 /* ── nav ── */
-nav{position:sticky;top:0;z-index:10;background:#111418;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;height:48px;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+nav{position:sticky;top:0;z-index:20;background:#111418;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;height:48px;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch}
 nav::-webkit-scrollbar{display:none}
 nav a{color:var(--sub);text-decoration:none;font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;white-space:nowrap;transition:background .15s,color .15s}
 nav a:hover{background:#1a1f27;color:var(--text)}
 nav a.active{background:#1e3a5f;color:var(--accent)}
 
 /* ── toolbar ── */
-.toolbar{padding:12px 16px;background:#0f1216;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.toolbar input{background:var(--card);border:1px solid var(--border2);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px;flex:1;min-width:140px}
+.toolbar{position:sticky;top:48px;z-index:15;padding:8px 16px;background:#0f1216;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.toolbar input{background:var(--card);border:1px solid var(--border2);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px;flex:1;min-width:120px}
 .toolbar input:focus{outline:0;border-color:var(--accent)}
-.toolbar select{background:var(--card);border:1px solid var(--border2);color:var(--text);padding:8px 10px;border-radius:6px;font-size:12px}
+.toolbar select{background:var(--card);border:1px solid var(--border2);color:var(--text);padding:6px 8px;border-radius:6px;font-size:11px}
 #result-count{color:var(--sub);font-size:11px;white-space:nowrap}
 
-/* ── details accordion ── */
-.wrap{max-width:680px;margin:0 auto;padding:12px 16px 80px}
-details{background:var(--panel);border:1px solid var(--border);border-radius:10px;margin-bottom:6px;overflow:hidden}
-details[open]{border-color:var(--border2)}
-details[open] summary{background:#1a1f27;border-bottom:1px solid var(--border)}
-summary{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;list-style:none;font-size:13px;transition:background .15s}
-summary::-webkit-details-marker{display:none}
-summary::after{content:'▶';color:var(--sub);font-size:10px;transition:transform .2s}
-details[open] summary::after{transform:rotate(90deg)}
-summary:hover{background:#151a22}
-.s-email{font-weight:600;word-break:break-all;flex:1;min-width:0}
-.s-right{display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:8px}
+/* ── compact list ── */
+.list-wrap{max-width:900px;margin:0 auto;padding:4px 8px 20px}
+.row{display:flex;align-items:center;gap:4px;padding:3px 8px;font-size:11px;cursor:pointer;border-bottom:1px solid #161a20;transition:background .1s}
+.row:hover{background:#151a22}
+.row.selected{background:#1a2536;border-color:var(--accent)}
+.row-num{color:var(--sub);min-width:36px;text-align:right;font-size:10px;font-variant-numeric:tabular-nums}
+.row-email{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace;font-size:11px}
+.row-site{font-size:10px;min-width:20px;text-align:center}
+.row-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.dot-none{background:#333}
+.dot-ok{background:var(--accent2)}
+.dot-fail{background:var(--err)}
+.row-badges{display:flex;gap:2px;flex-shrink:0}
+.mbadge{font-size:8px;padding:1px 4px;border-radius:3px;font-weight:700}
+.mb-2fa{background:#1c2740;color:var(--accent)}
+.mb-ch{background:#0f2a1a;color:var(--accent2)}
+
+/* ── detail panel (slide-out) ── */
+.detail-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:30}
+.detail-overlay.open{display:block}
+.detail-panel{position:fixed;top:0;right:0;bottom:0;width:min(420px,90vw);background:var(--panel);border-left:1px solid var(--border);z-index:31;overflow-y:auto;transform:translateX(100%);transition:transform .2s ease}
+.detail-panel.open{transform:translateX(0)}
+.dp-header{position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;z-index:1}
+.dp-close{background:none;border:0;color:var(--sub);font-size:20px;cursor:pointer;padding:4px 8px}
+.dp-close:hover{color:var(--text)}
+.dp-body{padding:16px}
+.dp-grid{display:grid;grid-template-columns:80px 1fr;gap:4px 10px;font-size:12px;line-height:1.8}
+.dp-label{color:var(--sub);font-weight:600;font-size:11px;text-align:right}
+.dp-val{word-break:break-all}
+.dp-section{margin-top:12px;padding-top:10px;border-top:1px solid var(--border)}
+.dp-section-title{font-size:11px;color:var(--accent);font-weight:700;margin-bottom:6px}
 .badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:999px;font-weight:600}
 .b-ok{background:#0f2a1a;color:var(--accent2);border:1px solid #1f5c39}
 .b-warn{background:#2a1a00;color:var(--warn);border:1px solid #6b4a1f}
 .b-err{background:#2a1515;color:var(--err);border:1px solid #5c2020}
 .b-2fa{background:#1c2740;color:var(--accent);border:1px solid #2a4070}
-
-/* ── card body ── */
-.acc-body{padding:12px 14px;background:#12171e;font-size:12.5px;line-height:1.8}
-.acc-grid{display:grid;grid-template-columns:80px 1fr;gap:4px 10px}
-.acc-label{color:var(--sub);font-weight:600;font-size:11px;text-align:right}
-.acc-val{word-break:break-all}
-.acc-section{margin-top:10px;padding-top:8px;border-top:1px solid var(--border)}
-.acc-section-title{font-size:11px;color:var(--accent);font-weight:700;margin-bottom:6px}
-.yt-info{background:#0b0f14;border:1px solid var(--border);border-radius:6px;padding:8px 10px;line-height:1.7;font-size:11.5px}
-.yt-info b{color:var(--accent)}
-.live-item{display:flex;gap:8px;font-size:11px;padding:3px 0;color:#9fb3c8}
-.live-date{color:var(--text);min-width:70px}
 
 /* ── login button ── */
 .login-btn{background:#2b6cff;color:#fff;border:0;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600}
@@ -65,11 +72,14 @@ summary:hover{background:#151a22}
 .login-status{font-size:11px;color:var(--sub);margin-top:6px;line-height:1.6}
 .login-actions{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
 
-/* ── pager ── */
-.pager{position:fixed;bottom:0;left:0;right:0;background:#111418;border-top:1px solid var(--border);padding:10px 16px;display:flex;justify-content:center;align-items:center;gap:12px;z-index:10}
-.pager button{background:var(--card);border:1px solid var(--border2);color:var(--text);border-radius:6px;padding:6px 14px;font-size:13px;cursor:pointer}
-.pager button:disabled{opacity:.3;cursor:default}
-.pager span{color:var(--sub);font-size:12px}
+/* ── yt info ── */
+.yt-info{background:#0b0f14;border:1px solid var(--border);border-radius:6px;padding:8px 10px;line-height:1.7;font-size:11.5px}
+.yt-info b{color:var(--accent)}
+
+/* ── summary bar ── */
+.summary-bar{max-width:900px;margin:8px auto 0;padding:0 8px;display:flex;gap:12px;font-size:11px;color:var(--sub);flex-wrap:wrap}
+.summary-bar .s-item{display:flex;align-items:center;gap:4px}
+.summary-bar .s-dot{width:7px;height:7px;border-radius:50%;display:inline-block}
 
 /* ── loading ── */
 .loading{text-align:center;padding:40px;color:var(--sub)}
@@ -80,12 +90,12 @@ summary:hover{background:#151a22}
 @media(max-width:600px){
   nav{height:42px;padding:0 8px}
   nav a{font-size:12px;padding:5px 10px}
-  .toolbar{padding:8px 10px}
-  .wrap{padding:8px 10px 72px}
-  summary{padding:10px 12px;font-size:12.5px}
-  .acc-grid{grid-template-columns:70px 1fr;gap:3px 8px}
-  .acc-body{padding:10px 12px}
-  .pager{padding:8px 10px}
+  .toolbar{padding:6px 8px;top:42px}
+  .list-wrap{padding:2px 4px 16px}
+  .row{padding:3px 4px;font-size:10px}
+  .row-num{min-width:28px;font-size:9px}
+  .row-email{font-size:10px}
+  .detail-panel{width:100vw}
 }
 </style>
 </head>
@@ -105,30 +115,34 @@ summary:hover{background:#151a22}
     <option value="has_yt">채널 있음</option>
     <option value="no_yt">채널 없음</option>
     <option value="has_2fa">2FA 있음</option>
+    <option value="login_ok">로그인 성공</option>
+    <option value="login_fail">로그인 실패</option>
   </select>
   <span id="result-count"></span>
 </div>
 
-<div class="wrap">
+<div class="summary-bar" id="summaryBar"></div>
+
+<div class="list-wrap">
   <div id="list"><div class="loading"><span class="dot-pulse">불러오는 중…</span></div></div>
 </div>
 
-<div class="pager">
-  <button id="prevBtn" disabled>◀ 이전</button>
-  <span id="pageInfo">–</span>
-  <button id="nextBtn" disabled>다음 ▶</button>
+<!-- detail slide panel -->
+<div class="detail-overlay" id="overlay" onclick="closeDetail()"></div>
+<div class="detail-panel" id="detailPanel">
+  <div class="dp-header">
+    <span id="dp-title" style="font-weight:700;font-size:14px"></span>
+    <button class="dp-close" onclick="closeDetail()">✕</button>
+  </div>
+  <div class="dp-body" id="dp-body"></div>
 </div>
 
 <script>
-/* ref: https://developer.mozilla.org/en-US/docs/Web/HTML/Element/details
- * ref: https://developer.mozilla.org/en-US/blog/html-details-exclusive-accordions/ (name attr)
- * ref: https://developer.mozilla.org/en-US/docs/Web/API/HTMLDetailsElement */
+/* ref: https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage
+ * ref: https://developer.mozilla.org/en-US/docs/Web/HTML/Element/details */
 
-/* ref: https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage */
-var PER_PAGE = 20;
 var allAccounts = [];
 var filtered = [];
-var page = 0;
 var ytCache = {};
 var loginStore = {};
 try { loginStore = JSON.parse(localStorage.getItem('gauth_logins')||'{}'); } catch(e){ loginStore={}; }
@@ -144,38 +158,98 @@ var META = {
 
 function esc(s){ var d=document.createElement('div'); d.textContent=String(s==null?'':s); return d.innerHTML; }
 
-function fmtDur(s){ return s||'-'; }
-
-function badge(cls, txt){ return '<span class="badge '+cls+'">'+esc(txt)+'</span>'; }
-
-function statusBadge(a){
-  var b = '';
-  if (a.totp_secret) b += badge('b-2fa','2FA');
-  if (a.youtube_url) b += badge('b-ok','채널');
-  if (a.status === 'failed') b += badge('b-err','실패');
-  return b || badge('b-warn','대기');
+function loginDot(email){
+  var s = loginStore[email];
+  if (!s) return 'dot-none';
+  return s.ok ? 'dot-ok' : 'dot-fail';
 }
 
-function renderCard(a, idx){
+function renderList(){
+  var el = document.getElementById('list');
+  if (!filtered.length) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--sub)">결과 없음</div>';
+    return;
+  }
+
+  var buf = [];
+  for (var i = 0; i < filtered.length; i++) {
+    var a = filtered[i];
+    var email = a.email || a.gmail || '?';
+    var site = a.site || a.source_site || '?';
+    var m = META[site] || {e:'📁',k:site};
+    var badges = '';
+    if (a.totp_secret) badges += '<span class="mbadge mb-2fa">2FA</span>';
+    if (a.youtube_url||a.youtube||a.channel_url) badges += '<span class="mbadge mb-ch">CH</span>';
+
+    buf.push(
+      '<div class="row" data-i="'+a._idx+'" onclick="openDetail('+a._idx+')">' +
+        '<span class="row-num">'+(i+1)+'</span>' +
+        '<span class="row-dot '+loginDot(email)+'"></span>' +
+        '<span class="row-email">'+esc(email)+'</span>' +
+        '<span class="row-site">'+m.e+'</span>' +
+        '<span class="row-badges">'+badges+'</span>' +
+      '</div>'
+    );
+  }
+
+  el.innerHTML = buf.join('');
+  document.getElementById('result-count').textContent = filtered.length+'개';
+  updateSummary();
+}
+
+function updateSummary(){
+  var ok=0, fail=0, none=0;
+  for (var i=0; i<filtered.length; i++){
+    var email = filtered[i].email || filtered[i].gmail || '';
+    var s = loginStore[email];
+    if (!s) none++;
+    else if (s.ok) ok++;
+    else fail++;
+  }
+  document.getElementById('summaryBar').innerHTML =
+    '<span class="s-item"><span class="s-dot" style="background:var(--accent2)"></span> 성공 '+ok+'</span>'+
+    '<span class="s-item"><span class="s-dot" style="background:var(--err)"></span> 실패 '+fail+'</span>'+
+    '<span class="s-item"><span class="s-dot" style="background:#333"></span> 미시도 '+none+'</span>'+
+    '<span class="s-item">전체 '+filtered.length+'</span>';
+}
+
+function applyFilter(){
+  var q = document.getElementById('q').value.toLowerCase().trim();
+  var sf = document.getElementById('siteFilter').value;
+  var stf = document.getElementById('statusFilter').value;
+  filtered = allAccounts.filter(function(a){
+    var email = (a.email || a.gmail || '').toLowerCase();
+    var site = a.site || a.source_site || '';
+    if (q && email.indexOf(q) < 0 && site.indexOf(q) < 0) return false;
+    if (sf && site !== sf) return false;
+    if (stf === 'has_yt' && !(a.youtube_url || a.youtube || a.channel_url)) return false;
+    if (stf === 'no_yt' && (a.youtube_url || a.youtube || a.channel_url)) return false;
+    if (stf === 'has_2fa' && !a.totp_secret) return false;
+    if (stf === 'login_ok') { var s=loginStore[email]; if(!s||!s.ok) return false; }
+    if (stf === 'login_fail') { var s2=loginStore[email]; if(!s2||s2.ok) return false; }
+    return true;
+  });
+  renderList();
+}
+
+/* ── detail panel ── */
+window.openDetail = function(idx){
+  var a = allAccounts[idx];
+  if (!a) return;
   var email = a.email || a.gmail || '?';
   var site = a.site || a.source_site || '?';
   var m = META[site] || {e:'📁',k:site};
-  var yurl = a.youtube_url || a.youtube || a.channel_url || '';
-  var id = 'acc-'+idx;
+
+  document.getElementById('dp-title').textContent = '#'+(idx+1)+' '+email;
 
   var grid = '';
-  grid += '<div class="acc-label">사이트</div><div class="acc-val">'+m.e+' '+esc(site)+' ('+esc(m.k)+')</div>';
-  grid += '<div class="acc-label">이메일</div><div class="acc-val">'+esc(email)+'</div>';
-  if (a.password) grid += '<div class="acc-label">비밀번호</div><div class="acc-val" style="color:#c9d2dc;font-family:monospace">'+esc(a.password)+'</div>';
-  if (a.totp_secret) grid += '<div class="acc-label">2FA</div><div class="acc-val"><span class="badge b-2fa">TOTP</span> <span style="font-family:monospace;font-size:11px;color:var(--sub)">'+esc(a.totp_secret.slice(0,6))+'…</span></div>';
-  if (a.recovery_email) grid += '<div class="acc-label">복구메일</div><div class="acc-val">'+esc(a.recovery_email)+'</div>';
-  if (a.phone || a.recovery_phone) grid += '<div class="acc-label">전화</div><div class="acc-val">'+esc(a.phone||a.recovery_phone)+'</div>';
-  if (a.status) grid += '<div class="acc-label">상태</div><div class="acc-val">'+esc(a.status)+'</div>';
-
-  var ytSection = '';
-  if (yurl) {
-    ytSection = '<div class="acc-section"><div class="acc-section-title">📺 채널 정보</div><div class="yt-info" id="yt-'+idx+'"><button onclick="loadYt('+idx+',\''+esc(yurl)+'\')") style="background:var(--card);border:1px solid var(--border2);color:var(--accent);border-radius:5px;padding:4px 10px;font-size:11px;cursor:pointer">📊 채널 상태 불러오기</button></div></div>';
-  }
+  grid += '<div class="dp-label">사이트</div><div class="dp-val">'+m.e+' '+esc(site)+' ('+esc(m.k)+')</div>';
+  grid += '<div class="dp-label">이메일</div><div class="dp-val">'+esc(email)+'</div>';
+  if (a.password) grid += '<div class="dp-label">비밀번호</div><div class="dp-val" style="color:#c9d2dc;font-family:monospace">'+esc(a.password)+'</div>';
+  if (a.totp_secret) grid += '<div class="dp-label">2FA</div><div class="dp-val"><span class="badge b-2fa">TOTP</span> <span style="font-family:monospace;font-size:11px;color:var(--sub)">'+esc(a.totp_secret.slice(0,6))+'…</span></div>';
+  if (a.recovery_email) grid += '<div class="dp-label">복구메일</div><div class="dp-val">'+esc(a.recovery_email)+'</div>';
+  if (a.phone || a.recovery_phone) grid += '<div class="dp-label">전화</div><div class="dp-val">'+esc(a.phone||a.recovery_phone)+'</div>';
+  if (a.status) grid += '<div class="dp-label">상태</div><div class="dp-val">'+esc(a.status)+'</div>';
 
   var stored = loginStore[email];
   var storedHtml = '';
@@ -192,50 +266,34 @@ function renderCard(a, idx){
       storedHtml = '<span style="color:var(--err)">❌ 마지막 실패: '+esc(agoTxt)+'</span>';
     }
   }
-  var loginSection = '<div class="acc-section"><div class="acc-section-title">🔑 계정 로그인</div><div class="login-actions"><button class="'+btnClass+'" id="login-btn-'+idx+'" onclick="loginOne('+idx+',\''+esc(email)+'\')">'+btnText+'</button></div><div class="login-status" id="login-status-'+idx+'">'+storedHtml+'</div></div>';
+  var loginHtml = '<div class="dp-section"><div class="dp-section-title">🔑 계정 로그인</div>'+
+    '<div class="login-actions"><button class="'+btnClass+'" id="dp-login-btn" onclick="loginOne('+idx+',\''+esc(email)+'\')">' +btnText+'</button></div>'+
+    '<div class="login-status" id="dp-login-status">'+storedHtml+'</div></div>';
 
-  return '<details name="acc"><summary><span class="s-email">'+esc(email)+'</span><span class="s-right">'+statusBadge(a)+'</span></summary><div class="acc-body"><div class="acc-grid">'+grid+'</div>'+loginSection+ytSection+'</div></details>';
-}
-
-function renderPage(){
-  var el = document.getElementById('list');
-  var start = page * PER_PAGE;
-  var slice = filtered.slice(start, start + PER_PAGE);
-  var totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
-
-  if (!slice.length) {
-    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--sub)">결과 없음</div>';
-  } else {
-    el.innerHTML = slice.map(function(a, i){ return renderCard(a, start + i); }).join('');
+  var yurl = a.youtube_url || a.youtube || a.channel_url || '';
+  var ytHtml = '';
+  if (yurl) {
+    ytHtml = '<div class="dp-section"><div class="dp-section-title">📺 채널 정보</div>'+
+      '<div class="yt-info" id="dp-yt"><button onclick="loadYt(\'dp-yt\',\''+esc(yurl)+'\')") style="background:var(--card);border:1px solid var(--border2);color:var(--accent);border-radius:5px;padding:4px 10px;font-size:11px;cursor:pointer">📊 채널 상태 불러오기</button></div></div>';
   }
 
-  document.getElementById('pageInfo').textContent = (start+1)+'–'+Math.min(start+PER_PAGE, filtered.length)+' / '+filtered.length;
-  document.getElementById('prevBtn').disabled = page === 0;
-  document.getElementById('nextBtn').disabled = page >= totalPages - 1;
-  document.getElementById('result-count').textContent = filtered.length+'개';
-  window.scrollTo(0, 0);
-}
+  document.getElementById('dp-body').innerHTML = '<div class="dp-grid">'+grid+'</div>'+loginHtml+ytHtml;
 
-function applyFilter(){
-  var q = document.getElementById('q').value.toLowerCase().trim();
-  var sf = document.getElementById('siteFilter').value;
-  var stf = document.getElementById('statusFilter').value;
-  filtered = allAccounts.filter(function(a){
-    var email = (a.email || a.gmail || '').toLowerCase();
-    var site = a.site || a.source_site || '';
-    if (q && email.indexOf(q) < 0 && site.indexOf(q) < 0) return false;
-    if (sf && site !== sf) return false;
-    if (stf === 'has_yt' && !(a.youtube_url || a.youtube || a.channel_url)) return false;
-    if (stf === 'no_yt' && (a.youtube_url || a.youtube || a.channel_url)) return false;
-    if (stf === 'has_2fa' && !a.totp_secret) return false;
-    return true;
-  });
-  page = 0;
-  renderPage();
-}
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('detailPanel').classList.add('open');
 
-window.loadYt = function(idx, url){
-  var box = document.getElementById('yt-'+idx);
+  document.querySelectorAll('.row.selected').forEach(function(r){r.classList.remove('selected');});
+  var row = document.querySelector('.row[data-i="'+idx+'"]');
+  if (row) row.classList.add('selected');
+};
+
+window.closeDetail = function(){
+  document.getElementById('overlay').classList.remove('open');
+  document.getElementById('detailPanel').classList.remove('open');
+};
+
+window.loadYt = function(boxId, url){
+  var box = document.getElementById(boxId);
   if (!box) return;
   if (ytCache[url]) { box.innerHTML = ytCache[url]; return; }
   box.innerHTML = '<span style="color:var(--sub)">불러오는 중…</span>';
@@ -243,16 +301,11 @@ window.loadYt = function(idx, url){
     .then(function(r){return r.json();})
     .then(function(d){
       if (!d.ok) { box.innerHTML = '⚠ '+esc(d.warn||d.error||'조회 실패'); return; }
-      var lives = (d.recentLives||[]).map(function(v){
-        return '<div class="live-item"><span class="live-date">'+(v.date?esc(v.date.slice(0,10)):'?')+'</span><span>'+esc(fmtDur(v.duration))+(v.concurrentViewers?' · 동시 '+esc(v.concurrentViewers):'')+'</span></div>';
-      }).join('');
       var html =
-        '<b>'+esc(d.title||'')+'</b> '+
-        (d.privacyStatus==='public'?badge('b-ok','공개'):badge('b-warn',d.privacyStatus||'?'))+'<br>'+
+        '<b>'+esc(d.title||'')+'</b><br>'+
         '구독 '+esc(d.subscriberCount||'-')+' · 영상 '+esc(d.videoCount||'-')+' · 조회 '+esc(d.viewCount||'-')+'<br>'+
         '생방송 '+esc(d.completedLiveCount||0)+'회'+
-        (d.lastLiveDaysAgo!=null?' · <b style="color:var(--warn)">마지막 '+esc(d.lastLiveDaysAgo)+'일 전</b>':'')+
-        (lives?'<div style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px">'+lives+'</div>':'');
+        (d.lastLiveDaysAgo!=null?' · <b style="color:var(--warn)">마지막 '+esc(d.lastLiveDaysAgo)+'일 전</b>':'');
       ytCache[url] = html;
       box.innerHTML = html;
     })
@@ -260,8 +313,8 @@ window.loadYt = function(idx, url){
 };
 
 window.loginOne = function(idx, email){
-  var btn = document.getElementById('login-btn-'+idx);
-  var status = document.getElementById('login-status-'+idx);
+  var btn = document.getElementById('dp-login-btn');
+  var status = document.getElementById('dp-login-status');
   if (!btn || btn.disabled) return;
   btn.disabled = true;
   btn.className = 'login-btn running';
@@ -282,15 +335,17 @@ window.loginOne = function(idx, email){
         (d.message ? ' — '+esc(d.message) : '') +
         (d.sessionSaved ? ' · 세션 저장됨' : '');
       loginStore[email] = {ok:true, ts:Date.now(), msg:d.message||''};
-      saveLoginStore();
     } else {
       btn.className = 'login-btn fail';
       btn.textContent = '❌ 실패 — 재시도';
       btn.disabled = false;
       status.innerHTML = '<span style="color:var(--err)">실패: '+esc(d.error||d.message||d.reason||JSON.stringify(d))+'</span>';
       loginStore[email] = {ok:false, ts:Date.now(), err:d.error||d.message||''};
-      saveLoginStore();
     }
+    saveLoginStore();
+    var dot = document.querySelector('.row[data-i="'+idx+'"] .row-dot');
+    if (dot) dot.className = 'row-dot '+(loginStore[email].ok?'dot-ok':'dot-fail');
+    updateSummary();
   })
   .catch(function(e){
     btn.className = 'login-btn fail';
@@ -300,8 +355,7 @@ window.loginOne = function(idx, email){
   });
 };
 
-document.getElementById('prevBtn').addEventListener('click', function(){ if(page>0){page--;renderPage();} });
-document.getElementById('nextBtn').addEventListener('click', function(){ page++;renderPage(); });
+document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeDetail(); });
 
 var debounceTimer;
 document.getElementById('q').addEventListener('input', function(){ clearTimeout(debounceTimer); debounceTimer=setTimeout(applyFilter, 200); });
@@ -313,11 +367,9 @@ fetch('/api/subsite-accounts',{cache:'no-store'})
   .then(function(d){
     var sites = d.sites || [];
     var sel = document.getElementById('siteFilter');
-    var siteSet = {};
     sites.forEach(function(s){
       var name = s.site || '';
       if (!name) return;
-      siteSet[name] = true;
       var m = META[name]||{e:'📁',k:name};
       var opt = document.createElement('option');
       opt.value = name;
@@ -326,11 +378,12 @@ fetch('/api/subsite-accounts',{cache:'no-store'})
 
       (s.accounts||[]).forEach(function(a){
         a.site = a.site || name;
+        a._idx = allAccounts.length;
         allAccounts.push(a);
       });
     });
     filtered = allAccounts.slice();
-    renderPage();
+    renderList();
   })
   .catch(function(e){
     document.getElementById('list').innerHTML = '<div style="color:var(--err);padding:20px">로드 실패: '+esc(e.message)+'</div>';
