@@ -1,0 +1,97 @@
+name: gauth youtube channel status
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-yt-status.txt']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Enable YouTube Data API + add channel-status route + test
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 150s
+          script: |
+            set -e
+            PROJECT=quantum-bonus-455522-b4
+            EX=/opt/gauth-full/rebrowser-login.js
+            gcloud services enable youtube.googleapis.com --project=$PROJECT 2>&1 | tail -2 || true
+
+            echo '=== 1. store a YouTube API key in gauth .env if not present ==='
+            if ! sudo grep -q 'YT_API_KEY' /opt/gauth-full/.env 2>/dev/null; then
+              echo 'YT_API_KEY=AIzaSyBahECe4THRJVR1h8bfRyTEvWHgz3Jqn9Y' | sudo tee -a /opt/gauth-full/.env > /dev/null
+            fi
+            KEY=$(sudo grep -oE 'YT_API_KEY=[A-Za-z0-9_-]+' /opt/gauth-full/.env | head -1 | cut -d= -f2)
+            echo "key length: ${#KEY}"
+
+            echo ''
+            echo '=== 2. inject /api/youtube/channel-status route ==='
+            sudo cp "$EX" "$EX.bak.yt.$(date +%s)"
+            sudo python3 - <<'PYEOF'
+            f='/opt/gauth-full/rebrowser-login.js'
+            s=open(f,encoding='utf-8').read()
+            if '/api/youtube/channel-status' in s:
+                print('route present, skipping')
+            else:
+                marker="app.get('/api/subsite-counts'"
+                idx=s.index(marker)
+                route=r'''
+            // === YouTube channel status (Data API v3, public data via API key) ===
+            function _yt_get(u){ const https=require('https'); return new Promise(function(res,rej){ https.get(u,function(r){ let d=''; r.on('data',function(c){d+=c;}); r.on('end',function(){ try{res(JSON.parse(d));}catch(e){rej(e);} }); }).on('error',rej); }); }
+            async function _yt_resolveChannelId(raw, key){
+              let u=String(raw||'').trim();
+              let m=u.match(/youtube\.com\/channel\/(UC[0-9A-Za-z_-]{20,})/i); if(m) return m[1];
+              m=u.match(/youtube\.com\/@([^\/?#\s]+)/i);
+              if(m){ const h=m[1]; const j=await _yt_get('https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=@'+encodeURIComponent(h)+'&key='+key); if(j.items&&j.items[0]) return j.items[0].id; }
+              m=u.match(/youtube\.com\/user\/([^\/?#\s]+)/i);
+              if(m){ const j=await _yt_get('https://www.googleapis.com/youtube/v3/channels?part=id&forUsername='+encodeURIComponent(m[1])+'&key='+key); if(j.items&&j.items[0]) return j.items[0].id; }
+              return '';
+            }
+            app.get('/api/youtube/channel-status', async (req, res) => {
+              try {
+                const key=process.env.YT_API_KEY||'';
+                if(!key) return res.status(500).json({error:'YT_API_KEY not set'});
+                const url=req.query.url||req.query.channel||'';
+                if(!url) return res.status(400).json({error:'missing url'});
+                const cid=await _yt_resolveChannelId(url, key);
+                if(!cid) return res.json({ ok:false, warn:'channel not found (삭제/비공개 가능)', url:url });
+                const c=await _yt_get('https://www.googleapis.com/youtube/v3/channels?part=statistics,status,snippet&id='+cid+'&key='+key);
+                if(!c.items||!c.items[0]) return res.json({ ok:false, warn:'채널 응답 없음 (삭제됨?)', channelId:cid });
+                const it=c.items[0]; const st=it.statistics||{};
+                // last completed live + count
+                const sr=await _yt_get('https://www.googleapis.com/youtube/v3/search?part=snippet&channelId='+cid+'&eventType=completed&type=video&order=date&maxResults=1&key='+key);
+                let lastLive=null, lastLiveDaysAgo=null, liveCount=null;
+                if(sr.pageInfo) liveCount=sr.pageInfo.totalResults;
+                if(sr.items&&sr.items[0]){ lastLive=sr.items[0].snippet.publishedAt; lastLiveDaysAgo=Math.floor((Date.now()-new Date(lastLive).getTime())/86400000); }
+                res.json({ ok:true, channelId:cid, title:(it.snippet||{}).title||'', subscriberCount:st.subscriberCount||null, videoCount:st.videoCount||null, viewCount:st.viewCount||null, privacyStatus:(it.status||{}).privacyStatus||'', lastLive:lastLive, lastLiveDaysAgo:lastLiveDaysAgo, completedLiveCount:liveCount, server_time:new Date().toISOString() });
+              } catch(e){ res.status(500).json({ error:String(e&&e.message||e) }); }
+            });
+            '''
+                s=s[:idx]+route+'\n'+s[idx:]
+                open(f,'w',encoding='utf-8').write(s)
+                print('route inserted')
+            PYEOF
+
+            echo ''
+            echo '=== 3. inject YT_API_KEY into systemd env ==='
+            sudo mkdir -p /etc/systemd/system/gauth.service.d
+            printf '[Service]\nEnvironment="YT_API_KEY=%s"\n' "$KEY" | sudo tee /etc/systemd/system/gauth.service.d/yt.conf > /dev/null
+            sudo systemctl daemon-reload
+            sudo node -c "$EX" && echo 'syntax OK'
+            sudo systemctl restart gauth
+            sleep 2
+            sudo systemctl is-active gauth
+
+            echo ''
+            echo '=== 4. LIVE TEST against a known channel from DB ==='
+            curl -s --max-time 25 'http://localhost:4000/api/youtube/channel-status?url=https://www.youtube.com/channel/UCap3AC4d894Z14uLSY7gfvA' | head -c 600
+            echo ''
+            curl -s --max-time 25 'http://localhost:4000/api/youtube/channel-status?url=https://www.youtube.com/@blackorwhite4371' | head -c 600
+            echo ''
