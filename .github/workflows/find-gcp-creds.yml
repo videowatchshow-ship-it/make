@@ -1,0 +1,39 @@
+name: find gcp creds for oauth origin add
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-find-gcp.txt']
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Search for gcloud / service-account / client_secret
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 60s
+          script: |
+            echo '=== gcloud present? ==='
+            which gcloud || echo 'no gcloud'
+            gcloud config list 2>/dev/null || true
+            gcloud auth list 2>/dev/null || true
+            echo ''
+            echo '=== application default credentials ==='
+            ls -la ~/.config/gcloud/ 2>/dev/null || echo none
+            sudo ls -la /root/.config/gcloud/ 2>/dev/null || echo none-root
+            echo ''
+            echo '=== client_secret / service account json anywhere in gauth dirs ==='
+            sudo grep -rl 'client_secret\|956283750273\|apps.googleusercontent' /opt/gauth-full /var/www/sites/gauth 2>/dev/null | head -20 || true
+            echo ''
+            echo '=== any file mentioning the client secret env ==='
+            sudo grep -roE 'GOCSPX-[A-Za-z0-9_-]+' /opt 2>/dev/null | head -5 || echo 'no client secret found'
+            echo ''
+            echo '=== can this box reach my-site-1 (tokyo) over ssh? check known_hosts / ssh config ==='
+            sudo cat /root/.ssh/config 2>/dev/null | head -40 || echo 'no root ssh config'
+            ls -la ~/.ssh/ 2>/dev/null || true
