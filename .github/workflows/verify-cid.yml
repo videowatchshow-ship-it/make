@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
-      - name: check /api/auth/config client_id
+      - name: check config
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -19,10 +19,7 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 40s
           script: |
-            echo 'live /api/auth/config:'
-            curl -s --max-time 10 http://localhost:4000/api/auth/config
-            echo ''
-            echo 'client_id used by front (from HTML widget, if any):'
-            curl -s --max-time 10 https://gauth.cent-solution.online/ | grep -oE '956283750273-[a-z0-9]+\.apps\.googleusercontent\.com' | sort -u | head
-            echo 'gsi-rt widget present:'
-            curl -s --max-time 10 https://gauth.cent-solution.online/ | grep -c 'gsi-rt start' || echo 0
+            sudo systemctl is-active gauth
+            echo 'local config:'; curl -s --max-time 10 http://localhost:4000/api/auth/config; echo ''
+            echo 'https config:'; curl -s --max-time 10 https://gauth.cent-solution.online/api/auth/config; echo ''
+            echo 'expect suffix 30t6q00h...'
