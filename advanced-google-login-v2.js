@@ -20,9 +20,66 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const { authenticator } = require('otplib');
 const fs = require('fs');
 const path = require('path');
+const { spawn, spawnSync } = require('child_process');
 
 // ✅ 공식 Stealth 플러그인 사용
 puppeteer.use(StealthPlugin());
+
+/**
+ * 가상 디스플레이(Xvfb) 보장 — "마우스가 지 맘대로 움직인다" 방지
+ *
+ * 원인: headless:false(헤드풀)로 실제 Chrome을 띄우면 Puppeteer의
+ *   page.click()이 Page.mouse로 커서를 요소 중앙까지 물리 이동시킨다.
+ *   ref: https://pptr.dev/api/puppeteer.page.click
+ *        "uses Page.mouse to click in the center of the element"
+ *   → 실제 X 세션(데스크톱)에서 돌면 사용자 마우스를 그대로 뺏어감.
+ *
+ * 해결: Chrome을 별도 Xvfb 가상 디스플레이에 렌더링 → 커서 이동이
+ *   가상 화면 안에서만 발생, 실제 마우스는 건드리지 않음. 헤드풀 유지라
+ *   Google 봇 감지 회피(navigator.webdriver 등)는 그대로 작동.
+ *   ref: https://www.x.org/releases/current/doc/man/man1/Xvfb.1.xhtml
+ *
+ * 이미 가상 디스플레이(:99)면 재사용, Xvfb 미설치면 경고만 하고 진행.
+ * Windows/macOS엔 Xvfb가 없으므로 false 반환 → 호출부에서 헤드리스로 폴백.
+ *
+ * @returns {boolean} 가상 디스플레이 확보 성공 여부 (실제 마우스 안전 여부)
+ */
+function ensureVirtualDisplay() {
+    // Xvfb는 Linux(X11) 전용. Windows/macOS엔 존재하지 않음.
+    if (process.platform !== 'linux') {
+        return false;
+    }
+
+    const VDISPLAY = ':99';
+    // 이미 가상 디스플레이를 쓰고 있으면 그대로 사용
+    if (process.env.DISPLAY === VDISPLAY) return true;
+
+    // Xvfb 바이너리 존재 확인
+    const has = spawnSync('which', ['Xvfb'], { encoding: 'utf-8' });
+    if (has.status !== 0) {
+        console.warn(`${c.yellow}⚠ Xvfb 미설치 — 'sudo apt-get install -y xvfb' 후 재실행 권장${c.reset}`);
+        return false;
+    }
+
+    // :99 가상 디스플레이가 살아있는지 확인 (X 락파일)
+    const alive = fs.existsSync('/tmp/.X99-lock');
+    if (!alive) {
+        console.log(`${c.cyan}🖥  Xvfb 가상 디스플레이 ${VDISPLAY} 기동 (실제 마우스 보호)${c.reset}`);
+        const xvfb = spawn('Xvfb', [VDISPLAY, '-screen', '0', '1920x1080x24', '-nolisten', 'tcp'], {
+            detached: true,
+            stdio: 'ignore'
+        });
+        xvfb.unref();
+        // X 서버 소켓이 올라올 때까지 짧게 대기
+        const start = Date.now();
+        while (!fs.existsSync('/tmp/.X99-lock') && Date.now() - start < 3000) {
+            spawnSync('sleep', ['0.1']);
+        }
+    }
+    process.env.DISPLAY = VDISPLAY;
+    console.log(`${c.green}✓${c.reset} DISPLAY=${VDISPLAY} (Chrome은 가상 화면에 렌더링 — 실제 커서 미이동)`);
+    return true;
+}
 
 // 색상
 const c = {
@@ -354,8 +411,20 @@ async function advancedGoogleLogin(account, options = {}) {
         }
     }
 
+    // 마우스 탈취 방지: Linux면 Xvfb 가상 디스플레이 확보.
+    // 확보 실패(Windows/macOS/미설치)면 헤드풀은 실제 마우스를 뺏으므로
+    // 새 헤드리스 모드('new')로 폴백 — 창/커서 없이 실제 Chrome 렌더링.
+    //   ref: https://developer.chrome.com/docs/chromium/new-headless
+    const virtualOk = ensureVirtualDisplay();
+    let effectiveHeadless = headless;
+    if (!headless && !virtualOk) {
+        effectiveHeadless = 'new';
+        console.warn(`${c.yellow}⚠ 가상 디스플레이 없음(${process.platform}) → 실제 마우스 보호 위해 새 헤드리스('new') 모드로 전환${c.reset}`);
+    }
+
     try {
-        // Google은 headless 모드를 감지하여 차단함 (2025-2026 확인)
+        // Google은 구(舊) headless 모드를 감지해 차단 (2025-2026 확인)
+        // → Linux: 헤드풀 + Xvfb, 그 외: 새 헤드리스('new')
         // headed 모드 + 실제 Chrome + userDataDir가 유일한 작동 방식
         // 서버에서는 Xvfb로 가상 디스플레이 사용
         /* Chromium flags — 비공식이나 Puppeteer 커뮤니티 검증 패턴
@@ -364,7 +433,7 @@ async function advancedGoogleLogin(account, options = {}) {
          * --flag-switches-begin/end: Chromium 내부 플래그 구분자 (비공식)
          * ignoreDefaultArgs: --enable-automation 제거로 "Chrome is being controlled" 배너 숨김 */
         const launchOpts = {
-            headless: headless,
+            headless: effectiveHeadless,
             userDataDir: profilePath,
             args: [
                 '--no-sandbox',
