@@ -11,47 +11,41 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Enable identitytoolkit, getConfig, add gauth authorizedDomain
+      - name: initializeAuth (correct path) + add gauth authorizedDomain
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 300s
+          command_timeout: 200s
           script: |
             PROJECT=quantum-bonus-455522-b4
             DOMAIN=gauth.cent-solution.online
-            echo '=== 1. enable Identity Toolkit API (Service Usage) ==='
-            gcloud services enable identitytoolkit.googleapis.com --project=$PROJECT 2>&1 | head -5 || echo 'enable failed'
-            echo 'waiting 30s for propagation...'
-            sleep 30
-
             TOKEN=$(gcloud auth print-access-token 2>/dev/null)
+
+            echo '=== 1. initializeAuth (official /v2/projects/{p}/identityPlatform:initializeAuth) ==='
+            curl -s -X POST "https://identitytoolkit.googleapis.com/v2/projects/$PROJECT/identityPlatform:initializeAuth" \
+              -H "Authorization: Bearer $TOKEN" -H "X-Goog-User-Project: $PROJECT" -H 'Content-Type: application/json' -d '{}' | head -c 800
             echo ''
-            echo '=== 2. getConfig (may need to initialize) ==='
+            echo 'sleep 8...'
+            sleep 8
+
+            echo ''
+            echo '=== 2. getConfig ==='
             CFG=$(curl -s -X GET "https://identitytoolkit.googleapis.com/admin/v2/projects/$PROJECT/config" -H "Authorization: Bearer $TOKEN" -H "X-Goog-User-Project: $PROJECT")
-            echo "$CFG" | head -c 1500
+            echo "$CFG" | head -c 1200
             echo ''
-            echo ''
-            if echo "$CFG" | grep -q 'CONFIGURATION_NOT_FOUND'; then
-              echo '=== 2b. initialize default config ==='
-              curl -s -X POST "https://identitytoolkit.googleapis.com/admin/v2/projects/$PROJECT/identityPlatform:initializeAuth" -H "Authorization: Bearer $TOKEN" -H "X-Goog-User-Project: $PROJECT" -H 'Content-Type: application/json' -d '{}' | head -c 600
-              echo ''
-              sleep 5
-              CFG=$(curl -s -X GET "https://identitytoolkit.googleapis.com/admin/v2/projects/$PROJECT/config" -H "Authorization: Bearer $TOKEN" -H "X-Goog-User-Project: $PROJECT")
-            fi
 
             echo ''
-            echo '=== 3. build new authorizedDomains list (existing + gauth) ==='
-            NEWDOMAINS=$(echo "$CFG" | python3 -c "import sys,json; d=json.load(sys.stdin); ad=d.get('authorizedDomains',[]) or ['localhost','$PROJECT.firebaseapp.com','$PROJECT.web.app']; ad=list(dict.fromkeys(ad+['$DOMAIN'])); print(json.dumps(ad))" 2>/dev/null)
+            echo '=== 3. build + PATCH authorizedDomains ==='
+            NEWDOMAINS=$(echo "$CFG" | python3 -c "import sys,json; d=json.load(sys.stdin); ad=d.get('authorizedDomains') or ['localhost','$PROJECT.firebaseapp.com','$PROJECT.web.app']; ad=list(dict.fromkeys(ad+['$DOMAIN'])); print(json.dumps(ad))" 2>/dev/null)
             echo "new domains: $NEWDOMAINS"
-
-            echo ''
-            echo '=== 4. PATCH updateConfig?updateMask=authorizedDomains (official) ==='
+            [ -z "$NEWDOMAINS" ] && NEWDOMAINS='["localhost","'$PROJECT'.firebaseapp.com","'$PROJECT'.web.app","'$DOMAIN'"]'
             curl -s -X PATCH "https://identitytoolkit.googleapis.com/admin/v2/projects/$PROJECT/config?updateMask=authorizedDomains" \
               -H "Authorization: Bearer $TOKEN" -H "X-Goog-User-Project: $PROJECT" -H 'Content-Type: application/json' \
-              -d "{\"authorizedDomains\": $NEWDOMAINS}" | head -c 1200
+              -d "{\"authorizedDomains\": $NEWDOMAINS}" | head -c 1000
             echo ''
+
             echo ''
-            echo '=== 5. verify authorizedDomains now includes gauth ==='
-            curl -s -X GET "https://identitytoolkit.googleapis.com/admin/v2/projects/$PROJECT/config" -H "Authorization: Bearer $TOKEN" -H "X-Goog-User-Project: $PROJECT" | python3 -c "import sys,json; d=json.load(sys.stdin); print('authorizedDomains:', d.get('authorizedDomains'))" 2>/dev/null || echo 'parse fail'
+            echo '=== 4. verify ==='
+            curl -s -X GET "https://identitytoolkit.googleapis.com/admin/v2/projects/$PROJECT/config" -H "Authorization: Bearer $TOKEN" -H "X-Goog-User-Project: $PROJECT" | python3 -c "import sys,json; d=json.load(sys.stdin); print('authorizedDomains:', d.get('authorizedDomains')); print('signIn:', list((d.get('signIn') or {}).keys()))" 2>/dev/null || echo 'parse fail'
