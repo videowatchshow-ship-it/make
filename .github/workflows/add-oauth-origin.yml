@@ -1,0 +1,55 @@
+name: add authorized js origin via api
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-add-origin.txt']
+
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Probe + patch OAuth client authorized origins
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 150s
+          script: |
+            PROJECT=quantum-bonus-455522-b4
+            CID='956283750273-do3ebgq60vbi585r62ffpk0cqts8l634.apps.googleusercontent.com'
+            ORIGIN='https://gauth.cent-solution.online'
+            TOKEN=$(gcloud auth print-access-token 2>/dev/null)
+            echo "token length: ${#TOKEN}"
+
+            echo ''
+            echo '=== A. try Cloud Console private clientauthconfig API (GET) ==='
+            curl -s -X GET \
+              "https://clientauthconfig.googleapis.com/v1/brands/-/clients/$CID" \
+              -H "Authorization: Bearer $TOKEN" | head -c 800
+            echo ''
+            echo ''
+            echo '=== B. try iap oauth clients list (alpha) ==='
+            gcloud alpha iap oauth-brands list --project=$PROJECT 2>&1 | head -20 || true
+            echo ''
+            echo '=== C. list existing oauth clients via console API (identitytoolkit / apikeys) ==='
+            curl -s -X GET \
+              "https://apikeys.googleapis.com/v2/projects/$PROJECT/locations/global/keys" \
+              -H "Authorization: Bearer $TOKEN" | head -c 400
+            echo ''
+            echo ''
+            echo '=== D. attempt the console-internal update endpoint (best effort) ==='
+            NUMID=$(echo "$CID" | cut -d- -f1)
+            curl -s -X GET \
+              "https://oauth2.googleapis.com/v1/clients/$CID" \
+              -H "Authorization: Bearer $TOKEN" | head -c 400
+            echo ''
+            echo ''
+            echo '=== E. gcloud services + describe project (confirm scope) ==='
+            gcloud config get-value account 2>/dev/null
+            gcloud auth print-access-token --scopes=https://www.googleapis.com/auth/cloud-platform 2>&1 | head -c 40 | wc -c
+            echo ''
+            echo 'done-probe'
