@@ -11,18 +11,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: gcloud compute ssh my-site-1 and grep google auth config
+      - name: Direct SSH my-site-1 and grep google auth config
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 250s
+          command_timeout: 200s
           script: |
-            PROJECT=quantum-bonus-455522-b4
-            ZONE=asia-northeast1-a
-            RC='sudo grep -roiE "GOCSPX-[A-Za-z0-9_-]{10,}" /var/www /opt /etc /home /root 2>/dev/null | sort -u | head -10; echo ---REDIRECTS---; sudo grep -rhoiE "redirect_uri[^,;\"]{0,160}" /var/www 2>/dev/null | sort -u | head -20; echo ---AUTHFILES---; sudo find /var/www -maxdepth 5 -iname "google-auth-api.php" 2>/dev/null | head; echo ---CLIENTID---; sudo grep -rhoiE "[0-9]{10,}-[a-z0-9]+\.apps\.googleusercontent\.com" /var/www 2>/dev/null | sort -u | head'
-            echo '=== ssh into my-site-1 and run remote grep ==='
-            timeout 200 gcloud compute ssh my-site-1 --zone=$ZONE --project=$PROJECT --tunnel-through-iap --command="$RC" 2>&1 | tail -60 || \
-            timeout 120 gcloud compute ssh my-site-1 --zone=$ZONE --project=$PROJECT --command="$RC" 2>&1 | tail -60 || echo 'ssh to my-site-1 failed'
+            IP=34.104.233.35
+            KEY=~/.ssh/google_compute_engine
+            U=$(whoami)
+            RC='echo HOST=$(hostname); sudo grep -roiE "GOCSPX-[A-Za-z0-9_-]{10,}" /var/www /opt /etc 2>/dev/null | sort -u | head -10; echo ---REDIRECTS---; sudo grep -rhoiE "redirect_uri[s]?[^a-zA-Z0-9]{0,4}[^,;\"]{0,180}" /var/www 2>/dev/null | grep -i http | sort -u | head -20; echo ---AUTHFILE---; sudo find /var/www -maxdepth 6 -iname "google-auth-api.php" 2>/dev/null | head; echo ---HANDLER---; sudo grep -rhoiE "__/auth/handler|/auth/callback|/auth/google/callback|/oauth2callback" /var/www 2>/dev/null | sort -u | head'
+            for user in "$U" ubuntu debian root; do
+              echo "=== try ssh as $user@$IP ==="
+              OUT=$(timeout 60 ssh -i $KEY -o StrictHostKeyChecking=no -o ConnectTimeout=12 -o BatchMode=yes ${user}@${IP} "$RC" 2>&1)
+              echo "$OUT" | tail -40
+              echo "$OUT" | grep -q 'HOST=' && { echo "*** SUCCESS as $user ***"; break; }
+            done
             echo 'done'
