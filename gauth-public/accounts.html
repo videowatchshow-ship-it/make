@@ -54,6 +54,17 @@ summary:hover{background:#151a22}
 .live-item{display:flex;gap:8px;font-size:11px;padding:3px 0;color:#9fb3c8}
 .live-date{color:var(--text);min-width:70px}
 
+/* ── login button ── */
+.login-btn{background:#2b6cff;color:#fff;border:0;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600}
+.login-btn:hover{background:#1e5ae0}
+.login-btn:disabled{background:#333;cursor:not-allowed;opacity:.6}
+.login-btn.running{background:#ff9040;animation:loginPulse 1.5s infinite}
+.login-btn.ok{background:#0f7b3a}
+.login-btn.fail{background:#c02020}
+@keyframes loginPulse{0%,100%{opacity:1}50%{opacity:.6}}
+.login-status{font-size:11px;color:var(--sub);margin-top:6px;line-height:1.6}
+.login-actions{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
+
 /* ── pager ── */
 .pager{position:fixed;bottom:0;left:0;right:0;background:#111418;border-top:1px solid var(--border);padding:10px 16px;display:flex;justify-content:center;align-items:center;gap:12px;z-index:10}
 .pager button{background:var(--card);border:1px solid var(--border2);color:var(--text);border-radius:6px;padding:6px 14px;font-size:13px;cursor:pointer}
@@ -113,11 +124,15 @@ summary:hover{background:#151a22}
  * ref: https://developer.mozilla.org/en-US/blog/html-details-exclusive-accordions/ (name attr)
  * ref: https://developer.mozilla.org/en-US/docs/Web/API/HTMLDetailsElement */
 
+/* ref: https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage */
 var PER_PAGE = 20;
 var allAccounts = [];
 var filtered = [];
 var page = 0;
 var ytCache = {};
+var loginStore = {};
+try { loginStore = JSON.parse(localStorage.getItem('gauth_logins')||'{}'); } catch(e){ loginStore={}; }
+function saveLoginStore(){ try { localStorage.setItem('gauth_logins', JSON.stringify(loginStore)); } catch(e){} }
 
 var META = {
   gain:{e:'🟣',k:'게인'},woodong:{e:'🚕',k:'우동'},sunbi:{e:'📘',k:'선비'},
@@ -159,10 +174,27 @@ function renderCard(a, idx){
 
   var ytSection = '';
   if (yurl) {
-    ytSection = '<div class="acc-section"><div class="acc-section-title">📺 채널 정보</div><div class="yt-info" id="yt-'+idx+'"><button onclick="loadYt('+idx+',\''+esc(yurl)+'\')">📊 채널 상태 불러오기</button></div></div>';
+    ytSection = '<div class="acc-section"><div class="acc-section-title">📺 채널 정보</div><div class="yt-info" id="yt-'+idx+'"><button onclick="loadYt('+idx+',\''+esc(yurl)+'\')") style="background:var(--card);border:1px solid var(--border2);color:var(--accent);border-radius:5px;padding:4px 10px;font-size:11px;cursor:pointer">📊 채널 상태 불러오기</button></div></div>';
   }
 
-  return '<details name="acc"><summary><span class="s-email">'+esc(email)+'</span><span class="s-right">'+statusBadge(a)+'</span></summary><div class="acc-body"><div class="acc-grid">'+grid+'</div>'+ytSection+'</div></details>';
+  var stored = loginStore[email];
+  var storedHtml = '';
+  var btnClass = 'login-btn';
+  var btnText = '🔑 로그인 시도';
+  if (stored) {
+    var ago = Math.round((Date.now() - stored.ts) / 60000);
+    var agoTxt = ago < 60 ? ago+'분 전' : Math.round(ago/60)+'시간 전';
+    if (stored.ok) {
+      storedHtml = '<span style="color:var(--accent2)">✅ 마지막 성공: '+esc(agoTxt)+'</span>';
+      btnClass = 'login-btn ok';
+      btnText = '✅ 성공 — 재시도';
+    } else {
+      storedHtml = '<span style="color:var(--err)">❌ 마지막 실패: '+esc(agoTxt)+'</span>';
+    }
+  }
+  var loginSection = '<div class="acc-section"><div class="acc-section-title">🔑 계정 로그인</div><div class="login-actions"><button class="'+btnClass+'" id="login-btn-'+idx+'" onclick="loginOne('+idx+',\''+esc(email)+'\')">'+btnText+'</button></div><div class="login-status" id="login-status-'+idx+'">'+storedHtml+'</div></div>';
+
+  return '<details name="acc"><summary><span class="s-email">'+esc(email)+'</span><span class="s-right">'+statusBadge(a)+'</span></summary><div class="acc-body"><div class="acc-grid">'+grid+'</div>'+loginSection+ytSection+'</div></details>';
 }
 
 function renderPage(){
@@ -225,6 +257,47 @@ window.loadYt = function(idx, url){
       box.innerHTML = html;
     })
     .catch(function(e){ box.innerHTML = '오류: '+esc(e.message); });
+};
+
+window.loginOne = function(idx, email){
+  var btn = document.getElementById('login-btn-'+idx);
+  var status = document.getElementById('login-status-'+idx);
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  btn.className = 'login-btn running';
+  btn.textContent = '⏳ 로그인 중…';
+  status.textContent = '서버에서 로그인 진행 중 (최대 2분 소요)…';
+
+  fetch('/api/login-one', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({email: email})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (d.ok || d.success || d.status === 'success') {
+      btn.className = 'login-btn ok';
+      btn.textContent = '✅ 로그인 성공';
+      status.innerHTML = '<span style="color:var(--accent2)">성공</span>' +
+        (d.message ? ' — '+esc(d.message) : '') +
+        (d.sessionSaved ? ' · 세션 저장됨' : '');
+      loginStore[email] = {ok:true, ts:Date.now(), msg:d.message||''};
+      saveLoginStore();
+    } else {
+      btn.className = 'login-btn fail';
+      btn.textContent = '❌ 실패 — 재시도';
+      btn.disabled = false;
+      status.innerHTML = '<span style="color:var(--err)">실패: '+esc(d.error||d.message||d.reason||JSON.stringify(d))+'</span>';
+      loginStore[email] = {ok:false, ts:Date.now(), err:d.error||d.message||''};
+      saveLoginStore();
+    }
+  })
+  .catch(function(e){
+    btn.className = 'login-btn fail';
+    btn.textContent = '❌ 오류 — 재시도';
+    btn.disabled = false;
+    status.innerHTML = '<span style="color:var(--err)">네트워크 오류: '+esc(e.message)+'</span>';
+  });
 };
 
 document.getElementById('prevBtn').addEventListener('click', function(){ if(page>0){page--;renderPage();} });
