@@ -125,6 +125,39 @@ romi(로미), second(세컨드), soktv(속TV), cham(참)
 
 ---
 
+## 계정 상태·인증 기능 계획표 (공식 문서 기준 · 버전 정합)
+
+### 버전 (공식 문서에 맞춤)
+| 구성 | 버전/엔드포인트 | 공식 문서 |
+|---|---|---|
+| YouTube Data API | **v3** (`www.googleapis.com/youtube/v3`) | developers.google.com/youtube/v3/docs |
+| Google Identity Services (로그인) | `accounts.google.com/gsi/client` (버전리스, 항상 최신) | developers.google.com/identity/gsi/web |
+| Identity Platform Admin | `identitytoolkit.googleapis.com/admin/v2` + `/v2` | cloud.google.com/identity-platform/docs/reference/rest |
+| Firebase JS SDK (미사용/대안) | `10.12.2` (gstatic CDN) | firebase.google.com/docs/auth/web/google-signin |
+| 계정 자동화 엔진 | 서버 기존 `rebrowser-login.js` + Puppeteer/rebrowser (서버 설치 버전 그대로) | pptr.dev |
+| Node 런타임 | gauth 서버 설치본 (`node -c` 문법검사로 정합 확인) | nodejs.org |
+| GitHub Actions | `actions/checkout@v4`, `appleboy/ssh-action@v1.0.3`, `appleboy/scp-action@v0.1.7` | — |
+
+### 기능 계획표 (단계 · 엔드포인트 · 프론트 · 상태)
+| 단계 | 기능 | 데이터 소스 | 엔드포인트 (gauth Node) | 프론트 | 상태 |
+|---|---|---|---|---|---|
+| 1 | 채널 현황 (구독·영상·조회·생방송횟수·날짜·진행시간·공개상태) | YouTube Data API v3 (키) | `GET /api/youtube/channel-status?url=` | `/subsites.html` 계정별 `📊 채널상태` 버튼 | ✅ 완료 |
+| 2 | 보안 점검 (2단계인증 유무·전화번호·복구정보·로그인성공) | Puppeteer(accounts.google.com) | `GET /api/account/security?email=` | `🔐 보안` 버튼 + 배지 | 🚧 진행 |
+| 3 | 전화 2SV 강제 온보딩 (최초 로그인 자동 이동·SMS 발송·코드 입력) | Puppeteer | `POST /api/account/enforce-2sv` | `/onboarding.html` 자동 이동 | ⏳ 대기 |
+| 4 | 커뮤니티/저작권 양호여부 (불리언) | OAuth `channels.list part=auditDetails` | `GET /api/account/standing?email=` | 배지 🟢/🔴 | ⏳ 대기 |
+
+### API로 불가능(공식 확인) — 자동화로만 또는 불가
+- **스트라이크 상세**(횟수·시기·사유·교육 이수): YouTube 스튜디오 전용, 공개 API 없음 → auditDetails 불리언이 최대치
+- **종료 방송 피크/최저 시청자**: Data API 미제공 (생방송 중 `concurrentViewers`만)
+- **Google 2SV 유무·전화번호**: 계정 보안설정 API 없음 → Puppeteer 자동화로만
+
+### 로직 연결 (코드 간 의존)
+- 계정 DB(`accounts_normalized.json`: email·password·totp_secret·youtube_url)
+  → ①은 `youtube_url`로 채널 조회, ②③은 `email`+`password`+`totp_secret(/codes)`로 Puppeteer 로그인
+- 로그인 세션(`gauth_uid` 쿠키) → `/api/account-status` 실시간 폴링(5초) → 상태 배지 갱신
+
+---
+
 ## GitHub Actions 워크플로우 (배포/운영)
 
 - `diag-gauth-excel.yml` — jump 배포 (index/manifest/sw + Apache vhost + no-store + Let's Encrypt)
