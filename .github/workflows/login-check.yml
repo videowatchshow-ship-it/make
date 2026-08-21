@@ -1,0 +1,30 @@
+name: login state check
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-login-check.txt']
+
+jobs:
+  c:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: check
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 40s
+          script: |
+            echo '1) gauth active:'; sudo systemctl is-active gauth
+            echo '2) /api/auth/config (which client_id served):'
+            curl -s --max-time 10 https://gauth.cent-solution.online/api/auth/config; echo ''
+            echo '3) login widget present in HTML (gsi-rt or gsi-widget):'
+            curl -s --max-time 10 https://gauth.cent-solution.online/ | grep -oE 'gsi-rt start|gsi-widget start|g-signin-btn|grt-btn' | sort -u
+            echo '4) gsi client lib referenced:'
+            curl -s --max-time 10 https://gauth.cent-solution.online/ | grep -oE 'accounts.google.com/gsi/client' | sort -u
+            echo '5) /api/auth/me:'
+            curl -s --max-time 10 https://gauth.cent-solution.online/api/auth/me; echo ''
