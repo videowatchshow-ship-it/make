@@ -1,1 +1,1 @@
-trigger 2 - write back TOTP from Excel to accounts_normalized.json
+trigger 3 - fix false positive: exclude password from TOTP candidates

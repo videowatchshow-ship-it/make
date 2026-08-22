@@ -27,7 +27,7 @@ jobs:
             set -e
             cd /opt/gauth-full
 
-            echo "=== TOTP 복구: Excel → accounts_normalized.json ==="
+            echo "=== TOTP 복구 v2: 비밀번호 오탐 수정 + Excel 재스캔 ==="
             node -e "
               const fs = require('fs');
               const path = require('path');
@@ -36,16 +36,32 @@ jobs:
               const data = JSON.parse(fs.readFileSync('accounts_normalized.json','utf8'));
               const arr = Array.isArray(data) ? data : (data.accounts || []);
 
-              // 1) TOTP 없는 계정 인덱스 맵
+              // 0) 이전 실행에서 비밀번호를 TOTP로 잘못 넣은 것 제거
+              let cleaned = 0;
+              for (const a of arr) {
+                if (a.totp_secret && a.password) {
+                  if (a.totp_secret.toUpperCase() === a.password.toUpperCase()) {
+                    console.log('CLEAN bad totp (=password): ' + a.email);
+                    delete a.totp_secret;
+                    cleaned++;
+                  }
+                }
+              }
+              if (cleaned) console.log(cleaned + '개 비밀번호=TOTP 오탐 제거');
+
+              // 1) TOTP 없는 계정 인덱스 맵 + 비밀번호 맵
               const missingMap = new Map();
+              const pwMap = new Map();
               for (let i = 0; i < arr.length; i++) {
                 const a = arr[i];
                 if (a.email && a.password && !a.totp_secret) {
-                  missingMap.set(normalizeEmail(a.email), i);
+                  const ne = normalizeEmail(a.email);
+                  missingMap.set(ne, i);
+                  pwMap.set(ne, a.password);
                 }
               }
               console.log('TOTP 없는 계정: ' + missingMap.size + ' / 전체: ' + arr.length);
-              if (!missingMap.size) { console.log('복구 불필요'); process.exit(0); }
+              if (!missingMap.size && !cleaned) { console.log('복구 불필요'); process.exit(0); }
 
               function normalizeEmail(s) {
                 s = String(s||'').trim().toLowerCase();
@@ -68,23 +84,34 @@ jobs:
                 return /^[A-Z2-7]+$/i.test(clean);
               }
 
-              function extractSecret(cell) {
+              function extractSecret(cell, password) {
                 if (/^otpauth:\/\//i.test(cell)) {
                   const m = cell.match(/secret=([A-Z2-7]+)/i);
-                  return m ? m[1].toUpperCase() : null;
+                  if (m) {
+                    const s = m[1].toUpperCase();
+                    if (password && s === password.toUpperCase()) return null;
+                    return s;
+                  }
+                  return null;
                 }
+                // 비밀번호와 동일하면 스킵
+                if (password && cell.toLowerCase() === password.toLowerCase()) return null;
                 const clean = cell.replace(/[\s=-]/g,'');
-                if (isBase32Like(cell)) return clean.toUpperCase();
+                if (isBase32Like(cell)) {
+                  const upper = clean.toUpperCase();
+                  if (password && upper === password.toUpperCase()) return null;
+                  return upper;
+                }
                 return null;
               }
 
               // 2) extra[] 필드에서 먼저 복구
               let recoveredExtra = 0;
-              for (const [ne, idx] of missingMap) {
+              for (const [ne, idx] of [...missingMap]) {
                 const a = arr[idx];
                 if (!a.extra || !a.extra.length) continue;
                 for (const e of a.extra) {
-                  const secret = extractSecret(String(e));
+                  const secret = extractSecret(String(e), a.password);
                   if (secret) {
                     a.totp_secret = secret;
                     missingMap.delete(ne);
@@ -117,20 +144,19 @@ jobs:
                         const ne = normalizeEmail(emailCell);
                         if (!missingMap.has(ne)) continue;
 
-                        // 이 행에서 TOTP 찾기
+                        const pw = pwMap.get(ne) || '';
                         let found = null;
                         for (const cell of cells) {
                           if (cell === emailCell) continue;
-                          const secret = extractSecret(cell);
+                          const secret = extractSecret(cell, pw);
                           if (secret) { found = secret; break; }
                         }
-                        // 다음 행도 체크
                         if (!found && r + 1 < rows.length) {
                           const nextRow = rows[r+1].map(c => String(c||'').trim());
                           const hasEmail = nextRow.some(c => c.includes('@') && /^[^@]+@[^@]+\.[^@]+$/.test(c));
                           if (!hasEmail) {
                             for (const cell of nextRow) {
-                              const secret = extractSecret(cell);
+                              const secret = extractSecret(cell, pw);
                               if (secret) { found = secret; break; }
                             }
                           }
@@ -154,14 +180,14 @@ jobs:
 
               // 4) 저장
               const totalRecovered = recoveredExtra + recoveredExcel;
-              if (totalRecovered > 0) {
+              if (totalRecovered > 0 || cleaned > 0) {
                 const tmp = 'accounts_normalized.json.tmp.' + process.pid;
                 fs.writeFileSync(tmp, JSON.stringify(arr, null, 2));
                 fs.renameSync(tmp, 'accounts_normalized.json');
                 console.log('');
-                console.log('=== 총 ' + totalRecovered + '개 TOTP 복구 완료 ===');
+                console.log('=== 오탐 제거: ' + cleaned + ' / 신규 복구: ' + totalRecovered + ' ===');
               } else {
-                console.log('복구 가능한 TOTP 없음');
+                console.log('변경 없음');
               }
 
               // 5) 최종 상태
