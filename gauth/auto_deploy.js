@@ -665,7 +665,7 @@ module.exports = function(app) {
       if (err) return res.status(401).json({ ok: false, error: err.message });
       const https = require('https');
       const r = https.request({
-        hostname: 'www.googleapis.com', path: `/youtube/v3/liveChat/messages?liveChatId=${encodeURIComponent(liveChatId)}&part=snippet,authorDetails&maxResults=50`,
+        hostname: 'youtube.googleapis.com', path: `/youtube/v3/liveChat/messages?liveChatId=${encodeURIComponent(liveChatId)}&part=snippet,authorDetails&maxResults=50`,
         method: 'GET', timeout: 30000, headers: { 'Authorization': 'Bearer ' + token }
       }, (resp) => {
         let d = ''; resp.on('data', c => d += c); resp.on('end', () => {

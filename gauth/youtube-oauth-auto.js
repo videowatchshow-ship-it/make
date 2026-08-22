@@ -346,7 +346,7 @@ function exchangeCodeForTokens(code, clientId, clientSecret, redirectUri) {
 function getChannelInfo(accessToken) {
   return new Promise((resolve) => {
     const req = https.request({
-      hostname: 'www.googleapis.com',
+      hostname: 'youtube.googleapis.com',
       path: '/youtube/v3/channels?part=snippet&mine=true',
       method: 'GET',
       headers: { 'Authorization': 'Bearer ' + accessToken }
