@@ -18,26 +18,32 @@ jobs:
           command_timeout: 2m
           script: |
             set -e
-            FILE=/var/www/sites/gauth/public/index.html
             TOKEN=$(sudo grep -oP 'GAUTH_API_TOKEN=\K.*' /opt/gauth-full/.env)
+            FILE=/var/www/sites/gauth/public/index.html
 
             echo "=== Before ==="
-            grep -n "getApiToken" "$FILE" | head -3
+            grep -c "gauth_token" "$FILE"
 
-            # Use python for reliable string replacement
-            sudo python3 -c "
-import sys
-with open('$FILE','r') as f: c=f.read()
-c=c.replace(\"getApiToken(){return sessionStorage.getItem('gauth_token')||''}\",\"getApiToken(){return sessionStorage.getItem('gauth_token')||'$TOKEN'}\")
-c=c.replace('type=\"password\" placeholder=\"\xf0\x9f\x94\x91 API \xed\x86\xa0\xed\x81\xb0\"','type=\"hidden\"')
-with open('$FILE','w') as f: f.write(c)
-            "
+            cat > /tmp/patch_token.py << 'PYEOF'
+            import sys
+            token = sys.argv[1]
+            fpath = sys.argv[2]
+            with open(fpath, 'r') as f:
+                c = f.read()
+            old = "getApiToken(){return sessionStorage.getItem('gauth_token')||''}"
+            new = "getApiToken(){return sessionStorage.getItem('gauth_token')||'" + token + "'}"
+            c = c.replace(old, new)
+            c = c.replace('type="password" placeholder=', 'type="hidden" data-old-placeholder=')
+            with open(fpath, 'w') as f:
+                f.write(c)
+            print('Patched OK')
+            PYEOF
+
+            sudo python3 /tmp/patch_token.py "$TOKEN" "$FILE"
+            rm -f /tmp/patch_token.py
 
             echo ""
             echo "=== After ==="
             grep -n "getApiToken" "$FILE" | head -3
             grep -n 'id="apiToken"' "$FILE" | head -3
-
-            echo ""
-            echo "=== Size ==="
             wc -c "$FILE"
