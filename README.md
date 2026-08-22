@@ -41,23 +41,36 @@ Express :4000 (rebrowser-login.js)
 - 데이터 원본: `/opt/gauth-full/accounts_normalized.json`
 - 모든 하위 사이트는 gauth DB에서 계정을 가져감
 
-#### 하위 사이트 (서브사이트, 7개)
+#### 하위 사이트 (서브사이트, 14개)
 
 gauth에서 계정을 받아 독립 운영. 각 사이트는 자체 `server.js` + `accounts.json` + 프론트엔드 보유.
 
-| 사이트 | 포트 | 서버 경로 | accounts.json 형식 | systemd 서비스 |
-|--------|------|-----------|-------------------|---------------|
-| gain.cent-solution.online | 3021 | `/var/www/sites/gain` | `{accounts: [...]}` | `gain` |
-| sunbi.cent-solution.online | 3013 | `/var/www/sites/sunbi` | `{accounts: [...]}` | `sunbi` |
-| woodong.cent-solution.online | 3012 | `/var/www/sites/woodong` | `{accounts: [...]}` | `woodong` |
-| win.cent-solution.online | 4001 | `/var/www/sites/win` | `{accounts: [...]}` | `win` |
-| simmani.cent-solution.online | 3011 | `/var/www/sites/simmani` | `{accounts: [...]}` | `simmani` |
-| romi.cent-solution.online | 3019 | `/var/www/sites/romi` | `{accounts: [...]}` | `romi` |
-| soktv.cent-solution.online | 3017 | `/var/www/sites/soktv` | `{accounts: [...]}` | `soktv` |
+| 사이트 | 포트 | 서버 경로 | 계정 수 | systemd 서비스 |
+|--------|------|-----------|---------|---------------|
+| gain.cent-solution.online | 3021 | `/var/www/sites/gain` | 10 | `gain` |
+| sunbi.cent-solution.online | 3013 | `/var/www/sites/sunbi` | 10 | `sunbi` |
+| woodong.cent-solution.online | 3012 | `/var/www/sites/woodong` | 5 | `woodong` |
+| win.cent-solution.online | 4001 | `/var/www/sites/win` | 5 | `win` |
+| simmani.cent-solution.online | 3011 | `/var/www/sites/simmani` | 12 | `simmani` |
+| romi.cent-solution.online | 3019 | `/var/www/sites/romi` | 7 | `romi` |
+| soktv.cent-solution.online | 3017 | `/var/www/sites/soktv` | 6 | `soktv` |
+| aura.cent-solution.online | — | `/var/www/sites/aura` | 5 | `aura` |
+| bacad.cent-solution.online | — | `/var/www/sites/bacad` | 6 | `bacad` |
+| camstouch.cent-solution.online | — | `/var/www/sites/camstouch` | 7 | `camstouch` |
+| cham.cent-solution.online | — | `/var/www/sites/cham` | 4 | `cham` |
+| james.cent-solution.online | — | `/var/www/sites/james` | 6 | `james` |
+| misskim.cent-solution.online | — | `/var/www/sites/misskim` | 6 | `misskim` |
+| naman.cent-solution.online | — | `/var/www/sites/naman` | 5 | `naman` |
 
-#### 기타 사이트 (계정 관리 대상 아님)
+#### 기타 사이트 (백엔드 없음)
 
-admin, aura, bacad, camstouch, cent-tools, gauth01, gucci, james, misskim, naman
+| 사이트 | 상태 |
+|--------|------|
+| jump.cent-solution.online | Apache vhost만 존재, server.js/accounts.json 없음 |
+| admin.cent-solution.online | 관리 도구 |
+| cent-tools.cent-solution.online | 유틸리티 |
+| gauth01.cent-solution.online | gauth 미러/테스트 |
+| bot.cent-solution.online | Apache vhost만 존재 |
 
 #### 서브사이트 계정 데이터 구조
 
