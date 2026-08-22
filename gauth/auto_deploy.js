@@ -580,7 +580,7 @@ module.exports = function(app) {
     getValidToken(req.params.email, (err, token) => {
       if (err) return res.status(401).json({ ok: false, error: err.message });
       const https = require('https');
-      const r = https.request({ hostname: 'www.googleapis.com', path: '/youtube/v3/channels?part=snippet,statistics,status,contentDetails&mine=true', method: 'GET', timeout: 30000, headers: { 'Authorization': 'Bearer ' + token } }, (resp) => {
+      const r = https.request({ hostname: 'youtube.googleapis.com', path: '/youtube/v3/channels?part=snippet,statistics&mine=true', method: 'GET', timeout: 30000, headers: { 'Authorization': 'Bearer ' + token } }, (resp) => {
         let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
           try { const j = JSON.parse(d); res.json({ ok: !j.error, data: j }); } catch { res.json({ ok: false, raw: d }); }
         });
@@ -595,7 +595,7 @@ module.exports = function(app) {
     getValidToken(req.params.email, (err, token) => {
       if (err) return res.status(401).json({ ok: false, error: err.message });
       const https = require('https');
-      const r = https.request({ hostname: 'www.googleapis.com', path: '/youtube/v3/liveBroadcasts?part=snippet,contentDetails,status&broadcastStatus=all&broadcastType=all&maxResults=50', method: 'GET', timeout: 30000, headers: { 'Authorization': 'Bearer ' + token } }, (resp) => {
+      const r = https.request({ hostname: 'youtube.googleapis.com', path: '/youtube/v3/liveBroadcasts?part=snippet,status&broadcastStatus=active&mine=true&maxResults=10', method: 'GET', timeout: 30000, headers: { 'Authorization': 'Bearer ' + token } }, (resp) => {
         let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
           try { const j = JSON.parse(d); res.json({ ok: !j.error, data: j }); } catch { res.json({ ok: false, raw: d }); }
         });
@@ -623,7 +623,7 @@ module.exports = function(app) {
       const https = require('https');
       const body = JSON.stringify({ snippet: { liveChatId, type: 'textMessageEvent', textMessageDetails: { messageText: message } } });
       const r = https.request({
-        hostname: 'www.googleapis.com', path: '/youtube/v3/liveChat/messages?part=snippet',
+        hostname: 'youtube.googleapis.com', path: '/youtube/v3/liveChat/messages?part=snippet',
         method: 'POST', timeout: 30000, headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
       }, (resp) => {
         let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
@@ -641,7 +641,7 @@ module.exports = function(app) {
       if (err) return res.status(401).json({ ok: false, error: err.message });
       const https = require('https');
       const r = https.request({
-        hostname: 'www.googleapis.com', path: '/youtube/v3/liveBroadcasts?part=snippet,contentDetails,status&broadcastStatus=active&broadcastType=all',
+        hostname: 'youtube.googleapis.com', path: '/youtube/v3/liveBroadcasts?part=snippet&broadcastStatus=active&mine=true',
         method: 'GET', timeout: 30000, headers: { 'Authorization': 'Bearer ' + token }
       }, (resp) => {
         let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
@@ -665,7 +665,7 @@ module.exports = function(app) {
       if (err) return res.status(401).json({ ok: false, error: err.message });
       const https = require('https');
       const r = https.request({
-        hostname: 'www.googleapis.com', path: `/youtube/v3/liveChat/messages?liveChatId=${encodeURIComponent(liveChatId)}&part=snippet,authorDetails&maxResults=200`,
+        hostname: 'www.googleapis.com', path: `/youtube/v3/liveChat/messages?liveChatId=${encodeURIComponent(liveChatId)}&part=snippet,authorDetails&maxResults=50`,
         method: 'GET', timeout: 30000, headers: { 'Authorization': 'Bearer ' + token }
       }, (resp) => {
         let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
@@ -695,7 +695,7 @@ module.exports = function(app) {
       const https = require('https');
       const body = JSON.stringify({ snippet: { liveChatId, moderatorDetails: { channelId } } });
       const r = https.request({
-        hostname: 'www.googleapis.com', path: '/youtube/v3/liveChat/moderators?part=snippet',
+        hostname: 'youtube.googleapis.com', path: '/youtube/v3/liveChat/moderators?part=snippet',
         method: 'POST', timeout: 30000, headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
       }, (resp) => {
         let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
