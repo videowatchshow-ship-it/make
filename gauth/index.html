@@ -729,8 +729,24 @@ function updateUploadStatus(){
 updateUploadStatus();
 </script>
 
-<!-- 전체 마스터 계정 -->
-<div id="master-view">
+<!-- 탭: 하위 사이트 계정(기본) / 전체 마스터 계정 -->
+<div style="padding:10px 20px;background:#0d1117;border-bottom:1px solid #22282f;display:flex;gap:8px">
+  <button id="tab-subsite" onclick="showTab('subsite')" style="background:#2b6cff;font-weight:700">📦 하위 사이트 계정</button>
+  <button id="tab-master" onclick="showTab('master')" style="background:#2a323c">🗂 전체 마스터 계정</button>
+</div>
+
+<!-- 하위 사이트 계정 (기본 뷰) -->
+<div id="subsite-view" style="padding:16px 20px">
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+    <span style="font-size:14px;color:#7dabff;font-weight:700">📦 하위 사이트별 계정</span>
+    <input id="subsite-filter" placeholder="🔍 사이트/이메일 필터…" style="flex:1;min-width:220px" oninput="renderSubsiteAccounts()">
+    <button onclick="loadSubsiteAccounts()" style="background:#2a323c">🔄 새로고침</button>
+  </div>
+  <div id="subsite-accounts-body" style="display:flex;flex-direction:column;gap:18px"></div>
+</div>
+
+<!-- 전체 마스터 계정 (기본 숨김) -->
+<div id="master-view" style="display:none">
 
 <!-- 계정 정보 조회 -->
 <div style="padding:14px 20px;background:#0f1620;border-bottom:1px solid #22282f;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -769,6 +785,79 @@ updateUploadStatus();
 <div id="pagination" style="padding:12px 20px;background:#0f1216;border-top:1px solid #22282f;display:flex;gap:6px;flex-wrap:wrap;justify-content:center;align-items:center"></div>
 
 </div><!-- /master-view -->
+
+<script>
+function showTab(which){
+  var subV = document.getElementById('subsite-view'), masV = document.getElementById('master-view');
+  var subT = document.getElementById('tab-subsite'), masT = document.getElementById('tab-master');
+  if(which==='master'){
+    subV.style.display='none'; masV.style.display='block';
+    subT.style.background='#2a323c'; masT.style.background='#2b6cff';
+  } else {
+    subV.style.display='block'; masV.style.display='none';
+    subT.style.background='#2b6cff'; masT.style.background='#2a323c';
+  }
+}
+var SUBSITE_DATA = [];
+const SITE_STYLE = {
+  gain: {emoji:'🟣', color:'#c084fc'}, woodong: {emoji:'🚕', color:'#ffb469'},
+  sunbi: {emoji:'📘', color:'#7dabff'}, simmani: {emoji:'🎬', color:'#3ddc84'},
+  win: {emoji:'🏆', color:'#f6c945'}, aura: {emoji:'✨', color:'#ff8ad4'},
+  bacad: {emoji:'🎓', color:'#7dabff'}, camstouch: {emoji:'📷', color:'#3ddc84'},
+  james: {emoji:'👤', color:'#8a95a5'}, misskim: {emoji:'👩', color:'#ff8ad4'},
+  naman: {emoji:'🧑', color:'#8a95a5'}, romi: {emoji:'🐾', color:'#ffb469'},
+  second: {emoji:'2️⃣', color:'#8a95a5'}, soktv: {emoji:'📺', color:'#f6c945'},
+  cham: {emoji:'🐘', color:'#8a95a5'}
+};
+async function loadSubsiteAccounts(){
+  var body = document.getElementById('subsite-accounts-body');
+  body.innerHTML = '<div style="color:#8a95a5;padding:20px">불러오는 중…</div>';
+  try{
+    var r = await fetch(authQuery('/api/subsite-accounts'),{cache:'no-store',headers:authHeaders()});
+    var d = await r.json();
+    SUBSITE_DATA = d.sites || [];
+    renderSubsiteAccounts();
+  }catch(e){
+    body.innerHTML = '<div style="color:#f47070;padding:20px">불러오기 실패: '+e.message+'</div>';
+  }
+}
+function renderSubsiteAccounts(){
+  var body = document.getElementById('subsite-accounts-body');
+  var q = (document.getElementById('subsite-filter').value||'').toLowerCase();
+  var html = '';
+  var totalShown = 0;
+  SUBSITE_DATA.forEach(function(site){
+    var st = SITE_STYLE[site.site] || {emoji:'📁', color:'#7dabff'};
+    var accts = site.accounts.filter(function(a){
+      if(!q) return true;
+      return site.site.toLowerCase().includes(q) || (a.email||'').toLowerCase().includes(q);
+    });
+    if(q && !site.site.toLowerCase().includes(q) && accts.length===0) return;
+    totalShown += accts.length;
+    var cards = accts.map(function(a){
+      var _em = escapeHtml(a.email);
+      return '<div style="background:#161a20;border:1px solid #2a323c;border-radius:8px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px">'
+        + '<b style="color:#ffb469;font-size:13px">'+_em+'</b>'
+        + (a.youtube_url ? '<a href="'+escapeHtml(a.youtube_url)+'" target="_blank" style="color:#ff8a8a;font-size:11px">▶ 채널</a>' : '<span style="color:#4a525c;font-size:11px">채널 미등록</span>')
+        + '</div>';
+    }).join('');
+    html += '<div style="background:#0f1620;border:1px solid #22282f;border-radius:12px;overflow:hidden">'
+      + '<div style="background:linear-gradient(135deg,'+st.color+'22,transparent);padding:12px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #22282f">'
+      + '<span style="font-size:20px">'+st.emoji+'</span>'
+      + '<span style="font-weight:800;font-size:15px;color:'+st.color+'">'+escapeHtml(site.site)+'</span>'
+      + '<span style="margin-left:auto;background:'+st.color+';color:#0d1117;font-weight:700;font-size:12px;padding:2px 10px;border-radius:999px">'+accts.length+'개</span>'
+      + '</div>'
+      + '<div style="padding:12px 16px;display:flex;flex-direction:column;gap:8px">'
+      + (accts.length ? cards : '<div style="color:#4a525c;font-size:12px">배포된 계정 없음</div>')
+      + '</div></div>';
+  });
+  var total = SUBSITE_DATA.reduce(function(s,x){return s+x.accounts.length;},0);
+  document.getElementById('subsite-accounts-body').innerHTML =
+    '<div style="color:#8a95a5;font-size:12px;margin-bottom:-6px">하위 사이트 '+SUBSITE_DATA.length+'개 · 배포 계정 총 '+total+'개'+(q?' (필터: '+totalShown+'개 표시)':'')+'</div>'
+    + (html || '<div style="color:#8a95a5;padding:20px">데이터 없음</div>');
+}
+loadSubsiteAccounts();
+</script>
 
 <script>
 const PAGE_SIZE = 50
