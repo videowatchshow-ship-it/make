@@ -1,0 +1,53 @@
+name: Test accounts.html login
+on:
+  push:
+    branches: ['claude/broadcast-ip-check-z57wox']
+    paths: ['.github/workflows/test-accounts-login.yml']
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify accounts.html deployed and login endpoint works
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            set -e
+            echo "=== 1. accounts.html deployed? ==="
+            ls -la /var/www/sites/gauth/public/accounts.html
+            SIZE=$(wc -c < /var/www/sites/gauth/public/accounts.html)
+            echo "Size: $SIZE bytes"
+
+            echo ""
+            echo "=== 2. Has programLogin function? ==="
+            grep -c "programLogin" /var/www/sites/gauth/public/accounts.html && echo "YES" || echo "NO"
+
+            echo ""
+            echo "=== 3. Has subsite tab? ==="
+            grep -c "subsite" /var/www/sites/gauth/public/accounts.html && echo "YES" || echo "NO"
+
+            echo ""
+            echo "=== 4. login-one endpoint test ==="
+            TOKEN=$(sudo grep -oP 'API_TOKEN=\K.*' /opt/gauth-full/.env 2>/dev/null || echo "")
+            if [ -n "$TOKEN" ]; then
+              RESP=$(curl -s -w "\nHTTP_CODE:%{http_code}" "http://localhost:4000/api/login-one" \
+                -X POST -H "content-type: application/json" -H "Authorization: Bearer $TOKEN" \
+                -d '{"email":"test-does-not-exist@gmail.com"}')
+              echo "$RESP"
+            else
+              echo "(no token, skip)"
+            fi
+
+            echo ""
+            echo "=== 5. subsite-accounts endpoint test ==="
+            if [ -n "$TOKEN" ]; then
+              RESP=$(curl -s -w "\nHTTP_CODE:%{http_code}" "http://localhost:4000/api/subsite-accounts?token=$TOKEN")
+              echo "${RESP:0:500}"
+            else
+              echo "(no token, skip)"
+            fi
