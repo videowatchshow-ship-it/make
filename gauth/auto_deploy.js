@@ -31,9 +31,21 @@ const FRONTEND_DIR = '/var/www/sites/gauth/public';
  * ref: https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html
  * ref: https://github.com/nodejs/node/blob/main/doc/api/crypto.md#cryptotimingsafeequala-b */
 function authMiddleware(req, res, next) {
+  const cookies = {};
+  (req.headers.cookie || '').split(';').forEach(function(c) {
+    const parts = c.trim().split('=');
+    if (parts.length >= 2) cookies[parts[0]] = decodeURIComponent(parts.slice(1).join('='));
+  });
+  if (cookies.gauth_uid) {
+    try {
+      const users = JSON.parse(fs.readFileSync(path.join(path.dirname(DATA_FILE), 'google_users.json'), 'utf8'));
+      if (users.some(function(u) { return u.sub === cookies.gauth_uid; })) return next();
+    } catch (e) {}
+  }
   const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
     || (req.query && req.query.token) || '';
   const expected = process.env.GAUTH_API_TOKEN || '';
+  if (!expected && !token) return res.status(401).json({ ok: false, error: 'unauthorized' });
   if (!expected) return res.status(503).json({ ok: false, error: 'service unavailable' });
   if (!token) return res.status(401).json({ ok: false, error: 'unauthorized' });
   const hmacKey = process.env.GAUTH_HMAC_KEY || process.env.GAUTH_API_TOKEN || '';

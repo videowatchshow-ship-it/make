@@ -119,7 +119,8 @@ nav a.active{background:#1e3a5f;color:var(--accent)}
     <option value="login_fail">로그인 실패</option>
   </select>
   <span id="result-count"></span>
-  <input id="apiToken" type="password" placeholder="API 토큰" style="max-width:100px" oninput="sessionStorage.setItem('gauth_token',this.value)">
+  <span id="gis-user" style="font-size:12px;color:#3ddc84;display:none"></span>
+  <span id="gis-area" style="flex:0 0 auto"></span>
   <a href="/api/export/login-results?format=csv" style="font-size:11px;color:var(--accent);text-decoration:none;white-space:nowrap" title="실 로그인 결과 CSV 다운로드">⬇ CSV</a>
   <a href="/api/export/login-results?format=json" style="font-size:11px;color:var(--accent);text-decoration:none;white-space:nowrap" title="실 로그인 결과 JSON 다운로드">⬇ JSON</a>
 </div>
@@ -351,6 +352,7 @@ window.loginOne = function(idx, email){
   fetch('/api/login-one', {
     method: 'POST',
     headers: authHeaders({'Content-Type':'application/json'}),
+    credentials: 'include',
     body: JSON.stringify({email: email})
   })
   .then(function(r){ return r.json(); })
@@ -418,7 +420,25 @@ fetch('/api/subsite-accounts',{cache:'no-store',headers:authHeaders()})
   .catch(function(e){
     document.getElementById('list').innerHTML = '<div style="color:var(--err);padding:20px">로드 실패: '+esc(e.message)+'</div>';
   });
-(function(){var el=document.getElementById('apiToken');if(el){var t=getApiToken();if(t)el.value=t;}})();
+;(function(){
+  var userEl=document.getElementById('gis-user'), area=document.getElementById('gis-area');
+  function showUser(u){ if(userEl){userEl.style.display='';userEl.textContent=(u.name||u.email||'')+'  로그인됨';} if(area)area.innerHTML=''; }
+  fetch('/api/auth/me',{credentials:'include',cache:'no-store'}).then(function(r){return r.json();}).then(function(d){
+    if(d&&d.user){ showUser(d.user); return; }
+    fetch('/api/auth/config',{cache:'no-store'}).then(function(r){return r.json();}).then(function(c){
+      if(!c.client_id){ if(area)area.innerHTML='<span style="font-size:11px;color:#ff6b6b">로그인 미설정</span>'; return; }
+      var s=document.createElement('script'); s.src='https://accounts.google.com/gsi/client'; s.async=true;
+      s.onload=function(){
+        google.accounts.id.initialize({client_id:c.client_id, callback:function(res){
+          fetch('/api/auth/google',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({credential:res.credential})})
+            .then(function(r){return r.json();}).then(function(d){ if(d&&d.user) showUser(d.user); else if(area) area.innerHTML='<span style="color:#ff6b6b">로그인 실패</span>'; });
+        }, use_fedcm_for_prompt:true});
+        google.accounts.id.renderButton(area, {theme:'filled_black',size:'small',shape:'pill',text:'signin',locale:'ko'});
+      };
+      document.head.appendChild(s);
+    });
+  }).catch(function(){});
+})();
 </script>
 </body>
 </html>
