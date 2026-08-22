@@ -491,12 +491,77 @@ module.exports = function(app) {
     res.json({ client_id: clientId });
   });
 
+  app.post('/api/youtube/exchange-code', authMiddleware, (req, res) => {
+    const { email, code, redirect_uri } = req.body || {};
+    if (!email || !code || !redirect_uri) return res.status(400).json({ ok: false, error: 'email, code, redirect_uri required' });
+    const clientId = process.env.YOUTUBE_OAUTH_CLIENT_ID || '';
+    const clientSecret = process.env.YOUTUBE_OAUTH_CLIENT_SECRET || '';
+    if (!clientId || !clientSecret) return res.status(500).json({ ok: false, error: 'OAuth credentials not configured' });
+    const https = require('https');
+    const body = new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri, grant_type: 'authorization_code' }).toString();
+    const r = https.request({ hostname: 'oauth2.googleapis.com', path: '/token', method: 'POST', timeout: 30000, headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) } }, (resp) => {
+      let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
+        try {
+          const j = JSON.parse(d);
+          if (j.error) return res.json({ ok: false, error: j.error, error_description: j.error_description });
+          const tokens = readYtTokens();
+          const key = normalizeEmail(email);
+          const prev = tokens[key] || {};
+          tokens[key] = { access_token: j.access_token, refresh_token: j.refresh_token || prev.refresh_token || '', expires_at: Date.now() + (j.expires_in || 3600) * 1000, saved_at: Date.now() };
+          writeYtTokens(tokens);
+          res.json({ ok: true, has_refresh: !!tokens[key].refresh_token });
+        } catch { res.json({ ok: false, raw: d }); }
+      });
+    });
+    r.on('timeout', () => { r.destroy(); if (!res.headersSent) res.status(504).json({ ok: false, error: 'timeout' }); });
+    r.on('error', e => { if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
+    r.write(body); r.end();
+  });
+
+  function refreshAccessToken(key, tokenData, cb) {
+    if (!tokenData.refresh_token) return cb(new Error('no refresh_token'));
+    const clientId = process.env.YOUTUBE_OAUTH_CLIENT_ID || '';
+    const clientSecret = process.env.YOUTUBE_OAUTH_CLIENT_SECRET || '';
+    if (!clientId || !clientSecret) return cb(new Error('OAuth credentials not configured'));
+    const https = require('https');
+    const body = new URLSearchParams({ refresh_token: tokenData.refresh_token, client_id: clientId, client_secret: clientSecret, grant_type: 'refresh_token' }).toString();
+    const r = https.request({ hostname: 'oauth2.googleapis.com', path: '/token', method: 'POST', timeout: 30000, headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) } }, (resp) => {
+      let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
+        try {
+          const j = JSON.parse(d);
+          if (j.error) return cb(new Error(j.error));
+          const tokens = readYtTokens();
+          tokens[key] = { ...tokens[key], access_token: j.access_token, expires_at: Date.now() + (j.expires_in || 3600) * 1000 };
+          writeYtTokens(tokens);
+          cb(null, tokens[key]);
+        } catch(e) { cb(e); }
+      });
+    });
+    r.on('timeout', () => { r.destroy(); cb(new Error('timeout')); });
+    r.on('error', cb);
+    r.write(body); r.end();
+  }
+
+  function getValidToken(email, cb) {
+    const tokens = readYtTokens();
+    const key = normalizeEmail(email);
+    const t = tokens[key];
+    if (!t || !t.access_token) return cb(new Error('not connected'));
+    if (Date.now() < t.expires_at - 60000) return cb(null, t.access_token);
+    refreshAccessToken(key, t, (err, updated) => {
+      if (err) return cb(err);
+      cb(null, updated.access_token);
+    });
+  }
+
   app.post('/api/youtube/save-token', authMiddleware, (req, res) => {
     try {
       const { email, access_token, expires_at } = req.body || {};
       if (!email || !access_token) return res.status(400).json({ ok: false, error: 'email and access_token required' });
       const tokens = readYtTokens();
-      tokens[normalizeEmail(email)] = { access_token, expires_at: expires_at || (Date.now() + 3600000), saved_at: Date.now() };
+      const key = normalizeEmail(email);
+      const prev = tokens[key] || {};
+      tokens[key] = { access_token, refresh_token: prev.refresh_token || '', expires_at: expires_at || (Date.now() + 3600000), saved_at: Date.now() };
       writeYtTokens(tokens);
       res.json({ ok: true });
     } catch (e) {
@@ -508,100 +573,139 @@ module.exports = function(app) {
     const tokens = readYtTokens();
     const t = tokens[normalizeEmail(req.params.email)];
     if (!t) return res.json({ connected: false });
-    res.json({ connected: true, expires_at: t.expires_at, expired: Date.now() > t.expires_at });
+    res.json({ connected: true, has_refresh: !!t.refresh_token, expires_at: t.expires_at, expired: Date.now() > t.expires_at, permanent: !!t.refresh_token });
+  });
+
+  app.get('/api/youtube/channel-info/:email', authMiddleware, (req, res) => {
+    getValidToken(req.params.email, (err, token) => {
+      if (err) return res.status(401).json({ ok: false, error: err.message });
+      const https = require('https');
+      const r = https.request({ hostname: 'www.googleapis.com', path: '/youtube/v3/channels?part=snippet,statistics,status,contentDetails&mine=true', method: 'GET', timeout: 30000, headers: { 'Authorization': 'Bearer ' + token } }, (resp) => {
+        let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
+          try { const j = JSON.parse(d); res.json({ ok: !j.error, data: j }); } catch { res.json({ ok: false, raw: d }); }
+        });
+      });
+      r.on('timeout', () => { r.destroy(); if (!res.headersSent) res.status(504).json({ ok: false, error: 'timeout' }); });
+      r.on('error', e => { if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
+      r.end();
+    });
+  });
+
+  app.get('/api/youtube/stream-status/:email', authMiddleware, (req, res) => {
+    getValidToken(req.params.email, (err, token) => {
+      if (err) return res.status(401).json({ ok: false, error: err.message });
+      const https = require('https');
+      const r = https.request({ hostname: 'www.googleapis.com', path: '/youtube/v3/liveBroadcasts?part=snippet,contentDetails,status&broadcastStatus=all&broadcastType=all&maxResults=50', method: 'GET', timeout: 30000, headers: { 'Authorization': 'Bearer ' + token } }, (resp) => {
+        let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
+          try { const j = JSON.parse(d); res.json({ ok: !j.error, data: j }); } catch { res.json({ ok: false, raw: d }); }
+        });
+      });
+      r.on('timeout', () => { r.destroy(); if (!res.headersSent) res.status(504).json({ ok: false, error: 'timeout' }); });
+      r.on('error', e => { if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
+      r.end();
+    });
+  });
+
+  app.get('/api/youtube/all-status', authMiddleware, (req, res) => {
+    const tokens = readYtTokens();
+    const result = {};
+    for (const [email, t] of Object.entries(tokens)) {
+      result[email] = { connected: true, has_refresh: !!t.refresh_token, expired: Date.now() > t.expires_at, permanent: !!t.refresh_token, saved_at: t.saved_at };
+    }
+    res.json({ ok: true, accounts: result, total: Object.keys(result).length });
   });
 
   app.post('/api/youtube/chat-message', authMiddleware, (req, res) => {
     const { email, liveChatId, message } = req.body || {};
     if (!email || !liveChatId || !message) return res.status(400).json({ ok: false, error: 'email, liveChatId, message required' });
-    const tokens = readYtTokens();
-    const t = tokens[normalizeEmail(email)];
-    if (!t || !t.access_token) return res.status(401).json({ ok: false, error: 'not connected' });
-    const https = require('https');
-    const body = JSON.stringify({ snippet: { liveChatId, type: 'textMessageEvent', textMessageDetails: { messageText: message } } });
-    const r = https.request({
-      hostname: 'www.googleapis.com', path: '/youtube/v3/liveChat/messages?part=snippet',
-      method: 'POST', timeout: 30000, headers: { 'Authorization': 'Bearer ' + t.access_token, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
-    }, (resp) => {
-      let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
-        try { const j = JSON.parse(d); res.json({ ok: !j.error, data: j }); } catch { res.json({ ok: false, raw: d }); }
+    getValidToken(email, (err, token) => {
+      if (err) return res.status(401).json({ ok: false, error: err.message });
+      const https = require('https');
+      const body = JSON.stringify({ snippet: { liveChatId, type: 'textMessageEvent', textMessageDetails: { messageText: message } } });
+      const r = https.request({
+        hostname: 'www.googleapis.com', path: '/youtube/v3/liveChat/messages?part=snippet',
+        method: 'POST', timeout: 30000, headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+      }, (resp) => {
+        let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
+          try { const j = JSON.parse(d); res.json({ ok: !j.error, data: j }); } catch { res.json({ ok: false, raw: d }); }
+        });
       });
+      r.on('timeout', () => { r.destroy(); if (!res.headersSent) res.status(504).json({ ok: false, error: 'upstream timeout' }); });
+      r.on('error', e => { if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
+      r.write(body); r.end();
     });
-    r.on('timeout', () => { r.destroy(); if (!res.headersSent) res.status(504).json({ ok: false, error: 'upstream timeout' }); });
-    r.on('error', e => { if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
-    r.write(body); r.end();
   });
 
   app.get('/api/youtube/live-chat-id/:email', authMiddleware, (req, res) => {
-    const tokens = readYtTokens();
-    const t = tokens[normalizeEmail(req.params.email)];
-    if (!t || !t.access_token) return res.status(401).json({ ok: false, error: 'not connected' });
-    const https = require('https');
-    const r = https.request({
-      hostname: 'www.googleapis.com', path: '/youtube/v3/liveBroadcasts?part=snippet,contentDetails,status&broadcastStatus=active&broadcastType=all',
-      method: 'GET', timeout: 30000, headers: { 'Authorization': 'Bearer ' + t.access_token }
-    }, (resp) => {
-      let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
-        try {
-          const j = JSON.parse(d);
-          const items = (j.items || []).map(it => ({ title: (it.snippet || {}).title, liveChatId: (it.snippet || {}).liveChatId, videoId: it.id || '' }));
-          res.json({ ok: true, broadcasts: items });
-        } catch { res.json({ ok: false, raw: d }); }
+    getValidToken(req.params.email, (err, token) => {
+      if (err) return res.status(401).json({ ok: false, error: err.message });
+      const https = require('https');
+      const r = https.request({
+        hostname: 'www.googleapis.com', path: '/youtube/v3/liveBroadcasts?part=snippet,contentDetails,status&broadcastStatus=active&broadcastType=all',
+        method: 'GET', timeout: 30000, headers: { 'Authorization': 'Bearer ' + token }
+      }, (resp) => {
+        let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
+          try {
+            const j = JSON.parse(d);
+            const items = (j.items || []).map(it => ({ title: (it.snippet || {}).title, liveChatId: (it.snippet || {}).liveChatId, videoId: it.id || '' }));
+            res.json({ ok: true, broadcasts: items });
+          } catch { res.json({ ok: false, raw: d }); }
+        });
       });
+      r.on('timeout', () => { r.destroy(); if (!res.headersSent) res.status(504).json({ ok: false, error: 'upstream timeout' }); });
+      r.on('error', e => { if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
+      r.end();
     });
-    r.on('timeout', () => { r.destroy(); if (!res.headersSent) res.status(504).json({ ok: false, error: 'upstream timeout' }); });
-    r.on('error', e => { if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
-    r.end();
   });
 
   app.get('/api/youtube/chat-list/:email', authMiddleware, (req, res) => {
-    const tokens = readYtTokens();
-    const t = tokens[normalizeEmail(req.params.email)];
-    if (!t || !t.access_token) return res.status(401).json({ ok: false, error: 'not connected' });
     const liveChatId = req.query.liveChatId;
     if (!liveChatId) return res.status(400).json({ ok: false, error: 'liveChatId required' });
-    const https = require('https');
-    const r = https.request({
-      hostname: 'www.googleapis.com', path: `/youtube/v3/liveChat/messages?liveChatId=${encodeURIComponent(liveChatId)}&part=snippet,authorDetails&maxResults=200`,
-      method: 'GET', timeout: 30000, headers: { 'Authorization': 'Bearer ' + t.access_token }
-    }, (resp) => {
-      let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
-        try {
-          const j = JSON.parse(d);
-          const msgs = (j.items || []).map(it => ({
-            displayName: (it.authorDetails || {}).displayName,
-            channelId: (it.authorDetails || {}).channelId,
-            message: (it.snippet && it.snippet.textMessageDetails) ? it.snippet.textMessageDetails.messageText : '',
-            publishedAt: (it.snippet || {}).publishedAt
-          }));
-          res.json({ ok: true, messages: msgs, pollingIntervalMillis: j.pollingIntervalMillis || 5000 });
-        } catch { res.json({ ok: false, raw: d }); }
+    getValidToken(req.params.email, (err, token) => {
+      if (err) return res.status(401).json({ ok: false, error: err.message });
+      const https = require('https');
+      const r = https.request({
+        hostname: 'www.googleapis.com', path: `/youtube/v3/liveChat/messages?liveChatId=${encodeURIComponent(liveChatId)}&part=snippet,authorDetails&maxResults=200`,
+        method: 'GET', timeout: 30000, headers: { 'Authorization': 'Bearer ' + token }
+      }, (resp) => {
+        let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
+          try {
+            const j = JSON.parse(d);
+            const msgs = (j.items || []).map(it => ({
+              displayName: (it.authorDetails || {}).displayName,
+              channelId: (it.authorDetails || {}).channelId,
+              message: (it.snippet && it.snippet.textMessageDetails) ? it.snippet.textMessageDetails.messageText : '',
+              publishedAt: (it.snippet || {}).publishedAt
+            }));
+            res.json({ ok: true, messages: msgs, pollingIntervalMillis: j.pollingIntervalMillis || 5000 });
+          } catch { res.json({ ok: false, raw: d }); }
+        });
       });
+      r.on('timeout', () => { r.destroy(); if (!res.headersSent) res.status(504).json({ ok: false, error: 'upstream timeout' }); });
+      r.on('error', e => { if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
+      r.end();
     });
-    r.on('timeout', () => { r.destroy(); if (!res.headersSent) res.status(504).json({ ok: false, error: 'upstream timeout' }); });
-    r.on('error', e => { if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
-    r.end();
   });
 
   app.post('/api/youtube/add-moderator', authMiddleware, (req, res) => {
     const { email, liveChatId, channelId } = req.body || {};
     if (!email || !liveChatId || !channelId) return res.status(400).json({ ok: false, error: 'email, liveChatId, channelId required' });
-    const tokens = readYtTokens();
-    const t = tokens[normalizeEmail(email)];
-    if (!t || !t.access_token) return res.status(401).json({ ok: false, error: 'not connected' });
-    const https = require('https');
-    const body = JSON.stringify({ snippet: { liveChatId, moderatorDetails: { channelId } } });
-    const r = https.request({
-      hostname: 'www.googleapis.com', path: '/youtube/v3/liveChat/moderators?part=snippet',
-      method: 'POST', timeout: 30000, headers: { 'Authorization': 'Bearer ' + t.access_token, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
-    }, (resp) => {
-      let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
-        try { const j = JSON.parse(d); res.json({ ok: !j.error, data: j }); } catch { res.json({ ok: false, raw: d }); }
+    getValidToken(email, (err, token) => {
+      if (err) return res.status(401).json({ ok: false, error: err.message });
+      const https = require('https');
+      const body = JSON.stringify({ snippet: { liveChatId, moderatorDetails: { channelId } } });
+      const r = https.request({
+        hostname: 'www.googleapis.com', path: '/youtube/v3/liveChat/moderators?part=snippet',
+        method: 'POST', timeout: 30000, headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+      }, (resp) => {
+        let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
+          try { const j = JSON.parse(d); res.json({ ok: !j.error, data: j }); } catch { res.json({ ok: false, raw: d }); }
+        });
       });
+      r.on('timeout', () => { r.destroy(); if (!res.headersSent) res.status(504).json({ ok: false, error: 'upstream timeout' }); });
+      r.on('error', e => { if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
+      r.write(body); r.end();
     });
-    r.on('timeout', () => { r.destroy(); if (!res.headersSent) res.status(504).json({ ok: false, error: 'upstream timeout' }); });
-    r.on('error', e => { if (!res.headersSent) res.status(500).json({ ok: false, error: e.message }); });
-    r.write(body); r.end();
   });
 
   app.post('/api/fix-mtime', authMiddleware, (req, res) => {
