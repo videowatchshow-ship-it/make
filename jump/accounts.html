@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>gauth · 계정 상세</title>
+<meta http-equiv="Cache-Control" content="no-store">
+<style>
+:root{--bg:#0d1117;--panel:#0f1620;--card:#161a20;--border:#22282f;--border2:#2a323c;--text:#e8ecef;--sub:#8a95a5;--accent:#7dabff;--accent2:#3ddc84;--warn:#ffb469;--err:#f47070}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo",sans-serif;min-height:100vh}
+
+/* ── nav ── */
+nav{position:sticky;top:0;z-index:20;background:#111418;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;height:48px;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+nav::-webkit-scrollbar{display:none}
+nav a{color:var(--sub);text-decoration:none;font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;white-space:nowrap;transition:background .15s,color .15s}
+nav a:hover{background:#1a1f27;color:var(--text)}
+nav a.active{background:#1e3a5f;color:var(--accent)}
+
+/* ── toolbar ── */
+.toolbar{position:sticky;top:48px;z-index:15;padding:8px 16px;background:#0f1216;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.toolbar input{background:var(--card);border:1px solid var(--border2);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px;flex:1;min-width:120px}
+.toolbar input:focus{outline:0;border-color:var(--accent)}
+.toolbar select{background:var(--card);border:1px solid var(--border2);color:var(--text);padding:6px 8px;border-radius:6px;font-size:11px}
+#result-count{color:var(--sub);font-size:11px;white-space:nowrap}
+
+/* ── compact list ── */
+.list-wrap{max-width:900px;margin:0 auto;padding:4px 8px 20px}
+.row{display:flex;align-items:center;gap:4px;padding:3px 8px;font-size:11px;cursor:pointer;border-bottom:1px solid #161a20;transition:background .1s}
+.row:hover{background:#151a22}
+.row.selected{background:#1a2536;border-color:var(--accent)}
+.row-num{color:var(--sub);min-width:36px;text-align:right;font-size:10px;font-variant-numeric:tabular-nums}
+.row-email{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace;font-size:11px}
+.row-site{font-size:10px;min-width:20px;text-align:center}
+.row-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.dot-none{background:#333}
+.dot-ok{background:var(--accent2)}
+.dot-fail{background:var(--err)}
+.row-badges{display:flex;gap:2px;flex-shrink:0}
+.mbadge{font-size:8px;padding:1px 4px;border-radius:3px;font-weight:700}
+.mb-2fa{background:#1c2740;color:var(--accent)}
+.mb-ch{background:#0f2a1a;color:var(--accent2)}
+
+/* ── detail panel (slide-out) ── */
+.detail-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:30}
+.detail-overlay.open{display:block}
+.detail-panel{position:fixed;top:0;right:0;bottom:0;width:min(420px,90vw);background:var(--panel);border-left:1px solid var(--border);z-index:31;overflow-y:auto;transform:translateX(100%);transition:transform .2s ease}
+.detail-panel.open{transform:translateX(0)}
+.dp-header{position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;z-index:1}
+.dp-close{background:none;border:0;color:var(--sub);font-size:20px;cursor:pointer;padding:4px 8px}
+.dp-close:hover{color:var(--text)}
+.dp-body{padding:16px}
+.dp-grid{display:grid;grid-template-columns:80px 1fr;gap:4px 10px;font-size:12px;line-height:1.8}
+.dp-label{color:var(--sub);font-weight:600;font-size:11px;text-align:right}
+.dp-val{word-break:break-all}
+.dp-section{margin-top:12px;padding-top:10px;border-top:1px solid var(--border)}
+.dp-section-title{font-size:11px;color:var(--accent);font-weight:700;margin-bottom:6px}
+.badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:999px;font-weight:600}
+.b-ok{background:#0f2a1a;color:var(--accent2);border:1px solid #1f5c39}
+.b-warn{background:#2a1a00;color:var(--warn);border:1px solid #6b4a1f}
+.b-err{background:#2a1515;color:var(--err);border:1px solid #5c2020}
+.b-2fa{background:#1c2740;color:var(--accent);border:1px solid #2a4070}
+
+/* ── login button ── */
+.login-btn{background:#2b6cff;color:#fff;border:0;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600}
+.login-btn:hover{background:#1e5ae0}
+.login-btn:disabled{background:#333;cursor:not-allowed;opacity:.6}
+.login-btn.running{background:#ff9040;animation:loginPulse 1.5s infinite}
+.login-btn.ok{background:#0f7b3a}
+.login-btn.fail{background:#c02020}
+@keyframes loginPulse{0%,100%{opacity:1}50%{opacity:.6}}
+.login-status{font-size:11px;color:var(--sub);margin-top:6px;line-height:1.6}
+.login-actions{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
+
+/* ── yt info ── */
+.yt-info{background:#0b0f14;border:1px solid var(--border);border-radius:6px;padding:8px 10px;line-height:1.7;font-size:11.5px}
+.yt-info b{color:var(--accent)}
+
+/* ── summary bar ── */
+.summary-bar{max-width:900px;margin:8px auto 0;padding:0 8px;display:flex;gap:12px;font-size:11px;color:var(--sub);flex-wrap:wrap}
+.summary-bar .s-item{display:flex;align-items:center;gap:4px}
+.summary-bar .s-dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+
+/* ── loading ── */
+.loading{text-align:center;padding:40px;color:var(--sub)}
+.dot-pulse{display:inline-block;animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+
+/* ── mobile ── */
+@media(max-width:600px){
+  nav{height:42px;padding:0 8px}
+  nav a{font-size:12px;padding:5px 10px}
+  .toolbar{padding:6px 8px;top:42px}
+  .list-wrap{padding:2px 4px 16px}
+  .row{padding:3px 4px;font-size:10px}
+  .row-num{min-width:28px;font-size:9px}
+  .row-email{font-size:10px}
+  .detail-panel{width:100vw}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/">🏠 보물섬</a>
+  <a href="/accounts.html" class="active">📋 계정 상세</a>
+</nav>
+
+<div class="toolbar">
+  <input type="text" id="q" placeholder="이메일·사이트 검색…" autocomplete="off">
+  <select id="siteFilter"><option value="">전체 사이트</option></select>
+  <select id="statusFilter">
+    <option value="">전체 상태</option>
+    <option value="has_yt">채널 있음</option>
+    <option value="no_yt">채널 없음</option>
+    <option value="has_2fa">2FA 있음</option>
+    <option value="login_ok">로그인 성공</option>
+    <option value="login_fail">로그인 실패</option>
+  </select>
+  <span id="result-count"></span>
+  <a href="/api/export/login-results?format=csv" style="font-size:11px;color:var(--accent);text-decoration:none;white-space:nowrap" title="실 로그인 결과 CSV 다운로드">⬇ CSV</a>
+  <a href="/api/export/login-results?format=json" style="font-size:11px;color:var(--accent);text-decoration:none;white-space:nowrap" title="실 로그인 결과 JSON 다운로드">⬇ JSON</a>
+</div>
+
+<div class="summary-bar" id="summaryBar"></div>
+
+<div class="list-wrap">
+  <div id="list"><div class="loading"><span class="dot-pulse">불러오는 중…</span></div></div>
+</div>
+
+<!-- detail slide panel -->
+<div class="detail-overlay" id="overlay" onclick="closeDetail()"></div>
+<div class="detail-panel" id="detailPanel">
+  <div class="dp-header">
+    <span id="dp-title" style="font-weight:700;font-size:14px"></span>
+    <button class="dp-close" onclick="closeDetail()">✕</button>
+  </div>
+  <div class="dp-body" id="dp-body"></div>
+</div>
+
+<script>
+/* ref: https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage
+ * ref: https://developer.mozilla.org/en-US/docs/Web/HTML/Element/details */
+
+var allAccounts = [];
+var filtered = [];
+var ytCache = {};
+var loginStore = {};
+try { loginStore = JSON.parse(localStorage.getItem('gauth_logins')||'{}'); } catch(e){ loginStore={}; }
+function saveLoginStore(){ try { localStorage.setItem('gauth_logins', JSON.stringify(loginStore)); } catch(e){} }
+function mergeServerLogins(){
+  fetch('/api/login-results',{cache:'no-store'})
+    .then(function(r){ return r.ok ? r.json() : {}; })
+    .then(function(server){
+      var changed = false;
+      Object.keys(server).forEach(function(email){
+        var s = server[email];
+        var local = loginStore[email];
+        if (!local || (s.ts && (!local.ts || s.ts > local.ts))) {
+          loginStore[email] = {ok:!!s.ok, ts:s.ts||0, msg:s.msg||s.message||'', err:s.err||s.error||''};
+          changed = true;
+        }
+      });
+      if (changed) { saveLoginStore(); renderList(); }
+    })
+    .catch(function(){});
+}
+
+var META = {
+  gain:{e:'🟣',k:'게인'},woodong:{e:'🚕',k:'우동'},sunbi:{e:'📘',k:'선비'},
+  simmani:{e:'🎬',k:'심마니'},win:{e:'🏆',k:'윈'},aura:{e:'✨',k:'아우라'},
+  bacad:{e:'🎓',k:'바캇'},camstouch:{e:'📷',k:'캠스터치'},james:{e:'👤',k:'제임스'},
+  misskim:{e:'👩',k:'미스김'},naman:{e:'🧑',k:'나만'},romi:{e:'🐾',k:'로미'},
+  second:{e:'2️⃣',k:'세컨드'},soktv:{e:'📺',k:'속TV'},cham:{e:'🐘',k:'참'}
+};
+
+function esc(s){ var d=document.createElement('div'); d.textContent=String(s==null?'':s); return d.innerHTML; }
+
+function loginDot(email){
+  var s = loginStore[email];
+  if (!s) return 'dot-none';
+  return s.ok ? 'dot-ok' : 'dot-fail';
+}
+
+function renderList(){
+  var el = document.getElementById('list');
+  if (!filtered.length) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--sub)">결과 없음</div>';
+    return;
+  }
+
+  var buf = [];
+  for (var i = 0; i < filtered.length; i++) {
+    var a = filtered[i];
+    var email = a.email || a.gmail || '?';
+    var site = a.site || a.source_site || '?';
+    var m = META[site] || {e:'📁',k:site};
+    var badges = '';
+    if (a.totp_secret) badges += '<span class="mbadge mb-2fa">2FA</span>';
+    if (a.youtube_url||a.youtube||a.channel_url) badges += '<span class="mbadge mb-ch">CH</span>';
+
+    buf.push(
+      '<div class="row" data-i="'+a._idx+'" onclick="openDetail('+a._idx+')">'+
+        '<span class="row-num">'+(i+1)+'</span>'+
+        '<span class="row-dot '+loginDot(email)+'"></span>'+
+        '<span class="row-email">'+esc(email)+'</span>'+
+        '<span class="row-site">'+m.e+'</span>'+
+        '<span class="row-badges">'+badges+'</span>'+
+      '</div>'
+    );
+  }
+
+  el.innerHTML = buf.join('');
+  document.getElementById('result-count').textContent = filtered.length+'개';
+  updateSummary();
+}
+
+function updateSummary(){
+  var ok=0, fail=0, none=0;
+  for (var i=0; i<filtered.length; i++){
+    var email = filtered[i].email || filtered[i].gmail || '';
+    var s = loginStore[email];
+    if (!s) none++;
+    else if (s.ok) ok++;
+    else fail++;
+  }
+  document.getElementById('summaryBar').innerHTML =
+    '<span class="s-item"><span class="s-dot" style="background:var(--accent2)"></span> 성공 '+ok+'</span>'+
+    '<span class="s-item"><span class="s-dot" style="background:var(--err)"></span> 실패 '+fail+'</span>'+
+    '<span class="s-item"><span class="s-dot" style="background:#333"></span> 미시도 '+none+'</span>'+
+    '<span class="s-item">전체 '+filtered.length+'</span>';
+}
+
+function applyFilter(){
+  var q = document.getElementById('q').value.toLowerCase().trim();
+  var sf = document.getElementById('siteFilter').value;
+  var stf = document.getElementById('statusFilter').value;
+  filtered = allAccounts.filter(function(a){
+    var email = (a.email || a.gmail || '').toLowerCase();
+    var site = a.site || a.source_site || '';
+    if (q && email.indexOf(q) < 0 && site.indexOf(q) < 0) return false;
+    if (sf && site !== sf) return false;
+    if (stf === 'has_yt' && !(a.youtube_url || a.youtube || a.channel_url)) return false;
+    if (stf === 'no_yt' && (a.youtube_url || a.youtube || a.channel_url)) return false;
+    if (stf === 'has_2fa' && !a.totp_secret) return false;
+    if (stf === 'login_ok') { var s=loginStore[email]; if(!s||!s.ok) return false; }
+    if (stf === 'login_fail') { var s2=loginStore[email]; if(!s2||s2.ok) return false; }
+    return true;
+  });
+  renderList();
+}
+
+/* ── detail panel ── */
+window.openDetail = function(idx){
+  var a = allAccounts[idx];
+  if (!a) return;
+  var email = a.email || a.gmail || '?';
+  var site = a.site || a.source_site || '?';
+  var m = META[site] || {e:'📁',k:site};
+
+  document.getElementById('dp-title').textContent = '#'+(idx+1)+' '+email;
+
+  var grid = '';
+  grid += '<div class="dp-label">사이트</div><div class="dp-val">'+m.e+' '+esc(site)+' ('+esc(m.k)+')</div>';
+  grid += '<div class="dp-label">이메일</div><div class="dp-val">'+esc(email)+'</div>';
+  if (a.password) grid += '<div class="dp-label">비밀번호</div><div class="dp-val" style="color:#c9d2dc;font-family:monospace">'+esc(a.password)+'</div>';
+  if (a.totp_secret) grid += '<div class="dp-label">2FA</div><div class="dp-val"><span class="badge b-2fa">TOTP</span> <span style="font-family:monospace;font-size:11px;color:var(--sub)">'+esc(a.totp_secret.slice(0,6))+'…</span></div>';
+  if (a.recovery_email) grid += '<div class="dp-label">복구메일</div><div class="dp-val">'+esc(a.recovery_email)+'</div>';
+  if (a.phone || a.recovery_phone) grid += '<div class="dp-label">전화</div><div class="dp-val">'+esc(a.phone||a.recovery_phone)+'</div>';
+  if (a.status) grid += '<div class="dp-label">상태</div><div class="dp-val">'+esc(a.status)+'</div>';
+
+  // login section
+  var stored = loginStore[email];
+  var storedHtml = '';
+  var btnClass = 'login-btn';
+  var btnText = '🔑 로그인 시도';
+  if (stored) {
+    var ago = Math.round((Date.now() - stored.ts) / 60000);
+    var agoTxt = ago < 60 ? ago+'분 전' : Math.round(ago/60)+'시간 전';
+    if (stored.ok) {
+      storedHtml = '<span style="color:var(--accent2)">✅ 마지막 성공: '+esc(agoTxt)+'</span>';
+      btnClass = 'login-btn ok';
+      btnText = '✅ 성공 — 재시도';
+    } else {
+      storedHtml = '<span style="color:var(--err)">❌ 마지막 실패: '+esc(agoTxt)+'</span>';
+    }
+  }
+  var loginHtml = '<div class="dp-section"><div class="dp-section-title">🔑 계정 로그인</div>'+
+    '<div class="login-actions"><button class="'+btnClass+'" id="dp-login-btn" onclick="loginOne('+idx+',\''+esc(email)+'\')">'+btnText+'</button></div>'+
+    '<div class="login-status" id="dp-login-status">'+storedHtml+'</div></div>';
+
+  // yt section
+  var yurl = a.youtube_url || a.youtube || a.channel_url || '';
+  var ytHtml = '';
+  if (yurl) {
+    ytHtml = '<div class="dp-section"><div class="dp-section-title">📺 채널 정보</div>'+
+      '<div class="yt-info" id="dp-yt"><button onclick="loadYt(\'dp-yt\',\''+esc(yurl)+'\')" style="background:var(--card);border:1px solid var(--border2);color:var(--accent);border-radius:5px;padding:4px 10px;font-size:11px;cursor:pointer">📊 채널 상태 불러오기</button></div></div>';
+  }
+
+  document.getElementById('dp-body').innerHTML = '<div class="dp-grid">'+grid+'</div>'+loginHtml+ytHtml;
+
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('detailPanel').classList.add('open');
+
+  // highlight row
+  document.querySelectorAll('.row.selected').forEach(function(r){r.classList.remove('selected');});
+  var row = document.querySelector('.row[data-i="'+idx+'"]');
+  if (row) row.classList.add('selected');
+};
+
+window.closeDetail = function(){
+  document.getElementById('overlay').classList.remove('open');
+  document.getElementById('detailPanel').classList.remove('open');
+};
+
+window.loadYt = function(boxId, url){
+  var box = document.getElementById(boxId);
+  if (!box) return;
+  if (ytCache[url]) { box.innerHTML = ytCache[url]; return; }
+  box.innerHTML = '<span style="color:var(--sub)">불러오는 중…</span>';
+  fetch('/api/youtube/channel-status?url='+encodeURIComponent(url),{cache:'no-store'})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if (!d.ok) { box.innerHTML = '⚠ '+esc(d.warn||d.error||'조회 실패'); return; }
+      var html =
+        '<b>'+esc(d.title||'')+'</b><br>'+
+        '구독 '+esc(d.subscriberCount||'-')+' · 영상 '+esc(d.videoCount||'-')+' · 조회 '+esc(d.viewCount||'-')+'<br>'+
+        '생방송 '+esc(d.completedLiveCount||0)+'회'+
+        (d.lastLiveDaysAgo!=null?' · <b style="color:var(--warn)">마지막 '+esc(d.lastLiveDaysAgo)+'일 전</b>':'');
+      ytCache[url] = html;
+      box.innerHTML = html;
+    })
+    .catch(function(e){ box.innerHTML = '오류: '+esc(e.message); });
+};
+
+window.loginOne = function(idx, email){
+  var btn = document.getElementById('dp-login-btn');
+  var status = document.getElementById('dp-login-status');
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  btn.className = 'login-btn running';
+  btn.textContent = '⏳ 로그인 중…';
+  status.textContent = '서버에서 로그인 진행 중 (최대 2분 소요)…';
+
+  fetch('/api/login-one', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({email: email})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (d.ok || d.success || d.status === 'success') {
+      btn.className = 'login-btn ok';
+      btn.textContent = '✅ 로그인 성공';
+      status.innerHTML = '<span style="color:var(--accent2)">성공</span>' +
+        (d.message ? ' — '+esc(d.message) : '') +
+        (d.sessionSaved ? ' · 세션 저장됨' : '');
+      loginStore[email] = {ok:true, ts:Date.now(), msg:d.message||''};
+    } else {
+      btn.className = 'login-btn fail';
+      btn.textContent = '❌ 실패 — 재시도';
+      btn.disabled = false;
+      status.innerHTML = '<span style="color:var(--err)">실패: '+esc(d.error||d.message||d.reason||JSON.stringify(d))+'</span>';
+      loginStore[email] = {ok:false, ts:Date.now(), err:d.error||d.message||''};
+    }
+    saveLoginStore();
+    // update the dot in the list row
+    var dot = document.querySelector('.row[data-i="'+idx+'"] .row-dot');
+    if (dot) dot.className = 'row-dot '+(loginStore[email].ok?'dot-ok':'dot-fail');
+    updateSummary();
+  })
+  .catch(function(e){
+    btn.className = 'login-btn fail';
+    btn.textContent = '❌ 오류 — 재시도';
+    btn.disabled = false;
+    status.innerHTML = '<span style="color:var(--err)">네트워크 오류: '+esc(e.message)+'</span>';
+  });
+};
+
+// keyboard: Escape closes panel
+document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeDetail(); });
+
+var debounceTimer;
+document.getElementById('q').addEventListener('input', function(){ clearTimeout(debounceTimer); debounceTimer=setTimeout(applyFilter, 200); });
+document.getElementById('siteFilter').addEventListener('change', applyFilter);
+document.getElementById('statusFilter').addEventListener('change', applyFilter);
+
+fetch('/api/subsite-accounts',{cache:'no-store'})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    var sites = d.sites || [];
+    var sel = document.getElementById('siteFilter');
+    sites.forEach(function(s){
+      var name = s.site || '';
+      if (!name) return;
+      var m = META[name]||{e:'📁',k:name};
+      var opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = m.e+' '+name+' ('+m.k+') — '+(s.accounts?s.accounts.length:s.count||0)+'개';
+      sel.appendChild(opt);
+
+      (s.accounts||[]).forEach(function(a){
+        a.site = a.site || name;
+        a._idx = allAccounts.length;
+        allAccounts.push(a);
+      });
+    });
+    filtered = allAccounts.slice();
+    renderList();
+    mergeServerLogins();
+  })
+  .catch(function(e){
+    document.getElementById('list').innerHTML = '<div style="color:var(--err);padding:20px">로드 실패: '+esc(e.message)+'</div>';
+  });
+</script>
+</body>
+</html>

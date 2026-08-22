@@ -1,1 +1,1 @@
-trigger88-jump-excel-button-live
+deploy jump accounts.html + api proxy - 2026-08-22

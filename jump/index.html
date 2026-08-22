@@ -50,9 +50,18 @@
   .footer-note{text-align:center;color:var(--sub);font-size:11px;margin-top:24px;line-height:1.7}
   .footer-note b{color:var(--accent2)}
   .empty{color:var(--sub);font-size:13px;padding:8px 4px}
+  nav{position:sticky;top:0;z-index:20;background:#111418;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;height:48px;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  nav::-webkit-scrollbar{display:none}
+  nav a{color:var(--sub);text-decoration:none;font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;white-space:nowrap;transition:background .15s,color .15s}
+  nav a:hover{background:#1a1f27;color:var(--text)}
+  nav a.active{background:#1e3a5f;color:var(--accent)}
 </style>
 </head>
 <body>
+<nav>
+  <a href="/" class="active">🏠 보물섬</a>
+  <a href="/accounts.html">📋 계정 상세</a>
+</nav>
 <div class="wrap">
 
   <div class="brand">

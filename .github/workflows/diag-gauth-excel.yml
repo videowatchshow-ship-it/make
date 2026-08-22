@@ -43,7 +43,7 @@ jobs:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          source: "jump/index.html,jump/manifest.json,jump/sw.js"
+          source: "jump/index.html,jump/manifest.json,jump/sw.js,jump/accounts.html"
           target: "/var/www/sites/jump/public"
           strip_components: 1
       - name: Create DNS record + static vhost + cert + enable
@@ -91,6 +91,14 @@ jobs:
                 ProxyPassReverse /api/subsite-counts http://127.0.0.1:4000/api/subsite-counts
                 ProxyPass /api/subsite-accounts http://127.0.0.1:4000/api/subsite-accounts
                 ProxyPassReverse /api/subsite-accounts http://127.0.0.1:4000/api/subsite-accounts
+                ProxyPass /api/login-results http://127.0.0.1:4000/api/login-results
+                ProxyPassReverse /api/login-results http://127.0.0.1:4000/api/login-results
+                ProxyPass /api/export/login-results http://127.0.0.1:4000/api/export/login-results
+                ProxyPassReverse /api/export/login-results http://127.0.0.1:4000/api/export/login-results
+                ProxyPass /api/login-one http://127.0.0.1:4000/api/login-one
+                ProxyPassReverse /api/login-one http://127.0.0.1:4000/api/login-one
+                ProxyPass /api/youtube/channel-status http://127.0.0.1:4000/api/youtube/channel-status
+                ProxyPassReverse /api/youtube/channel-status http://127.0.0.1:4000/api/youtube/channel-status
             </VirtualHost>
             VHOSTEOF
             sudo a2enmod proxy proxy_http headers 2>/dev/null || true
@@ -131,6 +139,14 @@ jobs:
                 ProxyPassReverse /api/subsite-counts http://127.0.0.1:4000/api/subsite-counts
                 ProxyPass /api/subsite-accounts http://127.0.0.1:4000/api/subsite-accounts
                 ProxyPassReverse /api/subsite-accounts http://127.0.0.1:4000/api/subsite-accounts
+                ProxyPass /api/login-results http://127.0.0.1:4000/api/login-results
+                ProxyPassReverse /api/login-results http://127.0.0.1:4000/api/login-results
+                ProxyPass /api/export/login-results http://127.0.0.1:4000/api/export/login-results
+                ProxyPassReverse /api/export/login-results http://127.0.0.1:4000/api/export/login-results
+                ProxyPass /api/login-one http://127.0.0.1:4000/api/login-one
+                ProxyPassReverse /api/login-one http://127.0.0.1:4000/api/login-one
+                ProxyPass /api/youtube/channel-status http://127.0.0.1:4000/api/youtube/channel-status
+                ProxyPassReverse /api/youtube/channel-status http://127.0.0.1:4000/api/youtube/channel-status
                 SSLCertificateFile /etc/letsencrypt/live/jump.cent-solution.online/fullchain.pem
                 SSLCertificateKeyFile /etc/letsencrypt/live/jump.cent-solution.online/privkey.pem
                 Include /etc/letsencrypt/options-ssl-apache.conf
