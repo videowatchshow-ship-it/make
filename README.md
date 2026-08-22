@@ -165,8 +165,8 @@ gain · woodong · sunbi · simmani · win · aura · bacad · camstouch · jame
 | **상단 요약바** | 성공 N · 실패 N · 미시도 N · 전체 N |
 | **필터** | 사이트 드롭다운 · 로그인 상태 필터 (성공/실패/미시도) · 텍스트 검색 |
 | **컴팩트 리스트** | 1만개 대응 · 번호 · 로그인상태점(●) · 이메일 · 사이트 배지 |
-| **API 토큰** | 상단 토큰 입력란 → `sessionStorage('gauth_token')` → 모든 fetch에 `Authorization: Bearer` 헤더 전송 |
-| **개별 로그인** | 각 행에 🔑 버튼 → `POST /api/login-one` (Bearer 인증) → 결과를 localStorage + 서버 병합 |
+| **구글 로그인** | 상단 GIS 버튼 → 로그인 후 `gauth_uid` 쿠키 → `POST /api/login-one` 인증 자동 통과 |
+| **개별 로그인** | 각 행에 🔑 버튼 → `POST /api/login-one` (쿠키 인증) → 결과를 localStorage + 서버 병합 |
 | **서버 병합** | `GET /api/login-results` → localStorage와 timestamp 비교 병합 |
 | **다운로드** | ⬇ CSV · ⬇ JSON (`GET /api/export/login-results?format=csv\|json`) |
 
@@ -182,7 +182,7 @@ gain · woodong · sunbi · simmani · win · aura · bacad · camstouch · jame
 | `GET` | `/api/account-status` | 실시간 상태 (server_time, 로그인 현황) | - |
 | `GET` | `/api/youtube/channel-status?url=` | 유튜브 채널 통계 (구독·영상·조회·생방송) | - |
 | `GET` | `/api/accounts` | 전체 계정 목록 | - |
-| `POST` | `/api/login-one` | 단일 계정 Puppeteer 로그인 시도 | Bearer 토큰 |
+| `POST` | `/api/login-one` | 단일 계정 Puppeteer 로그인 시도 | Bearer 토큰 또는 `gauth_uid` 쿠키 |
 | `GET` | `/api/lookup` | 이메일 조회 | - |
 | `GET` | `/api/search-account?q=` | 계정 검색 | - |
 | `GET` | `/api/login-results` | 실 로그인 결과 전체 조회 (login_results.json) | - |
@@ -259,7 +259,8 @@ const url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURICompo
 | **상단 요약바** | 성공 N · 실패 N · 미시도 N · 전체 N |
 | **필터** | 사이트 드롭다운 · 로그인 상태 필터 · 텍스트 검색 |
 | **컴팩트 리스트** | 1만개 대응 · 번호 · 로그인상태점(●) · 이메일 · 사이트 배지 |
-| **개별 로그인** | 🔑 버튼 → `POST /api/login-one` |
+| **구글 로그인** | GIS 버튼 (jump 도메인이 OAuth JS origin에 등록되어야 작동) |
+| **개별 로그인** | 🔑 버튼 → `POST /api/login-one` (쿠키 인증) |
 | **채널 상태** | 📊 버튼 → `GET /api/youtube/channel-status` |
 | **다운로드** | ⬇ CSV · ⬇ JSON |
 
@@ -274,6 +275,10 @@ const url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURICompo
 | `/api/export/login-results` | 로그인 결과 CSV/JSON 다운로드 |
 | `/api/login-one` | 개별 로그인 실행 |
 | `/api/youtube/channel-status` | 채널 상태 조회 |
+| `/api/auth/*` | 구글 로그인 (me, config, google) |
+| `/api/lookup` | 이메일 조회 |
+| `/api/search-account` | 계정 검색 |
+| `/api/normalized-accounts` | 전체 계정 목록 |
 
 ### 캐시 정책
 - Apache vhost에서 `.html/.json/.js`에 `no-store` + `Clear-Site-Data: "cache", "storage"` 강제
