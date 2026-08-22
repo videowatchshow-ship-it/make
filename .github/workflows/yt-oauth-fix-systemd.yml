@@ -1,0 +1,38 @@
+name: Fix YT OAuth systemd drop-in (no leading whitespace)
+on:
+  push:
+    branches: ['claude/broadcast-ip-check-z57wox']
+    paths: ['.github/workflows/yt-oauth-fix-systemd.yml']
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fix systemd drop-in and restart
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            set -e
+            YT_CID=$(sudo grep '^YOUTUBE_OAUTH_CLIENT_ID=' /opt/gauth-full/.env | cut -d= -f2-)
+            YT_CSE=$(sudo grep '^YOUTUBE_OAUTH_CLIENT_SECRET=' /opt/gauth-full/.env | cut -d= -f2-)
+            echo "CID length: ${#YT_CID}"
+            echo "CSE length: ${#YT_CSE}"
+
+            printf '[Service]\nEnvironment="YOUTUBE_OAUTH_CLIENT_ID=%s"\nEnvironment="YOUTUBE_OAUTH_CLIENT_SECRET=%s"\n' "$YT_CID" "$YT_CSE" | sudo tee /etc/systemd/system/gauth.service.d/youtube-oauth.conf > /dev/null
+
+            echo "=== drop-in contents ==="
+            sudo cat /etc/systemd/system/gauth.service.d/youtube-oauth.conf
+
+            sudo systemctl daemon-reload
+            sudo systemctl restart gauth
+            sleep 2
+            sudo systemctl is-active gauth
+
+            echo "=== process env verify ==="
+            PID=$(pgrep -f rebrowser-login | head -1)
+            sudo cat /proc/$PID/environ 2>/dev/null | tr '\0' '\n' | grep "YOUTUBE_OAUTH" | sed 's/=.\{8\}/=********/' || echo "(YOUTUBE_OAUTH not in process env)"
