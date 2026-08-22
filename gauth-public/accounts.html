@@ -376,6 +376,18 @@ window.loginOne = function(idx, email){
     var dot = document.querySelector('.row[data-i="'+idx+'"] .row-dot');
     if (dot) dot.className = 'row-dot '+(loginStore[email].ok?'dot-ok':'dot-fail');
     updateSummary();
+    // 성공 시 1.5초 후 다음 계정으로 자동 이동
+    if (loginStore[email].ok) {
+      setTimeout(function(){
+        var curPos = -1;
+        for (var fi = 0; fi < filtered.length; fi++) {
+          if (filtered[fi]._idx === idx) { curPos = fi; break; }
+        }
+        if (curPos >= 0 && curPos + 1 < filtered.length) {
+          openDetail(filtered[curPos + 1]._idx);
+        }
+      }, 1500);
+    }
   })
   .catch(function(e){
     btn.className = 'login-btn fail';
