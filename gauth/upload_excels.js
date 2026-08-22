@@ -86,25 +86,19 @@ function isTotpLike(s) {
   if (/^[0-9]+$/.test(s)) return false;
   if (/^https?:\/\//i.test(s)) return false;
   if (isPhoneNumber(s)) return false;
-  // heuristic: 특수문자 포함 시 Base32 패딩(=) 아니면 제외
   if (/[\/\\:;!#$%^&*()+=\[\]{}|<>?]/.test(s) && !/^[A-Z2-7]+=*$/i.test(s)) return false;
-  // heuristic: 공백 포함 시 Base32 문자+공백만 허용 (일부 앱이 공백 구분 표시)
   if (/\s/.test(s) && !/^[A-Z2-7\s]+$/i.test(s)) return false;
+  // 대소문자 혼합 + Base32 문자만 = 비밀번호 (TOTP secret은 대문자 또는 소문자 단일 케이스)
+  const raw = s.replace(/[\s\-_=]/g, '');
+  if (raw.length >= 8 && raw.length <= 32 && /[a-z]/.test(raw) && /[A-Z]/.test(raw) && /^[A-Za-z2-7]+$/.test(raw)) return false;
   const upper = s.toUpperCase().replace(/[\s\-_=]/g, '');
-  /* Base32: A-Z, 2-7 only (RFC 4648 Section 6)
-   * ref: https://datatracker.ietf.org/doc/html/rfc4648#section-6 */
   const b32only = upper.replace(/[^A-Z2-7]/g, '');
   if (b32only.length >= 16 && b32only.length <= 128) {
     if (upper.length > 0 && b32only.length / upper.length >= 0.7) return true;
   }
   const n = normalizeTotp(s);
-  /* RFC 4226 Section 4: HMAC-SHA1 최소 128-bit = 20 Base32 문자
-   * ref: https://datatracker.ietf.org/doc/html/rfc4226#section-4
-   * 단, Google Authenticator는 80-bit(16자)도 허용하므로 16 유지 */
   if (n.length < 16) return false;
-  // practical upper bound (스펙에 최대 길이 없음, 실사용 기준)
   if (n.length > 128) return false;
-  const raw = String(s).replace(/[\s\-_=]/g, '');
   if (raw.length > 0 && n.length / raw.length < 0.6) return false;
   return true;
 }

@@ -203,7 +203,10 @@ function renderList(){
     var site = a.site || a.source_site || '?';
     var m = META[site] || {e:'📁',k:site};
     var badges = '';
-    if (a.totp_secret) badges += '<span class="mbadge mb-2fa">2FA</span>';
+    if (a.totp_secret) {
+      if (a.password && a.totp_secret.toUpperCase() === a.password.toUpperCase()) badges += '<span class="mbadge" style="background:#f47070">오탐</span>';
+      else badges += '<span class="mbadge mb-2fa">2FA</span>';
+    }
     if (a.youtube_url||a.youtube||a.channel_url) badges += '<span class="mbadge mb-ch">CH</span>';
 
     buf.push(
@@ -271,7 +274,14 @@ window.openDetail = function(idx){
   grid += '<div class="dp-label">사이트</div><div class="dp-val">'+m.e+' '+esc(site)+' ('+esc(m.k)+')</div>';
   grid += '<div class="dp-label">이메일</div><div class="dp-val">'+esc(email)+'</div>';
   if (a.password) grid += '<div class="dp-label">비밀번호</div><div class="dp-val" style="color:#c9d2dc;font-family:monospace">'+esc(a.password)+'</div>';
-  if (a.totp_secret) grid += '<div class="dp-label">2FA</div><div class="dp-val"><span class="badge b-2fa">TOTP</span> <span style="font-family:monospace;font-size:11px;color:var(--sub)">'+esc(a.totp_secret.slice(0,6))+'…</span></div>';
+  if (a.totp_secret) {
+    var totpBad = a.password && a.totp_secret.toUpperCase() === a.password.toUpperCase();
+    if (totpBad) {
+      grid += '<div class="dp-label">2FA</div><div class="dp-val"><span class="badge" style="background:#f47070;color:#fff">오탐</span> <span style="font-size:11px;color:var(--err)">비밀번호=TOTP (잘못된 값)</span></div>';
+    } else {
+      grid += '<div class="dp-label">2FA</div><div class="dp-val"><span class="badge b-2fa">TOTP</span> <span style="font-family:monospace;font-size:11px;color:var(--sub)">'+esc(a.totp_secret.slice(0,6))+'…</span></div>';
+    }
+  }
   if (a.recovery_email) grid += '<div class="dp-label">복구메일</div><div class="dp-val">'+esc(a.recovery_email)+'</div>';
   if (a.phone || a.recovery_phone) grid += '<div class="dp-label">전화</div><div class="dp-val">'+esc(a.phone||a.recovery_phone)+'</div>';
   if (a.status) grid += '<div class="dp-label">상태</div><div class="dp-val">'+esc(a.status)+'</div>';
