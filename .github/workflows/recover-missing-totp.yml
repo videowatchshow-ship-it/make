@@ -1,0 +1,188 @@
+name: Recover missing TOTP from original Excel files
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: 'Email to search for missing TOTP'
+        required: false
+        default: ''
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-recover-totp.txt']
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Search original Excel files for missing TOTP secrets
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            set -e
+            cd /opt/gauth-full
+
+            echo "=== 1. accounts_normalized.json에서 TOTP 없는 계정 목록 ==="
+            node -e "
+              const fs = require('fs');
+              const data = JSON.parse(fs.readFileSync('accounts_normalized.json','utf8'));
+              const arr = Array.isArray(data) ? data : (data.accounts || []);
+              const missing = arr.filter(a => a.email && a.password && !a.totp_secret);
+              console.log('TOTP 없는 계정 수: ' + missing.length + ' / 전체: ' + arr.length);
+              missing.forEach(a => console.log('  ' + a.email + ' | pw=' + (a.password||'').slice(0,4) + '*** | extra=' + JSON.stringify(a.extra||[])));
+            "
+
+            echo ""
+            echo "=== 2. 원본 엑셀에서 TOTP 후보 재검색 ==="
+            node -e "
+              const fs = require('fs');
+              const path = require('path');
+              const XLSX = require('xlsx');
+
+              const data = JSON.parse(fs.readFileSync('accounts_normalized.json','utf8'));
+              const arr = Array.isArray(data) ? data : (data.accounts || []);
+              const missing = arr.filter(a => a.email && a.password && !a.totp_secret);
+              if (!missing.length) { console.log('모든 계정에 TOTP 있음'); process.exit(0); }
+
+              const missingEmails = new Set(missing.map(a => a.email.toLowerCase().trim()));
+              console.log('검색 대상: ' + missingEmails.size + '개 이메일');
+
+              const dirs = ['uploads', 'uploads/archive'];
+              let found = 0;
+
+              function normalizeEmail(s) {
+                s = String(s||'').trim().toLowerCase();
+                const parts = s.split('@');
+                if (parts.length === 2) {
+                  let local = parts[0];
+                  const domain = parts[1];
+                  if (domain === 'gmail.com' || domain === 'googlemail.com') {
+                    local = local.replace(/\\./g,'').split('+')[0];
+                    return local + '@gmail.com';
+                  }
+                }
+                return s;
+              }
+
+              function isBase32Like(s) {
+                if (!s || s.length < 16) return false;
+                const clean = s.replace(/[\\s=-]/g,'');
+                if (clean.length < 16) return false;
+                const b32 = /^[A-Z2-7]+$/i;
+                return b32.test(clean) && clean.length >= 16 && clean.length <= 64;
+              }
+
+              function isOtpauthUrl(s) { return /^otpauth:\\/\\//i.test(s); }
+
+              for (const dir of dirs) {
+                const fullDir = path.join('/opt/gauth-full', dir);
+                if (!fs.existsSync(fullDir)) continue;
+                const files = fs.readdirSync(fullDir).filter(f => /\\.(xlsx?|csv)$/i.test(f));
+                for (const file of files) {
+                  try {
+                    const wb = XLSX.readFile(path.join(fullDir, file));
+                    for (const sn of wb.SheetNames) {
+                      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], {header:1, defval:'', raw:false});
+                      for (let r = 0; r < rows.length; r++) {
+                        const row = rows[r];
+                        const cells = row.map(c => String(c||'').trim());
+                        const emailCell = cells.find(c => c.includes('@') && /^[^@]+@[^@]+\\.[^@]+$/.test(c));
+                        if (!emailCell) continue;
+                        const ne = normalizeEmail(emailCell);
+                        if (!missingEmails.has(ne)) continue;
+
+                        for (const cell of cells) {
+                          if (cell === emailCell) continue;
+                          if (isOtpauthUrl(cell)) {
+                            console.log('FOUND otpauth: ' + ne + ' → ' + cell + ' (file: ' + file + ')');
+                            found++;
+                          } else if (isBase32Like(cell)) {
+                            console.log('FOUND base32: ' + ne + ' → ' + cell + ' (file: ' + file + ')');
+                            found++;
+                          }
+                        }
+                        if (r + 1 < rows.length) {
+                          const nextRow = rows[r+1].map(c => String(c||'').trim());
+                          const hasEmail = nextRow.some(c => c.includes('@') && /^[^@]+@[^@]+\\.[^@]+$/.test(c));
+                          if (!hasEmail) {
+                            for (const cell of nextRow) {
+                              if (isOtpauthUrl(cell)) {
+                                console.log('FOUND otpauth(next row): ' + ne + ' → ' + cell + ' (file: ' + file + ')');
+                                found++;
+                              } else if (isBase32Like(cell)) {
+                                console.log('FOUND base32(next row): ' + ne + ' → ' + cell + ' (file: ' + file + ')');
+                                found++;
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  } catch(e) { console.log('  skip ' + file + ': ' + e.message); }
+                }
+              }
+              console.log('');
+              console.log('총 ' + found + '개 TOTP 후보 발견');
+            "
+
+            echo ""
+            echo "=== 3. extra[] 필드에서 TOTP 후보 복구 ==="
+            node -e "
+              const fs = require('fs');
+              const data = JSON.parse(fs.readFileSync('accounts_normalized.json','utf8'));
+              const arr = Array.isArray(data) ? data : (data.accounts || []);
+              let recovered = 0;
+              const b32 = /^[A-Z2-7]{16,64}$/i;
+
+              for (const a of arr) {
+                if (a.totp_secret) continue;
+                if (!a.extra || !a.extra.length) continue;
+                for (const e of a.extra) {
+                  const clean = String(e).replace(/[\\s=-]/g,'');
+                  if (b32.test(clean) && clean.length >= 16) {
+                    console.log('RECOVER from extra: ' + a.email + ' → ' + clean);
+                    a.totp_secret = clean.toUpperCase();
+                    recovered++;
+                    break;
+                  }
+                  if (/^otpauth:\\/\\//i.test(e)) {
+                    const m = e.match(/secret=([A-Z2-7]+)/i);
+                    if (m) {
+                      console.log('RECOVER from extra otpauth: ' + a.email + ' → ' + m[1]);
+                      a.totp_secret = m[1].toUpperCase();
+                      recovered++;
+                      break;
+                    }
+                  }
+                }
+              }
+
+              if (recovered > 0) {
+                const tmp = 'accounts_normalized.json.tmp.' + process.pid;
+                fs.writeFileSync(tmp, JSON.stringify(arr, null, 2));
+                fs.renameSync(tmp, 'accounts_normalized.json');
+                console.log('');
+                console.log(recovered + '개 TOTP 복구 완료 → accounts_normalized.json 업데이트');
+              } else {
+                console.log('extra[]에서 복구 가능한 TOTP 없음');
+              }
+            "
+
+            echo ""
+            echo "=== 4. 최종 상태 ==="
+            node -e "
+              const data = JSON.parse(require('fs').readFileSync('accounts_normalized.json','utf8'));
+              const arr = Array.isArray(data) ? data : (data.accounts || []);
+              const withTotp = arr.filter(a => a.totp_secret).length;
+              const withPw = arr.filter(a => a.password).length;
+              const missing = arr.filter(a => a.email && a.password && !a.totp_secret);
+              console.log('전체: ' + arr.length + ' | 비밀번호: ' + withPw + ' | TOTP: ' + withTotp + ' | TOTP 없음(비번 있는 계정): ' + missing.length);
+              if (missing.length > 0 && missing.length <= 30) {
+                missing.forEach(a => console.log('  ' + a.email));
+              }
+            "
