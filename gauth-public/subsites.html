@@ -46,6 +46,7 @@
   <a href="/">🏠 메인</a>
   <a href="/subsites.html" class="active">📦 사이트별</a>
   <a href="/accounts.html">📋 계정 상세</a>
+  <input id="apiToken" type="password" placeholder="API 토큰" style="max-width:100px;margin-left:auto;background:#1a1f27;border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 8px;font-size:12px" oninput="sessionStorage.setItem('gauth_token',this.value)">
 </nav>
   <div class="wrap">
     <div class="brand">
@@ -55,6 +56,10 @@
     <div class="card"><div id="list">불러오는 중…</div></div>
   </div>
 <script>
+/* ref: https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage */
+function getApiToken(){return sessionStorage.getItem('gauth_token')||''}
+function authHeaders(extra){var h=extra||{};var t=getApiToken();if(t)h['Authorization']='Bearer '+t;return h}
+
 var META={gain:{e:'🟣',k:'게인'},woodong:{e:'🚕',k:'우동'},sunbi:{e:'📘',k:'선비'},simmani:{e:'🎬',k:'심마니'},win:{e:'🏆',k:'윈'},aura:{e:'✨',k:'아우라'},bacad:{e:'🎓',k:'바캇'},camstouch:{e:'📷',k:'캠스터치'},james:{e:'👤',k:'제임스'},misskim:{e:'👩',k:'미스김'},naman:{e:'🧑',k:'나만'},romi:{e:'🐾',k:'로미'},second:{e:'2️⃣',k:'세컨드'},soktv:{e:'📺',k:'속TV'},cham:{e:'🐘',k:'참'}};
 var PS=10, pg={}, cache=null;
 function esc(s){var d=document.createElement('div');d.textContent=String(s==null?'':s);return d.innerHTML;}
@@ -81,7 +86,7 @@ function loadYt(btn){
   if(box){ box.style.display = box.style.display==='none'?'block':'none'; if(box.dataset.loaded) return; }
   else { box=document.createElement('div'); box.className='ytbox'; btn.parentNode.parentNode.appendChild(box); }
   box.textContent='불러오는 중…';
-  fetch('/api/youtube/channel-status?url='+encodeURIComponent(url),{cache:'no-store'}).then(function(r){return r.json();}).then(function(d){
+  fetch('/api/youtube/channel-status?url='+encodeURIComponent(url),{headers:authHeaders(),cache:'no-store'}).then(function(r){return r.json();}).then(function(d){
     box.dataset.loaded='1';
     if(!d.ok){ box.innerHTML='⚠ '+esc(d.warn||d.error||'조회 실패'); return; }
     var lives=(d.recentLives||[]).map(function(v){
@@ -125,7 +130,8 @@ function wire(body,obj){
     b.addEventListener('click',function(e){e.stopPropagation();loadYt(b);});
   });
 }
-fetch('/api/subsite-accounts',{cache:'no-store'}).then(function(r){return r.json();}).then(function(d){render(d.sites||[]);}).catch(function(e){document.getElementById('list').textContent='오류: '+e.message;});
+fetch('/api/subsite-accounts',{headers:authHeaders(),cache:'no-store'}).then(function(r){return r.json();}).then(function(d){render(d.sites||[]);}).catch(function(e){document.getElementById('list').textContent='오류: '+e.message;});
+(function(){var el=document.getElementById('apiToken');if(el){var t=getApiToken();if(t)el.value=t;}})();
 </script>
 </body>
 </html>
