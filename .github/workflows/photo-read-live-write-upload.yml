@@ -1,0 +1,39 @@
+name: photo/write_upload.php 전체 내용 확인 (실제 라이브 핸들러)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-read-live-write-upload.yml'
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+
+            echo "===== [1] photo/write_upload.php 전체 내용 ====="
+            timeout 8 sudo cat "$P1/write_upload.php" 2>&1
+
+            echo ""
+            echo "===== [2] photo/write.php 안 chSel <select> 전체 블록 (350~400줄) ====="
+            timeout 8 sudo sed -n '340,400p' "$P1/write.php" 2>&1
+
+            echo ""
+            echo "===== [3] write_select_room.php \$ALL_CH / 마스터 관련 ====="
+            timeout 8 sudo grep -n "ALL_CH\|isMaster\|aass0707\|__all__" "$P1/write_select_room.php" 2>&1 | head -30
+            REMOTE

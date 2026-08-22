@@ -1,0 +1,59 @@
+name: 어드민 업로드 이미지 찾아서 계정별 독립 배포 (gain 제외)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-admin-upload-find-deploy.yml'
+jobs:
+  finddeploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 어드민 업로드 경로 탐색 + 최근 이미지 검색
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          envs: CF_TOKEN,CF_ZONE
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            SITE="/var/www/sites/chamgyo/public"
+
+            echo "===== [1] 어드민 관련 php/디렉토리 전체 탐색 ====="
+            sudo find "$SITE" -maxdepth 3 -iname "*admin*" 2>/dev/null
+
+            echo ""
+            echo "===== [2] write.php 에서 업로드(upload/move_uploaded_file) 관련 코드 검색 ====="
+            sudo grep -rn "move_uploaded_file\|upload_dir\|\\\$_FILES" "$SITE" --include="*.php" 2>/dev/null | head -40
+
+            echo ""
+            echo "===== [3] 최근 24시간 이내 수정된 이미지 파일 전체 검색 (photo 하위) ====="
+            sudo find "$SITE/photo" -type f \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.gif" -o -iname "*.webp" \) -mmin -1440 2>/dev/null -exec ls -la {} \;
+
+            echo ""
+            echo "===== [4] /tmp 최근 24시간 업로드 파일 ====="
+            sudo find /tmp -type f \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.gif" -o -iname "*chamgyo*" \) -mmin -1440 2>/dev/null -exec ls -la {} \;
+
+            echo ""
+            echo "===== [5] 사이트 전체(var/www) 최근 24시간 업로드 파일 (chamgyo 무관 전체) ====="
+            sudo find /var/www -type f \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" \) -mmin -1440 2>/dev/null -exec ls -la {} \; | head -40
+
+            echo ""
+            echo "===== [6] Live_height_kakao.gif 현재 위치 전체 (심볼릭 포함) ====="
+            sudo find "$SITE" -iname "Live_height_kakao*" 2>/dev/null -exec ls -la {} \;
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE

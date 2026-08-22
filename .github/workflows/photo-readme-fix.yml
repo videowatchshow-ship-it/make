@@ -1,0 +1,148 @@
+name: photo/photo2/photo3 각 폴더 독립 README 1개씩 (photo2/photo3 복원)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-readme-fix.yml'
+
+jobs:
+  readme:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set -uo pipefail
+            P1="/var/www/sites/chamgyo/public/photo"
+            P2="/var/www/sites/chamgyo/public/photo2"
+            P3="/var/www/sites/chamgyo/public/photo3"
+
+            echo "===== [1] BEFORE ====="
+            for D in "$P1" "$P2" "$P3"; do
+              echo "--- $D ---"
+              sudo ls -la "$D"/README* 2>/dev/null || echo "  (README 없음)"
+            done
+
+            echo ""
+            echo "===== [2] photo/README.md 재작성 (photo 폴더 전용) ====="
+            sudo tee "$P1/README.md" > /dev/null << "PHOTO_EOF"
+            # photo · 대표 폴더 (참교육카지노)
+
+            서버 경로: /var/www/sites/chamgyo/public/photo
+            도메인: https://xn--9d0bw2fjtyymch7de9d.info/photo/
+
+            ## 노출 계정 (13개, denny 삭제 완료)
+            aass0707(마스터), abc01~07, cent, gain, jay, otuki, tak
+
+            ## 계정별 URL
+            - 세로 : /photo/CAH_1.html?ch=<계정>
+            - 가로 : /photo/CAW_1.html?ch=<계정>
+            - 싱지뉴: /photo/SNW_1.html?ch=<계정>
+
+            ## 데이터 (data/ 실체 디렉토리)
+            - sel_<계정>.json : 계정별 선택 방 (room_id/board)
+            - selected_room.json : 공용 폴백
+            - tables.json : xtd 방 20개 [10,11,12,15,16,17,18,19,20,21,22,23,25,26,27,55,66,77,88,99]
+              - xtd_map: 17→87, 19→89, 55→31, 66→32, 77→33, 88→34, 99→35
+              - xtd_kind: 10→"21점", 16→"용호"
+            - room_<label>.json : xtd6688 크롤 결과
+            - img_ver.json / img_ver_<계정>.json : 이미지 캐시버스팅
+
+            ## 이미지
+            - 공용 : /photo/images/<파일>
+            - 계정별: /photo/images/ch/<계정>/<파일> (write_upload.php 저장 완료, 프론트 미반영)
+
+            ## 상단 경고
+            write.php 상단 "두 기기 모두 로그인" 붉은/노랑 깜빡임 배치 완료
+
+            ## 하단 채팅창
+            SNW_1.html ban_wrap div 통째 제거 완료
+            PHOTO_EOF
+
+            echo ""
+            echo "===== [3] photo2/README.md 신규 작성 (photo2 폴더 전용 · 독립) ====="
+            sudo tee "$P2/README.md" > /dev/null << "PHOTO2_EOF"
+            # photo2 · 원본 폴더 (참교육카지노)
+
+            서버 경로: /var/www/sites/chamgyo/public/photo2
+            도메인: https://xn--9d0bw2fjtyymch7de9d.info/photo2/
+
+            ## 역할
+            모든 채널 원본. photo(대표) / photo3(tak 전용) 이전의 마스터 데이터.
+
+            ## data/
+            **실체 디렉토리** (photo3/data 심볼릭이 이곳으로 걸려 있음)
+            - sel_<계정>.json / tables.json / room_<label>.json 등 photo 와 동일 스키마
+            - photo 와는 별개 실체 (photo/data 와 상호 독립)
+
+            ## hot-patch
+            /photo2/hot_patches.json (2초 폴링, 프론트 실시간 반영)
+
+            ## 크롤러
+            /etc/cron.d/chamgyo-photo3-collector (매분)
+            → collector_xtd.php 실행 → api.xtd6688.com 폴링 → room_<label>.json 갱신
+
+            ## 참고
+            상세 URL/계정 목록은 photo/README.md 참조.
+            PHOTO2_EOF
+
+            echo ""
+            echo "===== [4] photo3/README.md 신규 작성 (photo3 폴더 전용 · 독립) ====="
+            sudo tee "$P3/README.md" > /dev/null << "PHOTO3_EOF"
+            # photo3 · tak 전용 폴더 (참교육카지노)
+
+            서버 경로: /var/www/sites/chamgyo/public/photo3
+            도메인: https://xn--9d0bw2fjtyymch7de9d.info/photo3/
+
+            ## 역할
+            tak 계정 전용 뷰. 데이터는 photo2 실체를 심볼릭으로 공유.
+
+            ## data/
+            **심볼릭**: photo3/data → photo2/data (실체)
+            → sel_tak.json / tables.json / room_<label>.json 은 photo2 와 동일 파일
+
+            ## 주의
+            tak 계정 테스트 시 다른 계정 건드리지 말 것 (프로젝트 규칙).
+
+            ## 참고
+            상세 URL/계정 목록은 photo/README.md 참조.
+            PHOTO3_EOF
+
+            for F in "$P1/README.md" "$P2/README.md" "$P3/README.md"; do
+              sudo chown www-data:www-data "$F"
+              sudo chmod 644 "$F"
+            done
+
+            echo ""
+            echo "===== [5] AFTER - 각 폴더 README 1개씩 확인 ====="
+            for D in "$P1" "$P2" "$P3"; do
+              echo "--- $D ---"
+              sudo ls -la "$D"/README* 2>/dev/null
+              CNT=$(sudo ls "$D"/README*.md 2>/dev/null | wc -l)
+              echo "  README 개수: $CNT (기대값: 1)"
+            done
+
+            echo ""
+            echo "===== [6] 각 README 크기 및 첫 5줄 미리보기 ====="
+            for F in "$P1/README.md" "$P2/README.md" "$P3/README.md"; do
+              echo "--- $F ---"
+              sudo wc -c "$F"
+              sudo head -5 "$F"
+              echo ""
+            done
+
+            echo "===== DONE ====="
+            REMOTE

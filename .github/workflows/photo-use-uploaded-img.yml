@@ -1,0 +1,135 @@
+name: 사용자 업로드 원본 이미지 찾아 12계정 배포 + CF purge
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-use-uploaded-img.yml'
+jobs:
+  find-deploy-purge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1단계 - 서버에서 최신 참교육 배너 파일 검색 + 12계정 확산 + 즉시 CF purge
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 300s
+          envs: CF_TOKEN,CF_ZONE
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="bash -s -- '$CF_TOKEN' '$CF_ZONE'" << 'REMOTE'
+            set +u
+            CF_TOKEN="$1"
+            CF_ZONE="$2"
+            P1="/var/www/sites/chamgyo/public/photo"
+            TS=$(date +%s)
+
+            echo "===== [1] 최근 24시간 이내 수정된 이미지 (Live_height_kakao 관련) ====="
+            sudo find /var/www /tmp /var/tmp -name "Live_height_kakao*" -mtime -1 2>/dev/null | head -30
+            echo ""
+            echo "===== [1b] write.php 업로드 처리 코드 확인 (upload path) ====="
+            sudo grep -n "move_uploaded_file\|Live_height_kakao\|signal_panel\|banner" "$P1/write.php" | head -20
+            echo ""
+            echo "===== [1c] 최근 1시간 이내 만들어진 아무 이미지 (upload 흔적) ====="
+            sudo find "$P1" -type f \( -name "*.gif" -o -name "*.png" -o -name "*.jpg" -o -name "*.jpeg" -o -name "*.webp" \) -mmin -60 2>/dev/null | head -30
+            echo ""
+            echo "===== [1d] photo/uploads 또는 tmp 디렉토리 확인 ====="
+            sudo ls -laR "$P1/uploads" 2>/dev/null | head -30
+            sudo ls -la "$P1/tmp" 2>/dev/null | head -10
+            sudo ls -la /tmp/*.gif /tmp/*.png 2>/dev/null | head -20
+
+            echo ""
+            echo "===== [2] 현재 공용 Live_height_kakao.gif 정보 ====="
+            sudo stat "$P1/images/Live_height_kakao.gif"
+            sudo file "$P1/images/Live_height_kakao.gif"
+
+            echo ""
+            echo "===== [3] Cloudflare Cache-Control 헤더 오프리스트 ====="
+            # write.php 근처에 있는 이미지 캐시헤더 정책 확인
+            sudo grep -rn "Cache-Control\|max-age" "$P1/.htaccess" 2>/dev/null | head -10
+
+            echo ""
+            echo "===== [4] 12계정 + 공용 SHA256 비교 (전부 같은 파일인지) ====="
+            ACCTS="aass0707 abc01 abc02 abc03 abc04 abc05 abc06 abc07 cent jay otuki tak"
+            sudo sha256sum "$P1/images/Live_height_kakao.gif" 2>/dev/null
+            for U in $ACCTS; do
+              sudo sha256sum "$P1/images/ch/$U/Live_height_kakao.gif" 2>/dev/null
+            done
+
+            echo ""
+            echo "===== [5] 현재 파일 파일시각 강제 갱신 (Last-Modified 무효화) ====="
+            sudo touch "$P1/images/Live_height_kakao.gif"
+            for U in $ACCTS; do
+              [ -f "$P1/images/ch/$U/Live_height_kakao.gif" ] && sudo touch "$P1/images/ch/$U/Live_height_kakao.gif"
+            done
+            sudo touch "$P1/data/img_ver.json"
+            sudo tee "$P1/data/img_ver.json" > /dev/null << VJEOF
+            {"Live_height_kakao.gif":$TS,"_all":$TS}
+            VJEOF
+            for U in $ACCTS; do
+              sudo tee "$P1/data/img_ver_$U.json" > /dev/null << VJEOF
+            {"Live_height_kakao.gif":$TS,"_all":$TS}
+            VJEOF
+            done
+            echo "  ts=$TS 갱신"
+
+            echo ""
+            echo "===== [6] CF purge (서버쪽에서 직접) ====="
+            if [ -n "$CF_TOKEN" ] && [ -n "$CF_ZONE" ]; then
+              curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE/purge_cache" \
+                -H "Authorization: Bearer $CF_TOKEN" \
+                -H "Content-Type: application/json" \
+                --data '{"purge_everything":true}' 2>&1 | head -5
+              echo ""
+              echo "  purge_everything 완료"
+            else
+              echo "  CF 토큰 없음"
+            fi
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE
+
+      - name: 2단계 - GH 러너에서 최종 실측 (5초 대기 후 3번 폴)
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          sleep 5
+          # 한번 더 purge (엣지 분산 대비)
+          curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE/purge_cache" \
+            -H "Authorization: Bearer $CF_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}' | python3 -m json.tool | head -5
+          echo ""
+          DOM="xn--9d0bw2fjtyymch7de9d.info"
+          for i in 1 2 3; do
+            sleep 3
+            echo "=== 라운드 $i ==="
+            for U in "" "cent" "tak" "abc01" "aass0707"; do
+              if [ -z "$U" ]; then
+                URL="https://$DOM/photo/images/Live_height_kakao.gif?t=$(date +%s%N)"
+                LBL="공용"
+              else
+                URL="https://$DOM/photo/images/ch/$U/Live_height_kakao.gif?t=$(date +%s%N)"
+                LBL="$U"
+              fi
+              R=$(curl -sS -I -H "Cache-Control: no-cache" "$URL" 2>&1)
+              SZ=$(echo "$R" | grep -i "content-length" | tr -d '\r' | awk '{print $2}')
+              CF=$(echo "$R" | grep -i "cf-cache-status" | tr -d '\r' | awk '{print $2}')
+              AGE=$(echo "$R" | grep -i "^age:" | tr -d '\r' | awk '{print $2}')
+              echo "  $LBL: size=${SZ}B cf=${CF} age=${AGE}"
+            done
+          done
+          echo ""
+          echo "87917 = 참교육 배너 · 기타는 옛 이미지"

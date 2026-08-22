@@ -1,0 +1,54 @@
+name: 마스터(aass0707)가 다른 계정 방 지정할 수 있는지 실측
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-verify-master-select.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+
+            echo "===== [1] write.php 안에 계정 선택 드롭다운 / 방 저장 로직 존재? ====="
+            sudo grep -nE "select|dropdown|option|채널|계정|ch=|sel_|save_selected|write_selected|target_ch|__all__|aass0707" "$P1/write.php" | head -40
+
+            echo ""
+            echo "===== [2] 방 클릭 시 호출되는 저장 API 파일 찾기 ====="
+            sudo ls -la "$P1"/*.php 2>/dev/null | grep -iE "save|select|write" | head -10
+
+            echo ""
+            echo "===== [3] 방 저장 API 소스 (save_selected / write_selected / api_save) ====="
+            for F in save_selected_room.php write_selected_room.php api_save_room.php api_selected_save.php api_write_room.php; do
+              [ -f "$P1/$F" ] && echo "--- $F ---" && sudo cat "$P1/$F"
+            done
+
+            echo ""
+            echo "===== [4] write.php 하단 저장 JS + 전송 URL 확인 ====="
+            sudo tail -100 "$P1/write.php" | grep -nE "fetch|xhr|POST|form|action=|api|save|ch:|ch=" | head -30
+
+            echo ""
+            echo "===== [5] write.php 전체 (뒷부분 200줄 - JS 로직) ====="
+            sudo tail -200 "$P1/write.php"
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE

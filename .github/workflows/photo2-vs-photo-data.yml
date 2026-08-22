@@ -1,0 +1,118 @@
+name: photo vs photo2 vs photo3 - symlink integrity check
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-vs-photo-data.yml'
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: photo vs photo2 vs photo3 - 같은 파일 3개 폴더에서 비교
+        run: |
+          set +e
+          BASE="https://xn--9d0bw2fjtyymch7de9d.info"
+          TS=$(date +%s)
+          NOW=$(date +%s)
+          echo "server_now: $NOW"
+          echo ""
+
+          # 20 labels from user's write.php screenshot
+          LABELS="10 11 12 15 16 17 18 19 20 21 22 23 25 26 27 55 66 77 88 99"
+
+          echo ""
+          echo "===== room_XX.json age (초) 비교: photo vs photo2 vs photo3 ====="
+          printf "%-6s | %-14s | %-14s | %-14s\n" "label" "photo" "photo2" "photo3"
+          echo "-------|----------------|----------------|----------------"
+          for L in $LABELS; do
+            A1=""
+            A2=""
+            A3=""
+            for FOLDER in photo photo2 photo3; do
+              curl -sS --max-time 10 -o "/tmp/${FOLDER}_${L}.json" -w "%{http_code}" "$BASE/${FOLDER}/data/room_${L}.json?_t=$TS" > "/tmp/code_${FOLDER}_${L}" 2>/dev/null
+              CODE=$(cat "/tmp/code_${FOLDER}_${L}")
+              if [ "$CODE" = "200" ] && [ -s "/tmp/${FOLDER}_${L}.json" ]; then
+                T=$(python3 -c "import json;print(json.load(open('/tmp/${FOLDER}_${L}.json')).get('t',0))" 2>/dev/null || echo 0)
+                if [ "$T" != "0" ] && [ -n "$T" ]; then
+                  AGE=$((NOW - T))
+                  RES="age=${AGE}s"
+                else
+                  RES="no-t-field"
+                fi
+              else
+                RES="HTTP_${CODE}"
+              fi
+              case "$FOLDER" in
+                photo) A1="$RES" ;;
+                photo2) A2="$RES" ;;
+                photo3) A3="$RES" ;;
+              esac
+            done
+            printf "%-6s | %-14s | %-14s | %-14s\n" "$L" "$A1" "$A2" "$A3"
+          done
+
+          echo ""
+          echo "===== 핵심 검증: photo/data/room_XX.json 자체가 신선한가? ====="
+          echo ""
+          for L in 10 11 12 15 16 18 20 21 22 25 26 27; do
+            curl -sS --max-time 10 "$BASE/photo/data/room_${L}.json?_t=$TS" -o /tmp/p1.json
+            if [ -s /tmp/p1.json ]; then
+              echo "--- photo/data/room_${L}.json ---"
+              python3 -c "
+          import json
+          d=json.load(open('/tmp/p1.json'))
+          t=d.get('t',0)
+          age=${NOW}-int(t) if t else -1
+          nums=d.get('nums',[])
+          nlen=len(nums) if isinstance(nums,list) else '?'
+          tail=nums[-8:] if isinstance(nums,list) else '?'
+          apiId=d.get('apiId','-')
+          ver=d.get('ver','-')
+          print(f'  age={age}s  nums_len={nlen}  ver={ver}  apiId={apiId}  tail={tail}')
+          "
+            else
+              echo "--- photo/data/room_${L}.json --- MISSING/EMPTY"
+            fi
+          done
+
+          echo ""
+          echo "===== photo/data/tables.json (진짜 매핑 원본) ====="
+          curl -sS --max-time 10 "$BASE/photo/data/tables.json?_t=$TS"
+          echo ""
+
+          echo ""
+          echo "===== photo3/data/tables.json ====="
+          curl -sS --max-time 10 "$BASE/photo3/data/tables.json?_t=$TS"
+          echo ""
+
+          echo ""
+          echo "===== photo/collector 결과 → photo/data 신선? ====="
+          curl -sS --max-time 10 "$BASE/photo/collector_xtd.php?force=1"
+          echo ""
+          sleep 3
+          curl -sS --max-time 10 "$BASE/photo/data/room_11.json?_t=$TS" | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)
+          t=d.get('t',0)
+          print(f'photo/data/room_11.json t={t} age={${NOW}-int(t)}s' if t else 'no t')
+          "
+
+          echo ""
+          echo "===== photo2/data/tables.json vs photo/data/tables.json 차이 ====="
+          curl -sS --max-time 10 "$BASE/photo/data/tables.json?_t=$TS" -o /tmp/p1_tables.json
+          curl -sS --max-time 10 "$BASE/photo2/data/tables.json?_t=$TS" -o /tmp/p2_tables.json
+          echo "photo/data/tables.json:  $(wc -c < /tmp/p1_tables.json)B, sha=$(sha256sum /tmp/p1_tables.json | cut -c1-16)"
+          echo "photo2/data/tables.json: $(wc -c < /tmp/p2_tables.json)B, sha=$(sha256sum /tmp/p2_tables.json | cut -c1-16)"
+          diff /tmp/p1_tables.json /tmp/p2_tables.json && echo "IDENTICAL (심볼릭 살아있음)" || echo "DIFFERENT (심볼릭 끊어짐 - photo2/data는 옛날 실체 파일)"
+
+          echo ""
+          echo "===== photo/data/room_11.json vs photo2/data/room_11.json 차이 ====="
+          curl -sS --max-time 10 "$BASE/photo/data/room_11.json?_t=$TS" -o /tmp/p1_11.json
+          curl -sS --max-time 10 "$BASE/photo2/data/room_11.json?_t=$TS" -o /tmp/p2_11.json
+          echo "photo/data/room_11.json:  $(wc -c < /tmp/p1_11.json)B, t=$(python3 -c 'import json;print(json.load(open(\"/tmp/p1_11.json\")).get(\"t\",\"?\"))')"
+          echo "photo2/data/room_11.json: $(wc -c < /tmp/p2_11.json)B, t=$(python3 -c 'import json;print(json.load(open(\"/tmp/p2_11.json\")).get(\"t\",\"?\"))')"
+          diff /tmp/p1_11.json /tmp/p2_11.json && echo "IDENTICAL" || echo "DIFFERENT"

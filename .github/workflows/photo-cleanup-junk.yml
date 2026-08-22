@@ -1,0 +1,112 @@
+name: photo 경로 백업/junk 파일 정리 (SHA256 사전검증 후 삭제)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-cleanup-junk.yml'
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+            GOOD="58d42bfdbebff51ba6f1ed125ba24f2569589bb1f4f99262f90daa78f7e9cd9c"
+
+            echo "===== [1] 라이브 배너 SHA256 사전 검증 (삭제 전 필수) ====="
+            LIVE=$(sudo sha256sum "$P1/images/Live_height_kakao.gif" 2>/dev/null | awk '{print $1}')
+            echo "  photo/images/Live_height_kakao.gif = $LIVE"
+            OK=1
+            [ "$LIVE" = "$GOOD" ] || OK=0
+
+            for A in cent tak jay abc06; do
+              S=$(sudo sha256sum "$P1/images/ch/$A/Live_height_kakao.gif" 2>/dev/null | awk '{print $1}')
+              echo "  photo/images/ch/$A/Live_height_kakao.gif = $S"
+              [ "$S" = "$GOOD" ] || OK=0
+            done
+
+            if [ "$OK" != "1" ]; then
+              echo "  ❌ 라이브 파일 SHA256 불일치 발견 — 안전을 위해 백업 삭제를 중단합니다."
+              exit 0
+            fi
+            echo "  ✅ 전부 정상 (58d42bf...) — 백업 삭제 진행"
+
+            echo ""
+            echo "===== [2] 알려진 특정 백업 파일 삭제 =====" 
+            TARGETS="
+            $P1/images/Live_height_kakao.gif.orig.1787191002
+            $P1/images/ch/tak/Live_height_kakao.gif.blackbak.1787189241
+            $P1/images/ch/jay/Live_height_kakao.gif.blackbak.1787189241
+            $P1/images/ch/abc06/Live_height_kakao.gif.blackbak.1787189241
+            "
+            for F in $TARGETS; do
+              if sudo test -f "$F"; then
+                sudo rm -f "$F"
+                echo "  삭제: $F"
+              else
+                echo "  (없음, skip): $F"
+              fi
+            done
+
+            echo ""
+            echo "===== [3] photo/images/ch/* 전체에서 *.blackbak.* / *.orig.* 광범위 검색+삭제 =====" 
+            sudo find "$P1/images/ch" -maxdepth 2 -type f \( -name "*.blackbak.*" -o -name "*.orig.*" \) 2>/dev/null | while read -r f; do
+              echo "  발견+삭제: $f"
+              sudo rm -f "$f"
+            done
+
+            echo ""
+            echo "===== [4] photo/images/ (공용) 에도 동일 패턴 검색+삭제 =====" 
+            sudo find "$P1/images" -maxdepth 1 -type f \( -name "*.blackbak.*" -o -name "*.orig.*" \) 2>/dev/null | while read -r f; do
+              echo "  발견+삭제: $f"
+              sudo rm -f "$f"
+            done
+
+            echo ""
+            echo "===== [5] 삭제 후 재확인 (남은 blackbak/orig 파일 없어야 함) =====" 
+            REMAIN=$(sudo find "$P1/images" -maxdepth 3 -type f \( -name "*.blackbak.*" -o -name "*.orig.*" \) 2>/dev/null | wc -l)
+            echo "  잔여 blackbak/orig 파일 수: $REMAIN"
+
+            echo ""
+            echo "===== [6] /tmp 세션 아티팩트 확인 =====" 
+            for F in /tmp/banner1787190845 /tmp/banner_common1787191002 /tmp/chamgyo_1787189338.png; do
+              if sudo test -e "$F"; then
+                sudo ls -la "$F" 2>&1
+              else
+                echo "  (이미 없음): $F"
+              fi
+            done
+
+            echo ""
+            echo "===== [7] /tmp 세션 아티팩트 삭제 (배포 무관 임시 파일) =====" 
+            for F in /tmp/banner1787190845 /tmp/banner_common1787191002 /tmp/chamgyo_1787189338.png; do
+              if sudo test -e "$F"; then
+                sudo rm -rf "$F"
+                echo "  삭제: $F"
+              fi
+            done
+
+            echo ""
+            echo "===== [8] 최종 SHA256 재확인 (삭제 작업이 원본에 영향 없었는지) =====" 
+            LIVE2=$(sudo sha256sum "$P1/images/Live_height_kakao.gif" 2>/dev/null | awk '{print $1}')
+            echo "  photo/images/Live_height_kakao.gif = $LIVE2 (기대: $GOOD)"
+            [ "$LIVE2" = "$GOOD" ] && echo "  ✅ 일치" || echo "  ❌ 불일치!!"
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE
+

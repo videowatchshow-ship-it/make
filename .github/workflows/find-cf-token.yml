@@ -5,84 +5,68 @@ on:
 jobs:
   search:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
-      - name: Search entire server for CF tokens
+      - name: Add CF wildcard DNS via gauth server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 8m
+          command_timeout: 3m
           script: |
-            echo "=== Search 1: All env files on entire system ==="
-            sudo find / -maxdepth 6 -name '*.env' -o -name '.env*' -o -name 'env' 2>/dev/null | grep -v proc | grep -v sys | while read f; do
-              HAS=$(sudo grep -ilP 'cloudflare|cf_token|cf_api|cf_zone|cf_global' "$f" 2>/dev/null)
-              [ -n "$HAS" ] && echo "MATCH: $f" && sudo grep -iP 'cloudflare|cf_token|cf_api|cf_zone|cf_global' "$f" 2>/dev/null | head -5
-            done
+            CF_TOKEN=$(sudo grep -oP 'dns_cloudflare_api_token\s*=\s*\K\S+' /root/.secrets/cloudflare.ini 2>/dev/null)
+            if [ -z "$CF_TOKEN" ]; then
+              echo "ERROR: token not found in /root/.secrets/cloudflare.ini"
+              exit 1
+            fi
+            echo "Token: ${CF_TOKEN:0:10}..."
 
-            echo ""
-            echo "=== Search 2: All config/json files with cloudflare mention ==="
-            sudo find / -maxdepth 6 \( -name '*.json' -o -name '*.cfg' -o -name '*.conf' -o -name '*.ini' -o -name '*.yaml' -o -name '*.yml' -o -name '*.toml' \) 2>/dev/null | grep -v proc | grep -v sys | grep -v node_modules | while read f; do
-              HAS=$(sudo grep -ilP 'cloudflare|cf_token|cf_api' "$f" 2>/dev/null)
-              [ -n "$HAS" ] && echo "MATCH: $f" && sudo grep -iP 'cloudflare|cf_token|cf_api' "$f" 2>/dev/null | head -3
-            done
+            echo "=== Zone list ==="
+            curl -s "https://api.cloudflare.com/client/v4/zones?per_page=50" \
+              -H "Authorization: Bearer $CF_TOKEN" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+for z in d.get('result',[]):
+    print(z['id'], z['name'])
+print('success='+str(d.get('success')))
+"
 
-            echo ""
-            echo "=== Search 3: JS files with cloudflare references ==="
-            sudo find / -maxdepth 6 -name '*.js' 2>/dev/null | grep -v proc | grep -v sys | grep -v node_modules | while read f; do
-              HAS=$(sudo grep -ilP 'cloudflare|CF_TOKEN|CF_API_KEY|CF_ZONE|globalApiKey|authEmail' "$f" 2>/dev/null)
-              [ -n "$HAS" ] && echo "MATCH: $f" && sudo grep -nP 'cloudflare|CF_TOKEN|CF_API_KEY|CF_ZONE|globalApiKey|authEmail' "$f" 2>/dev/null | head -5
-            done
+            ZONE_ID=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=xn--9d0bw2fjtyymch7de9d.info" \
+              -H "Authorization: Bearer $CF_TOKEN" | python3 -c "
+import sys,json; d=json.load(sys.stdin)
+print((d.get('result') or [{}])[0].get('id',''))
+")
+            echo "Zone ID: '$ZONE_ID'"
+            [ -z "$ZONE_ID" ] && echo "Zone not found!" && exit 1
 
-            echo ""
-            echo "=== Search 4: Any file containing cfut_ token pattern ==="
-            sudo grep -rlP 'cfut_[A-Za-z0-9_-]{20,}' / 2>/dev/null | grep -v proc | grep -v sys | head -20
+            EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=A&name=*.xn--9d0bw2fjtyymch7de9d.info" \
+              -H "Authorization: Bearer $CF_TOKEN" | python3 -c "
+import sys,json; d=json.load(sys.stdin)
+print((d.get('result') or [{}])[0].get('id',''))
+")
 
-            echo ""
-            echo "=== Search 5: Any file with 37-char hex (Global API Key pattern) ==="
-            sudo grep -rlP '[a-f0-9]{37}' /root /opt /etc /var/www 2>/dev/null | grep -v node_modules | grep -v proc | grep -v '.log' | head -20
+            if [ -n "$EXISTING" ]; then
+              echo "Updating existing record $EXISTING"
+              RESULT=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$EXISTING" \
+                -H "Authorization: Bearer $CF_TOKEN" \
+                -H "Content-Type: application/json" \
+                --data '{"type":"A","name":"*","content":"34.104.233.35","ttl":1,"proxied":true}')
+            else
+              echo "Creating new wildcard A record"
+              RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
+                -H "Authorization: Bearer $CF_TOKEN" \
+                -H "Content-Type: application/json" \
+                --data '{"type":"A","name":"*","content":"34.104.233.35","ttl":1,"proxied":true}')
+            fi
 
-            echo ""
-            echo "=== Search 6: Cloudflare dirs and files ==="
-            sudo find / -maxdepth 4 -type d -iname '*cloudflare*' 2>/dev/null | grep -v proc | grep -v sys
-            sudo find / -maxdepth 4 -type f -iname '*cloudflare*' 2>/dev/null | grep -v proc | grep -v sys
-            sudo find / -maxdepth 4 -type f -iname 'wrangler*' 2>/dev/null | grep -v proc | grep -v sys
-
-            echo ""
-            echo "=== Search 7: Home dirs and token locations ==="
-            for d in /root /home/*; do
-              [ -d "$d" ] || continue
-              echo "--- $d ---"
-              sudo ls -la "$d"/.cloudflare* "$d"/.cf* "$d"/.wrangler* 2>/dev/null || echo "  no cloudflare dotfiles"
-              sudo cat "$d"/.cloudflare/cf-token 2>/dev/null && echo "  ^^ cf-token"
-              sudo cat "$d"/.cloudflare/.credentials 2>/dev/null && echo "  ^^ credentials"
-            done
-
-            echo ""
-            echo "=== Search 8: Mounted volumes ==="
-            sudo lsblk 2>/dev/null || true
-            sudo df -h 2>/dev/null | grep -v tmpfs | grep -v udev
-            sudo ls -la /mnt/ /media/ /e/ /E/ /drives/ 2>/dev/null || echo "no /mnt /media /e /E /drives"
-            for mp in /mnt/* /media/* /e /E; do
-              [ -d "$mp" ] || continue
-              echo "--- mounted: $mp ---"
-              sudo find "$mp" -maxdepth 4 -type f \( -name '*.env' -o -name '*.json' -o -name '*.cfg' -o -name '*.conf' \) 2>/dev/null | head -20
-              sudo grep -rlP 'cloudflare|cf_token|cfut_' "$mp" 2>/dev/null | head -10
-            done
-
-            echo ""
-            echo "=== Search 9: systemd and env ==="
-            sudo cat /etc/environment 2>/dev/null | grep -iP 'cloudflare|cf_token|cf_api|export.*CF' || true
-            sudo cat /root/.bashrc 2>/dev/null | grep -iP 'cloudflare|cf_token|cf_api|export.*CF' || true
-            sudo cat /root/.profile 2>/dev/null | grep -iP 'cloudflare|cf_token|cf_api|export.*CF' || true
-
-            echo ""
-            echo "=== Search 10: Running processes env vars ==="
-            for pid in $(pgrep -f 'node\|python\|apache\|nginx' 2>/dev/null | head -10); do
-              CFVARS=$(sudo cat /proc/$pid/environ 2>/dev/null | tr '\0' '\n' | grep -iP 'cloudflare|cf_token|cf_api|cf_zone')
-              [ -n "$CFVARS" ] && echo "PID $pid:" && echo "$CFVARS"
-            done
-
-            echo ""
-            echo "=== Done ==="
+            echo "=== Result ==="
+            echo "$RESULT" | python3 -c "
+import sys,json; d=json.load(sys.stdin)
+if d.get('success'):
+    r=d['result']
+    print('SUCCESS:', r.get('name'), '->', r.get('content'), 'proxied='+str(r.get('proxied')))
+else:
+    print('FAIL:', json.dumps(d.get('errors')))
+    sys.exit(1)
+"

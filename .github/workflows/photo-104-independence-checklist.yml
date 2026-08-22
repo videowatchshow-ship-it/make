@@ -1,0 +1,122 @@
+name: 13계정 이미지 완전 독립 104개 체크리스트
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-104-independence-checklist.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+            DOM="xn--9d0bw2fjtyymch7de9d.info"
+            ACCTS="otuki cent jay tak abc01 abc02 abc03 abc04 abc05 abc06 abc07 aass0707 gain"
+
+            PASS=0; FAIL=0; FAILS=""
+            pf(){
+              if [ "$1" = "P" ]; then PASS=$((PASS+1));
+              else FAIL=$((FAIL+1)); FAILS="$FAILS\n  [FAIL] $2"; fi
+            }
+
+            echo "================================================================"
+            echo " 13계정 이미지 완전 독립 100개 체크리스트 (2026-08-20)"
+            echo "================================================================"
+
+            echo ""
+            echo "----- [0] 사전: 13계정 images/ch/<acc> 디렉토리 inode 수집 -----"
+            declare -A INODE
+            for A in $ACCTS; do
+              D="$P1/images/ch/$A"
+              if [ -d "$D" ] && [ ! -L "$D" ]; then
+                INODE[$A]=$(stat -c %i "$D" 2>/dev/null)
+              else
+                INODE[$A]="MISSING"
+              fi
+              echo "  $A -> inode=${INODE[$A]}"
+            done
+
+            for A in $ACCTS; do
+              D="$P1/images/ch/$A"
+
+              # 1. 디렉토리 실존
+              if sudo test -d "$D"; then pf P "01-$A-dir-exists"; else pf F "01-$A-dir-exists (없음)"; fi
+
+              # 2. 심볼릭 링크 아님 (실제 디렉토리)
+              if [ ! -L "$D" ]; then pf P "02-$A-not-symlink"; else pf F "02-$A-not-symlink (심볼릭임)"; fi
+
+              # 3. inode 유일성 (다른 12계정과 전부 다른지)
+              MYINO="${INODE[$A]}"
+              DUP=0
+              if [ "$MYINO" != "MISSING" ]; then
+                for B in $ACCTS; do
+                  [ "$A" = "$B" ] && continue
+                  if [ "${INODE[$B]}" = "$MYINO" ]; then DUP=1; fi
+                done
+              else
+                DUP=1
+              fi
+              if [ "$DUP" = "0" ]; then pf P "03-$A-inode-unique"; else pf F "03-$A-inode-unique (충돌 또는 MISSING)"; fi
+
+              # 4. img_ver_<acc>.json 존재
+              VF="$P1/data/img_ver_$A.json"
+              if sudo test -f "$VF"; then pf P "04-$A-img_ver-json-exists"; else pf F "04-$A-img_ver-json-exists (없음: $VF)"; fi
+
+              # 5. 폴더 안 파일이 1개 이상
+              CNT=$(sudo ls "$D" 2>/dev/null | wc -l)
+              if [ "$CNT" -ge "1" ]; then pf P "05-$A-has-files($CNT)"; else pf F "05-$A-has-files (0개)"; fi
+
+              # 6. 폴더 안에 심볼릭 링크 파일 없음 (다른 계정 폴더로의 링크 방지)
+              SYMCNT=$(sudo find "$D" -maxdepth 1 -type l 2>/dev/null | wc -l)
+              if [ "$SYMCNT" = "0" ]; then pf P "06-$A-no-internal-symlinks"; else pf F "06-$A-no-internal-symlinks ($SYMCNT개 발견)"; fi
+
+              # 7. Live_height_kakao.gif 파일이 다른 계정 폴더와 하드링크(동일 inode) 아님
+              MYFILE="$D/Live_height_kakao.gif"
+              if sudo test -f "$MYFILE"; then
+                MYFINO=$(sudo stat -c %i "$MYFILE" 2>/dev/null)
+                HDUP=0
+                for B in $ACCTS; do
+                  [ "$A" = "$B" ] && continue
+                  OF="$P1/images/ch/$B/Live_height_kakao.gif"
+                  if sudo test -f "$OF"; then
+                    OFINO=$(sudo stat -c %i "$OF" 2>/dev/null)
+                    [ "$OFINO" = "$MYFINO" ] && HDUP=1
+                  fi
+                done
+                if [ "$HDUP" = "0" ]; then pf P "07-$A-banner-not-hardlinked"; else pf F "07-$A-banner-not-hardlinked (다른 계정과 동일 inode)"; fi
+              else
+                pf F "07-$A-banner-not-hardlinked (파일 없음)"
+              fi
+
+              # 8. HTTP 200 라이브 확인
+              CODE=$(curl -sSk --resolve "$DOM:443:127.0.0.1" -o /dev/null -w "%{http_code}" "https://$DOM/photo/images/ch/$A/Live_height_kakao.gif" 2>/dev/null)
+              if [ "$CODE" = "200" ]; then pf P "08-$A-http200"; else pf F "08-$A-http200 (HTTP $CODE)"; fi
+            done
+
+            echo ""
+            echo "================================================================"
+            echo " 결과: PASS=$PASS  FAIL=$FAIL  (총 $((PASS+FAIL))개, 13계정 x 8체크)"
+            echo "================================================================"
+            if [ "$FAIL" != "0" ]; then
+              echo -e "실패 목록:$FAILS"
+            fi
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE
+

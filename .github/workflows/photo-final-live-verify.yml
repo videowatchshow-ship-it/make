@@ -1,0 +1,23 @@
+name: 최종 배너 라이브 반영 확인 (실제 도메인 캐시버스팅 curl)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-final-live-verify.yml'
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 실제 도메인으로 직접 curl (CF 경유, 캐시버스팅)
+        run: |
+          URL="https://xn--9d0bw2fjtyymch7de9d.info/photo/images/ch/cent/Live_height_kakao.gif?cb=$(date +%s)"
+          echo "요청 URL: $URL"
+          curl -sS -D - -o /tmp/banner_check.gif "$URL" | grep -iE "^HTTP|cf-cache-status|content-length|content-type"
+          echo ""
+          echo "실제 다운로드 파일 크기:"
+          wc -c < /tmp/banner_check.gif
+          echo ""
+          echo "실제 다운로드 파일 SHA256:"
+          sha256sum /tmp/banner_check.gif

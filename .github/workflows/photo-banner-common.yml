@@ -1,0 +1,103 @@
+name: 참교육 배너 공용 위치에도 배포 (write.php 프리뷰 반영)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-banner-common.yml'
+
+jobs:
+  common:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+            TS=$(date +%s)
+            W=/tmp/banner_common$TS
+            mkdir -p $W
+
+            echo "===== [1] HTML 배너 재생성 (참교육 금색) ====="
+            cat > $W/banner.html << "HTML"
+            <!DOCTYPE html><html><head><meta charset=UTF-8><style>
+            @font-face{font-family:"BrandHanSans";src:url("/var/www/sites/chamgyo/public/photo/fonts/BlackHanSans.woff2") format("woff2");font-weight:400;font-style:normal;font-display:block;}
+            html,body{margin:0;padding:0;width:1080px;height:266px;overflow:hidden;background:radial-gradient(ellipse at center,#1a1200 0%,#000 80%);display:flex;align-items:center;justify-content:center;}
+            .logo{font-family:"BrandHanSans","Malgun Gothic",sans-serif;font-size:200px;font-weight:400;line-height:1;letter-spacing:-14px;background:linear-gradient(180deg,#ffe75e 0%,#ffcc00 45%,#e0a000 72%,#a06a00 100%);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-stroke:5px #1a1200;filter:drop-shadow(4px 5px 0 #000) drop-shadow(0 0 18px rgba(255,204,0,0.75));padding:8px 24px;transform:translateY(-8px);}
+            </style></head><body><div class=logo>참교육</div></body></html>
+            HTML
+
+            echo "===== [2] Chromium 헤드리스 스크린샷 ====="
+            /usr/bin/google-chrome --headless=new --no-sandbox --disable-gpu --hide-scrollbars \
+              --window-size=1080,266 \
+              --screenshot=$W/chamgyo.png \
+              "file://$W/banner.html" 2>&1 | tail -2
+
+            file $W/chamgyo.png
+
+            echo ""
+            echo "===== [3] 공용 위치 백업 + 참교육 배너로 덮어쓰기 ====="
+            # 백업
+            [ -f "$P1/images/Live_height_kakao.gif" ] && sudo cp "$P1/images/Live_height_kakao.gif" "$P1/images/Live_height_kakao.gif.orig.$TS"
+            sudo cp $W/chamgyo.png "$P1/images/Live_height_kakao.gif"
+            sudo chown www-data:www-data "$P1/images/Live_height_kakao.gif"
+            sudo chmod 644 "$P1/images/Live_height_kakao.gif"
+            SZ=$(sudo stat -c %s "$P1/images/Live_height_kakao.gif")
+            echo "  공용 Live_height_kakao.gif: ${SZ}B"
+
+            echo ""
+            echo "===== [4] 12 계정 폴더도 재확정 (혹시 이전 배포 실패했을 수 있어) ====="
+            ACCTS="aass0707 abc01 abc02 abc03 abc04 abc05 abc06 abc07 cent jay otuki tak"
+            for U in $ACCTS; do
+              DIR="$P1/images/ch/$U"
+              [ -d "$DIR" ] || continue
+              sudo cp $W/chamgyo.png "$DIR/Live_height_kakao.gif"
+              sudo chown www-data:www-data "$DIR/Live_height_kakao.gif"
+              sudo chmod 644 "$DIR/Live_height_kakao.gif"
+              SZ=$(sudo stat -c %s "$DIR/Live_height_kakao.gif")
+              echo "  $U: ${SZ}B"
+              # img_ver 갱신
+              VF="$P1/data/img_ver_$U.json"
+              sudo tee "$VF" > /dev/null << VJEOF
+            {"Live_height_kakao.gif":$TS,"_all":$TS}
+            VJEOF
+              sudo chown www-data:www-data "$VF"
+            done
+
+            echo ""
+            echo "===== [5] img_ver.json 공용 갱신 ====="
+            sudo tee "$P1/data/img_ver.json" > /dev/null << VJEOF
+            {"Live_height_kakao.gif":$TS,"_all":$TS}
+            VJEOF
+            sudo chown www-data:www-data "$P1/data/img_ver.json"
+            echo "  img_ver.json 갱신 (ts=$TS)"
+
+            echo ""
+            echo "===== [6] Cloudflare 캐시 purge (이미지 파일) ====="
+            if [ -n "$${CLOUDFLARE_TOKEN:-}" ] && [ -n "$${CLOUDFLARE_ZONE_ID:-}" ]; then
+              curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$${CLOUDFLARE_ZONE_ID}/purge_cache" \
+                -H "Authorization: Bearer $${CLOUDFLARE_TOKEN}" \
+                -H "Content-Type: application/json" \
+                --data "{\"files\":[\"https://xn--9d0bw2fjtyymch7de9d.info/photo/images/Live_height_kakao.gif\"]}" 2>&1 | head -3
+            fi
+
+            echo ""
+            echo "===== [7] gain 확인 - 손 안 댐 ====="
+            sudo ls -la "$P1/images/ch/gain/"
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE

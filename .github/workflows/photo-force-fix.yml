@@ -1,0 +1,66 @@
+name: 서버 실측 - setInterval 반영됐는지 + 캐시 강제 폭발
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-force-fix.yml'
+
+jobs:
+  force:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set -uo pipefail
+            P1="/var/www/sites/chamgyo/public/photo"
+            TS=$(date +%s)
+
+            echo "===== [1] write.php 안 setInterval / setTimeout 확인 ====="
+            sudo grep -n "__prevRooms.forEach(drawPreview)\|setInterval.*prevRooms\|setTimeout.*prevRooms" "$P1/write.php"
+
+            echo ""
+            echo "===== [2] setTimeout 이 남아있으면 강제로 setInterval 로 재변경 ====="
+            if sudo grep -q "setTimeout(function(){ window.__prevRooms.forEach" "$P1/write.php"; then
+              sudo sed -i "s|setTimeout(function(){ window.__prevRooms.forEach(drawPreview); }, 3000);|setInterval(function(){ window.__prevRooms.forEach(drawPreview); }, 1200);|" "$P1/write.php"
+              echo "  setTimeout → setInterval 재변경 완료"
+            else
+              echo "  이미 setInterval 로 되어있음"
+            fi
+
+            echo ""
+            echo "===== [3] Cloudflare + 브라우저 캐시 무효화용 write.php Last-Modified 강제 ====="
+            sudo touch "$P1/write.php"
+            sudo chown www-data:www-data "$P1/write.php"
+            sudo chmod 644 "$P1/write.php"
+            echo "  파일 시각: $(sudo stat -c %y "$P1/write.php")"
+
+            echo ""
+            echo "===== [4] Cloudflare 캐시 purge (write.php) ====="
+            if [ -n "$${CLOUDFLARE_TOKEN:-}" ] && [ -n "$${CLOUDFLARE_ZONE_ID:-}" ]; then
+              curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$${CLOUDFLARE_ZONE_ID}/purge_cache" \
+                -H "Authorization: Bearer $${CLOUDFLARE_TOKEN}" \
+                -H "Content-Type: application/json" \
+                --data "{\"files\":[\"https://xn--9d0bw2fjtyymch7de9d.info/photo/write.php\"]}" 2>&1 | head -3
+            fi
+
+            echo ""
+            echo "===== [5] 최종 확인 - setInterval 존재 ====="
+            sudo grep -n "setInterval.*prevRooms" "$P1/write.php" | head -3
+
+            echo ""
+            echo "===== DONE - 사용자는 Ctrl+Shift+R 로 브라우저 새로고침 필요 ====="
+            REMOTE

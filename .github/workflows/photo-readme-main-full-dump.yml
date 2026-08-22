@@ -1,0 +1,31 @@
+name: photo README.md 메인 전체 원문 (수정 전 베이스라인)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-readme-main-full-dump.yml'
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 90s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P="/var/www/sites/chamgyo/public"
+            echo "===== photo/README.md 전체 원문 (BEGIN) ====="
+            timeout 5 sudo cat "$P/photo/README.md" 2>&1
+            echo "===== photo/README.md 전체 원문 (END) ====="
+            REMOTE

@@ -1,0 +1,93 @@
+name: 잘못 배포된 파일 롤백 + 검증된 금색 배너로 재배포 (gain 제외)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-rollback-gold-banner.yml'
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 원본(/tmp) 금색 배너 재확인 + 롤백 배포
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          envs: CF_TOKEN,CF_ZONE
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+            SRC="/tmp/chamgyo_1787189338.png"
+
+            echo "===== [1] /tmp 원본 존재 + SHA256 재확인 (기대값: 58d42bf...) ====="
+            sudo ls -la "$SRC" 2>&1
+            sudo sha256sum "$SRC" 2>&1
+
+            echo ""
+            echo "===== [2] 픽셀 재검사 (금색 255,214,51 확인) ====="
+            python3 - << "PYEOF"
+            from PIL import Image
+            im = Image.open("/tmp/chamgyo_1787189338.png").convert("RGB")
+            w,h = im.size
+            print("size:", (w,h))
+            pts = [(w//2,h//2),(w//4,h//2),(3*w//4,h//2),(w//2,h//4),(w//2,3*h//4)]
+            for p in pts:
+                print(p, im.getpixel(p))
+            PYEOF
+
+            echo ""
+            echo "===== [3] 잘못 배포된 photo2 원본(어두운 JPEG) 롤백 -> 검증된 금색 배너로 교체 ====="
+            ACCOUNTS=$(sudo find "$P1/images/ch" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' 2>/dev/null | grep -v '^gain$')
+            echo "대상 계정: $ACCOUNTS"
+
+            sudo cp -f "$SRC" "$P1/images/Live_height_kakao.gif"
+            sudo chown www-data:www-data "$P1/images/Live_height_kakao.gif"
+            sudo chmod 644 "$P1/images/Live_height_kakao.gif"
+
+            for acc in $ACCOUNTS; do
+              sudo cp -f "$SRC" "$P1/images/ch/$acc/Live_height_kakao.gif"
+              sudo chown www-data:www-data "$P1/images/ch/$acc/Live_height_kakao.gif"
+              sudo chmod 644 "$P1/images/ch/$acc/Live_height_kakao.gif"
+            done
+
+            echo ""
+            echo "===== [4] SHA256 전수 재대조 ====="
+            sudo sha256sum "$SRC"
+            sudo sha256sum "$P1/images/Live_height_kakao.gif"
+            for acc in $ACCOUNTS; do
+              sudo sha256sum "$P1/images/ch/$acc/Live_height_kakao.gif"
+            done
+            REMOTE
+
+      - name: CF purge (에러 상세 출력) + 엣지 실측
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          echo "===== CF purge 응답 전체 ====="
+          curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE/purge_cache" \
+            -H "Authorization: Bearer $CF_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}'
+          echo ""
+          sleep 10
+
+          DOM="xn--9d0bw2fjtyymch7de9d.info"
+          for acc in otuki cent jay tak abc01 abc02 abc03 abc04 abc05 abc06 abc07 aass0707; do
+            echo "----- $acc -----"
+            curl -sS -o /dev/null -D - "https://$DOM/photo/images/ch/$acc/Live_height_kakao.gif?_=$(date +%s)" \
+              | grep -Ei "^HTTP|cf-cache-status|content-length"
+          done

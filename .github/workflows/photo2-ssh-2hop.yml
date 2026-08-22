@@ -1,0 +1,102 @@
+name: photo2 - SSH 2-hop (gauth -> gcloud -> my-site-1) source dump
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-ssh-2hop.yml'
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH to gauth -> gcloud to my-site-1 -> dump photo2 sources
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 300s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='
+            set -uo pipefail
+            P2="/var/www/sites/chamgyo/public/photo2"
+            P1="/var/www/sites/chamgyo/public/photo"
+
+            echo "===== [1] photo2 root listing ====="
+            ls -la "$P2/" | head -60
+
+            echo ""
+            echo "===== [2] photo2/data listing (real dir vs symlink) ====="
+            ls -la "$P2/data" 2>&1 | head -3
+            ls -la "$P2/data/" 2>&1 | head -60
+
+            echo ""
+            echo "===== [3] write.php SOURCE (labels/mapping 매핑 코드 찾기) ====="
+            cat "$P2/write.php"
+
+            echo ""
+            echo "===== [4] collector_xtd.php SOURCE ====="
+            cat "$P2/collector_xtd.php" 2>/dev/null || cat "$P1/collector_xtd.php"
+
+            echo ""
+            echo "===== [5] api_all_rooms.php SOURCE ====="
+            cat "$P2/api_all_rooms.php" 2>/dev/null || cat "$P1/api_all_rooms.php"
+
+            echo ""
+            echo "===== [6] crontab (모든 사용자) ====="
+            sudo crontab -l 2>/dev/null | grep -iE "photo|collector|cron" || true
+            for u in www-data videowatch_show root; do
+              echo "--- crontab -u $u ---"
+              sudo crontab -u $u -l 2>/dev/null | head -20 || echo "(none)"
+            done
+            echo "--- /etc/cron.d ---"
+            sudo ls -la /etc/cron.d/ 2>/dev/null | head -30
+            echo "--- /etc/cron.d/chamgyo* ---"
+            sudo cat /etc/cron.d/chamgyo* 2>/dev/null || echo "(no chamgyo cron file)"
+
+            echo ""
+            echo "===== [7] tables.json 실제 파일 (실체) ====="
+            sudo cat "$P1/data/tables.json"
+            echo ""
+
+            echo ""
+            echo "===== [8] xtd6688 collector last run log ====="
+            sudo find "$P1" "$P2" /var/log -name "*collector*" -o -name "*cron*log*" 2>/dev/null | head -10
+            sudo tail -n 50 /var/log/syslog 2>/dev/null | grep -i "collector\|photo\|cron" | tail -30 || true
+
+            echo ""
+            echo "===== [9] room_10.json vs room_11.json (fresh) 시간 비교 ====="
+            for L in 10 11 12 15 16 17 18 19 20 21 22 23 25 26 27 28 31 32 55 66 77 87 88 89 99; do
+              F="$P1/data/room_${L}.json"
+              if [ -f "$F" ]; then
+                MT=$(stat -c %y "$F" 2>/dev/null | cut -d. -f1)
+                SZ=$(stat -c %s "$F" 2>/dev/null)
+                echo "room_${L}.json: mtime=$MT size=${SZ}B"
+              else
+                echo "room_${L}.json: MISSING"
+              fi
+            done
+
+            echo ""
+            echo "===== [10] collector_xtd.php 실행 결과 (매뉴얼) ====="
+            cd "$P1" && sudo -u www-data /usr/bin/php collector_xtd.php 2>&1 | head -100
+
+            echo ""
+            echo "===== [11] 실행 후 room_10.json age 재확인 ====="
+            for L in 10 11 12 15; do
+              F="$P1/data/room_${L}.json"
+              MT=$(stat -c %y "$F" 2>/dev/null | cut -d. -f1)
+              echo "room_${L}.json: mtime=$MT"
+            done
+
+            echo ""
+            echo "===== DONE ====="
+            '

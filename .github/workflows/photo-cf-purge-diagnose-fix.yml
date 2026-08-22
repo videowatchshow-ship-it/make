@@ -1,0 +1,73 @@
+name: CF purge 라우팅 에러 진단 + 강제 purge + 최종 실측
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-cf-purge-diagnose-fix.yml'
+jobs:
+  fixpurge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: CF_ZONE / CF_TOKEN 값 길이·형식 진단 (값 자체는 노출 안 함)
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          echo "CF_ZONE length: ${#CF_ZONE}"
+          echo "CF_TOKEN length: ${#CF_TOKEN}"
+          echo "CF_ZONE first/last char check (masked): $(echo -n "$CF_ZONE" | sed 's/./*/g' | head -c 3)... (${#CF_ZONE} chars)"
+          echo "CF_ZONE is 32-hex zone id format?: "
+          if [[ "$CF_ZONE" =~ ^[a-f0-9]{32}$ ]]; then echo "OK - valid 32-hex format"; else echo "INVALID FORMAT - not a 32-char hex zone id"; fi
+
+      - name: 토큰 verify API로 유효성 확인
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+        run: |
+          echo "===== /user/tokens/verify 결과 ====="
+          curl -sS -X GET "https://api.cloudflare.com/client/v4/user/tokens/verify" \
+            -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json"
+          echo ""
+
+      - name: zone 정보 직접 조회로 올바른 zone id 재확인
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+        run: |
+          echo "===== zones?name=xn--9d0bw2fjtyymch7de9d.info 조회 (실제 zone id 확인용) ====="
+          curl -sS -X GET "https://api.cloudflare.com/client/v4/zones?name=xn--9d0bw2fjtyymch7de9d.info" \
+            -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" | python3 -m json.tool
+
+      - name: 조회된 zone id로 강제 purge 실행
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+        run: |
+          REAL_ZONE_ID=$(curl -sS -X GET "https://api.cloudflare.com/client/v4/zones?name=xn--9d0bw2fjtyymch7de9d.info" \
+            -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['result'][0]['id'] if d.get('result') else '')")
+          echo "조회된 실제 zone id: $REAL_ZONE_ID"
+
+          if [ -z "$REAL_ZONE_ID" ]; then
+            echo "zone id 조회 실패 - purge 불가"
+            exit 0
+          fi
+
+          echo "===== 실제 zone id로 purge_everything 실행 ====="
+          curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$REAL_ZONE_ID/purge_cache" \
+            -H "Authorization: Bearer $CF_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}'
+          echo ""
+          sleep 12
+
+          echo ""
+          echo "===== 캐시버스팅 없이 일반 URL 실측 (13계정) ====="
+          DOM="xn--9d0bw2fjtyymch7de9d.info"
+          for acc in otuki cent jay tak abc01 abc02 abc03 abc04 abc05 abc06 abc07 aass0707; do
+            echo "----- $acc -----"
+            curl -sS -o /dev/null -D - "https://$DOM/photo/images/ch/$acc/Live_height_kakao.gif" \
+              | grep -Ei "^HTTP|cf-cache-status|content-length"
+          done
+
+          echo ""
+          echo "===== 페이지 자체(CAH_1.html) 도 일반 URL로 재확인 ====="
+          curl -sS -o /dev/null -D - "https://$DOM/photo/CAH_1.html?ch=cent" | grep -Ei "^HTTP|cf-cache-status"

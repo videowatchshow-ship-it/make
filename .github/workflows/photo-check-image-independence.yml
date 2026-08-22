@@ -1,0 +1,68 @@
+name: 3뷰가 계정별 이미지(images/ch) 참조 하는지 실측
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-check-image-independence.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+
+            echo "===== [1] 각 뷰 HTML 안에서 이미지 참조 (img src) 전체 리스트 ====="
+            for VIEW in CAH_1 CAW_1 SNW_1; do
+              echo "--- $VIEW.html ---"
+              sudo grep -oE '(src|data-src)="[^"]*"' "$P1/$VIEW.html" | head -20
+            done
+
+            echo ""
+            echo "===== [2] images/ch 참조 여부 (있어야 계정별 이미지 지원) ====="
+            for VIEW in CAH_1 CAW_1 SNW_1; do
+              CNT=$(sudo grep -c "images/ch" "$P1/$VIEW.html" 2>/dev/null)
+              printf "  %-12s | images/ch 참조 %s회\n" "$VIEW" "$CNT"
+            done
+
+            echo ""
+            echo "===== [3] 각 계정별 images/ch/<계정>/ 실제 파일 ====="
+            sudo ls -la "$P1/images/ch/" 2>/dev/null
+
+            for U in cent tak abc01; do
+              echo ""
+              echo "--- images/ch/$U/ ---"
+              sudo ls -la "$P1/images/ch/$U/" 2>/dev/null || echo "  (폴더 없음)"
+            done
+
+            echo ""
+            echo "===== [4] write_upload.php: ch 저장 로직 확인 ====="
+            sudo grep -nE "images/ch|__all__|\\\$ch" "$P1/write_upload.php" | head -15
+
+            echo ""
+            echo "===== [5] api_img_ver.php: ch 파라미터 지원 여부 ====="
+            sudo cat "$P1/api_img_ver.php"
+
+            echo ""
+            echo "===== [6] img_ver_<계정>.json 파일 리스트 ====="
+            sudo ls -la "$P1/data/"img_ver_*.json 2>/dev/null
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE

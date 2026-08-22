@@ -1,0 +1,90 @@
+name: 사용자 원본 이미지 픽셀 검사 + cent SNW_1 렌더링 상태 확인
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-inspect-original.yml'
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 서버에서 원본 이미지 정보 + base64로 GH출력
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+            SRC="/tmp/chamgyo_1787189338.png"
+            CENT="$P1/images/ch/cent/Live_height_kakao.gif"
+
+            echo "===== [1] 원본 파일 정보 ====="
+            sudo file "$SRC"
+            sudo identify "$SRC" 2>/dev/null || sudo python3 -c "
+            from PIL import Image
+            im = Image.open('$SRC')
+            print(f'  크기: {im.size}, 모드: {im.mode}')
+            # 픽셀 분석
+            import collections
+            pixels = list(im.getdata())[:10000]
+            avg_r = sum(p[0] if isinstance(p,tuple) else p for p in pixels) / len(pixels)
+            if isinstance(pixels[0], tuple) and len(pixels[0]) >= 3:
+                avg_g = sum(p[1] for p in pixels) / len(pixels)
+                avg_b = sum(p[2] for p in pixels) / len(pixels)
+                print(f'  평균 RGB (첫 10k픽셀): R={avg_r:.0f} G={avg_g:.0f} B={avg_b:.0f}')
+            # 실제 색상 분포
+            uniq = collections.Counter(pixels)
+            print(f'  고유색 수 (첫 10k): {len(uniq)}')
+            print(f'  최다 5개 색상:')
+            for color, cnt in uniq.most_common(5):
+                print(f'    {color} : {cnt}회 ({cnt*100/len(pixels):.1f}%)')
+            "
+
+            echo ""
+            echo "===== [2] cent 계정 배포된 파일 vs 원본 SHA256 ====="
+            sudo sha256sum "$SRC" "$CENT" | awk '{print "  " $0}'
+
+            echo ""
+            echo "===== [3] 이미지 중앙 부분 실제 픽셀 값 (텍스트 있는지 확인) ====="
+            sudo python3 << "PYEOF"
+            from PIL import Image
+            im = Image.open('/tmp/chamgyo_1787189338.png')
+            w, h = im.size
+            print(f"  전체 크기: {w}x{h}")
+            # 중앙 100x50 영역 픽셀 검사
+            cx, cy = w//2, h//2
+            box = im.crop((cx-100, cy-25, cx+100, cy+25))
+            import collections
+            pixels = list(box.getdata())
+            uniq = collections.Counter(pixels)
+            print(f"  중앙 200x50 영역:")
+            print(f"    고유색: {len(uniq)}")
+            for color, cnt in uniq.most_common(3):
+                print(f"    {color} : {cnt}회")
+
+            # 밝은 픽셀(참교육 금색 텍스트 있는지) 찾기
+            bright_pixels = [p for p in pixels if isinstance(p,tuple) and p[0] > 200 and p[1] > 150]
+            print(f"    금색 계열(R>200,G>150) 픽셀 수: {len(bright_pixels)}")
+            PYEOF
+
+            echo ""
+            echo "===== [4] SNW_1.html 어떻게 배너 표시하는지 확인 ====="
+            sudo grep -n "signal_panel\|Live_height_kakao\|CAH_1" "$P1/SNW_1.html" 2>/dev/null | head -15
+
+            echo ""
+            echo "===== [5] 원본 base64 (앞 500자만, 파일 시작부) ====="
+            sudo base64 "$SRC" | head -c 500
+            echo ""
+            echo "===== DONE ====="
+            REMOTE

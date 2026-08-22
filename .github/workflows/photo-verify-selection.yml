@@ -1,0 +1,71 @@
+name: 계정 선택 방 3뷰 반영 실측 v3 (--resolve + 뷰 HTML 전체 dump)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-verify-selection.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 240s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+            DOM="xn--9d0bw2fjtyymch7de9d.info"
+            BASE="https://$DOM"
+            RESOLVE="--resolve $DOM:443:127.0.0.1"
+
+            echo "===== [1] api_selected_room.php 실응답 (SNI 정상) ====="
+            for U in cent tak gain aass0707 abc01 jay otuki; do
+              R=$(curl -sSk $RESOLVE "$BASE/photo/api_selected_room.php?ch=$U")
+              printf "  %-10s | %s\n" "$U" "$R"
+            done
+
+            echo ""
+            echo "===== [2] 강제 테스트: cent room 999 로 임시 후 api 반영 확인 ====="
+            ORIG=$(sudo cat "$P1/data/sel_cent.json")
+            echo "  원래: $ORIG"
+            echo "{\"room_id\":999,\"board\":\"CAH_1\"}" | sudo tee "$P1/data/sel_cent.json" > /dev/null
+            sudo chown www-data:www-data "$P1/data/sel_cent.json"
+            sleep 1
+            R=$(curl -sSk $RESOLVE "$BASE/photo/api_selected_room.php?ch=cent")
+            echo "  변경 후: $R"
+            echo "$R" | grep -q "999" && echo "  ✅ PASS 즉시 반영" || echo "  ❌ FAIL"
+            echo "$ORIG" | sudo tee "$P1/data/sel_cent.json" > /dev/null
+            sudo chown www-data:www-data "$P1/data/sel_cent.json"
+
+            echo ""
+            echo "===== [3] modules/dist 실체 리스트 ====="
+            sudo ls -la "$P1/modules/dist/" 2>/dev/null | head -20
+
+            echo ""
+            echo "===== [4] CAH_1.html 전체 소스 (뷰가 어떻게 방을 결정하는지 확인) ====="
+            sudo cat "$P1/CAH_1.html"
+
+            echo ""
+            echo "===== [5] CAW_1.html 전체 소스 ====="
+            sudo cat "$P1/CAW_1.html"
+
+            echo ""
+            echo "===== [6] SNW_1.html 처음 100줄 ====="
+            sudo head -100 "$P1/SNW_1.html"
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE

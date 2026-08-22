@@ -1,0 +1,85 @@
+name: write.php 방 카드 썸네일 자동 갱신 (1.2초 주기)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-fix-preview-refresh.yml'
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set -uo pipefail
+            P1="/var/www/sites/chamgyo/public/photo"
+            TS=$(date +%s)
+
+            F="$P1/write.php"
+            sudo cp "$F" "$F.bak.preview.$TS"
+
+            echo "===== [1] BEFORE - 썸네일 setTimeout 부분 ====="
+            sudo grep -n "__prevRooms.forEach(drawPreview)\|이후 정적\|focus 정적" "$F" | head -5
+
+            echo ""
+            echo "===== [2] Python 으로 setTimeout(...3000) → setInterval(...1200) 교체 ====="
+            sudo TARGET="$F" python3 << "PYEOF"
+            import os, re
+            p = os.environ["TARGET"]
+            s = open(p).read()
+
+            old = '''  window.__prevRooms.forEach(drawPreview);
+              setTimeout(function(){ window.__prevRooms.forEach(drawPreview); }, 3000); /* 초기데이터 1회 보정, 이후 정적 */'''
+
+            new = '''  window.__prevRooms.forEach(drawPreview);
+              setInterval(function(){ window.__prevRooms.forEach(drawPreview); }, 1200); /* 1.2초마다 자동 갱신 - 원본 실시간 반영 */'''
+
+            if old in s:
+                s = s.replace(old, new)
+                print("교체 성공 (정확 매칭)")
+            else:
+                # Fallback: regex - 어떤 형태든 setTimeout(...3000) 을 setInterval(...1200) 로
+                s2 = re.sub(
+                    r"setTimeout\(function\(\)\{\s*window\.__prevRooms\.forEach\(drawPreview\);\s*\},\s*3000\);.*?이후 정적[^*]*\*/",
+                    "setInterval(function(){ window.__prevRooms.forEach(drawPreview); }, 1200); /* 1.2초마다 자동 갱신 */",
+                    s, flags=re.DOTALL
+                )
+                if s2 != s:
+                    s = s2
+                    print("교체 성공 (regex)")
+                else:
+                    print("❌ setTimeout 못 찾음")
+                    raise SystemExit(1)
+
+            open(p, "w").write(s)
+            print(f"file size: {os.path.getsize(p)}B")
+            PYEOF
+
+            sudo chown www-data:www-data "$F"
+            sudo chmod 644 "$F"
+
+            echo ""
+            echo "===== [3] AFTER - setInterval 로 바뀐 것 확인 ====="
+            sudo grep -n "__prevRooms.forEach(drawPreview)\|setInterval.*prevRooms\|1.2초마다" "$F" | head -5
+
+            echo ""
+            echo "===== [4] PHP 문법 검사 ====="
+            sudo /usr/bin/php -l "$F"
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE

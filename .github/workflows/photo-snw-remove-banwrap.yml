@@ -1,0 +1,100 @@
+name: photo/SNW_1.html ban_wrap 실제 제거 (검증 FAIL 조치)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-snw-remove-banwrap.yml'
+
+jobs:
+  nuke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set -uo pipefail
+            P1="/var/www/sites/chamgyo/public/photo"
+            TS=$(date +%s)
+
+            F="$P1/SNW_1.html"
+
+            echo "===== [1] BEFORE - ban_wrap 라인 ====="
+            sudo grep -n "ban_wrap" "$F" | head -5
+            BEFORE_SIZE=$(sudo stat -c %s "$F")
+            echo "  size: ${BEFORE_SIZE}B"
+
+            sudo cp "$F" "$F.bak.banwrap.$TS"
+
+            echo ""
+            echo "===== [2] Python 으로 ban_wrap CSS 룰 + <div class=ban_wrap> 블록 완전 제거 ====="
+            sudo TARGET="$F" python3 << "PYEOF"
+            import os, re
+            p = os.environ["TARGET"]
+            s = open(p).read()
+            before = len(s)
+
+            # (1) CSS 규칙: .ban_wrap{...} 한 줄 통째 삭제
+            s = re.sub(r"\.ban_wrap\s*\{[^}]*\}\s*", "", s)
+
+            # (2) <div class="ban_wrap"> ... </div> 태그 블록 완전 삭제
+            #     열림 태그부터 짝 맞는 </div> 까지 (nested div 고려 · greedy 아닌 스택 방식)
+            i = 0
+            out = []
+            open_tag = re.compile(r'<div\s+[^>]*class\s*=\s*["\']ban_wrap["\'][^>]*>', re.IGNORECASE)
+            while i < len(s):
+                m = open_tag.search(s, i)
+                if not m:
+                    out.append(s[i:])
+                    break
+                out.append(s[i:m.start()])
+                j = m.end()
+                depth = 1
+                while j < len(s) and depth > 0:
+                    nxt_open = s.find("<div", j)
+                    nxt_close = s.find("</div>", j)
+                    if nxt_close == -1:
+                        break
+                    if nxt_open != -1 and nxt_open < nxt_close:
+                        depth += 1
+                        j = nxt_open + 4
+                    else:
+                        depth -= 1
+                        j = nxt_close + 6
+                i = j
+
+            new = "".join(out)
+            # 남은 ban_wrap 참조 (스크립트 셀렉터 등) 삭제 안 함 - 위에서 이미 태그+CSS 사라졌으므로 참조는 무해
+            open(p, "w").write(new)
+            print(f"before={before}B after={len(new)}B diff={before-len(new)}B")
+            PYEOF
+
+            sudo chown www-data:www-data "$F"
+            sudo chmod 644 "$F"
+
+            echo ""
+            echo "===== [3] AFTER - ban_wrap grep ====="
+            AFTER_SIZE=$(sudo stat -c %s "$F")
+            echo "  size: ${AFTER_SIZE}B (감소: $((BEFORE_SIZE - AFTER_SIZE))B)"
+            sudo grep -c "ban_wrap" "$F" 2>/dev/null | xargs -I{} echo "  ban_wrap 잔존 개수: {} (기대: 0)"
+            sudo grep -n "ban_wrap" "$F" | head -5 || echo "  (없음)"
+
+            echo ""
+            echo "===== [4] SNW_1.html 라인 40-60 확인 ====="
+            sudo sed -n "40,60p" "$F"
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE

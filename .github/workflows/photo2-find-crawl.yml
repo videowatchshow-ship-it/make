@@ -1,0 +1,171 @@
+name: photo2 - 실제 크롤링 upstream URL 뽑기
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-find-crawl.yml'
+
+jobs:
+  find-crawl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. room_XX.json 안의 source/id 필드 전수 조사
+        run: |
+          set +e
+          BASE="https://xn--9d0bw2fjtyymch7de9d.info"
+          TS=$(date +%s)
+
+          echo "===== 모든 방 파일의 모든 필드 (source, url, api 힌트) ====="
+          # 우리 photo/data/에 있는 모든 라벨 시도 (넓게)
+          for L in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 40 50 55 62 66 73 77 87 88 89 99 100 101 102 103 104 105 106 107 108 109 110; do
+            curl -sS --max-time 5 "$BASE/photo/data/room_${L}.json?_t=$TS" -o /tmp/r 2>/dev/null
+            if [ -s /tmp/r ]; then
+              python3 -c "
+          import json,sys
+          try:
+              d=json.load(open('/tmp/r'))
+              # 모든 top-level keys
+              keys=list(d.keys())
+              src=d.get('source','-')
+              apiId=d.get('apiId','-')
+              api_id=d.get('api_id','-')
+              url=d.get('url','-')
+              t=d.get('t','?')
+              nums_len=len(d.get('nums',[]))
+              print(f'  room_${L}.json: keys={keys} source={src} apiId={apiId} api_id={api_id} url={url} t={t} nums_len={nums_len}')
+          except: pass
+          " 2>/dev/null
+            fi
+          done
+
+      - name: 2. photo/ 폴더 스캔 - 모든 데이터 파일 리스팅
+        run: |
+          set +e
+          BASE="https://xn--9d0bw2fjtyymch7de9d.info"
+          TS=$(date +%s)
+
+          echo "===== data/ 폴더 안의 다른 파일들 시도 ====="
+          for f in \
+              "tables.json" "selected_room.json" "config.json" "meta.json" \
+              "sources.json" "upstream.json" "endpoints.json" "collectors.json" \
+              "kambodia.json" "cambodia.json" "bin.json" "xtd.json" "sinji.json" "sinji_new.json" \
+              "map.json" "labels.json" "history.json" "log.json" \
+              "collector_log.txt" "cron.log" "error.log" "debug.log" "collector.log" \
+              "collectors/config.json" "config/upstream.json"; do
+            CODE=$(curl -sS --max-time 5 -o /tmp/f -w "%{http_code}" "$BASE/photo/data/$f?_t=$TS")
+            SIZE=$(stat -c%s /tmp/f 2>/dev/null || echo 0)
+            if [ "$CODE" = "200" ] && [ "$SIZE" -gt 0 ]; then
+              echo "  photo/data/$f → HTTP $CODE ($SIZE B)"
+              head -c 800 /tmp/f | tr '\n' ' '
+              echo ""
+            fi
+          done
+          echo ""
+
+      - name: 3. photo/, photo2/, photo3/ 루트에서 collector 관련 파일 스캔
+        run: |
+          set +e
+          BASE="https://xn--9d0bw2fjtyymch7de9d.info"
+          TS=$(date +%s)
+
+          for FOLDER in photo photo2 photo3; do
+            echo "===== $FOLDER/ 스캔 ====="
+            for f in \
+                "collector.php" "collector_xtd.php" "collector_sinji.php" "collector_new.php" \
+                "collector_bin.php" "collector_kambodia.php" "collector_cambodia.php" \
+                "collect.php" "cron.php" "fetch.php" "poll.php" \
+                "api/collector.php" "api/upstream.php" "api/fetch.php" \
+                "upstream.php" "worker.php" "scheduler.php" \
+                "config.php" "config.json" "sources.php" \
+                "collector.php.txt" "collector.txt" "collector.bak" "collector.php.bak"; do
+              CODE=$(curl -sS -o /tmp/f -w "%{http_code}" --max-time 5 "$BASE/$FOLDER/$f?_t=$TS")
+              SIZE=$(stat -c%s /tmp/f 2>/dev/null || echo 0)
+              if [ "$CODE" = "200" ] && [ "$SIZE" -gt 0 ] && [ "$SIZE" -lt 3 ]; then
+                echo "  $FOLDER/$f → HTTP $CODE (${SIZE}B - PHP executed, no source)"
+              elif [ "$CODE" = "200" ] && [ "$SIZE" -ge 3 ]; then
+                echo "  $FOLDER/$f → HTTP $CODE (${SIZE}B)"
+                # source hints
+                grep -oE 'https?://[^"'"'"'`\ ]+' /tmp/f 2>/dev/null | head -5
+              fi
+            done
+          done
+
+      - name: 4. api_all_rooms.php 지금 상태 + hot_patches.json 안에 upstream 흔적
+        run: |
+          set +e
+          BASE="https://xn--9d0bw2fjtyymch7de9d.info"
+          TS=$(date +%s)
+
+          echo "===== photo/api_all_rooms.php + photo2/api_all_rooms.php ====="
+          for FOLDER in photo photo2 photo3; do
+            echo "--- $FOLDER/api_all_rooms.php ---"
+            curl -sS --max-time 10 "$BASE/$FOLDER/api_all_rooms.php?_t=$TS"
+            echo ""
+          done
+
+          echo ""
+          echo "===== hot_patches.json 안에 upstream 힌트 있는지 (모든 patch content) ====="
+          curl -sS --max-time 10 "$BASE/photo/hot_patches.json?_t=$TS" > /tmp/hp.json
+          python3 -c "
+          import json
+          d=json.load(open('/tmp/hp.json'))
+          patches = d.get('patches', d if isinstance(d,list) else [])
+          for p in patches:
+              c = p.get('content','')
+              hits = [line for line in c.split(';') if any(k in line for k in ['fetch','http','api_','room_','xtd','sinji','cambodia','kambodia'])]
+              if hits:
+                  print(f\"--- patch: {p.get('id','?')} ---\")
+                  for h in hits[:10]: print(' ', h.strip()[:250])
+          "
+
+      - name: 5. bundle.js / bgl.js / signal.js 안의 EVERY fetch/xhr call
+        run: |
+          set +e
+          BASE="https://xn--9d0bw2fjtyymch7de9d.info"
+          TS=$(date +%s)
+
+          for js in bgl.js dragon_fx.js signal.js signal_common.js luzhu_render.js hot-patch.js modules/dist/bundle.js; do
+            SAFE=$(echo "$js" | tr '/' '_')
+            curl -sS --max-time 15 "$BASE/photo/$js?_t=$TS" -o /tmp/j_$SAFE
+            SIZE=$(stat -c%s /tmp/j_$SAFE 2>/dev/null || echo 0)
+            if [ "$SIZE" -gt 100 ]; then
+              echo ""
+              echo "===== $js ($SIZE B) fetch/xhr/room_ 패턴 ====="
+              grep -oE 'fetch\([^)]{0,200}|new XMLHttpRequest|\.open\("(GET|POST)","[^"]+"|room_\$?\{?[^\.]{0,40}\.json|/api_[a-z_]+\.php|url:\s*["'"'"'][^"'"'"']+["'"'"']|https?://[a-z0-9.-]+/[a-z0-9./_?=&-]*' /tmp/j_$SAFE 2>/dev/null | sort -u | head -25
+            fi
+          done
+
+      - name: 6. crontab 힌트 - collector가 어디 API를 때리는지 로그 파일
+        run: |
+          set +e
+          BASE="https://xn--9d0bw2fjtyymch7de9d.info"
+          TS=$(date +%s)
+
+          echo "===== 로그 파일 후보 ====="
+          for LOG in \
+              "photo/log.txt" "photo/cron.log" "photo/collector.log" "photo/error.log" \
+              "photo/data/log.txt" "photo/data/collector.log" \
+              "photo/data/last_run.json" "photo/data/status.json" "photo/data/health.json" \
+              "photo2/log.txt" "photo2/cron.log" "photo2/collector.log" \
+              "logs/collector.log" "logs/cron.log" "logs/access.log" \
+              "chamgyo/log.txt" "cron_log.txt" \
+              "photo/data/error.txt" "photo/data/debug.txt"; do
+            CODE=$(curl -sS -o /tmp/L -w "%{http_code}" --max-time 5 "$BASE/$LOG?_t=$TS")
+            SIZE=$(stat -c%s /tmp/L 2>/dev/null || echo 0)
+            if [ "$CODE" = "200" ] && [ "$SIZE" -gt 0 ]; then
+              echo "  ✓ $LOG (HTTP $CODE, ${SIZE}B)"
+              head -c 500 /tmp/L
+              echo ""
+            fi
+          done
+
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: find-crawl
+          path: /tmp/j_*
+          retention-days: 7

@@ -1,0 +1,87 @@
+name: write_url.php 남은 denny option 최종 제거
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-fix-master-dropdown.yml'
+
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set -uo pipefail
+            P1="/var/www/sites/chamgyo/public/photo"
+            TS=$(date +%s)
+
+            F="$P1/write_url.php"
+
+            echo "===== [1] BEFORE - line 161 ctlCh 셀렉트 원본 ====="
+            sudo sed -n "161p" "$F"
+
+            sudo cp "$F" "$F.bak.denny2.$TS"
+
+            echo ""
+            echo "===== [2] Python: <option>denny</option> 완전 제거 ====="
+            sudo TARGET="$F" python3 << "PYEOF"
+            import os, re
+            p = os.environ["TARGET"]
+            s = open(p).read()
+            before = len(s)
+            # value 없는 <option>denny</option> 도 잡기
+            s = re.sub(r'<option[^>]*>denny</option>', '', s)
+            open(p, "w").write(s)
+            print(f"before={before}B after={len(s)}B diff={before-len(s)}B")
+            PYEOF
+
+            sudo chown www-data:www-data "$F"
+            sudo chmod 644 "$F"
+
+            echo ""
+            echo "===== [3] AFTER - line 161 ====="
+            sudo sed -n "161p" "$F"
+
+            echo ""
+            echo "===== [4] denny 최종 grep ====="
+            CNT=$(sudo grep -c "denny" "$F" 2>/dev/null)
+            echo "  write_url.php denny 잔존: $CNT (기대: 0)"
+            echo ""
+            echo "전체 photo/ 스캔:"
+            sudo grep -rl "denny" "$P1"/*.php "$P1"/*.html 2>/dev/null || echo "  ✅ denny 완전 제거"
+
+            echo ""
+            echo "===== [5] PHP 문법 검사 ====="
+            sudo /usr/bin/php -l "$F"
+
+            echo ""
+            echo "===== [6] 최종 요약 - photo 계정 시스템 상태 ====="
+            echo "  로그인 계정 (login_check.php \$ACCOUNTS):"
+            sudo grep -E "^\s*'[a-z0-9_]+'\s*=>" "$P1/login_check.php" | sed "s/^/    /"
+            echo ""
+            echo "  sel_*.json 파일 (관리 대상 채널):"
+            sudo ls "$P1/data/"sel_*.json 2>/dev/null | xargs -n1 basename | sed "s/^/    /"
+            echo ""
+            echo "  마스터 채널 드롭다운 (write.php):"
+            sudo grep -oE '<option value="[^"]*">[^<]*</option>' "$P1/write.php" | sed "s/^/    /"
+            echo ""
+            echo "  백엔드 write_select_room.php \$ALL_CH:"
+            sudo grep "^\\\$ALL_CH" "$P1/write_select_room.php" | sed "s/^/    /"
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE

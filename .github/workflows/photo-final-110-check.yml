@@ -1,0 +1,94 @@
+name: 방 110 최종 대조 - fcj6 원본 페이지 + xjh API + 서버 3소스 모두
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-final-110-check.yml'
+
+jobs:
+  final:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='bash -s' << "REMOTE"
+            set +u
+            P1="/var/www/sites/chamgyo/public/photo"
+
+            echo "===== [A] tables.json 안 싱지뉴 관련 모든 키 (매핑 진짜 확인) ====="
+            sudo cat "$P1/data/tables.json" | python3 -c "
+            import sys, json
+            d = json.load(sys.stdin)
+            for k, v in d.items():
+                if 'sinji' in k or 'sn' in k:
+                    print(f'  {k}: {v}')
+            "
+
+            echo ""
+            echo "===== [B] write.php 에서 실제 sn_rooms/sn_map/sn_labels 코드 ====="
+            sudo grep -nE "sn_rooms|sn_map|sn_labels|sinji_new|api_sn_rooms" "$P1/write.php" | head -20
+
+            echo ""
+            echo "===== [C] api_sn_rooms.php 실제 응답 (write.php UI에 노출되는 방 리스트) ====="
+            sudo cat "$P1/api_sn_rooms.php" 2>/dev/null
+            echo ""
+            echo "실제 응답:"
+            DOM="xn--9d0bw2fjtyymch7de9d.info"
+            curl -sSk --resolve "$DOM:443:127.0.0.1" "https://$DOM/photo/api_sn_rooms.php" 2>/dev/null | python3 -m json.tool 2>/dev/null | head -80
+
+            echo ""
+            echo "===== [D] 원본 fcj6.oqogyf.com/?room_id=110 실제 페이지 HTML (제목/방번호 확인) ====="
+            R=$(curl -sS --max-time 8 \
+              -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+              -H "Accept: text/html" \
+              "https://fcj6.oqogyf.com/?room_id=110" 2>&1)
+            echo "$R" | head -100
+
+            echo ""
+            echo "===== [E] xjh API - room_id 다른 값들도 몇 개 대조 (혹시 110이 매핑 오류인지) ====="
+            API="https://xjh.liveview2024.vip"
+            for RID in 100 101 105 108 109 110 111 112 115 120; do
+              R=$(curl -sS --max-time 4 \
+                -H "Origin: https://fcj6.oqogyf.com" \
+                -H "Referer: https://fcj6.oqogyf.com/" \
+                "$API/api/pub/get_newly_issue?room_id=$RID" 2>/dev/null)
+              IID=$(echo "$R" | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('data',{}).get('id','none'))" 2>/dev/null)
+              echo "  room_id=$RID → issue_id=$IID"
+            done
+
+            echo ""
+            echo "===== [F] 서버 room_110.json + 브라우저 실제 요청 응답 ====="
+            echo "서버 파일:"
+            sudo cat "$P1/data/room_110.json"
+            echo ""
+            echo "브라우저처럼 HTTPS 로 fetch:"
+            curl -sSk --resolve "$DOM:443:127.0.0.1" "https://$DOM/photo/data/room_110.json?t=$(date +%s)"
+
+            echo ""
+            echo ""
+            echo "===== [G] Cloudflare 캐시 우회 - CF 통과한 응답 ====="
+            curl -sS --max-time 5 -H "Cache-Control: no-cache" "https://$DOM/photo/data/room_110.json?t=$(date +%s)" 2>&1 | head -5
+
+            echo ""
+            echo "===== [H] 지금 즉시 collector 강제 실행 (60초 대기 없이) ====="
+            sudo -u www-data /usr/bin/php "$P1/collector_sinji_new.php" once=1 2>&1 | head -5 || echo "실행 실패"
+            echo ""
+            echo "실행 후 room_110.json:"
+            sudo cat "$P1/data/room_110.json"
+
+            echo ""
+            echo "===== DONE ====="
+            REMOTE
