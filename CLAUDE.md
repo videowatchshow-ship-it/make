@@ -57,6 +57,11 @@
 - 서버 IP는 README에 마스킹
 - tak 계정 테스트 시 다른 계정 건드리지 말 것
 
+## accounts.html 규칙
+- accounts.html은 검색/조회 + 로그인 전용 페이지 (계정 리스트 표시 금지)
+- 계정 전체 리스트는 gauth.cent-solution.online 메인(index.html)에만 존재
+- accounts.html에서는 이메일 검색 → 조회 결과 + 🔑 로그인 + 다음 순번만 표시
+
 ## gauth 계정 조회 "다음 순번" 규칙 (재발 방지)
 - 조회 시 "다음 순번"은 반드시 서버 원본 순서(`accounts_normalized.json` 그대로)를 따른다
 - 프론트엔드에서 정렬(`_sortByExcelDate` 등)한 배열을 다음 순번에 사용 금지
