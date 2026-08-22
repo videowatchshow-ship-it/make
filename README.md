@@ -165,7 +165,8 @@ gain · woodong · sunbi · simmani · win · aura · bacad · camstouch · jame
 | **상단 요약바** | 성공 N · 실패 N · 미시도 N · 전체 N |
 | **필터** | 사이트 드롭다운 · 로그인 상태 필터 (성공/실패/미시도) · 텍스트 검색 |
 | **컴팩트 리스트** | 1만개 대응 · 번호 · 로그인상태점(●) · 이메일 · 사이트 배지 |
-| **개별 로그인** | 각 행에 🔑 버튼 → `POST /api/login-one` → 결과를 localStorage + 서버 병합 |
+| **API 토큰** | 상단 토큰 입력란 → `sessionStorage('gauth_token')` → 모든 fetch에 `Authorization: Bearer` 헤더 전송 |
+| **개별 로그인** | 각 행에 🔑 버튼 → `POST /api/login-one` (Bearer 인증) → 결과를 localStorage + 서버 병합 |
 | **서버 병합** | `GET /api/login-results` → localStorage와 timestamp 비교 병합 |
 | **다운로드** | ⬇ CSV · ⬇ JSON (`GET /api/export/login-results?format=csv\|json`) |
 
@@ -181,7 +182,7 @@ gain · woodong · sunbi · simmani · win · aura · bacad · camstouch · jame
 | `GET` | `/api/account-status` | 실시간 상태 (server_time, 로그인 현황) | - |
 | `GET` | `/api/youtube/channel-status?url=` | 유튜브 채널 통계 (구독·영상·조회·생방송) | - |
 | `GET` | `/api/accounts` | 전체 계정 목록 | - |
-| `POST` | `/api/login-one` | 단일 계정 Puppeteer 로그인 시도 | - |
+| `POST` | `/api/login-one` | 단일 계정 Puppeteer 로그인 시도 | Bearer 토큰 |
 | `GET` | `/api/lookup` | 이메일 조회 | - |
 | `GET` | `/api/search-account?q=` | 계정 검색 | - |
 | `GET` | `/api/login-results` | 실 로그인 결과 전체 조회 (login_results.json) | - |
@@ -396,6 +397,9 @@ const url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURICompo
 | Excel 임시파일 `~$` 접두사 | Microsoft 지원 | https://support.microsoft.com/en-us/topic/description-of-the-tilde-file-43b45e3b-1c35-4460-a04e-8c02a999d3c1 |
 | 클립보드 API | MDN Clipboard API | https://developer.mozilla.org/en-US/docs/Web/API/Clipboard/writeText |
 | 파일 API (`webkitdirectory`) | MDN webkitRelativePath (비표준, Chrome/Edge/Firefox 지원) | https://developer.mozilla.org/en-US/docs/Web/API/File/webkitRelativePath |
+| sessionStorage (API 토큰 저장) | MDN Web Storage API | https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage |
+| Fetch API + Authorization Bearer 헤더 | MDN Fetch API / HTTP Authorization | https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch / https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Authorization |
+| Express `res.json()` 인터셉트 (login-one 결과 저장) | Express 4.x API `res.json()` | https://expressjs.com/en/4x/api.html#res.json |
 
 > **heuristic (표준 없음)**: 헤더 패턴 매칭(`HEADER_PATTERNS`), 파일명 날짜 추출(`parseDateFromFilename`), 반복숫자 전화번호 제외 — Excel 파일에 공식 포맷이 없으므로 코드 주석에 heuristic 명시
 

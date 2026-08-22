@@ -1,0 +1,68 @@
+name: patch login-one to save results
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-patch-login-one.txt']
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Patch login-one route to call saveLoginResult
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            set -e
+            APP=/opt/gauth-full/rebrowser-login.js
+
+            echo "=== 1. Check saveLoginResult exists ==="
+            if ! grep -q 'function saveLoginResult' "$APP"; then
+              echo "ERROR: saveLoginResult not found. Run deploy-login-results-api first."
+              exit 1
+            fi
+
+            echo "=== 2. Check if login-one already saves results ==="
+            if grep -q 'saveLoginResult' "$APP" && grep -A5 'login-one' "$APP" | grep -q 'saveLoginResult'; then
+              echo "login-one already calls saveLoginResult, skipping"
+              exit 0
+            fi
+
+            echo "=== 3. Patch login-one response to save result ==="
+            sudo cp "$APP" "${APP}.bak.loginone"
+
+            PATCH_B64="Ci8vIOKUgOKUgCBsb2dpbi1vbmUg6rKw6rO8IOyggOyepSDtjKjsuZgg4pSA4pSACi8vIEV4cHJlc3MgbWlkZGxld2FyZTogL2FwaS9sb2dpbi1vbmUg7J2R64u1IO2bhCByZXMuanNvbiDtmLjstpwg7jig7JeQIOyggOyepQovLyByZWY6IGh0dHBzOi8vZXhwcmVzc2pzLmNvbS9lbi80eC9hcGkuaHRtbCNyZXMuanNvbgpjb25zdCBfb3JpZ0pzb24gPSByZXF1aXJlKCdleHByZXNzJykucmVzcG9uc2UuanNvbjsKY29uc3QgX29yaWdTZW5kID0gcmVxdWlyZSgnZXhwcmVzcycpLnJlc3BvbnNlLnNlbmQ7CgphcHAudXNlKCcvYXBpL2xvZ2luLW9uZScsIChyZXEsIHJlcywgbmV4dCkgPT4gewogIGNvbnN0IGVtYWlsID0gcmVxLmJvZHkgJiYgcmVxLmJvZHkuZW1haWw7CiAgaWYgKCFlbWFpbCkgcmV0dXJuIG5leHQoKTsKICBjb25zdCBvcmlnSnNvbiA9IHJlcy5qc29uLmJpbmQocmVzKTsKICByZXMuanNvbiA9IGZ1bmN0aW9uKGRhdGEpIHsKICAgIHRyeSB7CiAgICAgIGlmICh0eXBlb2Ygc2F2ZUxvZ2luUmVzdWx0ID09PSAnZnVuY3Rpb24nICYmIGRhdGEpIHsKICAgICAgICBzYXZlTG9naW5SZXN1bHQoZW1haWwsIHsKICAgICAgICAgIG9rOiAhIWRhdGEub2ssCiAgICAgICAgICBtc2c6IGRhdGEubXNnIHx8IGRhdGEubWVzc2FnZSB8fCAnJywKICAgICAgICAgIGVycjogZGF0YS5lcnIgfHwgZGF0YS5lcnJvciB8fCAnJwogICAgICAgIH0pOwogICAgICB9CiAgICB9IGNhdGNoKGUpIHsgY29uc29sZS5lcnJvcignc2F2ZUxvZ2luUmVzdWx0IGVycjonLCBlLm1lc3NhZ2UpOyB9CiAgICByZXR1cm4gb3JpZ0pzb24oZGF0YSk7CiAgfTsKICBuZXh0KCk7Cn0pOwo="
+
+            echo "$PATCH_B64" | base64 -d > /tmp/login_one_save_patch.js
+
+            LISTEN_LINE=$(sudo grep -n 'app\.listen\|server\.listen' "$APP" | head -1 | cut -d: -f1)
+            if [ -z "$LISTEN_LINE" ]; then
+              sudo bash -c "cat /tmp/login_one_save_patch.js >> $APP"
+            else
+              sudo sed -i "${LISTEN_LINE}r /tmp/login_one_save_patch.js" "$APP"
+            fi
+            rm /tmp/login_one_save_patch.js
+            echo "login-one save patch applied"
+
+            echo "=== 4. Restart gauth ==="
+            sudo systemctl restart gauth
+            sleep 2
+            if systemctl is-active --quiet gauth; then
+              echo "gauth running OK"
+            else
+              echo "gauth failed, rolling back"
+              sudo cp "${APP}.bak.loginone" "$APP"
+              sudo systemctl restart gauth
+              exit 1
+            fi
+
+            echo "=== 5. Verify ==="
+            curl -sf http://localhost:4000/api/login-results | head -c 200
+            echo ""
+            echo "DONE"
