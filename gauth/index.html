@@ -613,7 +613,7 @@ updateUploadStatus();
 
 <script>
 const PAGE_SIZE = 50
-let ALL=[], FILTERED=[], PAGE=1
+let ALL=[], ALL_ORIGINAL=[], FILTERED=[], PAGE=1
 let _lookupEmail = null, _loginEmail = null
 const vp = document.getElementById('viewport'), sp = document.getElementById('spacer')
 
@@ -671,6 +671,7 @@ async function load(){
     var ad = a.account_date || null;
     return Object.assign({}, a, {has_session: sess.has(a.email), lock_reason: f.reason || null, account_date: ad, source_file: _fixMojibake(a.source_file)});
   })
+  ALL_ORIGINAL = ALL.slice()
   ALL = _sortByExcelDate(ALL)
   var _fc = n.summary && n.summary.files_scanned;
   if(_fc == null){
@@ -986,13 +987,13 @@ async function lookup(){
       <div></div><div>${btn}</div>
     </div>
     <div id="lookup-next" style="margin-top:14px;border-top:1px solid #22282f;padding-top:10px"></div>`
-  if(window.ALL && window.ALL.length){
-    const idx = ALL.findIndex(a=>a.email===j.email)
+  if(window.ALL_ORIGINAL && window.ALL_ORIGINAL.length){
+    const idx = ALL_ORIGINAL.findIndex(a=>a.email===j.email)
     if(idx>=0){
-      const next = ALL.slice(idx+1, idx+6)
+      const next = ALL_ORIGINAL.slice(idx+1, idx+51)
       const nbox = document.getElementById('lookup-next')
       if(nbox && next.length){
-        nbox.innerHTML = '<div style="color:#8a95a5;font-size:12px;margin-bottom:6px">▼ 다음 순번 ('+(idx+2)+'~'+(idx+1+next.length)+' / '+ALL.length+')</div>'
+        nbox.innerHTML = '<div style="color:#8a95a5;font-size:12px;margin-bottom:6px">▼ 다음 순번 ('+(idx+2)+'~'+(idx+1+next.length)+' / '+ALL_ORIGINAL.length+')</div>'
           + next.map((a,i)=>'<div style="padding:5px 0;border-bottom:1px solid #1a1f26;font-size:12.5px;display:flex;align-items:center;gap:8px">'
             +'<span style="color:#8a95a5;font-family:monospace;min-width:35px">'+(idx+2+i)+'.</span>'
             +'<span style="color:#7dabff;cursor:pointer;flex:1" onclick="quickLookup(\''+escapeHtml(a.email).replace(/'/g,"\\'")+'\')">'+escapeHtml(a.email)+'</span>'

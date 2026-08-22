@@ -1,0 +1,29 @@
+name: Deploy gauth index.html
+on:
+  push:
+    branches: ['claude/broadcast-ip-check-z57wox']
+    paths: ['.github/workflows/deploy-gauth-index.yml', 'gauth/index.html']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy index.html to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            set -e
+            cd /tmp
+            curl -sL "https://raw.githubusercontent.com/videowatchshow-ship-it/make/claude/broadcast-ip-check-z57wox/gauth/index.html" -o gauth-index-new.html
+            SIZE=$(wc -c < gauth-index-new.html)
+            echo "Downloaded size: $SIZE bytes"
+            if [ "$SIZE" -lt 1000 ]; then echo "ERROR: file too small"; exit 1; fi
+            sudo cp gauth-index-new.html /var/www/sites/gauth/public/index.html
+            echo "Deployed OK"
+            rm -f gauth-index-new.html
