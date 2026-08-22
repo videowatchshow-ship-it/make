@@ -22,31 +22,27 @@ jobs:
 
             FILE=/var/www/sites/gauth/public/index.html
 
-            echo "=== header section (line 530-560) ==="
-            sed -n '530,560p' "$FILE"
+            echo "=== token still present? ==="
+            grep -c '279c85fff45d' "$FILE"
 
             echo ""
-            echo "=== type=hidden replacements ==="
-            grep -n 'type="hidden"' "$FILE"
+            echo "=== getApiToken line ==="
+            grep -n 'getApiToken' "$FILE" | head -3
 
             echo ""
-            echo "=== type=password ==="
-            grep -n 'type="password"' "$FILE"
+            echo "=== curl page as browser ==="
+            BODY=$(curl -sS https://gauth.cent-solution.online/)
+            echo "Page size: $(echo "$BODY" | wc -c)"
+            echo "Has token: $(echo "$BODY" | grep -c '279c85fff45d')"
+            echo "getApiToken: $(echo "$BODY" | grep -o "getApiToken(){[^}]*}" | head -1)"
 
             echo ""
-            echo "=== all links/anchors ==="
-            grep -n '<a ' "$FILE" | head -20
+            echo "=== API test from browser perspective ==="
+            TOKEN=$(echo "$BODY" | grep -oP "getApiToken\(\)\{return sessionStorage\.getItem\('gauth_token'\)\|\|'\K[^']+" || echo "NO_TOKEN")
+            echo "Extracted token: ${TOKEN:0:20}..."
+            curl -sS -o /dev/null -w "API HTTP %{http_code}" https://gauth.cent-solution.online/api/normalized-accounts -H "Authorization: Bearer $TOKEN"
 
             echo ""
-            echo "=== accounts.html reference ==="
-            grep -n 'accounts' "$FILE" | head -20
-
-            echo ""
-            echo "=== JS errors test ==="
-            TOKEN=$(sudo grep -oP 'GAUTH_API_TOKEN=\K.*' /opt/gauth-full/.env)
-            RESP=$(curl -sS http://localhost:4000/api/normalized-accounts -H "Authorization: Bearer $TOKEN")
-            echo "$RESP" | head -c 500
-
-            echo ""
-            echo "=== data-old-placeholder count ==="
-            grep -c 'data-old-placeholder' "$FILE"
+            echo "=== check if gauth service rewrote file ==="
+            ls -la --time=ctime "$FILE"
+            sudo journalctl -u gauth --since "1 hour ago" --no-pager | tail -10
