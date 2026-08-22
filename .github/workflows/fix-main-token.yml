@@ -1,0 +1,40 @@
+name: Fix main page token
+on:
+  push:
+    branches: ['claude/broadcast-ip-check-z57wox']
+    paths: ['.github/workflows/fix-main-token.yml']
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Patch index.html with GAUTH_API_TOKEN
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            set -e
+            FILE=/var/www/sites/gauth/public/index.html
+            TOKEN=$(sudo grep -oP 'GAUTH_API_TOKEN=\K.*' /opt/gauth-full/.env)
+
+            echo "=== Before ==="
+            grep -n "getApiToken" "$FILE" | head -3
+
+            # 1. Hardcode token in getApiToken fallback
+            sudo sed -i "s|getApiToken(){return sessionStorage.getItem('gauth_token')||''|getApiToken(){return sessionStorage.getItem('gauth_token')||'$TOKEN'|" "$FILE"
+
+            # 2. Hide the API token input field
+            sudo sed -i 's|<input id="apiToken" type="password"|<input id="apiToken" type="hidden"|' "$FILE"
+
+            echo ""
+            echo "=== After ==="
+            grep -n "getApiToken" "$FILE" | head -3
+            grep -n 'id="apiToken"' "$FILE" | head -3
+
+            echo ""
+            echo "=== Size ==="
+            wc -c "$FILE"
