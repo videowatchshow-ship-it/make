@@ -1,0 +1,39 @@
+name: Read auth code
+on:
+  push:
+    branches: ['claude/broadcast-ip-check-z57wox']
+    paths: ['.github/workflows/read-auth-code.yml']
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read rebrowser-login.js auth sections
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            echo "=== Total lines ==="
+            wc -l /opt/gauth-full/rebrowser-login.js
+
+            echo ""
+            echo "=== Lines around login-one (+-20) ==="
+            grep -n 'login-one' /opt/gauth-full/rebrowser-login.js
+            LINE=$(grep -n 'login-one' /opt/gauth-full/rebrowser-login.js | head -1 | cut -d: -f1)
+            if [ -n "$LINE" ]; then
+              START=$((LINE - 20))
+              END=$((LINE + 40))
+              sed -n "${START},${END}p" /opt/gauth-full/rebrowser-login.js
+            fi
+
+            echo ""
+            echo "=== Auth middleware / requireAuth / isAdmin ==="
+            grep -n 'requireAuth\|isAdmin\|function.*auth\|app.use.*cookie\|gauth_uid\|unauthorized' /opt/gauth-full/rebrowser-login.js
+
+            echo ""
+            echo "=== Cookie parsing ==="
+            grep -n 'cookie\|Cookie' /opt/gauth-full/rebrowser-login.js | head -15
