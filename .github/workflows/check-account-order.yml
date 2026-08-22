@@ -1,0 +1,32 @@
+name: Check account order around mccullysongsterqs750
+on:
+  push:
+    branches: ['claude/broadcast-ip-check-z57wox']
+    paths: ['.github/workflows/check-account-order.yml']
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check order
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 1m
+          script: |
+            node -e '
+            const data = JSON.parse(require("fs").readFileSync("/opt/gauth-full/accounts_normalized.json","utf8"));
+            const target = "mccullysongsterqs750@gmail.com";
+            const idx = data.findIndex(a => a.email === target);
+            if (idx === -1) { console.log(target + " NOT FOUND"); process.exit(0); }
+            console.log("=== " + target + " = #" + (idx+1) + " ===");
+            console.log("Before:");
+            for (let i = Math.max(0, idx-3); i < idx; i++) console.log("  #" + (i+1) + " " + data[i].email);
+            console.log(">>> #" + (idx+1) + " " + data[idx].email);
+            console.log("After:");
+            for (let i = idx+1; i < Math.min(data.length, idx+55); i++) console.log("  #" + (i+1) + " " + data[i].email);
+            console.log("Total accounts: " + data.length);
+            '
