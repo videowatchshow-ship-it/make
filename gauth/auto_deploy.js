@@ -674,5 +674,56 @@ module.exports = function(app) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
-  console.log('[auto_deploy] routes registered: /api/accounts, /api/normalized-accounts, /api/profiles, /api/failed-accounts, /api/deploy, /api/update-secret, /api/lookup/:email, /api/search-account, /api/deploy-status, /api/login-one, /api/youtube/*, /api/fix-mtime, /api/parse-report, /codes/:secret');
+  const GOOGLE_USERS_FILE = path.join(DATA_DIR, 'google_users.json');
+
+  function readGoogleUsers() {
+    try { return JSON.parse(fs.readFileSync(GOOGLE_USERS_FILE, 'utf8')); } catch (_) { return []; }
+  }
+  function writeGoogleUsers(users) {
+    const tmp = GOOGLE_USERS_FILE + '.tmp.' + process.pid;
+    fs.writeFileSync(tmp, JSON.stringify(users, null, 2));
+    fs.renameSync(tmp, GOOGLE_USERS_FILE);
+  }
+
+  app.get('/api/auth/config', (_req, res) => {
+    const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '';
+    res.json({ client_id: clientId });
+  });
+
+  app.get('/api/auth/me', (req, res) => {
+    const cookies = {};
+    (req.headers.cookie || '').split(';').forEach(function(c) {
+      const parts = c.trim().split('=');
+      if (parts.length >= 2) cookies[parts[0]] = decodeURIComponent(parts.slice(1).join('='));
+    });
+    if (!cookies.gauth_uid) return res.json({ user: null });
+    const users = readGoogleUsers();
+    const u = users.find(function(x) { return x.sub === cookies.gauth_uid; });
+    if (!u) return res.json({ user: null });
+    res.json({ user: { email: u.email, name: u.name, sub: u.sub } });
+  });
+
+  app.post('/api/auth/google', (req, res) => {
+    try {
+      const { credential } = req.body || {};
+      if (!credential) return res.status(400).json({ ok: false, error: 'missing credential' });
+      const parts = credential.split('.');
+      if (parts.length !== 3) return res.status(400).json({ ok: false, error: 'invalid token' });
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
+      const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '';
+      if (clientId && payload.aud !== clientId) return res.status(401).json({ ok: false, error: 'audience mismatch' });
+      if (!payload.sub) return res.status(400).json({ ok: false, error: 'missing sub' });
+      const users = readGoogleUsers();
+      const existing = users.find(function(u) { return u.sub === payload.sub; });
+      const userData = { sub: payload.sub, email: payload.email || '', name: payload.name || '', updated: new Date().toISOString() };
+      if (existing) { Object.assign(existing, userData); } else { users.push(userData); }
+      writeGoogleUsers(users);
+      res.setHeader('Set-Cookie', 'gauth_uid=' + encodeURIComponent(payload.sub) + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=315360000');
+      res.json({ ok: true, user: { email: userData.email, name: userData.name, sub: userData.sub } });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  console.log('[auto_deploy] routes registered: /api/accounts, /api/normalized-accounts, /api/profiles, /api/failed-accounts, /api/deploy, /api/update-secret, /api/lookup/:email, /api/search-account, /api/deploy-status, /api/login-one, /api/youtube/*, /api/fix-mtime, /api/parse-report, /codes/:secret, /api/auth/*');
 };
