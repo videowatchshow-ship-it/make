@@ -1,0 +1,25 @@
+name: Read login middleware
+on:
+  push:
+    branches: ['claude/broadcast-ip-check-z57wox']
+    paths: ['.github/workflows/read-login-middleware.yml']
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read login-one full code
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            echo "=== lines 850-930 ==="
+            sed -n '850,930p' /opt/gauth-full/rebrowser-login.js
+
+            echo ""
+            echo "=== any global app.use with auth ==="
+            grep -an 'app.use.*function\|app.use.*req.*res.*next\|unauthorized\|401' /opt/gauth-full/rebrowser-login.js | head -20
