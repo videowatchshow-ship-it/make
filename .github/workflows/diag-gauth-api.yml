@@ -1,0 +1,46 @@
+name: Diag gauth API
+on: workflow_dispatch
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Test API endpoints
+        run: |
+          echo "=== Test /api/normalized-accounts WITHOUT auth ==="
+          curl -s -o /tmp/na.json -w "HTTP %{http_code} Size:%{size_download}" \
+            "https://gauth.cent-solution.online/api/normalized-accounts" \
+            --connect-timeout 10 --max-time 30
+          echo ""
+          echo "Response preview:"
+          head -c 500 /tmp/na.json
+          echo ""
+          echo ""
+          echo "=== accounts count ==="
+          python3 -c "import json; d=json.load(open('/tmp/na.json')); print('accounts:', len(d.get('accounts',[])), 'summary:', d.get('summary',{}))" 2>&1 || echo "failed to parse"
+          echo ""
+          echo "=== Test /api/normalized-accounts WITH auth ==="
+          curl -s -o /tmp/na2.json -w "HTTP %{http_code} Size:%{size_download}" \
+            -H "Authorization: Bearer ${{ secrets.GAUTH_API_TOKEN }}" \
+            "https://gauth.cent-solution.online/api/normalized-accounts" \
+            --connect-timeout 10 --max-time 30
+          echo ""
+          echo "Response preview:"
+          head -c 500 /tmp/na2.json
+          echo ""
+          echo ""
+          echo "=== accounts count (with auth) ==="
+          python3 -c "import json; d=json.load(open('/tmp/na2.json')); print('accounts:', len(d.get('accounts',[])), 'summary:', d.get('summary',{}))" 2>&1 || echo "failed to parse"
+          echo ""
+          echo "=== Test page HTML ==="
+          curl -s -o /tmp/page.html -w "HTTP %{http_code} Size:%{size_download}" \
+            "https://gauth.cent-solution.online/" \
+            --connect-timeout 10 --max-time 30
+          echo ""
+          echo "File size: $(wc -c < /tmp/page.html)"
+          echo "Has viewport: $(grep -c 'id=\"viewport\"' /tmp/page.html)"
+          echo "Has spacer: $(grep -c 'id=\"spacer\"' /tmp/page.html)"
+          echo "Has load(): $(grep -c 'function load' /tmp/page.html)"
+          echo "Has _sortByExcelDate: $(grep -c '_sortByExcelDate' /tmp/page.html)"
+          echo "Has Google Sign-In: $(grep -c 'google' /tmp/page.html)"
+          echo "Has error visibility: $(grep -c 'API 상태' /tmp/page.html)"
