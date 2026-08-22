@@ -36,6 +36,22 @@ input:focus{outline:0;border-color:#2b6cff}
 }
 </style></head>
 <body>
+
+<div id="hero-banner" style="position:relative;overflow:hidden;padding:20px;background:linear-gradient(135deg,#0a0d12 0%,#111828 40%,#1a1030 70%,#0a0d12 100%);text-align:center;border-bottom:none">
+  <h1 style="margin:0;font-size:24px;font-weight:900;letter-spacing:2px;background:linear-gradient(90deg,#ff9040,#ffcc40,#a060ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">🎬 참교육 스트리밍 계정 조회</h1>
+</div>
+
+<div id="main-nav" style="display:flex;gap:0;background:#111418;border-bottom:1px solid #22282f;padding:0 16px">
+  <a href="/" style="padding:12px 20px;font-size:14px;font-weight:700;color:#5a6a7a;border-bottom:2px solid transparent;text-decoration:none">📋 전체 계정</a>
+  <a href="/accounts.html" style="padding:12px 20px;font-size:14px;font-weight:700;color:#7dabff;border-bottom:2px solid #2b6cff;text-decoration:none">🔑 계정 조회 + 로그인</a>
+</div>
+
+<div id="accStats" style="padding:10px 20px;background:#0d1520;border-bottom:1px solid #22282f;font-size:13px;color:#9aa5b5;text-align:center">
+  <span>계정 <b id="s-acc" style="color:#e8ecef;font-size:15px">–</b></span>
+  <span style="margin:0 12px">세션 <b id="s-sess" style="color:#3ddc84;font-size:15px">–</b></span>
+  <span>2FA <b id="s-2fa" style="color:#7dabff;font-size:15px">–</b></span>
+</div>
+
 <div style="padding:12px 16px;background:#0a1a2a;border-bottom:2px solid #2b6cff;display:flex;justify-content:center;gap:0">
   <button id="tab-lookup" class="tab active" onclick="switchTab('lookup')">🔑 계정 조회 + 로그인</button>
   <button id="tab-subsites" class="tab" onclick="switchTab('subsites')">🌐 하부 사이트</button>
@@ -44,6 +60,7 @@ input:focus{outline:0;border-color:#2b6cff}
 <div id="panel-lookup" class="panel active">
 <div style="padding:14px 20px;background:#0f1620;border-bottom:1px solid #22282f;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
   <input id="apiToken" type="hidden" oninput="sessionStorage.setItem('gauth_token',this.value)">
+  <span style="font-size:14px;color:#7dabff;font-weight:700">🔎 계정 검색</span>
   <input id="lookup" placeholder="이메일 입력 후 Enter" style="flex:1;min-width:200px">
   <button id="lookup-btn" style="padding:9px 18px;font-size:14px">조회</button>
 </div>
@@ -123,6 +140,10 @@ async function load(){
   });
   var total=ALL_ORIGINAL.length;
   var sessCount=ALL_ORIGINAL.filter(function(a){return a.has_session}).length;
+  var tfaCount=ALL_ORIGINAL.filter(function(a){return a.totp_secret}).length;
+  document.getElementById('s-acc').textContent=total.toLocaleString();
+  document.getElementById('s-sess').textContent=sessCount.toLocaleString();
+  document.getElementById('s-2fa').textContent=tfaCount.toLocaleString();
   document.getElementById('status-bar').innerHTML='전체 <b style="color:#e8ecef">'+total.toLocaleString()+'</b>개 계정 로드 완료 · 세션 <b style="color:#3ddc84">'+sessCount.toLocaleString()+'</b>';
 }
 
@@ -150,7 +171,7 @@ async function lookup(){
     +'<div style="color:#8a95a5">2FA 코드</div><div class="mono" style="color:#7dabff;font-size:22px;font-weight:700;letter-spacing:3px">'+_esc(code)+cp(code!=='—'?code:'')+'</div>'
     +'<div style="color:#8a95a5">YouTube</div><div class="mono">'+_esc(j.youtube_url||'—')+'</div>'
     +'<div style="color:#8a95a5">복구</div><div class="mono">'+_esc(j.recovery_email||'—')+'</div>'
-    +'<div style="color:#8a95a5">동작</div><div><button style="background:#7c3aed;padding:8px 14px;font-size:13px" onclick="programLogin(\''+_esc(j.email).replace(/'/g,"\\'")+"',this)">🔑 로그인</button></div>"
+    +'<div style="color:#8a95a5">동작</div><div><button style="background:#7c3aed;padding:8px 14px;font-size:13px" onclick="programLogin(\''+_esc(j.email).replace(/'/g,"\\'")+'\',this)">🔑 로그인</button></div>'
     +'</div>'
     +'<div id="lookup-next" style="margin-top:14px;border-top:1px solid #22282f;padding-top:10px"></div>';
   if(ALL_ORIGINAL&&ALL_ORIGINAL.length){
@@ -162,8 +183,8 @@ async function lookup(){
         nb.innerHTML='<div style="color:#8a95a5;font-size:12px;margin-bottom:6px">▼ 다음 순번 ('+(oi+2)+'~'+(oi+1+nxt.length)+' / '+ALL_ORIGINAL.length+')</div>'
           +nxt.map(function(a,i){return'<div style="padding:5px 0;border-bottom:1px solid #1a1f26;font-size:12.5px;display:flex;align-items:center;gap:8px">'
             +'<span style="color:#8a95a5;font-family:monospace;min-width:35px">'+(oi+2+i)+'.</span>'
-            +'<span style="color:#7dabff;cursor:pointer;flex:1" onclick="document.getElementById(\'lookup\').value=\''+_esc(a.email).replace(/'/g,"\\'")+"';lookup()\">'+_esc(a.email)+'</span>'
-            +'<button style="padding:3px 8px;font-size:11px;background:#7c3aed" onclick="programLogin(\''+_esc(a.email).replace(/'/g,"\\'")+"',this)">🔑</button>"
+            +'<span style="color:#7dabff;cursor:pointer;flex:1" onclick="document.getElementById(\'lookup\').value=\''+_esc(a.email).replace(/'/g,"\\'")+'\';lookup()">'+_esc(a.email)+'</span>'
+            +'<button style="padding:3px 8px;font-size:11px;background:#7c3aed" onclick="programLogin(\''+_esc(a.email).replace(/'/g,"\\'")+'\',this)">🔑</button>'
             +'</div>'}).join('')
       }
     }
