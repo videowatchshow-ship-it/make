@@ -24,11 +24,14 @@ jobs:
             echo "=== Before ==="
             grep -n "getApiToken" "$FILE" | head -3
 
-            # 1. Hardcode token in getApiToken fallback
-            sudo sed -i "s|getApiToken(){return sessionStorage.getItem('gauth_token')||''|getApiToken(){return sessionStorage.getItem('gauth_token')||'$TOKEN'|" "$FILE"
-
-            # 2. Hide the API token input field
-            sudo sed -i 's|<input id="apiToken" type="password"|<input id="apiToken" type="hidden"|' "$FILE"
+            # Use python for reliable string replacement
+            sudo python3 -c "
+import sys
+with open('$FILE','r') as f: c=f.read()
+c=c.replace(\"getApiToken(){return sessionStorage.getItem('gauth_token')||''}\",\"getApiToken(){return sessionStorage.getItem('gauth_token')||'$TOKEN'}\")
+c=c.replace('type=\"password\" placeholder=\"\xf0\x9f\x94\x91 API \xed\x86\xa0\xed\x81\xb0\"','type=\"hidden\"')
+with open('$FILE','w') as f: f.write(c)
+            "
 
             echo ""
             echo "=== After ==="
