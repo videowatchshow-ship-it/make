@@ -312,7 +312,10 @@ window.openDetail = function(idx){
   // highlight row
   document.querySelectorAll('.row.selected').forEach(function(r){r.classList.remove('selected');});
   var row = document.querySelector('.row[data-i="'+idx+'"]');
-  if (row) row.classList.add('selected');
+  if (row) {
+    row.classList.add('selected');
+    row.scrollIntoView({block:'center',behavior:'smooth'});
+  }
 };
 
 window.closeDetail = function(){
