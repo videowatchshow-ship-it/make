@@ -787,9 +787,9 @@ updateUploadStatus();
 const PAGE_SIZE = 50
 let ALL=[], FILTERED=[], PAGE=1
 let _lookupEmail = null, _loginEmail = null
-const vp = document.getElementById('viewport'), sp = document.getElementById('spacer')
+const vp = document.getElementById('viewport'), sp = document.getElementById('spacer');
 
-(function(){var el=document.getElementById('apiToken');if(el){var t=getApiToken();if(t)el.value=t;}})()
+;(function(){var el=document.getElementById('apiToken');if(el){var t=getApiToken();if(t)el.value=t;}})()
 function _parseFilenameDate(name){
   if(!name) return null
   name = name.normalize('NFC')
