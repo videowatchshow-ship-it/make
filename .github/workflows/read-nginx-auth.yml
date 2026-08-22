@@ -1,0 +1,37 @@
+name: Read nginx auth
+on:
+  push:
+    branches: ['claude/broadcast-ip-check-z57wox']
+    paths: ['.github/workflows/read-nginx-auth.yml']
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read nginx and test login
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            echo "=== nginx gauth config ==="
+            sudo cat /etc/nginx/sites-enabled/gauth* 2>/dev/null || sudo grep -rl 'gauth\|4000' /etc/nginx/ 2>/dev/null | head -5
+
+            echo ""
+            echo "=== test login-one directly on port 4000 ==="
+            curl -s -w "\nHTTP:%{http_code}" http://127.0.0.1:4000/api/login-one \
+              -X POST -H "content-type: application/json" \
+              -d '{"email":"meebqpazn1d4stvlrv@gmail.com"}'
+
+            echo ""
+            echo "=== test via https ==="
+            curl -sk -w "\nHTTP:%{http_code}" https://gauth.cent-solution.online/api/login-one \
+              -X POST -H "content-type: application/json" \
+              -d '{"email":"meebqpazn1d4stvlrv@gmail.com"}'
+
+            echo ""
+            echo "=== auto_deploy.js grep auth/unauthorized ==="
+            grep -n 'unauthorized\|401\|auth' /opt/gauth-full/auto_deploy.js 2>/dev/null | head -10
