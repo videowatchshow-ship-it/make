@@ -1,0 +1,82 @@
+name: Setup YouTube OAuth env vars
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'check = 확인만, set = 환경변수 설정'
+        required: true
+        default: 'check'
+        type: choice
+        options:
+          - check
+          - set
+      client_id:
+        description: 'YouTube OAuth Client ID (set 모드에서만 필요)'
+        required: false
+      client_secret:
+        description: 'YouTube OAuth Client Secret (set 모드에서만 필요)'
+        required: false
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check or set YouTube OAuth on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            echo "=== Current gauth systemd env ==="
+            sudo grep -i "youtube\|oauth\|client" /etc/systemd/system/gauth.service 2>/dev/null || echo "(no youtube vars in systemd)"
+            echo ""
+
+            echo "=== Current .env file ==="
+            sudo grep -i "youtube\|oauth\|client" /opt/gauth-full/.env 2>/dev/null || echo "(no youtube vars in .env)"
+            echo ""
+
+            echo "=== Process env check ==="
+            sudo cat /proc/$(pgrep -f rebrowser-login | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep -i "youtube\|oauth\|client" || echo "(process not running or no youtube vars)"
+            echo ""
+
+            ACTION="${{ github.event.inputs.action }}"
+            if [ "$ACTION" = "set" ]; then
+              CID="${{ github.event.inputs.client_id }}"
+              CSE="${{ github.event.inputs.client_secret }}"
+              if [ -z "$CID" ] || [ -z "$CSE" ]; then
+                echo "ERROR: client_id and client_secret required for set mode"
+                exit 1
+              fi
+
+              echo "=== Adding to .env ==="
+              sudo grep -v "YOUTUBE_OAUTH" /opt/gauth-full/.env > /tmp/env_clean 2>/dev/null || true
+              echo "YOUTUBE_OAUTH_CLIENT_ID=$CID" >> /tmp/env_clean
+              echo "YOUTUBE_OAUTH_CLIENT_SECRET=$CSE" >> /tmp/env_clean
+              sudo cp /tmp/env_clean /opt/gauth-full/.env
+              sudo chown root:root /opt/gauth-full/.env
+              sudo chmod 600 /opt/gauth-full/.env
+              echo "(.env updated)"
+
+              echo "=== Adding to systemd ==="
+              if ! sudo grep -q "YOUTUBE_OAUTH_CLIENT_ID" /etc/systemd/system/gauth.service 2>/dev/null; then
+                sudo sed -i "/\[Service\]/a Environment=YOUTUBE_OAUTH_CLIENT_ID=$CID\nEnvironment=YOUTUBE_OAUTH_CLIENT_SECRET=$CSE" /etc/systemd/system/gauth.service
+                echo "(systemd unit updated)"
+              else
+                sudo sed -i "s|^Environment=YOUTUBE_OAUTH_CLIENT_ID=.*|Environment=YOUTUBE_OAUTH_CLIENT_ID=$CID|" /etc/systemd/system/gauth.service
+                sudo sed -i "s|^Environment=YOUTUBE_OAUTH_CLIENT_SECRET=.*|Environment=YOUTUBE_OAUTH_CLIENT_SECRET=$CSE|" /etc/systemd/system/gauth.service
+                echo "(systemd unit replaced)"
+              fi
+
+              sudo systemctl daemon-reload
+              sudo systemctl restart gauth
+              echo "=== gauth restarted ==="
+              sleep 2
+              sudo systemctl status gauth --no-pager | head -15
+
+              echo ""
+              echo "=== Verify env loaded ==="
+              sudo cat /proc/$(pgrep -f rebrowser-login | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep "YOUTUBE_OAUTH" | sed 's/=.*/=***/' || echo "(check failed)"
+            fi
