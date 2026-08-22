@@ -1,0 +1,58 @@
+name: Test next-accounts order
+on:
+  push:
+    branches: ['claude/broadcast-ip-check-z57wox']
+    paths: ['.github/workflows/test-next-order.yml']
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify next accounts use original order
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            set -e
+
+            echo "=== 1. Server original order (accounts_normalized.json) ==="
+            node -e '
+            const data = JSON.parse(require("fs").readFileSync("/opt/gauth-full/accounts_normalized.json","utf8"));
+            const target = "mccullysongsterqs750@gmail.com";
+            const idx = data.findIndex(a => a.email === target);
+            if (idx === -1) { console.log("NOT FOUND"); process.exit(1); }
+            console.log("Position: #" + (idx+1) + " / " + data.length);
+            console.log("Next 10:");
+            for (let i = idx+1; i < Math.min(data.length, idx+11); i++) {
+              console.log("  #" + (i+1) + " " + data[i].email);
+            }
+            '
+
+            echo ""
+            echo "=== 2. Frontend deployed check (ALL_ORIGINAL in index.html) ==="
+            grep -c "ALL_ORIGINAL" /var/www/sites/gauth/public/index.html && echo "ALL_ORIGINAL found in deployed file" || echo "ERROR: ALL_ORIGINAL NOT in deployed file"
+            grep -c "ALL_ORIGINAL.findIndex" /var/www/sites/gauth/public/index.html && echo "lookup uses ALL_ORIGINAL" || echo "ERROR: lookup does NOT use ALL_ORIGINAL"
+            grep -c "ALL_ORIGINAL.slice" /var/www/sites/gauth/public/index.html && echo "slice uses ALL_ORIGINAL" || echo "ERROR: slice does NOT use ALL_ORIGINAL"
+
+            echo ""
+            echo "=== 3. API response test ==="
+            TOKEN=$(sudo grep -oP 'API_TOKEN=\K.*' /opt/gauth-full/.env 2>/dev/null || echo "")
+            if [ -n "$TOKEN" ]; then
+              RESP=$(curl -s "http://localhost:4000/api/lookup/mccullysongsterqs750@gmail.com?token=$TOKEN")
+              echo "Lookup response email: $(echo "$RESP" | node -pe 'JSON.parse(require("fs").readFileSync("/dev/stdin","utf8")).email' 2>/dev/null || echo 'parse error')"
+            else
+              echo "(no API_TOKEN, skipping API test)"
+            fi
+
+            echo ""
+            echo "=== RESULT ==="
+            COUNT=$(grep -c "ALL_ORIGINAL" /var/www/sites/gauth/public/index.html)
+            if [ "$COUNT" -ge 3 ]; then
+              echo "PASS: ALL_ORIGINAL used $COUNT times in deployed index.html"
+            else
+              echo "FAIL: ALL_ORIGINAL only found $COUNT times"
+            fi
