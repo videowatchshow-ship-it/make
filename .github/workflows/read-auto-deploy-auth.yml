@@ -1,0 +1,25 @@
+name: Read auto_deploy auth
+on:
+  push:
+    branches: ['claude/broadcast-ip-check-z57wox']
+    paths: ['.github/workflows/read-auto-deploy-auth.yml']
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read authMiddleware
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            echo "=== auto_deploy.js lines 1-80 ==="
+            sed -n '1,80p' /opt/gauth-full/auto_deploy.js
+
+            echo ""
+            echo "=== which routes use authMiddleware ==="
+            grep -n 'authMiddleware' /opt/gauth-full/auto_deploy.js
