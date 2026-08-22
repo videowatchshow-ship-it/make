@@ -1,0 +1,29 @@
+name: Read main page
+on:
+  push:
+    branches: ['claude/broadcast-ip-check-z57wox']
+    paths: ['.github/workflows/read-main-page.yml']
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read current index.html from server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            echo "=== index.html size ==="
+            wc -c /var/www/sites/gauth/public/index.html
+
+            echo ""
+            echo "=== head 200 lines ==="
+            head -200 /var/www/sites/gauth/public/index.html
+
+            echo ""
+            echo "=== menu/nav related ==="
+            grep -n -i 'nav\|menu\|tab\|header\|accounts' /var/www/sites/gauth/public/index.html | head -30
