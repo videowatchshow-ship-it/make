@@ -209,6 +209,10 @@ function copyStreamDesc(e){
 /* MDN: Element.innerHTML XSS 방지 — https://developer.mozilla.org/en-US/docs/Web/API/Element/innerHTML#security_considerations */
 function _esc(s){return String(s==null?'':s).replace(/[&<>"'`\\]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;','\\':'&#92;'}[c];})}
 var escapeHtml=_esc;
+function getApiToken(){return sessionStorage.getItem('gauth_token')||''}
+function authHeaders(extra){var h=extra||{};var t=getApiToken();if(t)h['Authorization']='Bearer '+t;return h}
+function authQuery(url){var t=getApiToken();if(!t)return url;return url+(url.indexOf('?')>=0?'&':'?')+'token='+encodeURIComponent(t)}
+function noCacheQuery(url){var u=authQuery(url);return u+(u.includes('?')?'&':'?')+'_t='+Date.now()}
 async function refreshAccStats(){
   try {
     const [rp, j, na] = await Promise.all([
@@ -847,13 +851,7 @@ let ALL=[], FILTERED=[], PAGE=1
 let _lookupEmail = null, _loginEmail = null
 const vp = document.getElementById('viewport'), sp = document.getElementById('spacer')
 
-function getApiToken(){return sessionStorage.getItem('gauth_token')||''}
 (function(){var el=document.getElementById('apiToken');if(el){var t=getApiToken();if(t)el.value=t;}})()
-function authHeaders(extra){var h=extra||{};var t=getApiToken();if(t)h['Authorization']='Bearer '+t;return h}
-function authQuery(url){var t=getApiToken();if(!t)return url;return url+(url.indexOf('?')>=0?'&':'?')+'token='+encodeURIComponent(t)}
-function noCacheQuery(url){var u=authQuery(url);return u+(u.includes('?')?'&':'?')+'_t='+Date.now()}
-
-var escapeHtml = _esc
 function _parseFilenameDate(name){
   if(!name) return null
   name = name.normalize('NFC')
