@@ -18,13 +18,30 @@ input:focus{outline:0;border-color:#2b6cff}
 .b-old{background:#2a2f36;color:#8a95a5}
 .b-2fa{background:#1c2740;color:#7dabff}
 .b-lock{background:#3a1c1c;color:#ff8080}
+.tab{background:transparent;color:#5a6a7a;border:0;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer;border-bottom:2px solid transparent}
+.tab.active{color:#7dabff;border-bottom-color:#2b6cff}
+.tab:hover{color:#a0b5cc}
+.panel{display:none}.panel.active{display:block}
+.site-card{background:#161a20;border:1px solid #2a323c;border-radius:8px;margin:8px 12px;padding:12px 16px}
+.site-name{font-size:15px;font-weight:700;color:#ffb469;margin-bottom:8px}
+.ch-row{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;border-bottom:1px solid #1a1f26}
+.ch-emoji{font-size:16px;min-width:22px;text-align:center}
+.ch-label{color:#c9d2dc;flex:1}
+.ch-count{color:#3ddc84;font-weight:600;font-size:12px}
+.ch-status{font-size:11px;padding:2px 6px;border-radius:8px}
+.ch-ok{background:#0d3222;color:#3ddc84}
+.ch-fail{background:#2a1e1e;color:#f47070}
 @media(max-width:768px){
   .cp{padding:6px 14px!important;font-size:13px!important}
 }
 </style></head>
 <body>
-<div style="padding:12px 16px;background:#0a1a2a;border-bottom:2px solid #2b6cff;text-align:center;font-size:15px;color:#7dabff;font-weight:700">🔑 계정 조회 + 로그인</div>
+<div style="padding:12px 16px;background:#0a1a2a;border-bottom:2px solid #2b6cff;display:flex;justify-content:center;gap:0">
+  <button id="tab-lookup" class="tab active" onclick="switchTab('lookup')">🔑 계정 조회 + 로그인</button>
+  <button id="tab-subsites" class="tab" onclick="switchTab('subsites')">🌐 하부 사이트</button>
+</div>
 
+<div id="panel-lookup" class="panel active">
 <div style="padding:14px 20px;background:#0f1620;border-bottom:1px solid #22282f;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
   <input id="apiToken" type="password" placeholder="🔑 API 토큰" style="flex:0 0 140px;min-width:100px;font-size:12px" oninput="sessionStorage.setItem('gauth_token',this.value)">
   <input id="lookup" placeholder="이메일 입력 후 Enter" style="flex:1;min-width:200px">
@@ -34,6 +51,12 @@ input:focus{outline:0;border-color:#2b6cff}
 <div id="lookup-result" style="display:none;background:#161a20;border:1px solid #2a323c;border-radius:8px;padding:16px;font-size:14px;margin:12px 20px"></div>
 
 <div id="status-bar" style="padding:10px 20px;color:#8a95a5;font-size:13px;text-align:center">데이터 로딩 중…</div>
+</div>
+
+<div id="panel-subsites" class="panel">
+<div id="subsites-loading" style="padding:20px;text-align:center;color:#8a95a5">하부 사이트 로딩 중…</div>
+<div id="subsites-content"></div>
+</div>
 
 <script>
 var GAUTH_API = 'https://gauth.cent-solution.online';
@@ -175,5 +198,52 @@ document.getElementById('lookup').addEventListener('keydown',function(e){if(e.ke
 document.getElementById('lookup').addEventListener('input',function(){localStorage.setItem('gauth_last_lookup_acc',this.value)});
 
 load();
+
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active')});
+  document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('active')});
+  document.getElementById('tab-'+name).classList.add('active');
+  document.getElementById('panel-'+name).classList.add('active');
+  if(name==='subsites'&&!window._subsitesLoaded)loadSubsites();
+}
+
+async function loadSubsites(){
+  var box=document.getElementById('subsites-content');
+  var loading=document.getElementById('subsites-loading');
+  try{
+    var r=await fetch(authQuery(GAUTH_API+'/api/subsite-accounts'),{headers:authHeaders()});
+    var data=await r.json();
+    window._subsitesLoaded=true;
+    loading.style.display='none';
+    if(!data||(!data.sites&&!Array.isArray(data))){box.innerHTML='<div style="padding:20px;color:#f47070;text-align:center">데이터 없음</div>';return}
+    var sites=data.sites||data;
+    if(!Array.isArray(sites)){
+      var keys=Object.keys(sites);
+      box.innerHTML=keys.map(function(siteName){
+        var channels=sites[siteName];
+        if(!channels||typeof channels!=='object')return'';
+        var chKeys=Object.keys(channels);
+        return'<div class="site-card"><div class="site-name">'+_esc(siteName)+'</div>'
+          +chKeys.map(function(ch){
+            var info=channels[ch];
+            var count=0,status='';
+            if(Array.isArray(info)){count=info.length;status=count>0?'ok':'fail'}
+            else if(typeof info==='object'&&info!==null){count=info.count||info.total||0;status=info.status||((info.ok||info.success)?'ok':'fail')}
+            else{count=info;status=count>0?'ok':'fail'}
+            return'<div class="ch-row"><span class="ch-emoji">'+(ch.match(/[\u{1F300}-\u{1FAFF}]/u)?ch.charAt(0):'📌')+'</span>'
+              +'<span class="ch-label">'+_esc(ch)+'</span>'
+              +'<span class="ch-count">'+count+'개</span>'
+              +'<span class="ch-status '+(status==='ok'?'ch-ok':'ch-fail')+'">'+(status==='ok'?'✅':'❌')+'</span></div>'
+          }).join('')
+          +'</div>'
+      }).join('');
+    } else {
+      box.innerHTML=sites.map(function(s){
+        return'<div class="site-card"><div class="site-name">'+_esc(s.name||s.site||s.label||'사이트')+'</div>'
+          +'<div style="color:#c9d2dc;font-size:13px">계정: '+_esc(s.count||s.accounts||s.total||'—')+'</div></div>'
+      }).join('');
+    }
+  }catch(e){loading.innerHTML='<span style="color:#f47070">로드 실패: '+_esc(e.message)+'</span>'}
+}
 </script>
 </body></html>
