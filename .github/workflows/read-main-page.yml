@@ -20,29 +20,30 @@ jobs:
             echo "=== index.html size ==="
             wc -c /var/www/sites/gauth/public/index.html
 
-            FILE=/var/www/sites/gauth/public/index.html
-
-            echo "=== token still present? ==="
-            grep -c '279c85fff45d' "$FILE"
-
-            echo ""
-            echo "=== getApiToken line ==="
-            grep -n 'getApiToken' "$FILE" | head -3
+            echo "=== accounts.html on server ==="
+            ls -la /var/www/sites/gauth/public/accounts.html 2>&1
+            wc -c /var/www/sites/gauth/public/accounts.html 2>&1
 
             echo ""
-            echo "=== curl page as browser ==="
-            BODY=$(curl -sS https://gauth.cent-solution.online/)
-            echo "Page size: $(echo "$BODY" | wc -c)"
-            echo "Has token: $(echo "$BODY" | grep -c '279c85fff45d')"
-            echo "getApiToken: $(echo "$BODY" | grep -o "getApiToken(){[^}]*}" | head -1)"
+            echo "=== accounts.html token ==="
+            grep -o "getApiToken(){[^}]*}" /var/www/sites/gauth/public/accounts.html | head -1
 
             echo ""
-            echo "=== API test from browser perspective ==="
-            TOKEN=$(echo "$BODY" | grep -oP "getApiToken\(\)\{return sessionStorage\.getItem\('gauth_token'\)\|\|'\K[^']+" || echo "NO_TOKEN")
-            echo "Extracted token: ${TOKEN:0:20}..."
-            curl -sS -o /dev/null -w "API HTTP %{http_code}" https://gauth.cent-solution.online/api/normalized-accounts -H "Authorization: Bearer $TOKEN"
+            echo "=== curl accounts.html ==="
+            curl -sS -o /dev/null -w "HTTP %{http_code}, size: %{size_download}" https://gauth.cent-solution.online/accounts.html
 
             echo ""
-            echo "=== check if gauth service rewrote file ==="
-            ls -la --time=ctime "$FILE"
-            sudo journalctl -u gauth --since "1 hour ago" --no-pager | tail -10
+            echo "=== curl API with token ==="
+            TOKEN=$(grep -oP "getApiToken\(\)\{return sessionStorage\.getItem\('gauth_token'\)\|\|'\K[^']+" /var/www/sites/gauth/public/accounts.html || echo "NONE")
+            echo "Token: ${TOKEN:0:20}..."
+            curl -sS -o /dev/null -w "normalized-accounts: HTTP %{http_code}\n" http://localhost:4000/api/normalized-accounts -H "Authorization: Bearer $TOKEN"
+            curl -sS -o /dev/null -w "profiles: HTTP %{http_code}\n" http://localhost:4000/api/profiles -H "Authorization: Bearer $TOKEN"
+            curl -sS -o /dev/null -w "subsite-accounts: HTTP %{http_code}\n" http://localhost:4000/api/subsite-accounts -H "Authorization: Bearer $TOKEN"
+
+            echo ""
+            echo "=== index.html nav menu ==="
+            grep -c 'main-nav' /var/www/sites/gauth/public/index.html
+
+            echo ""
+            echo "=== status-bar element in accounts.html ==="
+            grep -n 'status-bar' /var/www/sites/gauth/public/accounts.html
