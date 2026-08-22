@@ -550,6 +550,28 @@ make/
 
 ---
 
+## 치명적 버그 수정 이력
+
+### ASI(Automatic Semicolon Insertion) 버그 — 계정 리스트 안 보임 (2026-08-22)
+- **증상**: 메인 페이지에서 4,875개 계정 리스트가 완전히 안 보임 (통계도 `–` 표시)
+- **원인**: `index.html` 두 번째 `<script>` 블록에서 변수 선언 뒤에 세미콜론 없이 IIFE가 이어짐
+  ```javascript
+  // 버그 코드 (세미콜론 누락)
+  const vp = document.getElementById('viewport'), sp = document.getElementById('spacer')
+  (function(){...})()
+  // → JS 엔진이 getElementById('spacer')(function(){...})() 로 파싱
+  // → TypeError: document.getElementById(...) is not a function
+  ```
+- **결과**: 스크립트 블록 전체 사망 → `load()`, `render()`, `applyFilter()` 모두 미실행
+- **수정**: 변수 선언 끝에 세미콜론 추가 + IIFE 앞에 방어 세미콜론 추가
+  ```javascript
+  const vp = document.getElementById('viewport'), sp = document.getElementById('spacer');
+  ;(function(){...})()
+  ```
+- **교훈**: IIFE 앞에는 항상 `;` 방어 세미콜론 사용. `let`/`const`/`var` 선언 뒤에 `(`로 시작하는 코드가 오면 ASI가 세미콜론을 삽입하지 않음
+
+---
+
 ## 준수 규칙 (절대)
 
 - 사용자에게 터미널 명령 지시 금지 — 모든 배포는 GitHub Actions/SSH 자동화
