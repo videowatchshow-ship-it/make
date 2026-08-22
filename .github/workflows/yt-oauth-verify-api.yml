@@ -1,0 +1,44 @@
+name: Verify YouTube OAuth API ready
+on:
+  push:
+    branches: ['claude/broadcast-ip-check-z57wox']
+    paths: ['.github/workflows/yt-oauth-verify-api.yml']
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check YouTube OAuth API endpoints
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            echo "=== 1. Check if app loads YOUTUBE_OAUTH env vars ==="
+            curl -s http://localhost:4000/api/youtube/all-status 2>/dev/null | head -c 500 || echo "(endpoint not found)"
+            echo ""
+
+            echo "=== 2. Check rebrowser-login.js for dotenv ==="
+            grep -n 'dotenv\|require.*env\|\.env' /opt/gauth-full/rebrowser-login.js | head -5 || echo "(no dotenv usage found)"
+            echo ""
+
+            echo "=== 3. Check auto_deploy.js for env usage ==="
+            grep -n 'YOUTUBE_OAUTH' /opt/gauth-full/auto_deploy.js 2>/dev/null | head -10
+            grep -n 'YOUTUBE_OAUTH' /opt/gauth-full/rebrowser-login.js 2>/dev/null | head -10
+            echo ""
+
+            echo "=== 4. Check systemd ExecStart ==="
+            grep 'ExecStart\|EnvironmentFile' /etc/systemd/system/gauth.service
+            echo ""
+
+            echo "=== 5. Main process env (full YOUTUBE check) ==="
+            MAIN_PID=$(sudo systemctl show gauth --property=MainPID --value)
+            echo "MainPID: $MAIN_PID"
+            sudo cat /proc/$MAIN_PID/environ 2>/dev/null | tr '\0' '\n' | grep YOUTUBE | sed 's/=.\{8\}/=****..../' || echo "(not found in main PID)"
+            echo ""
+
+            echo "=== 6. .env file YouTube lines ==="
+            sudo grep YOUTUBE /opt/gauth-full/.env
