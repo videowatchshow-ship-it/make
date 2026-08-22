@@ -7,6 +7,11 @@
 <meta http-equiv="Cache-Control" content="no-store">
 <style>
   :root{--bg:#0d1117;--panel:#0f1620;--card:#161a20;--border:#22282f;--border2:#2a323c;--text:#e8ecef;--sub:#8a95a5;--accent:#7dabff;--accent2:#3ddc84}
+  nav{position:sticky;top:0;z-index:20;background:#111418;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;height:48px;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  nav::-webkit-scrollbar{display:none}
+  nav a{color:var(--sub);text-decoration:none;font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;white-space:nowrap;transition:background .15s,color .15s}
+  nav a:hover{background:#1a1f27;color:var(--text)}
+  nav a.active{background:#1e3a5f;color:var(--accent)}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo",sans-serif;min-height:100vh;padding:24px 16px}
   .wrap{max-width:620px;margin:0 auto}
@@ -37,6 +42,11 @@
 </style>
 </head>
 <body>
+<nav>
+  <a href="/">🏠 메인</a>
+  <a href="/subsites.html" class="active">📦 사이트별</a>
+  <a href="/accounts.html">📋 계정 상세</a>
+</nav>
   <div class="wrap">
     <div class="brand">
       <h1>📦 하위 사이트별 계정 · 채널 상태</h1>
