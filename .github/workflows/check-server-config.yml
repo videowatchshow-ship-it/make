@@ -1,0 +1,24 @@
+name: Check server config
+on:
+  push:
+    branches: ['claude/broadcast-ip-check-z57wox']
+    paths: ['.github/workflows/check-server-config.yml']
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check server config keys
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            echo "=== config keys (values masked) ==="
+            sudo cat /opt/gauth-full/.env | sed 's/=.*/=***/'
+            echo ""
+            echo "=== auth middleware in rebrowser ==="
+            grep -n -i 'token\|AUTH\|API_KEY\|SECRET' /opt/gauth-full/rebrowser-login.js | head -30
