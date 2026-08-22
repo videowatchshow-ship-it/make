@@ -810,17 +810,17 @@ async function load(){
     return r.json().catch(function(){ return fallback });
   }
   try {
-    var r1 = await fetch(authQuery('/api/normalized-accounts'),{headers:authHeaders()}).catch(function(){ return {ok:false} });
+    var r1 = await fetch(authQuery('/api/normalized-accounts'),{headers:authHeaders()}).catch(function(e){ console.error('fetch normalized-accounts failed:',e); return {ok:false,_err:e.message} });
     var r2 = await fetch(authQuery('/api/profiles'),{headers:authHeaders()}).catch(function(){ return {ok:false} });
     var r3 = await fetch(authQuery('/api/failed-accounts'),{headers:authHeaders()}).catch(function(){ return {ok:false} });
     n = await safeJson(r1, {accounts:[],summary:{}});
     p = await safeJson(r2, {profiles:[]});
     f = await safeJson(r3, {});
-    if(!r1.ok || !n.accounts){
-      var _msg = r1.ok ? 'accounts 키 없음 (응답: '+JSON.stringify(n).slice(0,200)+')' : 'HTTP '+r1.status;
-      document.getElementById('spacer').innerHTML='<div style="padding:20px;color:#ffb469;font-size:14px">⚠ API 상태: '+_esc(_msg)+'</div>';
+    if(!r1.ok || !n.accounts || !n.accounts.length){
+      var _msg = r1.ok ? (n.accounts?'accounts 배열 비어있음 (길이:'+n.accounts.length+')':'accounts 키 없음') : 'HTTP '+(r1.status||'네트워크 오류')+(r1._err?' ('+r1._err+')':'');
+      document.getElementById('spacer').innerHTML='<div style="padding:20px;color:#ffb469;font-size:14px">⚠ API 상태: '+_esc(_msg)+'<br><small style="color:#8a95a5">API 토큰을 입력하거나 페이지를 새로고침하세요</small></div>';
     }
-  } catch(e) { n={accounts:[],summary:{}}; p={profiles:[]}; f={}; }
+  } catch(e) { n={accounts:[],summary:{}}; p={profiles:[]}; f={}; console.error('load() error:',e); document.getElementById('spacer').innerHTML='<div style="padding:20px;color:#f47070;font-size:14px">⚠ 로드 오류: '+_esc(e.message)+'</div>'; }
   FAILED = f || {}
   var _profiles = (p && p.profiles) || []
   var _accounts = (n && n.accounts) || []
