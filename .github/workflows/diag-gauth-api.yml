@@ -5,42 +5,42 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Test API endpoints
-        run: |
-          echo "=== Test /api/normalized-accounts WITHOUT auth ==="
-          curl -s -o /tmp/na.json -w "HTTP %{http_code} Size:%{size_download}" \
-            "https://gauth.cent-solution.online/api/normalized-accounts" \
-            --connect-timeout 10 --max-time 30
-          echo ""
-          echo "Response preview:"
-          head -c 500 /tmp/na.json
-          echo ""
-          echo ""
-          echo "=== accounts count ==="
-          python3 -c "import json; d=json.load(open('/tmp/na.json')); print('accounts:', len(d.get('accounts',[])), 'summary:', d.get('summary',{}))" 2>&1 || echo "failed to parse"
-          echo ""
-          echo "=== Test /api/normalized-accounts WITH auth ==="
-          curl -s -o /tmp/na2.json -w "HTTP %{http_code} Size:%{size_download}" \
-            -H "Authorization: Bearer ${{ secrets.GAUTH_API_TOKEN }}" \
-            "https://gauth.cent-solution.online/api/normalized-accounts" \
-            --connect-timeout 10 --max-time 30
-          echo ""
-          echo "Response preview:"
-          head -c 500 /tmp/na2.json
-          echo ""
-          echo ""
-          echo "=== accounts count (with auth) ==="
-          python3 -c "import json; d=json.load(open('/tmp/na2.json')); print('accounts:', len(d.get('accounts',[])), 'summary:', d.get('summary',{}))" 2>&1 || echo "failed to parse"
-          echo ""
-          echo "=== Test page HTML ==="
-          curl -s -o /tmp/page.html -w "HTTP %{http_code} Size:%{size_download}" \
-            "https://gauth.cent-solution.online/" \
-            --connect-timeout 10 --max-time 30
-          echo ""
-          echo "File size: $(wc -c < /tmp/page.html)"
-          echo "Has viewport: $(grep -c 'id=\"viewport\"' /tmp/page.html)"
-          echo "Has spacer: $(grep -c 'id=\"spacer\"' /tmp/page.html)"
-          echo "Has load(): $(grep -c 'function load' /tmp/page.html)"
-          echo "Has _sortByExcelDate: $(grep -c '_sortByExcelDate' /tmp/page.html)"
-          echo "Has Google Sign-In: $(grep -c 'google' /tmp/page.html)"
-          echo "Has error visibility: $(grep -c 'API 상태' /tmp/page.html)"
+      - name: Test API via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 30s
+          script: |
+            echo "=== Test API locally ==="
+            curl -s -o /tmp/na.json -w "HTTP %{http_code} Size:%{size_download}\n" \
+              "http://localhost:4000/api/normalized-accounts" \
+              --connect-timeout 5 --max-time 20
+            echo "accounts count:"
+            python3 -c "import json; d=json.load(open('/tmp/na.json')); print('accounts:', len(d.get('accounts',[])), 'summary:', d.get('summary',{}))" 2>&1 || echo "parse failed"
+            echo ""
+            echo "=== gauth service status ==="
+            systemctl is-active gauth || true
+            echo ""
+            echo "=== Deployed file info ==="
+            ls -la /var/www/sites/gauth/public/index.html 2>/dev/null || echo "file missing"
+            echo ""
+            echo "=== Check deployed file for key elements ==="
+            F=/var/www/sites/gauth/public/index.html
+            echo "Has viewport: $(grep -c 'id=\"viewport\"' $F)"
+            echo "Has spacer: $(grep -c 'id=\"spacer\"' $F)"
+            echo "Has load(): $(grep -c 'async function load' $F)"
+            echo "Has _sortByExcelDate: $(grep -c '_sortByExcelDate' $F)"
+            echo "Has render(): $(grep -c 'async function render' $F)"
+            echo "Has error visibility: $(grep -c 'API 상태' $F)"
+            echo "Has master-view: $(grep -c 'id=\"master-view\"' $F)"
+            echo "master-view display: $(grep -o 'id=\"master-view\"[^>]*' $F)"
+            echo "File size: $(wc -c < $F)"
+            echo ""
+            echo "=== Test via HTTPS ==="
+            curl -s -o /tmp/na2.json -w "HTTP %{http_code} Size:%{size_download}\n" \
+              "https://gauth.cent-solution.online/api/normalized-accounts" \
+              --connect-timeout 5 --max-time 20
+            echo "HTTPS accounts count:"
+            python3 -c "import json; d=json.load(open('/tmp/na2.json')); print('accounts:', len(d.get('accounts',[])), 'summary:', d.get('summary',{}))" 2>&1 || echo "parse failed"
