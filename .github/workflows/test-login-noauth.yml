@@ -1,4 +1,4 @@
-name: Test login without token
+name: Test login with token
 on:
   push:
     branches: ['claude/broadcast-ip-check-z57wox']
@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Test login-one and subsite-accounts without token
+      - name: Test login-one with GAUTH_API_TOKEN
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -17,28 +17,27 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 2m
           script: |
-            echo "=== 1. login-one without auth ==="
+            echo "=== 1. Check GAUTH_API_TOKEN exists ==="
+            sudo grep 'GAUTH_API_TOKEN=' /opt/gauth-full/.env | sed 's/=.*/=***set***/'
+
+            echo ""
+            echo "=== 2. gauth service status ==="
+            sudo systemctl is-active gauth && echo "RUNNING" || echo "NOT RUNNING"
+
+            echo ""
+            echo "=== 3. login-one WITH token ==="
+            TOKEN=$(sudo grep -oP 'GAUTH_API_TOKEN=\K.*' /opt/gauth-full/.env)
             curl -s -w "\nHTTP:%{http_code}" http://localhost:4000/api/login-one \
               -X POST -H "content-type: application/json" \
-              -d '{"email":"test-does-not-exist@gmail.com"}'
+              -H "Authorization: Bearer $TOKEN" \
+              -d '{"email":"test-not-exist@gmail.com"}'
 
             echo ""
-            echo "=== 2. subsite-accounts without auth ==="
-            RESP=$(curl -s -w "\nHTTP:%{http_code}" http://localhost:4000/api/subsite-accounts)
-            echo "${RESP:0:800}"
+            echo "=== 4. login-one WITHOUT token ==="
+            curl -s -w "\nHTTP:%{http_code}" http://localhost:4000/api/login-one \
+              -X POST -H "content-type: application/json" \
+              -d '{"email":"test-not-exist@gmail.com"}'
 
             echo ""
-            echo "=== 3. normalized-accounts without auth ==="
-            RESP2=$(curl -s -w "\nHTTP:%{http_code}" http://localhost:4000/api/normalized-accounts)
-            echo "${RESP2:0:300}"
-
-            echo ""
-            echo "=== 4. login-one with SIM5_TOKEN ==="
-            SIM5=$(sudo grep -oP 'SIM5_TOKEN=\K.*' /opt/gauth-full/.env 2>/dev/null || echo "")
-            if [ -n "$SIM5" ]; then
-              curl -s -w "\nHTTP:%{http_code}" http://localhost:4000/api/login-one \
-                -X POST -H "content-type: application/json" -H "Authorization: Bearer $SIM5" \
-                -d '{"email":"test-does-not-exist@gmail.com"}'
-            else
-              echo "(no SIM5_TOKEN)"
-            fi
+            echo "=== 5. Token value ==="
+            echo "$TOKEN"
