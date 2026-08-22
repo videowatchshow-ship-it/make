@@ -166,7 +166,7 @@ gain · woodong · sunbi · simmani · win · aura · bacad · camstouch · jame
 | **필터** | 사이트 드롭다운 · 로그인 상태 필터 (성공/실패/미시도) · 텍스트 검색 |
 | **컴팩트 리스트** | 1만개 대응 · 번호 · 로그인상태점(●) · 이메일 · 사이트 배지 |
 | **구글 로그인** | 상단 GIS 버튼 → 로그인 후 `gauth_uid` 쿠키 → `POST /api/login-one` 인증 자동 통과 |
-| **개별 로그인** | 각 행에 🔑 버튼 → `POST /api/login-one` (쿠키 인증) → 결과를 localStorage + 서버 병합 |
+| **개별 로그인** | 각 행에 🔑 버튼 → `POST /api/login-one` (쿠키 인증) → 결과를 localStorage + 서버 병합 → 성공 시 1.5초 후 다음 계정 자동 이동 |
 | **서버 병합** | `GET /api/login-results` → localStorage와 timestamp 비교 병합 |
 | **다운로드** | ⬇ CSV · ⬇ JSON (`GET /api/export/login-results?format=csv\|json`) |
 
@@ -299,7 +299,7 @@ const url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURICompo
 
 ---
 
-## 데이터 무결성 현황 (2026-08-20 기준, 총 4,875건)
+## 데이터 무결성 현황 (2026-08-22 기준, 총 4,875건)
 
 | 버킷 | 건수 |
 |---|---|
@@ -311,15 +311,18 @@ const url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURICompo
 | YouTube URL 누락 | 383 |
 | YouTube URL 자리에 앱 패스워드 (미스왈) | 0 (완료) |
 | YouTube URL이 유튜브가 아님 | 383 |
-| 2FA 누락 | 460 |
+| 2FA 누락 | 81 |
 | 2FA 형식 무효 | 0 |
 | 파일명 mojibake 잔존 | 0 (4,026건 복구 완료) |
 | 이메일 중복 | 0 |
+| TOTP 보유 | 4,782 |
 
 ### 수정 이력
 - 파일명 UTF-8/latin1 mojibake 복구: **4,026건** — `s.encode('latin1').decode('utf-8')` 적용
 - 앱 패스워드가 youtube_url 자리에 있던 경우 스왈: **268건** — 정규식 `([a-z0-9]{4}\s+){3,}[a-z0-9]{4}`
 - 대체 후보(`extra`/`password_alts`)에서 앱 패스워드 추출 → password: **75건**
+- TOTP 복구 (원본 Excel 재스캔): **367건** — `recover-missing-totp.yml` 워크플로우로 `uploads/` Excel → `accounts_normalized.json` 직접 기록
+- TOTP 오탐 수정: **81건** — 비밀번호가 Base32 패턴에 매칭되어 TOTP로 잘못 들어간 경우 제거 후 재스캔 (비밀번호 ≠ TOTP 필터 추가)
 
 ---
 
@@ -430,7 +433,7 @@ const url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURICompo
 | `deploy-accounts-page.yml` | accounts.html 배포 | `gauth-public/accounts.html` 변경 | SCP → 서버 설치 + 3페이지 nav 메뉴 주입 |
 | `diag-gauth-excel.yml` | jump 배포 | `trigger-deploy-jump.txt` 변경 | jump/ → 서버 SCP + Apache vhost + no-store + Clear-Site-Data + Let's Encrypt |
 | `deploy-subsites.yml` | subsites 배포 | `trigger-deploy-subsites.txt` | `gauth-public/subsites.html` → 서버 SCP |
-| `deploy-gauth.yml` | gauth 배포 | workflow_dispatch | 메인 프론트 배포 |
+| `deploy-gauth.yml` | gauth 배포 | workflow_dispatch + `gauth/` · `gauth-public/accounts.html` 변경 | 메인 프론트 + accounts.html 배포 |
 | `gauth-google-signup.yml` | GIS 위젯 배포 | `trigger-gsi-topright.txt` | index.html에 GIS 우상단 위젯 주입 + Express auth 라우트 + systemd env + 재시작 |
 | `gauth-switch-old-cid.yml` | OLD client_id 전환 | `trigger-switch-old-cid.txt` | `.env` + systemd + index.html의 client_id를 OLD로 전환 + 재시작 |
 | `gauth-set-new-cid.yml` | 새 client_id 설정 | `trigger-new-cid.txt` | 새 client_id 적용 |
@@ -451,6 +454,7 @@ const url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURICompo
 | `gauth-excel-fix.yml` | mojibake 복구 + password↔youtube_url 스왈 |
 | `gauth-excel-diag.yml` | 엑셀 파서 컨럼 매핑 진단 |
 | `gauth-audit.yml` | 4,875건 무결성 버킷 집계 |
+| `recover-missing-totp.yml` | 원본 Excel에서 TOTP 복구 → `accounts_normalized.json` 기록 + gauth 재시작 (비밀번호 오탐 필터 포함) |
 
 ### 테스트·진단
 | 파일 | 동작 |
@@ -567,6 +571,12 @@ make/
   ;(function(){...})()
   ```
 - **교훈**: IIFE 앞에는 항상 `;` 방어 세미콜론 사용. `let`/`const`/`var` 선언 뒤에 `(`로 시작하는 코드가 오면 ASI가 세미콜론을 삽입하지 않음
+
+### 비밀번호→TOTP 오탐 버그 — 로그인 실패 (2026-08-22)
+- **증상**: `iskander1ms1@gmail.com` 등 81개 계정에서 2FA 시크릿이 비밀번호와 동일 → TOTP 코드 무효 → 로그인 실패
+- **원인**: `recover-missing-totp.yml` v1에서 `extractSecret()`이 비밀번호(`KHm5kyMVWi34RQAj`)를 Base32 패턴(`/^[A-Z2-7]+$/i`, 16자 이상)에 매칭시켜 TOTP로 저장
+- **수정**: `extractSecret(cell, password)` — 비밀번호와 대소문자 무시 비교하여 동일하면 스킵 + 이전 오탐 자동 정리(`totp_secret === password`인 계정 delete → 재스캔)
+- **결과**: 오탐 81건 제거 → Excel에서 진짜 TOTP 재복구 81건 → 최종 TOTP 4,782개 / 미복구 81개 (원본에 TOTP 없음)
 
 ---
 
