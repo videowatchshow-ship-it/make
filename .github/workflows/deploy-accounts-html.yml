@@ -1,0 +1,29 @@
+name: Deploy accounts.html
+on:
+  push:
+    branches: ['claude/broadcast-ip-check-z57wox']
+    paths: ['.github/workflows/deploy-accounts-html.yml', 'jump/accounts.html']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy accounts.html to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            set -e
+            cd /tmp
+            curl -sL "https://raw.githubusercontent.com/videowatchshow-ship-it/make/claude/broadcast-ip-check-z57wox/jump/accounts.html" -o accounts-new.html
+            SIZE=$(wc -c < accounts-new.html)
+            echo "Downloaded size: $SIZE bytes"
+            if [ "$SIZE" -lt 1000 ]; then echo "ERROR: file too small"; exit 1; fi
+            sudo cp accounts-new.html /var/www/sites/gauth/public/accounts.html
+            echo "Deployed to /var/www/sites/gauth/public/accounts.html OK"
+            rm -f accounts-new.html

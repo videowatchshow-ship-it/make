@@ -43,7 +43,7 @@ button:hover{background:#1e5ae0}
 }
 </style></head>
 <body>
-<div class="readonly-banner">🔒 읽기 전용 — 편집/로그인 불가 (gauth.cent-solution.online 에서 관리)</div>
+<div style="padding:8px 16px;background:#0a1a2a;border-bottom:2px solid #2b6cff;text-align:center;font-size:13px;color:#7dabff;font-weight:700">🔑 계정 조회 + 로그인</div>
 <div id="hero-banner" style="position:relative;overflow:hidden;padding:20px;background:linear-gradient(135deg,#0a0d12 0%,#111828 40%,#1a1030 70%,#0a0d12 100%);text-align:center;border-bottom:none">
   <h1 style="margin:0;font-size:24px;font-weight:900;letter-spacing:2px;background:linear-gradient(90deg,#ff9040,#ffcc40,#a060ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">🎬 참교육 스트리밍 계정 (읽기 전용)</h1>
 </div>
@@ -81,7 +81,7 @@ button:hover{background:#1e5ae0}
 
 <script>
 var GAUTH_API = 'https://gauth.cent-solution.online';
-var PAGE_SIZE = 50, ALL = [], FILTERED = [], PAGE = 1;
+var PAGE_SIZE = 50, ALL = [], ALL_ORIGINAL = [], FILTERED = [], PAGE = 1;
 
 function _esc(s){return String(s==null?'':s).replace(/[&<>"'`\\]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;','\\':'&#92;'}[c]})}
 function getApiToken(){return sessionStorage.getItem('gauth_token')||''}
@@ -150,6 +150,7 @@ async function load(){
     var fl=(f[a.email]||{});
     return Object.assign({},a,{has_session:sess.has(a.email),lock_reason:fl.reason||null});
   });
+  ALL_ORIGINAL=ALL.slice();
   ALL=_sortByExcelDate(ALL);
   document.getElementById('s-acc').textContent=ALL.length.toLocaleString();
   document.getElementById('s-sess').textContent=ALL.filter(function(a){return a.has_session}).length.toLocaleString();
@@ -196,6 +197,7 @@ function render(){
       +'<div style="color:#8a95a5">2FA 코드</div><div class="mono td-2fa-code" style="color:#7dabff;font-size:18px;font-weight:700;letter-spacing:2px"><span id="jcode-'+idx+'">…</span>'+(a.totp_secret?cp('_','jcode-'+idx):'')+'</div>'
       +'<div style="color:#8a95a5">YouTube</div><div class="mono" style="font-size:11px">'+(yt&&/^https?:\/\//i.test(yt)?'<a href="'+_yt+'" target="_blank" style="color:#ff8a8a">'+_yt+'</a>'+cp(yt):'—')+'</div>'
       +'<div style="color:#8a95a5">복구</div><div class="mono" style="font-size:11px">'+_rc+'</div>'
+      +'<div style="color:#8a95a5">동작</div><div><button style="background:#7c3aed;padding:7px 14px;font-size:13px" onclick="programLogin(\''+_em.replace(/'/g,"\\'")+'\',this)">🔑 로그인</button></div>'
       +'</div></div>');
   }
   document.getElementById('spacer').innerHTML=rows.join('');
@@ -248,7 +250,46 @@ async function lookup(){
     +'<div style="color:#8a95a5">2FA 코드</div><div class="mono" style="color:#7dabff;font-size:22px;font-weight:700;letter-spacing:3px">'+_esc(code)+cp(code!=='—'?code:'')+'</div>'
     +'<div style="color:#8a95a5">YouTube</div><div class="mono">'+_esc(j.youtube_url||'—')+'</div>'
     +'<div style="color:#8a95a5">복구</div><div class="mono">'+_esc(j.recovery_email||'—')+'</div>'
-    +'</div>';
+    +'<div style="color:#8a95a5">동작</div><div><button style="background:#7c3aed;padding:8px 14px;font-size:13px" onclick="programLogin(\''+_esc(j.email).replace(/'/g,"\\'")+'\',this)">🔑 로그인</button></div>'
+    +'</div>'
+    +'<div id="lookup-next" style="margin-top:14px;border-top:1px solid #22282f;padding-top:10px"></div>';
+  if(ALL_ORIGINAL&&ALL_ORIGINAL.length){
+    var oi=ALL_ORIGINAL.findIndex(function(a){return a.email===j.email});
+    if(oi>=0){
+      var nxt=ALL_ORIGINAL.slice(oi+1,oi+51);
+      var nb=document.getElementById('lookup-next');
+      if(nb&&nxt.length){
+        nb.innerHTML='<div style="color:#8a95a5;font-size:12px;margin-bottom:6px">▼ 다음 순번 ('+(oi+2)+'~'+(oi+1+nxt.length)+' / '+ALL_ORIGINAL.length+')</div>'
+          +nxt.map(function(a,i){return'<div style="padding:5px 0;border-bottom:1px solid #1a1f26;font-size:12.5px;display:flex;align-items:center;gap:8px">'
+            +'<span style="color:#8a95a5;font-family:monospace;min-width:35px">'+(oi+2+i)+'.</span>'
+            +'<span style="color:#7dabff;cursor:pointer;flex:1" onclick="document.getElementById(\'lookup\').value=\''+_esc(a.email).replace(/'/g,"\\'")+'\';lookup()">'+_esc(a.email)+'</span>'
+            +'<button style="padding:3px 8px;font-size:11px;background:#7c3aed" onclick="programLogin(\''+_esc(a.email).replace(/'/g,"\\'")+'\',this)">🔑</button>'
+            +'</div>'}).join('')
+      }
+    }
+  }
+}
+var LOCK_REASONS=new Set(['PHONE_REQUIRED','PASSKEY_REQUIRED','DEVICE_PROMPT','SECURITY_KEY','BACKUP_CODE','REJECTED','AFTER_TOTP_DEVICE_PROMPT','AFTER_TOTP_PHONE_REQUIRED','AFTER_TOTP_PASSKEY_REQUIRED','WRONG_PASSWORD','UNKNOWN_PASSWORD','2FA_NO_SECRET','TOTP_MAX_ATTEMPTS','BROWSER_UNSAFE']);
+async function programLogin(email,btn){
+  var orig=btn.textContent;btn.disabled=true;btn.textContent='⏳ 시도 중…';
+  var reason='',reached=false;
+  try{
+    var r=await fetch(authQuery(GAUTH_API+'/api/login-one'),{method:'POST',headers:authHeaders({'content-type':'application/json'}),body:JSON.stringify({email:email})});
+    var j=await r.json().catch(function(){return{}});
+    reached=true;
+    if(r.ok&&j.success!==false&&!j.error){
+      btn.textContent='✅ 성공';btn.style.background='#3ddc84';btn.style.color='#000';
+      try{await load()}catch(e){location.reload()}
+      setTimeout(function(){btn.textContent=orig;btn.disabled=false;btn.style.background='';btn.style.color=''},3000);
+      return;
+    }
+    reason=j.reason||j.error||'HTTP '+r.status;
+  }catch(e){reason=e.message}
+  btn.textContent='❌ 실패';btn.style.background='#e0503a';
+  if(reached&&LOCK_REASONS.has(reason)){alert('❌ '+email+'\n실패: '+reason+'\n\n(사람이 직접 로그인 필요)');}
+  else if(reached){alert('❌ '+email+'\n실패: '+reason);}
+  else{alert('❌ 서버 도달 실패: '+reason);}
+  setTimeout(function(){btn.textContent=orig;btn.disabled=false;btn.style.background=''},2000);
 }
 document.getElementById('lookup-btn').addEventListener('click',lookup);
 document.getElementById('lookup').addEventListener('keydown',function(e){if(e.key==='Enter')lookup()});
