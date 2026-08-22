@@ -1,1 +1,1 @@
-trigger 3 - fix false positive: exclude password from TOTP candidates
+trigger 4 - stronger password-TOTP comparison + post-recovery validation + invalid char cleanup

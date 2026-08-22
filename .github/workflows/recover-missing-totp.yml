@@ -27,7 +27,7 @@ jobs:
             set -e
             cd /opt/gauth-full
 
-            echo "=== TOTP 복구 v2: 비밀번호 오탐 수정 + Excel 재스캔 ==="
+            echo "=== TOTP 복구 v4: 비밀번호 오탐 완전 제거 + TOTP 유효성 검증 ==="
             node -e "
               const fs = require('fs');
               const path = require('path');
@@ -36,12 +36,29 @@ jobs:
               const data = JSON.parse(fs.readFileSync('accounts_normalized.json','utf8'));
               const arr = Array.isArray(data) ? data : (data.accounts || []);
 
-              // 0) 이전 실행에서 비밀번호를 TOTP로 잘못 넣은 것 제거
+              // Base32 정규화: 대문자 + Base32 문자만 남김
+              function toBase32(s) {
+                return String(s||'').toUpperCase().replace(/[^A-Z2-7]/g,'');
+              }
+
+              // 비밀번호와 TOTP가 같은지 (Base32 정규화 후 비교)
+              function isPwSameAsTotp(pw, totp) {
+                if (!pw || !totp) return false;
+                // 직접 비교
+                if (totp.toUpperCase() === pw.toUpperCase()) return true;
+                // Base32 정규화 후 비교 (비밀번호에서 0189 등 제거한 것과 일치 여부)
+                var b32pw = toBase32(pw);
+                var b32totp = toBase32(totp);
+                if (b32pw.length >= 12 && b32pw === b32totp) return true;
+                return false;
+              }
+
+              // 0) 비밀번호를 TOTP로 잘못 넣은 것 제거 (확장된 비교)
               let cleaned = 0;
               for (const a of arr) {
                 if (a.totp_secret && a.password) {
-                  if (a.totp_secret.toUpperCase() === a.password.toUpperCase()) {
-                    console.log('CLEAN bad totp (=password): ' + a.email);
+                  if (isPwSameAsTotp(a.password, a.totp_secret)) {
+                    console.log('CLEAN bad totp (=password): ' + a.email + ' pw=' + a.password.slice(0,6) + '... totp=' + a.totp_secret.slice(0,6) + '...');
                     delete a.totp_secret;
                     cleaned++;
                   }
@@ -89,17 +106,17 @@ jobs:
                   const m = cell.match(/secret=([A-Z2-7]+)/i);
                   if (m) {
                     const s = m[1].toUpperCase();
-                    if (password && s === password.toUpperCase()) return null;
+                    if (password && isPwSameAsTotp(password, s)) return null;
                     return s;
                   }
                   return null;
                 }
-                // 비밀번호와 동일하면 스킵
-                if (password && cell.toLowerCase() === password.toLowerCase()) return null;
+                // 비밀번호와 동일하면 스킵 (대소문자, Base32 정규화 모두 비교)
+                if (password && isPwSameAsTotp(password, cell)) return null;
                 const clean = cell.replace(/[\s=-]/g,'');
                 if (isBase32Like(cell)) {
                   const upper = clean.toUpperCase();
-                  if (password && upper === password.toUpperCase()) return null;
+                  if (password && isPwSameAsTotp(password, upper)) return null;
                   return upper;
                 }
                 return null;
@@ -178,19 +195,48 @@ jobs:
               console.log('Excel에서 복구: ' + recoveredExcel);
               recovered.forEach(r => console.log('  ' + r));
 
-              // 4) 저장
+              // 4) 최종 검증: 복구 후에도 비밀번호=TOTP인 것 다시 제거
+              let postCleaned = 0;
+              for (const a of arr) {
+                if (a.totp_secret && a.password) {
+                  if (isPwSameAsTotp(a.password, a.totp_secret)) {
+                    console.log('POST-CLEAN: ' + a.email);
+                    delete a.totp_secret;
+                    postCleaned++;
+                  }
+                }
+              }
+              if (postCleaned) console.log('복구 후 추가 오탐 제거: ' + postCleaned);
+
+              // 5) TOTP 유효성 검증 (0,1,8,9 포함 여부)
+              let invalidTotp = 0;
+              for (const a of arr) {
+                if (a.totp_secret) {
+                  const stripped = a.totp_secret.replace(/[^A-Z2-7]/gi,'');
+                  if (stripped.length !== a.totp_secret.length) {
+                    console.log('INVALID TOTP chars: ' + a.email + ' → ' + a.totp_secret.slice(0,10));
+                    a.totp_secret = stripped.length >= 16 ? stripped : undefined;
+                    if (!a.totp_secret) delete a.totp_secret;
+                    invalidTotp++;
+                  }
+                }
+              }
+              if (invalidTotp) console.log('잘못된 TOTP 문자 수정: ' + invalidTotp);
+
+              // 6) 저장
               const totalRecovered = recoveredExtra + recoveredExcel;
-              if (totalRecovered > 0 || cleaned > 0) {
+              const totalCleaned = cleaned + postCleaned + invalidTotp;
+              if (totalRecovered > 0 || totalCleaned > 0) {
                 const tmp = 'accounts_normalized.json.tmp.' + process.pid;
                 fs.writeFileSync(tmp, JSON.stringify(arr, null, 2));
                 fs.renameSync(tmp, 'accounts_normalized.json');
                 console.log('');
-                console.log('=== 오탐 제거: ' + cleaned + ' / 신규 복구: ' + totalRecovered + ' ===');
+                console.log('=== 오탐 제거: ' + totalCleaned + ' (사전=' + cleaned + ' 사후=' + postCleaned + ' 잘못된문자=' + invalidTotp + ') / 신규 복구: ' + totalRecovered + ' ===');
               } else {
                 console.log('변경 없음');
               }
 
-              // 5) 최종 상태
+              // 7) 최종 상태
               const finalMissing = arr.filter(a => a.email && a.password && !a.totp_secret).length;
               const withTotp = arr.filter(a => a.totp_secret).length;
               console.log('최종: 전체=' + arr.length + ' TOTP=' + withTotp + ' 미복구=' + finalMissing);
