@@ -1,5 +1,18 @@
 <!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>참교육 스트리밍 계정 정보</title>
+<script>
+window.onerror=function(msg,src,line,col,err){
+  var d=document.getElementById('_dbg');
+  if(!d){d=document.createElement('div');d.id='_dbg';d.style.cssText='position:fixed;bottom:0;left:0;right:0;z-index:99999;background:#1a0000;color:#ff4444;padding:12px;font-size:13px;font-family:monospace;max-height:40vh;overflow-y:auto;border-top:2px solid #ff0000';document.body?document.body.appendChild(d):document.addEventListener('DOMContentLoaded',function(){document.body.appendChild(d)})}
+  d.innerHTML+='<div style="margin-bottom:6px">❌ '+msg+' <small>(line '+line+')</small></div>';
+  return false;
+};
+window.addEventListener('unhandledrejection',function(e){
+  var d=document.getElementById('_dbg');
+  if(!d){d=document.createElement('div');d.id='_dbg';d.style.cssText='position:fixed;bottom:0;left:0;right:0;z-index:99999;background:#1a0000;color:#ff4444;padding:12px;font-size:13px;font-family:monospace;max-height:40vh;overflow-y:auto;border-top:2px solid #ff0000';document.body.appendChild(d)}
+  d.innerHTML+='<div style="margin-bottom:6px">❌ Promise: '+(e.reason&&e.reason.message||e.reason||'unknown')+'</div>';
+});
+</script>
 <link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0a0d12"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%230a0d12' width='100' height='100' rx='20'/><text x='50' y='70' text-anchor='middle' font-size='60'>📺</text></svg>">
 <style>
 *{box-sizing:border-box}
@@ -854,6 +867,7 @@ async function load(){
   document.getElementById('s-2fa').textContent = ((n.summary && n.summary.PASSWORD_2FA) || _2faCount).toLocaleString()
   document.getElementById('s-pw').textContent = ((n.summary && n.summary.PASSWORD_ONLY) || _pwOnly).toLocaleString()
   applyFilter()
+  var _dbg=document.getElementById('_dbg');if(_dbg)_dbg.innerHTML+='<div style="color:#3ddc84;margin-bottom:6px">✅ load() 완료: '+ALL.length+'개 계정</div>';
 }
 function applyFilter(){
   const q = document.getElementById('q').value.trim().toLowerCase()
