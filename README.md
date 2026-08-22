@@ -253,32 +253,25 @@ const url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURICompo
 | **엑셀 업로드** | 단일 파일 업로드 (gauth `/api/upload-excels` 프록시) |
 | **사이트별 카드** | 15개 사이트 × 이모지+영문+한글+계정수 · 클릭 → 이메일 10개/페이지 |
 
-#### 2. `/accounts.html` — 계정 상세 (gauth와 동일)
+#### 2. `/accounts.html` — 계정 상세 (읽기 전용, 로그인 기능 없음)
 | 영역 | 기능 |
 |---|---|
 | **상단 요약바** | 성공 N · 실패 N · 미시도 N · 전체 N |
 | **필터** | 사이트 드롭다운 · 로그인 상태 필터 · 텍스트 검색 |
 | **컴팩트 리스트** | 1만개 대응 · 번호 · 로그인상태점(●) · 이메일 · 사이트 배지 |
-| **구글 로그인** | GIS 버튼 (jump 도메인이 OAuth JS origin에 등록되어야 작동) |
-| **개별 로그인** | 🔑 버튼 → `POST /api/login-one` (쿠키 인증) |
 | **채널 상태** | 📊 버튼 → `GET /api/youtube/channel-status` |
 | **다운로드** | ⬇ CSV · ⬇ JSON |
 
 > gauth `accounts.html`과 동일 소스. API는 Apache vhost에서 gauth(port 4000)로 프록시.
 
-### 프록시 API (Apache vhost → gauth port 4000)
+### 프록시 API (Apache vhost → gauth port 4000, 읽기 전용)
 | 프록시 경로 | 용도 |
 |---|---|
 | `/api/subsite-counts` | 사이트별 개수 |
 | `/api/subsite-accounts` | 사이트별 계정 상세 |
 | `/api/login-results` | 로그인 결과 조회 |
 | `/api/export/login-results` | 로그인 결과 CSV/JSON 다운로드 |
-| `/api/login-one` | 개별 로그인 실행 |
 | `/api/youtube/channel-status` | 채널 상태 조회 |
-| `/api/auth/*` | 구글 로그인 (me, config, google) |
-| `/api/lookup` | 이메일 조회 |
-| `/api/search-account` | 계정 검색 |
-| `/api/normalized-accounts` | 전체 계정 목록 |
 
 ### 캐시 정책
 - Apache vhost에서 `.html/.json/.js`에 `no-store` + `Clear-Site-Data: "cache", "storage"` 강제
