@@ -4,7 +4,7 @@ on:
   workflow_dispatch: {}
   push:
     branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
-    paths: ['gauth-public/accounts.html']
+    paths: ['gauth-public/accounts.html', 'jump/accounts.html', 'gauth-public/subsites.html']
 
 jobs:
   deploy:
@@ -19,9 +19,9 @@ jobs:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          source: "gauth-public/accounts.html"
+          source: "gauth-public/accounts.html,gauth-public/subsites.html,jump/accounts.html"
           target: "/tmp/gauth-deploy"
-          strip_components: 1
+          strip_components: 0
 
       - name: Install and add nav
         uses: appleboy/ssh-action@v1.0.3
@@ -32,33 +32,23 @@ jobs:
           command_timeout: 60s
           script: |
             set -e
-            PUB=/var/www/sites/gauth/public
+            GPUB=/var/www/sites/gauth/public
+            JPUB=/var/www/sites/jump/public
 
-            echo "=== 1. Install accounts.html ==="
-            sudo cp /tmp/gauth-deploy/accounts.html "$PUB/accounts.html"
-            sudo chown www-data:www-data "$PUB/accounts.html" 2>/dev/null || true
+            echo "=== 1. Deploy gauth accounts.html + subsites.html ==="
+            sudo cp /tmp/gauth-deploy/gauth-public/accounts.html "$GPUB/accounts.html"
+            sudo cp /tmp/gauth-deploy/gauth-public/subsites.html "$GPUB/subsites.html"
+            sudo chown www-data:www-data "$GPUB/accounts.html" "$GPUB/subsites.html" 2>/dev/null || true
+
+            echo "=== 2. Deploy jump accounts.html ==="
+            sudo cp /tmp/gauth-deploy/jump/accounts.html "$JPUB/accounts.html"
+            sudo chown www-data:www-data "$JPUB/accounts.html" 2>/dev/null || true
+
             rm -rf /tmp/gauth-deploy
 
-            echo "=== 2. Add nav to subsites.html ==="
-            NAV='<nav style="position:sticky;top:0;z-index:10;background:#111418;border-bottom:1px solid #22282f;display:flex;align-items:center;padding:0 16px;height:48px;gap:6px;overflow-x:auto"><a href="/" style="color:#8a95a5;text-decoration:none;font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;white-space:nowrap">🏠 메인</a><a href="/subsites.html" style="color:#7dabff;text-decoration:none;font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;background:#1e3a5f;white-space:nowrap">📦 사이트별</a><a href="/accounts.html" style="color:#8a95a5;text-decoration:none;font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;white-space:nowrap">📋 계정 상세</a></nav>'
-            if ! grep -q 'accounts.html' "$PUB/subsites.html" 2>/dev/null; then
-              sudo sed -i "s|<body>|<body>\n${NAV}|" "$PUB/subsites.html"
-              echo "nav added to subsites.html"
-            else
-              echo "nav already in subsites.html"
-            fi
-
-            echo "=== 3. Add nav to index.html ==="
-            if ! grep -q 'accounts.html' "$PUB/index.html" 2>/dev/null; then
-              NAV_MAIN='<nav style="position:sticky;top:0;z-index:10;background:#111418;border-bottom:1px solid #22282f;display:flex;align-items:center;padding:0 16px;height:48px;gap:6px;overflow-x:auto"><a href="/" style="color:#7dabff;text-decoration:none;font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;background:#1e3a5f;white-space:nowrap">🏠 메인</a><a href="/subsites.html" style="color:#8a95a5;text-decoration:none;font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;white-space:nowrap">📦 사이트별</a><a href="/accounts.html" style="color:#8a95a5;text-decoration:none;font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;white-space:nowrap">📋 계정 상세</a></nav>'
-              sudo sed -i "s|<body>|<body>\n${NAV_MAIN}|" "$PUB/index.html"
-              echo "nav added to index.html"
-            else
-              echo "nav already in index.html"
-            fi
-
-            echo "=== 4. Verify ==="
-            for f in index.html subsites.html accounts.html; do
-              echo "$f: $(wc -c < "$PUB/$f") bytes"
+            echo "=== 3. Verify ==="
+            for f in accounts.html subsites.html; do
+              echo "gauth/$f: $(wc -c < "$GPUB/$f") bytes"
             done
+            echo "jump/accounts.html: $(wc -c < "$JPUB/accounts.html") bytes"
             echo "DONE"
