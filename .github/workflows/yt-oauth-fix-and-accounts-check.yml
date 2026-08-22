@@ -1,0 +1,67 @@
+name: Fix YT OAuth systemd + check account order
+on:
+  push:
+    branches: ['claude/broadcast-ip-check-z57wox']
+    paths: ['.github/workflows/yt-oauth-fix-and-accounts-check.yml']
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fix YouTube OAuth in systemd and check accounts
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            set -e
+
+            echo "=== 1. Add YOUTUBE_OAUTH vars to systemd drop-in ==="
+            YT_CID=$(sudo grep '^YOUTUBE_OAUTH_CLIENT_ID=' /opt/gauth-full/.env | cut -d= -f2-)
+            YT_CSE=$(sudo grep '^YOUTUBE_OAUTH_CLIENT_SECRET=' /opt/gauth-full/.env | cut -d= -f2-)
+
+            sudo tee /etc/systemd/system/gauth.service.d/youtube-oauth.conf > /dev/null <<DROPEOF
+            [Service]
+            Environment="YOUTUBE_OAUTH_CLIENT_ID=$YT_CID"
+            Environment="YOUTUBE_OAUTH_CLIENT_SECRET=$YT_CSE"
+            DROPEOF
+            echo "drop-in created"
+
+            echo ""
+            echo "=== 2. Update redirect_uri in .env to gauth domain ==="
+            sudo sed -i 's|^YOUTUBE_OAUTH_REDIRECT_URI=.*|YOUTUBE_OAUTH_REDIRECT_URI=https://gauth.cent-solution.online/|' /opt/gauth-full/.env
+            echo "redirect_uri updated"
+
+            echo ""
+            echo "=== 3. Restart gauth ==="
+            sudo systemctl daemon-reload
+            sudo systemctl restart gauth
+            sleep 2
+            sudo systemctl is-active gauth
+            echo "gauth restarted OK"
+
+            echo ""
+            echo "=== 4. Verify YOUTUBE_OAUTH in process ==="
+            PID=$(pgrep -f rebrowser-login | head -1)
+            sudo cat /proc/$PID/environ 2>/dev/null | tr '\0' '\n' | grep "YOUTUBE_OAUTH" | sed 's/=.\{8\}/=********/' || echo "(not found)"
+
+            echo ""
+            echo "=== 5. Account order after urbandhari874@gmail.com ==="
+            node -e '
+            const fs = require("fs");
+            const data = JSON.parse(fs.readFileSync("/opt/gauth-full/accounts_normalized.json","utf8"));
+            let found = false;
+            let count = 0;
+            for (let i = 0; i < data.length; i++) {
+              if (data[i].email === "urbandhari874@gmail.com") { found = true; }
+              if (found) {
+                count++;
+                console.log("#" + (i+1) + " " + data[i].email);
+                if (count > 55) break;
+              }
+            }
+            if (!found) console.log("urbandhari874@gmail.com NOT FOUND in accounts");
+            '
