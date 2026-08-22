@@ -21,9 +21,21 @@ jobs:
             wc -c /var/www/sites/gauth/public/index.html
 
             echo ""
-            echo "=== head 200 lines ==="
-            head -200 /var/www/sites/gauth/public/index.html
+            echo "=== getApiToken ==="
+            grep -n 'getApiToken' /var/www/sites/gauth/public/index.html | head -5
 
             echo ""
-            echo "=== menu/nav related ==="
-            grep -n -i 'nav\|menu\|tab\|header\|accounts' /var/www/sites/gauth/public/index.html | head -30
+            echo "=== menu/nav/tab ==="
+            grep -n -i 'nav\|menu\|tab-btn\|header\|class="tabs"' /var/www/sites/gauth/public/index.html | head -30
+
+            echo ""
+            echo "=== API calls status ==="
+            curl -sS -o /dev/null -w "HTTP %{http_code}" http://localhost:4000/api/accounts -H "Authorization: Bearer $(sudo grep -oP 'GAUTH_API_TOKEN=\K.*' /opt/gauth-full/.env)"
+
+            echo ""
+            echo "=== systemd gauth ==="
+            sudo systemctl is-active gauth
+
+            echo ""
+            echo "=== head 100 ==="
+            head -100 /var/www/sites/gauth/public/index.html
