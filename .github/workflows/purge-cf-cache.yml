@@ -1,0 +1,36 @@
+name: Purge Cloudflare cache
+on:
+  push:
+    branches: ['claude/broadcast-ip-check-z57wox']
+    paths: ['.github/workflows/purge-cf-cache.yml']
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Purge gauth cache
+        run: |
+          curl -sS -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"files":["https://gauth.cent-solution.online/","https://gauth.cent-solution.online/index.html"]}'
+
+      - name: Verify fresh page
+        run: |
+          sleep 5
+          echo "=== curl main page ==="
+          curl -sS -o /dev/null -w "HTTP %{http_code}, size: %{size_download}, cf-cache: " https://gauth.cent-solution.online/
+          curl -sI https://gauth.cent-solution.online/ | grep -i 'cf-cache-status'
+
+          echo ""
+          echo "=== check getApiToken ==="
+          curl -sS https://gauth.cent-solution.online/ | grep -o "getApiToken(){[^}]*}" | head -1
+
+          echo ""
+          echo "=== check API responds ==="
+          TOKEN=$(curl -sS https://gauth.cent-solution.online/ | grep -oP "getApiToken\(\)\{return sessionStorage\.getItem\('gauth_token'\)\|\|'\K[^']+")
+          curl -sS -o /dev/null -w "API /api/accounts HTTP %{http_code}\n" \
+            https://gauth.cent-solution.online/api/accounts \
+            -H "Authorization: Bearer $TOKEN"
