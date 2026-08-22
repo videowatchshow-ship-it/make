@@ -1078,26 +1078,27 @@ async function ytApiConnect(email, btn) {
   if (!_ytClientId) { alert('YouTube OAuth Client ID가 서버에 설정되지 않았습니다.\nYOUTUBE_OAUTH_CLIENT_ID 환경변수를 설정하세요.'); return; }
   const orig = btn.textContent; btn.disabled = true; btn.textContent = '⏳ 연결 중…';
   const redirectUri = location.origin + '/';
-  const scope = 'https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube.force-ssl';
+  const scope = 'https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.force-ssl';
   var _oauthNonce = Array.from(crypto.getRandomValues(new Uint8Array(16)),function(b){return b.toString(16).padStart(2,'0')}).join('');
   sessionStorage.setItem('yt_oauth_nonce', _oauthNonce);
+  sessionStorage.setItem('yt_oauth_email', email);
   const state = encodeURIComponent(JSON.stringify({ email, nonce: _oauthNonce }));
   const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=' + encodeURIComponent(_ytClientId)
     + '&redirect_uri=' + encodeURIComponent(redirectUri)
-    + '&response_type=token&scope=' + encodeURIComponent(scope)
+    + '&response_type=code&scope=' + encodeURIComponent(scope)
     + '&state=' + state
     + '&login_hint=' + encodeURIComponent(email)
-    + '&prompt=consent';
+    + '&access_type=offline&prompt=consent';
   const popup = window.open(authUrl, 'ytAuth', 'width=500,height=700');
   const checkInterval = setInterval(async () => {
     try {
       if (!popup || popup.closed) { clearInterval(checkInterval); btn.textContent = orig; btn.disabled = false; return; }
       const url = popup.location.href;
       if (url && url.startsWith(redirectUri)) {
-        const hash = popup.location.hash.substring(1);
         popup.close(); clearInterval(checkInterval);
-        const params = new URLSearchParams(hash);
-        var returnedState = params.get('state');
+        const urlObj = new URL(url);
+        const code = urlObj.searchParams.get('code');
+        var returnedState = urlObj.searchParams.get('state');
         try {
           var stateObj = JSON.parse(decodeURIComponent(returnedState || '{}'));
           var savedNonce = sessionStorage.getItem('yt_oauth_nonce');
@@ -1105,16 +1106,18 @@ async function ytApiConnect(email, btn) {
             btn.textContent = '❌ state 불일치'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000); return;
           }
           sessionStorage.removeItem('yt_oauth_nonce');
+          sessionStorage.removeItem('yt_oauth_email');
         } catch(_) { btn.textContent = '❌ state 파싱 실패'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000); return; }
-        const token = params.get('access_token');
-        const expiresIn = parseInt(params.get('expires_in') || '3600');
-        if (token) {
-          await fetch(authQuery('/api/youtube/save-token'), { method: 'POST', headers: authHeaders({'content-type': 'application/json'}), body: JSON.stringify({ email, access_token: token, expires_at: Date.now() + expiresIn * 1000 }) });
-          btn.textContent = '✅ 연결됨'; btn.style.background = '#0d3222'; btn.style.color = '#3ddc84';
-          setTimeout(() => { btn.textContent = orig; btn.disabled = false; btn.style.background = ''; btn.style.color = ''; }, 2000);
-        } else { btn.textContent = '❌ 실패'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000); }
+        if (code) {
+          const r = await fetch(authQuery('/api/youtube/exchange-code'), { method: 'POST', headers: authHeaders({'content-type': 'application/json'}), body: JSON.stringify({ email, code, redirect_uri: redirectUri }) });
+          const j = await r.json();
+          if (j.ok) {
+            btn.textContent = j.has_refresh ? '✅ 영구 연결' : '✅ 연결됨'; btn.style.background = '#0d3222'; btn.style.color = '#3ddc84';
+          } else { btn.textContent = '❌ ' + (j.error || '실패'); }
+          setTimeout(() => { btn.textContent = orig; btn.disabled = false; btn.style.background = ''; btn.style.color = ''; }, 3000);
+        } else { btn.textContent = '❌ 코드 없음'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000); }
       }
-    } catch { /* cross-origin — 아직 리다이렉트 전 */ }
+    } catch { /* cross-origin */ }
   }, 500);
 }
 
