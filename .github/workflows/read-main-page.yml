@@ -20,22 +20,33 @@ jobs:
             echo "=== index.html size ==="
             wc -c /var/www/sites/gauth/public/index.html
 
-            echo ""
-            echo "=== getApiToken ==="
-            grep -n 'getApiToken' /var/www/sites/gauth/public/index.html | head -5
+            FILE=/var/www/sites/gauth/public/index.html
+
+            echo "=== header section (line 530-560) ==="
+            sed -n '530,560p' "$FILE"
 
             echo ""
-            echo "=== menu/nav/tab ==="
-            grep -n -i 'nav\|menu\|tab-btn\|header\|class="tabs"' /var/www/sites/gauth/public/index.html | head -30
+            echo "=== type=hidden replacements ==="
+            grep -n 'type="hidden"' "$FILE"
 
             echo ""
-            echo "=== API calls status ==="
-            curl -sS -o /dev/null -w "HTTP %{http_code}" http://localhost:4000/api/accounts -H "Authorization: Bearer $(sudo grep -oP 'GAUTH_API_TOKEN=\K.*' /opt/gauth-full/.env)"
+            echo "=== type=password ==="
+            grep -n 'type="password"' "$FILE"
 
             echo ""
-            echo "=== systemd gauth ==="
-            sudo systemctl is-active gauth
+            echo "=== all links/anchors ==="
+            grep -n '<a ' "$FILE" | head -20
 
             echo ""
-            echo "=== head 100 ==="
-            head -100 /var/www/sites/gauth/public/index.html
+            echo "=== accounts.html reference ==="
+            grep -n 'accounts' "$FILE" | head -20
+
+            echo ""
+            echo "=== JS errors test ==="
+            TOKEN=$(sudo grep -oP 'GAUTH_API_TOKEN=\K.*' /opt/gauth-full/.env)
+            RESP=$(curl -sS http://localhost:4000/api/normalized-accounts -H "Authorization: Bearer $TOKEN")
+            echo "$RESP" | head -c 500
+
+            echo ""
+            echo "=== data-old-placeholder count ==="
+            grep -c 'data-old-placeholder' "$FILE"
