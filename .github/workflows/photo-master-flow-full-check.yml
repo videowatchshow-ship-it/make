@@ -1,0 +1,42 @@
+name: README 확인 + photo/photo2 헬스체크 + aass0707 마스터 계정선택→방선택 흐름 검증
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-master-flow-full-check.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: README + write.php 마스터 UI 로직 확인
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            echo "===== README 파일 목록(photo/photo2/photo3) ====="
+            sudo find /var/www/sites/chamgyo/public/photo /var/www/sites/chamgyo/public/photo2 /var/www/sites/chamgyo/public/photo3 -maxdepth 1 -iname "README*" 2>/dev/null
+            echo ""
+            echo "===== photo/README.md 전문 ====="
+            sudo cat /var/www/sites/chamgyo/public/photo/README.md 2>&1
+            echo ""
+            echo "===== photo2/write.php 안에서 마스터용 채널 선택 드롭다운/셀렉트 UI 코드 (isMaster 관련) ====="
+            sudo grep -n "isMaster\|__master\|selectChannel\|ch_select\|<select" /var/www/sites/chamgyo/public/photo2/write.php 2>&1 | head -40
+            echo ""
+            echo "===== photo2/write.php 안에서 방 선택 폼(room select) 코드 ====="
+            sudo grep -n "write_select_room\|room_id\|selectRoom" /var/www/sites/chamgyo/public/photo2/write.php 2>&1 | head -30
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
