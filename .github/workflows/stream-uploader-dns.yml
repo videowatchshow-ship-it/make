@@ -1,0 +1,44 @@
+name: Stream - DNS-only uploader subdomain
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/youtube-video-edit-stream-r4ftcx]
+    paths: ['.github/workflows/stream-uploader-dns.yml']
+
+jobs:
+  dns:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+      ORIGIN_IP: ${{ secrets.GAUTH_HOST }}
+    steps:
+      - name: Create grey-cloud A record vupload.cent-solution.online
+        run: |
+          set -e
+          ROOT="cent-solution.online"
+          NAME="vupload.cent-solution.online"
+
+          ZID=$(curl -s -H "Authorization: Bearer $CF_TOKEN" \
+            "https://api.cloudflare.com/client/v4/zones?name=${ROOT}" \
+            | python3 -c "import sys,json;d=json.load(sys.stdin);print(d['result'][0]['id'] if d.get('result') else '')")
+          if [ -z "$ZID" ]; then echo "zone not found for $ROOT"; exit 1; fi
+          echo "zone ok"
+
+          # existing record?
+          REC=$(curl -s -H "Authorization: Bearer $CF_TOKEN" \
+            "https://api.cloudflare.com/client/v4/zones/${ZID}/dns_records?type=A&name=${NAME}" \
+            | python3 -c "import sys,json;d=json.load(sys.stdin);print(d['result'][0]['id'] if d.get('result') else '')")
+
+          PAYLOAD=$(ORIGIN_IP="$ORIGIN_IP" python3 -c "import json,os;print(json.dumps({'type':'A','name':'vupload','content':os.environ['ORIGIN_IP'],'ttl':120,'proxied':False}))")
+
+          if [ -n "$REC" ]; then
+            OUT=$(curl -s -X PUT -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+              "https://api.cloudflare.com/client/v4/zones/${ZID}/dns_records/${REC}" --data "$PAYLOAD")
+          else
+            OUT=$(curl -s -X POST -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+              "https://api.cloudflare.com/client/v4/zones/${ZID}/dns_records" --data "$PAYLOAD")
+          fi
+          echo "$OUT" | python3 -c "import sys,json;d=json.load(sys.stdin);print('success=',d.get('success'),'proxied=',d.get('result',{}).get('proxied'),'name=',d.get('result',{}).get('name'))"
+          echo "URL:  http://vupload.cent-solution.online:4610/"
