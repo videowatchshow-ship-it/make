@@ -1,5 +1,6 @@
 name: Deploy gauth-public to server
 on:
+  workflow_dispatch:
   push:
     branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
     paths: ['gauth-public/**']
