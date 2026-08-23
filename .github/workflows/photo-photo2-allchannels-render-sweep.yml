@@ -1,0 +1,82 @@
+name: photo+photo2 전체 채널(13개) 출목표 렌더링 전수 테스트
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-photo2-allchannels-render-sweep.yml'
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install playwright@1.48.0
+      - run: npx playwright install --with-deps chromium
+      - name: 13개 채널 x photo/photo2 렌더링 전수 확인
+        run: |
+          cat > sweep.js << 'JSEOF'
+          const { chromium } = require('playwright');
+          (async () => {
+            const base = 'https://xn--9d0bw2fjtyymch7de9d.info';
+            const channels = ['aass0707','cent','otuki','denny','tak','jay','gain','abc01','abc02','abc03','abc04','abc05','abc06','abc07'];
+            const folders = ['photo','photo2'];
+            const canvasIds = ['cBead','cAskP','cAskB','cBig','cDrv'];
+
+            const browser = await chromium.launch();
+            const results = [];
+
+            for (const folder of folders) {
+              for (const ch of channels) {
+                const url = `${base}/${folder}/SNW_1.html?ch=${ch}`;
+                const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+                const errs = [];
+                let httpStatus = null;
+                page.on('pageerror', e => errs.push(e.message));
+                page.on('console', m => { if (m.type() === 'error') errs.push('[console] ' + m.text()); });
+                page.on('response', res => {
+                  if (res.status() >= 400 && res.url() === url) httpStatus = res.status();
+                  if (res.status() >= 400 && !res.url().includes('img_ver_') && !res.url().endsWith(url)) {
+                    errs.push(`[http ${res.status()}] ${res.url()}`);
+                  }
+                });
+                try {
+                  const resp = await page.goto(url, { waitUntil: 'networkidle', timeout: 15000 });
+                  httpStatus = resp ? resp.status() : null;
+                  await page.waitForTimeout(1000);
+                  const canvasInfo = await page.evaluate((ids) => {
+                    return ids.map(id => {
+                      const el = document.getElementById(id);
+                      return el ? { id, w: el.width, h: el.height, present: true } : { id, present: false };
+                    });
+                  }, canvasIds);
+                  const allPresent = canvasInfo.every(c => c.present && c.w > 0 && c.h > 0);
+                  results.push({
+                    folder, ch, url, httpStatus,
+                    pass: allPresent && httpStatus === 200,
+                    canvases: canvasInfo,
+                    errors: errs,
+                  });
+                } catch (e) {
+                  results.push({ folder, ch, url, httpStatus, pass: false, error: 'NAV_FAILED: ' + e.message, errors: errs });
+                }
+                await page.close();
+              }
+            }
+
+            await browser.close();
+            console.log('===== 전체 결과 JSON =====');
+            console.log(JSON.stringify(results, null, 2));
+
+            console.log('===== 요약 표 =====');
+            for (const r of results) {
+              console.log(`${r.folder}\t${r.ch}\t${r.pass ? 'PASS' : 'FAIL'}\thttp=${r.httpStatus}\terrs=${(r.errors||[]).length}`);
+            }
+            const fails = results.filter(r => !r.pass);
+            console.log('===== FAIL 개수: ' + fails.length + ' / ' + results.length + ' =====');
+          })();
+          JSEOF
+          node sweep.js
