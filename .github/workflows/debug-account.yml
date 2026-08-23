@@ -1,4 +1,5 @@
 name: Debug account data
+
 on:
   workflow_dispatch:
 
@@ -16,18 +17,7 @@ jobs:
           command_timeout: 30s
           script: |
             echo "=== addisonfjmzjocytsopzob account data ==="
-            python3 -c "
-import json
-with open('/opt/gauth-full/accounts_normalized.json') as f:
-    data = json.load(f)
-    accts = data if isinstance(data, list) else data.get('accounts', [])
-for a in accts:
-    if 'addisonfjmzjocytsopzob' in (a.get('email','') or '').lower():
-        print(json.dumps(a, indent=2, ensure_ascii=False))
-        break
-else:
-    print('NOT FOUND')
-"
+            python3 -c "import json; f=open('/opt/gauth-full/accounts_normalized.json'); data=json.load(f); accts=data if isinstance(data,list) else data.get('accounts',[]); matches=[a for a in accts if 'addisonfjmzjocytsopzob' in (a.get('email','') or '').lower()]; print(json.dumps(matches[0],indent=2,ensure_ascii=False) if matches else 'NOT FOUND')"
             echo ""
             echo "=== source excel files ==="
             grep -rl 'addisonfjmzjocytsopzob' /opt/gauth-full/excels/ 2>/dev/null || echo 'no excel matches'
