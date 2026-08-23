@@ -23,10 +23,8 @@ jobs:
             echo "===== 정리 전 디스크 사용량 ====="
             df -h /
             echo ""
-            echo "===== 1) chamgyo_access.log 로테이션 (파일은 유지, 내용만 비움 - 아파치가 열고 있는 fd 그대로 이어씀) ====="
+            echo "===== 1) chamgyo_access.log 비우기 (디스크 여유 부족으로 백업 복사 없이 바로 truncate - 아파치가 열고 있는 fd 그대로 이어씀) ====="
             ls -lh /chamgyo_access.log
-            sudo cp /chamgyo_access.log /chamgyo_access.log.rotated_$(date +%Y%m%d_%H%M%S).gz 2>/dev/null || true
-            sudo gzip -f /chamgyo_access.log.rotated_* 2>/dev/null || true
             sudo truncate -s 0 /chamgyo_access.log
             ls -lh /chamgyo_access.log
             echo ""
