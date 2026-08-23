@@ -47,6 +47,23 @@ jobs:
             sudo systemctl is-active gauth && echo "OK" || { echo "FAIL"; exit 1; }
             rm -rf "$SRC"
 
+            # purge CF cache using server-local tokens
+            CF_TOKEN="" CF_ZONE=""
+            for f in /opt/gauth-full/.env /opt/gauth/.env /etc/default/gauth /etc/systemd/system/gauth.service; do
+              [ -f "$f" ] || continue
+              [ -z "$CF_TOKEN" ] && CF_TOKEN=$(grep -oP '(?:CLOUDFLARE_TOKEN|CF_TOKEN|CLOUDFLARE_API_TOKEN)=\K\S+' "$f" 2>/dev/null | head -1)
+              [ -z "$CF_ZONE" ] && CF_ZONE=$(grep -oP '(?:CLOUDFLARE_ZONE_ID|CF_ZONE|CLOUDFLARE_ZONE)=\K\S+' "$f" 2>/dev/null | head -1)
+            done
+            if [ -n "$CF_TOKEN" ] && [ -n "$CF_ZONE" ]; then
+              curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/purge_cache" \
+                -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+                --data '{"purge_everything":true}' && echo "purge: done" || echo "purge: curl failed"
+            else
+              echo "CF tokens not found on server either — check .env files"
+              echo "CF_TOKEN=${CF_TOKEN:+SET} CF_ZONE=${CF_ZONE:+SET}"
+              ls -la /opt/gauth-full/.env 2>/dev/null || echo "no /opt/gauth-full/.env"
+              grep -c 'CLOUDFLARE\|CF_' /opt/gauth-full/.env 2>/dev/null || echo "no CF vars in .env"
+            fi
             echo "server deploy done"
 
       - name: Purge Cloudflare cache
