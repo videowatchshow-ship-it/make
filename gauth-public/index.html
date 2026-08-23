@@ -590,13 +590,14 @@ function authQuery(url){var t=getApiToken();if(!t)return url;return url+(url.ind
 function noCacheQuery(url){var u=authQuery(url);return u+(u.includes('?')?'&':'?')+'_t='+Date.now()}
 
 var escapeHtml = _esc
-/* 엑셀 내 날짜(account_date) 기준 최신순 정렬
- * 날짜 있는 계정 → 최신순 / 날짜 없는 계정 → 맨 뒤
+/* 엑셀 내 날짜(account_date) 기준 정렬
+ * 날짜 있는 계정 → 선택순(desc/asc) / 날짜 없는 계정 → 맨 뒤
  * ref: MDN Array.prototype.sort https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort */
-function _sortByExcelDate(arr){
+function _sortByExcelDate(arr, order){
   var withDate = arr.filter(function(a){ return a.account_date })
   var noDate   = arr.filter(function(a){ return !a.account_date })
-  withDate.sort(function(a, b){ return b.account_date - a.account_date })
+  var asc = order === 'asc'
+  withDate.sort(function(a, b){ return asc ? a.account_date - b.account_date : b.account_date - a.account_date })
   return withDate.concat(noDate)
 }
 let FAILED = {}
@@ -656,6 +657,8 @@ async function load(){
 function applyFilter(){
   const q = document.getElementById('q').value.trim().toLowerCase()
   const f = document.getElementById('filter').value
+  const orderEl = document.getElementById('td-order')
+  const order = (orderEl && orderEl.value) || 'desc'
   FILTERED = ALL.filter(a => {
     if (q && !(a.email||'').toLowerCase().includes(q)) return false
     if (f==='today' && !(a.session_mtime && a.session_mtime>=kstTodayMidnightMs())) return false
@@ -665,7 +668,7 @@ function applyFilter(){
     if (f==='locked' && !LOCK.includes(a.lock_reason)) return false
     return true
   })
-  FILTERED = _sortByExcelDate(FILTERED)
+  FILTERED = _sortByExcelDate(FILTERED, order)
   PAGE = 1
   const totalPages = Math.max(1, Math.ceil(FILTERED.length / PAGE_SIZE))
   document.getElementById('count').textContent = `${FILTERED.length.toLocaleString()}개 · ${totalPages}페이지`
