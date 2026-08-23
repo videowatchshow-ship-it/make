@@ -1,0 +1,88 @@
+name: Push accounts to simmani and sunbi site DBs
+on:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-push-subsites.txt']
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Push accounts to each subsite accounts.json
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            set -e
+            cd /opt/gauth-full
+
+            echo "=== 심마니 + 선비 계정 직접 푸시 ==="
+            node -e "
+              const fs = require('fs');
+              const today = new Date().toISOString().slice(0, 10);
+
+              function pushToSite(siteName, accounts) {
+                const siteDir = '/var/www/sites/' + siteName;
+                const acctFile = siteDir + '/accounts.json';
+                let data = {accounts: []};
+                try { data = JSON.parse(fs.readFileSync(acctFile, 'utf8')); } catch(e) {}
+                let arr = Array.isArray(data) ? data : (data.accounts || []);
+
+                let added = 0;
+                for (const na of accounts) {
+                  const exists = arr.find(a => (a.email||'').toLowerCase() === na.email.toLowerCase());
+                  if (exists) {
+                    Object.assign(exists, na);
+                    console.log('  업데이트: ' + na.email);
+                  } else {
+                    arr.unshift(na);
+                    added++;
+                    console.log('  추가: ' + na.email);
+                  }
+                }
+                fs.writeFileSync(acctFile, JSON.stringify({accounts: arr}, null, 2));
+                console.log('  ' + siteName + ': ' + added + '개 추가, 전체 ' + arr.length);
+              }
+
+              console.log('[simmani]');
+              pushToSite('simmani', [
+                {email:'itahefelix@gmail.com', password:'felixitahe4335', totp_secret:'ATCT6GS4GQTQNCH7HHNWT4ZMOMQDRLJ5', twofa_secret:'ATCT6GS4GQTQNCH7HHNWT4ZMOMQDRLJ5', youtube_url:'https://youtube.com/user/sissybella/videos', status:'active', allocated_date:today},
+                {email:'jonasudega@gmail.com', password:'jonasudega2934', totp_secret:'HYYCI2I7UFCQMK6IP4WFHMGFQFRDJ3E4', twofa_secret:'HYYCI2I7UFCQMK6IP4WFHMGFQFRDJ3E4', youtube_url:'https://youtube.com/user/cobny20nk/videos', status:'active', allocated_date:today},
+                {email:'zoxohanna@gmail.com', password:'annazoxoh2412', totp_secret:'RIR7NMPDZBHG6X5SZDI3FJ2TU4NX6QT3', twofa_secret:'RIR7NMPDZBHG6X5SZDI3FJ2TU4NX6QT3', youtube_url:'https://youtube.com/user/RBurke88/videos', status:'active', allocated_date:today},
+                {email:'uciphans@gmail.com', password:'hansucip3168', totp_secret:'6INOOLVYQB3MPRSGI3TG76DL5DYT4UHU', twofa_secret:'6INOOLVYQB3MPRSGI3TG76DL5DYT4UHU', youtube_url:'https://youtube.com/user/tonythetigerpppp/videos', status:'active', allocated_date:today}
+              ]);
+
+              console.log('[sunbi]');
+              pushToSite('sunbi', [
+                {email:'dongsong864@gmail.com', password:'rmalLW7305', totp_secret:'KDK43MMRQHWUIBPWJM5KVMGUKKHPN6U', twofa_secret:'KDK43MMRQHWUIBPWJM5KVMGUKKHPN6U', youtube_url:'https://youtube.com/user/cobny20nk/videos', status:'active', allocated_date:today},
+                {email:'congcon034@gmail.com', password:'lferQY7597', totp_secret:'Y4GDWVX6MQXB3JMSNIEIWAU4ZW56VZD', twofa_secret:'Y4GDWVX6MQXB3JMSNIEIWAU4ZW56VZD', youtube_url:'https://youtube.com/user/RBurke88/videos', status:'active', allocated_date:today},
+                {email:'ruongvuon52@gmail.com', password:'pwgCWW7879', totp_secret:'SRSY5PIWHXOJZY5GLDIDKCEMHEDN35XS', twofa_secret:'SRSY5PIWHXOJZY5GLDIDKCEMHEDN35XS', youtube_url:'https://youtube.com/user/tonythetigerpppp/videos', status:'active', allocated_date:today}
+              ]);
+            "
+
+            echo ""
+            echo "=== 서비스 재시작 ==="
+            sudo systemctl restart simmani 2>/dev/null && echo "simmani 재시작 완료" || echo "simmani 서비스 없음"
+            sudo systemctl restart sunbi 2>/dev/null && echo "sunbi 재시작 완료" || echo "sunbi 서비스 없음"
+            sleep 2
+
+            echo ""
+            echo "=== 검증 ==="
+            for site in simmani sunbi; do
+              f="/var/www/sites/$site/accounts.json"
+              if [ -f "$f" ]; then
+                cnt=$(sudo node -e "const d=JSON.parse(require('fs').readFileSync('$f','utf8'));const a=Array.isArray(d)?d:(d.accounts||[]);console.log(a.length)")
+                echo "$site: $cnt 계정"
+              else
+                echo "$site: accounts.json 없음"
+              fi
+            done
+
+            sudo systemctl restart gauth
+            sleep 2
+            sudo systemctl is-active gauth && echo "gauth 정상" || echo "gauth 재시작 실패"
