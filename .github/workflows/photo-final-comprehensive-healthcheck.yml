@@ -1,0 +1,61 @@
+name: photo/photo2 최종 종합 헬스체크 (오늘 작업 전체 이후 상태)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-final-comprehensive-healthcheck.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: 핵심 URL 전체 라이브 실측
+        run: |
+          DOM="xn--9d0bw2fjtyymch7de9d.info"
+          echo "===== SNW_1.html (photo/photo2, cent/jay/tak) ====="
+          for f in photo photo2; do
+            for ch in cent jay tak; do
+              echo "--- $f?ch=$ch ---"
+              curl -sS -o /dev/null -w "HTTP %{http_code}, size %{size_download}\n" "https://$DOM/$f/SNW_1.html?ch=$ch"
+            done
+          done
+          echo ""
+          echo "===== write.php 리다이렉트 (무한루프 재확인) ====="
+          curl -sS -o /dev/null -D - -L --max-redirs 5 "https://$DOM/photo2/write.php" | grep -Ei "^HTTP|location"
+          echo ""
+          echo "===== CAH_1.html 캐시 상태 재확인 ====="
+          curl -sS -o /dev/null -D - "https://$DOM/photo/CAH_1.html?ch=cent" | grep -Ei "^HTTP|cf-cache-status"
+
+      - name: 서버 최종 상태 (디스크 + sel_*.json 무결성)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            echo "===== 디스크 현재 상태 ====="
+            df -h /
+            echo ""
+            echo "===== photo2 cent/jay/tak sel_*.json (JSON 문법 정상 여부) ====="
+            for ch in cent jay tak; do
+              echo "--- $ch ---"
+              sudo cat /var/www/sites/chamgyo/public/photo2/data/sel_$ch.json 2>&1
+              echo ""
+              python3 -c "import json; json.load(open('/var/www/sites/chamgyo/public/photo2/data/sel_$ch.json'))" 2>&1 && echo "JSON_OK" || echo "JSON_BROKEN"
+            done
+            echo ""
+            echo "===== Apache 에러 로그 최근 20줄 (오늘 작업 중 새 에러 있는지) ====="
+            sudo tail -20 /var/log/apache2/error.log 2>&1
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
