@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 echo ============================================
-echo   Kiro AI 완전 삭제 스크립트 (강화판)
+echo   Kiro AI 완전 삭제 스크립트 (최종판)
 echo ============================================
 echo.
 
@@ -13,66 +13,54 @@ if %errorlevel% neq 0 (
 )
 
 echo [1/10] Kiro 프로세스 전부 종료...
-taskkill /F /IM Kiro.exe 2>nul
-taskkill /F /IM kiro.exe 2>nul
-taskkill /F /IM "Kiro Helper.exe" 2>nul
-taskkill /F /IM "Kiro Helper (GPU).exe" 2>nul
-taskkill /F /IM "Kiro Helper (Renderer).exe" 2>nul
-taskkill /F /IM "Kiro Helper (Plugin).exe" 2>nul
+powershell -Command "Get-Process | Where-Object {$_.Name -match 'kiro'} | Stop-Process -Force -ErrorAction SilentlyContinue"
+echo   - Kiro 관련 프로세스 전부 종료 완료
 
 echo [2/10] 공식 언인스톨러 실행...
 if exist "%LOCALAPPDATA%\Programs\Kiro\unins000.exe" (
-    echo   - 공식 언인스톨러 발견, 실행 중...
     "%LOCALAPPDATA%\Programs\Kiro\unins000.exe" /SILENT /NORESTART
     timeout /t 5 >nul
-)
+    echo   - 공식 언인스톨러 실행 완료
+) else echo   - 공식 언인스톨러 없음
 
 echo [3/10] Kiro 프로그램 폴더 삭제...
-if exist "%LOCALAPPDATA%\Programs\Kiro" (
-    rmdir /S /Q "%LOCALAPPDATA%\Programs\Kiro"
-    echo   - Programs\Kiro 삭제 완료
-) else echo   - Programs\Kiro 없음
-if exist "%PROGRAMFILES%\Kiro" (
-    rmdir /S /Q "%PROGRAMFILES%\Kiro"
-    echo   - Program Files\Kiro 삭제 완료
-) else echo   - Program Files\Kiro 없음
-if exist "%PROGRAMFILES(x86)%\Kiro" (
-    rmdir /S /Q "%PROGRAMFILES(x86)%\Kiro"
-    echo   - Program Files(x86)\Kiro 삭제 완료
-) else echo   - Program Files(x86)\Kiro 없음
+for %%p in (
+    "%LOCALAPPDATA%\Programs\Kiro"
+    "%PROGRAMFILES%\Kiro"
+    "%PROGRAMFILES(x86)%\Kiro"
+) do (
+    if exist %%p (
+        rmdir /S /Q %%p
+        echo   - %%p 삭제 완료
+    )
+)
 
-echo [4/10] Kiro 앱 데이터 삭제 (Roaming + Local + Cache)...
-if exist "%APPDATA%\Kiro" (
-    rmdir /S /Q "%APPDATA%\Kiro"
-    echo   - AppData\Roaming\Kiro 삭제 완료
-) else echo   - AppData\Roaming\Kiro 없음
-if exist "%LOCALAPPDATA%\Kiro" (
-    rmdir /S /Q "%LOCALAPPDATA%\Kiro"
-    echo   - AppData\Local\Kiro 삭제 완료
-) else echo   - AppData\Local\Kiro 없음
-if exist "%LOCALAPPDATA%\Kiro-updater" (
-    rmdir /S /Q "%LOCALAPPDATA%\Kiro-updater"
-    echo   - Kiro-updater 삭제 완료
-) else echo   - Kiro-updater 없음
+echo [4/10] Kiro 앱 데이터 전부 삭제...
+for %%p in (
+    "%APPDATA%\Kiro"
+    "%LOCALAPPDATA%\Kiro"
+    "%LOCALAPPDATA%\Kiro-updater"
+) do (
+    if exist %%p (
+        rmdir /S /Q %%p
+        echo   - %%p 삭제 완료
+    )
+)
 
-echo [5/10] Kiro 글로벌 설정 (.kiro) 삭제...
-if exist "%USERPROFILE%\.kiro" (
-    rmdir /S /Q "%USERPROFILE%\.kiro"
-    echo   - %USERPROFILE%\.kiro 삭제 완료
-) else echo   - .kiro 없음
+echo [5/10] .kiro 글로벌 설정 + MCP + CLI + 서버 삭제...
+for %%p in (
+    "%USERPROFILE%\.kiro"
+    "%USERPROFILE%\.kiro-server"
+    "%USERPROFILE%\.kiro-cli"
+) do (
+    if exist %%p (
+        rmdir /S /Q %%p
+        echo   - %%p 삭제 완료
+    )
+)
 
-echo [6/10] Kiro 확장 + 서버 데이터 삭제...
-if exist "%USERPROFILE%\.kiro-server" (
-    rmdir /S /Q "%USERPROFILE%\.kiro-server"
-    echo   - .kiro-server 삭제 완료
-) else echo   - .kiro-server 없음
-if exist "%USERPROFILE%\.kiro-cli" (
-    rmdir /S /Q "%USERPROFILE%\.kiro-cli"
-    echo   - .kiro-cli 삭제 완료
-) else echo   - .kiro-cli 없음
-
-echo [7/10] 모든 프로젝트 안의 .kiro 폴더 삭제...
-echo   - 사용자 폴더 전체 검색 중 (시간이 걸릴 수 있음)...
+echo [6/10] 프로젝트 안의 .kiro 폴더 전부 삭제...
+echo   - 검색 중 (시간이 걸릴 수 있음)...
 for /d /r "%USERPROFILE%" %%d in (.kiro) do (
     if exist "%%d" (
         echo   - 발견: %%d
@@ -81,51 +69,33 @@ for /d /r "%USERPROFILE%" %%d in (.kiro) do (
     )
 )
 
-echo [8/10] 레지스트리 Kiro 항목 전부 삭제...
-reg delete "HKCU\Software\Kiro" /f 2>nul && echo   - HKCU\Software\Kiro 삭제 || echo   - HKCU\Software\Kiro 없음
-reg delete "HKLM\Software\Kiro" /f 2>nul && echo   - HKLM\Software\Kiro 삭제 || echo   - HKLM\Software\Kiro 없음
-reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Kiro" /f 2>nul
-reg delete "HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\Kiro" /f 2>nul
-reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\{kiro}" /f 2>nul
-reg delete "HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\{kiro}" /f 2>nul
-echo   - Uninstall 레지스트리 정리 완료
+echo [7/10] 레지스트리 Kiro 항목 전부 삭제...
+powershell -Command "Get-ChildItem 'HKCU:\Software' -ErrorAction SilentlyContinue | Where-Object {$_.Name -match 'kiro'} | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
+powershell -Command "Get-ChildItem 'HKLM:\Software' -ErrorAction SilentlyContinue | Where-Object {$_.Name -match 'kiro'} | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
+powershell -Command "Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' -ErrorAction SilentlyContinue | Where-Object {$_.Name -match 'kiro'} | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
+powershell -Command "Get-ChildItem 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall' -ErrorAction SilentlyContinue | Where-Object {$_.Name -match 'kiro'} | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
+echo   - 레지스트리 정리 완료
 
-echo [9/10] 바로가기 전부 삭제...
+echo [8/10] 바로가기 전부 삭제 (이름 상관없이 Kiro 포함된 것 전부)...
+powershell -Command "Get-ChildItem '%USERPROFILE%\Desktop' -Filter '*.lnk' -ErrorAction SilentlyContinue | ForEach-Object { $sh = New-Object -ComObject WScript.Shell; $sc = $sh.CreateShortcut($_.FullName); if ($sc.TargetPath -match 'kiro' -or $_.Name -match 'kiro') { Remove-Item $_.FullName -Force; Write-Host ('  - 바탕화면 삭제: ' + $_.Name) } }"
+powershell -Command "Get-ChildItem '%PUBLIC%\Desktop' -Filter '*.lnk' -ErrorAction SilentlyContinue | ForEach-Object { $sh = New-Object -ComObject WScript.Shell; $sc = $sh.CreateShortcut($_.FullName); if ($sc.TargetPath -match 'kiro' -or $_.Name -match 'kiro') { Remove-Item $_.FullName -Force; Write-Host ('  - 공용 바탕화면 삭제: ' + $_.Name) } }"
+powershell -Command "Get-ChildItem '%APPDATA%\Microsoft\Windows\Start Menu\Programs' -Recurse -Filter '*.lnk' -ErrorAction SilentlyContinue | ForEach-Object { $sh = New-Object -ComObject WScript.Shell; $sc = $sh.CreateShortcut($_.FullName); if ($sc.TargetPath -match 'kiro' -or $_.Name -match 'kiro') { Remove-Item $_.FullName -Force; Write-Host ('  - 시작메뉴 삭제: ' + $_.Name) } }"
+powershell -Command "Get-ChildItem '%PROGRAMDATA%\Microsoft\Windows\Start Menu\Programs' -Recurse -Filter '*.lnk' -ErrorAction SilentlyContinue | ForEach-Object { $sh = New-Object -ComObject WScript.Shell; $sc = $sh.CreateShortcut($_.FullName); if ($sc.TargetPath -match 'kiro' -or $_.Name -match 'kiro') { Remove-Item $_.FullName -Force; Write-Host ('  - 공용 시작메뉴 삭제: ' + $_.Name) } }"
 if exist "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Kiro" (
     rmdir /S /Q "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Kiro"
     echo   - 시작 메뉴 Kiro 폴더 삭제 완료
 )
-if exist "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Kiro.lnk" (
-    del /F "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Kiro.lnk"
-    echo   - 시작 메뉴 Kiro.lnk 삭제 완료
-)
-if exist "%USERPROFILE%\Desktop\Kiro.lnk" (
-    del /F "%USERPROFILE%\Desktop\Kiro.lnk"
-    echo   - 바탕화면 바로가기 삭제 완료
-)
-if exist "%PUBLIC%\Desktop\Kiro.lnk" (
-    del /F "%PUBLIC%\Desktop\Kiro.lnk"
-    echo   - 공용 바탕화면 바로가기 삭제 완료
-)
+echo   - 바로가기 정리 완료
 
-echo [10/10] PATH 환경변수에서 Kiro 제거...
+echo [9/10] PATH 환경변수에서 Kiro 제거...
 powershell -Command "$p=[Environment]::GetEnvironmentVariable('PATH','User'); if($p -match 'kiro'){$np=($p.Split(';')|Where-Object{$_ -notmatch 'kiro'}) -join ';'; [Environment]::SetEnvironmentVariable('PATH',$np,'User'); Write-Host '  - PATH에서 Kiro 경로 제거 완료'} else {Write-Host '  - PATH에 Kiro 경로 없음'}"
 
+echo [10/10] 최종 확인 - 남은 Kiro 파일 검색...
+powershell -Command "$found=$false; @('%LOCALAPPDATA%\Programs\Kiro','%APPDATA%\Kiro','%LOCALAPPDATA%\Kiro','%USERPROFILE%\.kiro') | ForEach-Object { if(Test-Path $_){Write-Host ('  [경고] 아직 남아있음: '+$_); $found=$true} }; if(-not $found){Write-Host '  - 깨끗합니다. Kiro 흔적 없음.'}"
+
 echo.
 echo ============================================
-echo   Kiro AI 완전 삭제 완료 (10/10)
+echo   Kiro AI 완전 삭제 완료
 echo ============================================
-echo.
-echo   삭제 항목:
-echo     - Kiro 프로세스 (Helper 포함)
-echo     - 공식 언인스톨러
-echo     - Programs / Program Files 설치 폴더
-echo     - AppData (Roaming + Local + Updater)
-echo     - .kiro 글로벌 설정 + MCP
-echo     - .kiro-server / .kiro-cli
-echo     - 프로젝트별 .kiro 폴더
-echo     - 레지스트리 전체
-echo     - 바로가기 (시작메뉴 + 바탕화면)
-echo     - PATH 환경변수
 echo.
 pause
