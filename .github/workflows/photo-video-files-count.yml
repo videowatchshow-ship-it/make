@@ -1,0 +1,55 @@
+name: 서버 내 영상 파일 전체 개수/목록/용량 확인
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-video-files-count.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: mp4 등 영상 파일 전체 목록/개수/용량
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            echo "===== 03-backup-20260804-015840/videos ====="
+            sudo find /var/www/sites/chamgyo/public/admin/mode-a/03-backup-20260804-015840/videos -type f 2>/dev/null | wc -l
+            sudo du -sh /var/www/sites/chamgyo/public/admin/mode-a/03-backup-20260804-015840/videos 2>/dev/null
+            sudo ls -la /var/www/sites/chamgyo/public/admin/mode-a/03-backup-20260804-015840/videos 2>/dev/null
+            echo ""
+            echo "===== 03-backup-20260807-041913/videos ====="
+            sudo find /var/www/sites/chamgyo/public/admin/mode-a/03-backup-20260807-041913/videos -type f 2>/dev/null | wc -l
+            sudo du -sh /var/www/sites/chamgyo/public/admin/mode-a/03-backup-20260807-041913/videos 2>/dev/null
+            sudo ls -la /var/www/sites/chamgyo/public/admin/mode-a/03-backup-20260807-041913/videos 2>/dev/null
+            echo ""
+            echo "===== 다른 mode-a 백업 스냅샷 폴더들도 있는지 전체 목록 ====="
+            sudo ls -la /var/www/sites/chamgyo/public/admin/mode-a/ 2>/dev/null
+            echo ""
+            echo "===== /var/backup/deleted-videos-20260727 ====="
+            sudo find /var/backup/deleted-videos-20260727 -type f 2>/dev/null | wc -l
+            sudo du -sh /var/backup/deleted-videos-20260727 2>/dev/null
+            sudo ls -la /var/backup/deleted-videos-20260727 2>/dev/null
+            echo ""
+            echo "===== /var/backup 전체 하위 폴더 ====="
+            sudo ls -la /var/backup/ 2>/dev/null
+            echo ""
+            echo "===== 서버 전체에서 .mp4 파일 총 개수/총 용량 ====="
+            sudo find / -xdev -iname "*.mp4" 2>/dev/null | wc -l
+            sudo find / -xdev -iname "*.mp4" -printf '%s\n' 2>/dev/null | awk '{sum+=$1} END {printf "%.1fM 총합\n", sum/1048576}'
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
