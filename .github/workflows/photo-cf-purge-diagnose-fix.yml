@@ -1,4 +1,4 @@
-name: CF purge 라우팅 에러 진단 + 강제 purge + 최종 실측
+name: CF purge 라우팅 에러 진단 + 강제 purge + 최종 실측 (재실행)
 on:
   workflow_dispatch:
   push:
