@@ -11,6 +11,8 @@ jobs:
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: claude/gauth-frontend-backend-fixes-cg2icv
 
       - name: Upload files to server
         uses: appleboy/scp-action@v0.1.7
