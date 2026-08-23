@@ -14,29 +14,27 @@ jobs:
           ref: claude/gauth-frontend-backend-fixes-cg2icv
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup SSH and download index.html
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.GAUTH_SSH_KEY }}
+
+      - name: Download index.html from server
         env:
-          SSH_KEY: ${{ secrets.GAUTH_SSH_KEY }}
           SSH_HOST: ${{ secrets.GAUTH_HOST }}
           SSH_USER: ${{ secrets.GAUTH_USER }}
         run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
-          # Copy on server first (needs sudo)
-          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
+          # Copy on server (needs sudo)
+          ssh "$SSH_USER@$SSH_HOST" \
             "sudo cp /var/www/sites/gauth/public/index.html /tmp/gauth_index_download.html && sudo chmod 644 /tmp/gauth_index_download.html && wc -c < /tmp/gauth_index_download.html"
 
           # Download via scp
-          scp -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST:/tmp/gauth_index_download.html" ./gauth_index_download.html
+          scp "$SSH_USER@$SSH_HOST:/tmp/gauth_index_download.html" ./gauth_index_download.html
 
           # Cleanup server
-          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" "rm -f /tmp/gauth_index_download.html"
-
-          # Cleanup SSH key
-          rm -f ~/.ssh/id_rsa
+          ssh "$SSH_USER@$SSH_HOST" "rm -f /tmp/gauth_index_download.html"
 
       - name: Validate and commit
         run: |

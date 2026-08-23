@@ -1,1 +1,1 @@
-trigger 2026-08-23 v3 raw scp download
+trigger 2026-08-23 v4 webfactory ssh-agent
