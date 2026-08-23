@@ -1,0 +1,42 @@
+name: photo2 img_ver_cent.json 404 원인 조사
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-imgver-cent-404-check.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: img_ver_*.json 존재 여부 + api_img_ver.php 로직 확인
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            echo "===== photo2/data 안 img_ver_*.json 전체 목록 ====="
+            sudo find /var/www/sites/chamgyo/public/photo2/data -iname "img_ver_*.json" 2>&1
+            echo ""
+            echo "===== SNW_1.html(photo2) 안에서 img_ver 요청하는 JS 코드 ====="
+            sudo grep -n "img_ver" /var/www/sites/chamgyo/public/photo2/SNW_1.html 2>&1
+            echo ""
+            echo "===== api_img_ver.php 전문 ====="
+            sudo cat -n /var/www/sites/chamgyo/public/photo2/api_img_ver.php 2>&1
+            echo ""
+            echo "===== collector.php / collector_xtd.php 안에서 img_ver 생성 로직 ====="
+            sudo grep -n "img_ver" /var/www/sites/chamgyo/public/photo2/collector.php /var/www/sites/chamgyo/public/photo2/collector_xtd.php 2>&1
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
