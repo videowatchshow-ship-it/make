@@ -1,0 +1,32 @@
+name: Stream - locate multilive backend
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/youtube-video-edit-stream-r4ftcx]
+    paths: ['.github/workflows/stream-find-multilive.yml']
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Search server for multilive / ytdl backend
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 12m
+          script: |
+            echo "=== files referencing 멀티라이브 / dlUrl / ytdl / mode-a ==="
+            sudo grep -rlZ -e "멀티라이브" -e "dlUrl" -e "ytdl_url" -e "mode-a" -e "admin_pw" /var/www /opt 2>/dev/null | tr '\0' '\n' | head -40
+            echo
+            echo "=== docroots that could host this admin ==="
+            sudo ls -la /var/www/sites 2>/dev/null | head -40
+            echo
+            echo "=== apache vhosts with .info ServerName ==="
+            sudo grep -rniE "ServerName|ServerAlias" /etc/apache2/sites-enabled 2>/dev/null | grep -iE "info|live|multi" | head -20
+            echo
+            echo "=== any youtube download handler scripts ==="
+            sudo grep -rlniE "yt-dlp|youtube-dl|download-sections|ytdl" /var/www /opt 2>/dev/null | head -30
