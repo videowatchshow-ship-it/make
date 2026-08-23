@@ -1,0 +1,36 @@
+name: photo2 SNW_1.html fit() 함수 전문 확인 (1초마다 도는 원인)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-fit-function-check.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: fit() 함수 및 인라인 스크립트 전문 확인
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            echo "===== SNW_1.html(photo2) 1~65줄 (fit 함수 포함 인라인 스크립트) ====="
+            sudo sed -n '1,65p' /var/www/sites/chamgyo/public/photo2/SNW_1.html
+            echo ""
+            echo "===== signal.js 80~100줄 (cdTimer 200ms 관련) ====="
+            sudo sed -n '75,100p' /var/www/sites/chamgyo/public/photo2/signal.js
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
