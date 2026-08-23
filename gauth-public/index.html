@@ -16,7 +16,7 @@ input:focus{outline:0;border-color:#2b6cff}
 select{background:#161a20;border:1px solid #2a323c;color:#e8ecef;padding:9px 10px;border-radius:6px;font-size:13px}
 #count{color:#8a95a5;font-size:12px;white-space:nowrap}
 #viewport{overflow-y:visible;min-height:200px}
-#spacer{}
+#spacer{display:block}
 .row{padding:10px 20px;border-bottom:1px solid #1a1f26;display:grid;grid-template-columns:280px 100px 1fr 1fr 180px 170px;gap:10px;align-items:center;font-size:12.5px}
 .row:hover{background:#141821}
 .email{font-weight:500;word-break:break-all}
@@ -1194,41 +1194,74 @@ document.addEventListener('visibilitychange',function(){if(document.hidden){if(_
 </script>
 <script>
 /* 폴더 전체 스캔 핸들러
- * MDN FileList: https://developer.mozilla.org/en-US/docs/Web/API/FileList
- * DataTransfer.items.add 는 동기 루프로 메인스레드 블로킹 → 우회:
- * window._picked 에 직접 push 후 renderList() 호출
- * (change 핸들러가 fi.files 를 읽는 대신 _picked 를 읽으므로 DataTransfer 불필요)
+ * MDN requestAnimationFrame: https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame
+ * rAF 로 청크 단위 처리 → 매 프레임마다 UI 업데이트(진행 로그) → 메인스레드 블로킹 없음
+ * DataTransfer.items.add 루프 완전 제거 — window._picked 에 직접 push
  */
 (function(){
   var folderInput = document.getElementById('excelFolderFiles');
   var info = document.getElementById('excelFolderInfo');
+  var logBox = document.getElementById('excelFileList');
   if(!folderInput) return;
+
   folderInput.addEventListener('change', function(){
-    /* FileList → Array 변환 및 엑셀 필터 (MDN: FileList is array-like, not iterable in all browsers) */
     var raw = this.files;
-    var files = [];
-    for(var i = 0; i < raw.length; i++){
-      if(/\.(xlsx|xls|csv)$/i.test(raw[i].name)) files.push(raw[i]);
-    }
-    if(!files.length){
-      info.textContent = '❌ 엑셀 파일 없음';
-      return;
-    }
-    info.innerHTML = '📁 <b style="color:#3ddc84">' + files.length + '</b>개 엑셀 파일 발견';
-    /* _picked 에 직접 누적 — DataTransfer 루프 블로킹 완전 제거 */
+    var total = raw.length;
+
+    /* 즉시 진행 표시 — 브라우저가 파일 목록 로드를 끝낸 직후 */
+    info.innerHTML = '⏳ <b style="color:#9fb3e0">0 / ' + total + ' 스캔 중...</b>';
+    if(logBox) logBox.innerHTML = '<span style="color:#9fb3e0;font-size:11px">📂 전체 ' + total + '개 파일 검사 중...</span>';
+
     window._picked = window._picked || [];
+
+    /* rAF 기반 청크 처리
+     * ref: https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame
+     * 한 프레임(~16ms)당 CHUNK_SIZE 개씩 처리 → 매 프레임 UI 업데이트 가능 */
+    var CHUNK_SIZE = 200;
+    var idx = 0;
+    var found = [];
     var added = 0;
-    for(var j = 0; j < files.length; j++){
-      var f = files[j];
-      var dup = false;
-      for(var k = 0; k < window._picked.length; k++){
-        if(window._picked[k].name === f.name && window._picked[k].size === f.size){ dup = true; break; }
+
+    function processChunk(timestamp) {
+      var end = Math.min(idx + CHUNK_SIZE, total);
+      for(var i = idx; i < end; i++){
+        var f = raw[i];
+        /* 엑셀 파일만 필터 */
+        if(!/\.(xlsx|xls|csv)$/i.test(f.name)) continue;
+        found.push(f);
+        /* 중복 체크 (name + size) */
+        var dup = false;
+        for(var k = 0; k < window._picked.length; k++){
+          if(window._picked[k].name === f.name && window._picked[k].size === f.size){ dup = true; break; }
+        }
+        if(!dup){ window._picked.push(f); added++; }
       }
-      if(!dup){ window._picked.push(f); added++; }
+      idx = end;
+
+      /* 매 청크마다 진행 로그 업데이트 */
+      info.innerHTML = '⏳ <b style="color:#9fb3e0">' + idx + ' / ' + total + '</b> 스캔 중... (엑셀 <b style="color:#3ddc84">' + found.length + '</b>개)';
+      if(logBox) logBox.innerHTML = '<span style="color:#9fb3e0;font-size:11px">'
+        + '📂 ' + idx + '/' + total + ' 검사 · 엑셀 ' + found.length + '개 발견 · 신규 ' + added + '개 추가</span>';
+
+      if(idx < total){
+        /* 다음 프레임에 이어서 처리 — MDN 패턴: callback 내에서 rAF 재호출 */
+        requestAnimationFrame(processChunk);
+        return;
+      }
+
+      /* 완료 */
+      if(!found.length){
+        info.textContent = '❌ 엑셀 파일 없음';
+        if(logBox) logBox.innerHTML = '';
+        return;
+      }
+      info.innerHTML = '✅ <b style="color:#3ddc84">' + found.length + '</b>개 발견 · <b style="color:#3ddc84">' + added + '</b>개 추가';
+      /* renderList 트리거 — 업로드 IIFE 내부 함수 호출용 CustomEvent */
+      document.getElementById('excelFiles').dispatchEvent(new CustomEvent('_folderScanned'));
     }
-    info.innerHTML = '📁 <b style="color:#3ddc84">' + files.length + '</b>개 발견 · <b style="color:#3ddc84">' + added + '</b>개 추가';
-    /* renderList 는 업로드 핸들러 IIFE 내부에 있으므로 CustomEvent로 트리거 */
-    document.getElementById('excelFiles').dispatchEvent(new CustomEvent('_folderScanned'));
+
+    /* 첫 프레임 시작 */
+    requestAnimationFrame(processChunk);
   });
 })();
 </script></body></html>
