@@ -1,0 +1,42 @@
+name: 성우/더빙/음성 관련 파일 전체 검색 (삭제 전 사전 확인용)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-voice-dubbing-search.yml'
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: 음성/더빙/TTS 관련 파일 및 코드 검색
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            echo "===== 파일명에 voice/dub/tts/sound/audio/mp3/wav 들어간 것 (사이트 디렉토리 내) ====="
+            sudo find /var/www/sites/chamgyo -type f \( -iname "*voice*" -o -iname "*dub*" -o -iname "*tts*" -o -iname "*sound*" -o -iname "*audio*" -o -iname "*.mp3" -o -iname "*.wav" -o -iname "*.ogg" \) 2>/dev/null
+            echo ""
+            echo "===== 파일명에 thai / doichi / 도이치 / 도이찌 / dying / timer 들어간 것 ====="
+            sudo find /var/www/sites/chamgyo -type f \( -iname "*thai*" -o -iname "*doichi*" -o -iname "*dying*" -o -iname "*timer*" \) 2>/dev/null
+            echo ""
+            echo "===== 코드 안에서 voice/dub/성우/더빙/tts 문자열 검색 (php/js/html) ====="
+            sudo grep -rlE "voice|더빙|성우|dubbing|tts" /var/www/sites/chamgyo/public --include="*.php" --include="*.js" --include="*.html" 2>/dev/null | head -30
+            echo ""
+            echo "===== mode-a 디렉토리 전체 구조 (스트리밍/음성 관련 기능 있는 곳) ====="
+            sudo find /var/www/sites/chamgyo/public/admin/mode-a -maxdepth 3 2>/dev/null
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
