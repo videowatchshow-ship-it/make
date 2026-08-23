@@ -1,0 +1,46 @@
+name: Sync server index.html to repo + deploy pipeline
+on:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-sync-index.txt']
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/gauth-frontend-backend-fixes-cg2icv
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Fetch index.html from server via SCP
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 30s
+          script: |
+            sudo base64 /var/www/sites/gauth/public/index.html > /tmp/index_b64.txt
+            echo "SIZE=$(wc -c < /var/www/sites/gauth/public/index.html)"
+            echo "B64SIZE=$(wc -c < /tmp/index_b64.txt)"
+      - name: Download index.html via SCP
+        uses: nicklasfrahm/scp-action@v1.0.1
+        with:
+          direction: download
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: /tmp/index_b64.txt
+          target: index_b64.txt
+      - name: Decode and commit
+        run: |
+          base64 -d index_b64.txt > gauth-public/index.html
+          echo "Decoded size: $(wc -c < gauth-public/index.html) bytes"
+          grep -c 'excelFolderFiles' gauth-public/index.html || echo "WARNING: no folder scan"
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add gauth-public/index.html
+          git diff --cached --stat
+          git commit -m "Sync server index.html to repo (single source of truth)" || echo "No changes"
+          git push origin claude/gauth-frontend-backend-fixes-cg2icv

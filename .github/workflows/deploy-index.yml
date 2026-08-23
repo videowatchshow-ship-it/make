@@ -1,0 +1,61 @@
+name: Deploy index.html to server
+on:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['gauth-public/index.html']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy index.html to all server locations
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 30s
+          script: |
+            echo "=== 배포 준비 ==="
+      - name: Copy index.html to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: "gauth-public/index.html"
+          target: "/tmp/gauth-deploy"
+          strip_components: 1
+      - name: Install to all locations
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 30s
+          script: |
+            set -e
+            SRC="/tmp/gauth-deploy/index.html"
+            echo "배포 파일 크기: $(wc -c < $SRC) bytes"
+
+            # 모든 위치에 복사
+            for DST in /var/www/sites/gauth/public/index.html /var/www/sites/gauth01/public/index.html; do
+              if [ -d "$(dirname $DST)" ]; then
+                sudo cp "$SRC" "$DST"
+                sudo chown www-data:www-data "$DST" 2>/dev/null || true
+                echo "$DST 배포 완료"
+              fi
+            done
+
+            # gauth 재시작
+            sudo systemctl restart gauth || echo "restart warning"
+            sleep 2
+            sudo systemctl is-active gauth && echo "gauth 실행 중" || echo "gauth 실패"
+
+            # 확인
+            grep -c 'excelFolderFiles' /var/www/sites/gauth/public/index.html || echo "폴더스캔 없음"
+
+            rm -rf /tmp/gauth-deploy
+            echo "=== 배포 완료 ==="
