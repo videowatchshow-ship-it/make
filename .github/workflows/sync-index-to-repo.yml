@@ -13,31 +13,43 @@ jobs:
         with:
           ref: claude/gauth-frontend-backend-fixes-cg2icv
           token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Fetch index.html base64 from server
-        id: fetch
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.GAUTH_HOST }}
-          username: ${{ secrets.GAUTH_USER }}
-          key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 30s
-          script: |
-            echo "B64_START"
-            sudo base64 -w0 /var/www/sites/gauth/public/index.html
-            echo ""
-            echo "B64_END"
-      - name: Extract and commit
+
+      - name: Setup SSH and download index.html
         env:
-          SSH_OUTPUT: ${{ steps.fetch.outputs.stdout }}
+          SSH_KEY: ${{ secrets.GAUTH_SSH_KEY }}
+          SSH_HOST: ${{ secrets.GAUTH_HOST }}
+          SSH_USER: ${{ secrets.GAUTH_USER }}
         run: |
-          echo "$SSH_OUTPUT" | sed -n '/^B64_START$/,/^B64_END$/p' | grep -v 'B64_START\|B64_END' | base64 -d > gauth-public/index.html
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          # Copy on server first (needs sudo)
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
+            "sudo cp /var/www/sites/gauth/public/index.html /tmp/gauth_index_download.html && sudo chmod 644 /tmp/gauth_index_download.html && wc -c < /tmp/gauth_index_download.html"
+
+          # Download via scp
+          scp -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST:/tmp/gauth_index_download.html" ./gauth_index_download.html
+
+          # Cleanup server
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" "rm -f /tmp/gauth_index_download.html"
+
+          # Cleanup SSH key
+          rm -f ~/.ssh/id_rsa
+
+      - name: Validate and commit
+        run: |
+          ls -la gauth_index_download.html
+          mkdir -p gauth-public
+          mv gauth_index_download.html gauth-public/index.html
           SIZE=$(wc -c < gauth-public/index.html)
           echo "index.html size: $SIZE bytes"
           if [ "$SIZE" -lt 1000 ]; then
-            echo "ERROR: file too small, aborting"
+            echo "ERROR: file too small ($SIZE bytes)"
             exit 1
           fi
-          grep -c 'excelFolderFiles' gauth-public/index.html && echo "폴더스캔 버튼 있음" || echo "WARNING: 폴더스캔 없음"
+          grep -c 'excelFolderFiles' gauth-public/index.html && echo "폴더스캔 있음" || echo "WARNING: 폴더스캔 없음"
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add gauth-public/index.html

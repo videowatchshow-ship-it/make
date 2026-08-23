@@ -1,1 +1,1 @@
-trigger 2026-08-23 v2 sync server index.html to repo via base64
+trigger 2026-08-23 v3 raw scp download
