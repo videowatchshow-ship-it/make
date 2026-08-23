@@ -1,0 +1,78 @@
+name: photo2 auth_check.php 무한 리다이렉트 루프 긴급 수정
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-authcheck-redirectloop-fix.yml'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: 서브도메인 강제 이동 로직(IIFE) 전체 제거 - 이제 서브도메인 자체를 안 씀
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            F=/var/www/sites/chamgyo/public/photo2/auth_check.php
+            echo "===== 수정 전 전문 ====="
+            sudo cat -n "$F"
+            sudo cp "$F" "${F}.bak_$(date +%s)"
+            sudo python3 << 'PYEOF'
+            path = "/var/www/sites/chamgyo/public/photo2/auth_check.php"
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+            old = """/* 서브도메인 ↔ 세션 계정 일치 강제 — 잘못된 서브도메인 접속 시 올바른 서브도메인으로 리다이렉트.
+ * 예: jay 로 로그인한 브라우저가 cent.도메인 에 접근하면 jay.도메인 으로 이동시킴. */
+(function(){
+    $domain = 'xn--9d0bw2fjtyymch7de9d.info';
+    $host   = $_SERVER['HTTP_HOST'] ?? '';
+    $sessId = $_SESSION['id'] ?? '';
+    /* 서브도메인 추출: cent.도메인 → cent */
+    if (preg_match('/^([a-zA-Z0-9]+)\\.' . preg_quote($domain, '/') . '$/i', $host, $m)) {
+        $sub = strtolower($m[1]);
+        if ($sub !== $sessId) {
+            /* 로그인 계정과 다른 서브도메인 → 올바른 서브도메인으로 이동 */
+            session_write_close();
+            header('Location: https://' . $domain . '/photo2/write.php');
+            exit;
+        }
+    } elseif ($host === $domain || $host === 'www.' . $domain) {
+        /* 메인 도메인 접근 → 각자 서브도메인으로 이동 */
+        session_write_close();
+        header('Location: https://' . $domain . '/photo2/write.php');
+        exit;
+    }
+})();
+"""
+            if old not in content:
+                print("OLD_NOT_FOUND")
+                raise SystemExit(1)
+            content = content.replace(old, "", 1)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
+            print("REMOVED_OK")
+            PYEOF
+            sudo chown --reference="${F}.bak_"* "$F" 2>/dev/null || true
+            echo "===== 수정 후 전문 ====="
+            sudo cat -n "$F"
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
+
+      - name: 라이브 실측 - write.php 가 이제 무한루프 없이 200으로 응답하는지 (로그인 없이는 login.php 로 302 되는게 정상)
+        run: |
+          sleep 3
+          curl -sS -o /dev/null -w "HTTP %{http_code}, redirect_count %{num_redirects}, effective_url %{url_effective}\n" -L --max-redirs 10 "https://xn--9d0bw2fjtyymch7de9d.info/photo2/write.php"
