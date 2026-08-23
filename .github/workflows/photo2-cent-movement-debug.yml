@@ -1,0 +1,80 @@
+name: photo2 cent 화면에서 계속 움직이는 요소 디버깅
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-cent-movement-debug.yml'
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install playwright@1.48.0
+      - run: npx playwright install --with-deps chromium
+      - name: 요소 위치 변화(움직임) 실측
+        run: |
+          cat > check.js << 'JSEOF'
+          const { chromium } = require('playwright');
+          (async () => {
+            const browser = await chromium.launch();
+            const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+            const consoleMsgs = [];
+            page.on('console', msg => consoleMsgs.push(`[${msg.type()}] ${msg.text()}`));
+            page.on('pageerror', err => consoleMsgs.push(`[pageerror] ${err.message}`));
+
+            await page.goto('https://xn--9d0bw2fjtyymch7de9d.info/photo2/SNW_1.html?ch=cent', { waitUntil: 'networkidle', timeout: 30000 });
+
+            async function snapshot() {
+              return await page.evaluate(() => {
+                const out = {};
+                document.querySelectorAll('*').forEach(el => {
+                  const cs = getComputedStyle(el);
+                  if (cs.position === 'absolute' || cs.position === 'fixed') {
+                    const r = el.getBoundingClientRect();
+                    if (r.width > 0 && r.height > 0) {
+                      const key = (el.id ? '#'+el.id : '') + (el.className ? '.'+String(el.className).replace(/\s+/g,'.') : '') + '@' + Array.from(el.parentNode ? el.parentNode.children : []).indexOf(el);
+                      out[key] = { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) };
+                    }
+                  }
+                });
+                return out;
+              });
+            }
+
+            const snap1 = await snapshot();
+            await page.waitForTimeout(4000);
+            const snap2 = await snapshot();
+            await page.waitForTimeout(4000);
+            const snap3 = await snapshot();
+
+            const moved = [];
+            for (const key of Object.keys(snap1)) {
+              if (!snap2[key] || !snap3[key]) continue;
+              const a = snap1[key], b = snap2[key], c = snap3[key];
+              const d1 = Math.abs(a.x-b.x) + Math.abs(a.y-b.y);
+              const d2 = Math.abs(b.x-c.x) + Math.abs(b.y-c.y);
+              if (d1 > 1 || d2 > 1) {
+                moved.push({ key, snap1: a, snap2: b, snap3: c });
+              }
+            }
+
+            console.log('===== 움직인 요소 목록 =====');
+            console.log(JSON.stringify(moved, null, 2));
+            console.log('===== 콘솔/페이지 에러 (최근 30개) =====');
+            console.log(consoleMsgs.slice(-30).join('\n') || '(없음)');
+
+            // setInterval/setTimeout 존재 여부 힌트 (전역 함수 재정의 흔적은 못 잡지만 반복 갱신 여부 참고용)
+            const intervalHint = await page.evaluate(() => {
+              return { title: document.title, bodyChildCount: document.body.children.length };
+            });
+            console.log('===== 참고 =====', JSON.stringify(intervalHint));
+
+            await browser.close();
+          })();
+          JSEOF
+          node check.js
