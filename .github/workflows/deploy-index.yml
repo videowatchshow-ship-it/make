@@ -1,0 +1,93 @@
+name: Deploy gauth-public to server
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['gauth-public/**']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: "gauth-public/*"
+          target: "/tmp/gauth-deploy"
+          strip_components: 1
+
+      - name: Install and restart
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 30s
+          script: |
+            set -e
+            SRC="/tmp/gauth-deploy"
+            ls -la "$SRC"
+            for DST in /var/www/sites/gauth/public /var/www/sites/gauth01/public; do
+              if [ -d "$DST" ]; then
+                sudo cp -r "$SRC"/* "$DST"/
+                sudo chown -R www-data:www-data "$DST" 2>/dev/null || true
+                echo "$DST done"
+              fi
+            done
+            sudo a2enmod headers 2>/dev/null || true
+            sudo systemctl restart gauth
+            sudo systemctl reload apache2 2>/dev/null || sudo systemctl reload nginx 2>/dev/null || true
+            sleep 2
+            sudo systemctl is-active gauth && echo "OK" || { echo "FAIL"; exit 1; }
+            rm -rf "$SRC"
+
+            # purge CF cache using server-local tokens
+            CF_TOKEN="" CF_ZONE=""
+            for f in /opt/gauth-full/.env /opt/gauth/.env /etc/default/gauth /etc/systemd/system/gauth.service; do
+              [ -f "$f" ] || continue
+              [ -z "$CF_TOKEN" ] && CF_TOKEN=$(grep -oP '(?:CLOUDFLARE_TOKEN|CF_TOKEN|CLOUDFLARE_API_TOKEN)=\K\S+' "$f" 2>/dev/null | head -1)
+              [ -z "$CF_ZONE" ] && CF_ZONE=$(grep -oP '(?:CLOUDFLARE_ZONE_ID|CF_ZONE|CLOUDFLARE_ZONE)=\K\S+' "$f" 2>/dev/null | head -1)
+            done
+            if [ -n "$CF_TOKEN" ] && [ -n "$CF_ZONE" ]; then
+              curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/purge_cache" \
+                -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+                --data '{"purge_everything":true}' && echo "purge: done" || echo "purge: curl failed"
+            else
+              echo "CF tokens not found on server either"
+            fi
+            echo "server deploy done"
+
+      - name: Purge Cloudflare cache
+        if: always()
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          if [ -z "$CF_TOKEN" ]; then
+            echo "::warning::CLOUDFLARE_TOKEN secret not set"
+            exit 0
+          fi
+          if [ -z "$CF_ZONE" ]; then
+            echo "Auto-discovering zone ID..."
+            CF_ZONE=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=cent-solution.online&status=active" \
+              -H "Authorization: Bearer ${CF_TOKEN}" \
+              -H "Content-Type: application/json" | grep -oP '"id"\s*:\s*"\K[a-f0-9]{32}' | head -1)
+            if [ -z "$CF_ZONE" ]; then
+              echo "::warning::Could not auto-discover zone ID"
+              exit 0
+            fi
+            echo "Auto-discovered zone: ${CF_ZONE}"
+          fi
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/purge_cache" \
+            -H "Authorization: Bearer ${CF_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}')
+          echo "purge HTTP $STATUS"
+          if [ "$STATUS" = "200" ]; then echo "purge: ok"; else echo "purge: fail (HTTP $STATUS)"; fi
