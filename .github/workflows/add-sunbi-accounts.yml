@@ -1,0 +1,60 @@
+name: Add 3 accounts to sunbi subsite
+on:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-add-sunbi.txt']
+
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: SSH into server and add accounts to accounts_subsites.json
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 60s
+          script: |
+            set -e
+            cd /opt/gauth-full
+
+            echo "=== 선비 계정 3개 추가 ==="
+            node -e "
+              const fs = require('fs');
+              const FILE = 'accounts_subsites.json';
+              let data = [];
+              try { data = JSON.parse(fs.readFileSync(FILE,'utf8')); } catch(e) { data = []; }
+              if (!Array.isArray(data)) data = data.accounts || [];
+
+              const add = [
+                {email:'dongsong864@gmail.com', password:'rmalLW7305', totp_secret:'KDK43MMRQHWUIBPWJM5KVMGUKKHPN6U', site:'sunbi', youtube:'https://youtube.com/user/cobny20nk/videos'},
+                {email:'congcon034@gmail.com', password:'lferQY7597', totp_secret:'Y4GDWVX6MQXB3JMSNIEIWAU4ZW56VZD', site:'sunbi', youtube:'https://youtube.com/user/RBurke88/videos'},
+                {email:'ruongvuon52@gmail.com', password:'pwgCWW7879', totp_secret:'SRSY5PIWHXOJZY5GLDIDKCEMHEDN35XS', site:'sunbi', youtube:'https://youtube.com/user/tonythetigerpppp/videos'}
+              ];
+
+              let added = 0;
+              for (const na of add) {
+                if (data.some(a => a.email && a.email.toLowerCase() === na.email.toLowerCase())) {
+                  console.log('이미 존재: ' + na.email);
+                } else {
+                  data.push(na);
+                  added++;
+                  console.log('추가: ' + na.email + ' → sunbi (' + na.youtube + ')');
+                }
+              }
+
+              if (added) {
+                fs.writeFileSync(FILE + '.tmp', JSON.stringify(data, null, 2));
+                fs.renameSync(FILE + '.tmp', FILE);
+                console.log(added + '개 추가 완료. 전체: ' + data.length);
+              } else {
+                console.log('모두 이미 존재');
+              }
+            "
+
+            sudo systemctl restart gauth
+            sleep 2
+            sudo systemctl is-active gauth && echo "gauth 정상" || echo "재시작 실패"
