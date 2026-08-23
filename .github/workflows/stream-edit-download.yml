@@ -1,0 +1,54 @@
+name: Stream edit - download YouTube section to server
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_id:
+        description: 'YouTube video ID'
+        default: 'Bz8z1_pj-Lk'
+        required: true
+      start:
+        description: 'Start time (HH:MM:SS)'
+        default: '00:02:00'
+        required: true
+      end:
+        description: 'End time (HH:MM:SS)'
+        default: '00:28:00'
+        required: true
+
+jobs:
+  download-on-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Download and cut on server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 55m
+          script: |
+            set -e
+            VID="${{ github.event.inputs.video_id }}"
+            START="${{ github.event.inputs.start }}"
+            END="${{ github.event.inputs.end }}"
+            sudo mkdir -p /opt/stream
+            if ! command -v ffmpeg >/dev/null; then
+              sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+            fi
+            sudo curl -fsSL -o /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp
+            sudo chmod +x /usr/local/bin/yt-dlp
+            OUT="/opt/stream/${VID}_${START//:/-}_${END//:/-}.mp4"
+            sudo rm -f "$OUT"
+            sudo yt-dlp \
+              --download-sections "*${START}-${END}" \
+              -f "bv*[height<=1080]+ba/b" \
+              --merge-output-format mp4 \
+              --force-keyframes-at-cuts \
+              -o "$OUT" \
+              "https://www.youtube.com/watch?v=${VID}"
+            echo "=== RESULT ==="
+            ls -lh "$OUT"
+            sha256sum "$OUT"
+            ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 "$OUT"
