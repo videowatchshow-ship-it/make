@@ -20,75 +20,72 @@ on:
         required: true
 
 jobs:
-  download-on-server:
+  download-and-ship:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      VID: ${{ github.event.inputs.video_id || 'Bz8z1_pj-Lk' }}
+      START: ${{ github.event.inputs.start || '00:02:00' }}
+      END: ${{ github.event.inputs.end || '00:28:00' }}
     steps:
-      - name: Download and cut on server via SSH
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          pipx install "yt-dlp[default]" || pip install --user -U "yt-dlp[default]"
+          pipx inject yt-dlp bgutil-ytdlp-pot-provider || pip install --user -U bgutil-ytdlp-pot-provider
+          curl -fsSL https://deno.land/install.sh | DENO_INSTALL="$HOME/.deno" sh -s -- -y
+          echo "$HOME/.deno/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Start PO token provider
+        run: |
+          git clone --depth 1 https://github.com/Brainicism/bgutil-ytdlp-pot-provider /tmp/bgutil-pot
+          cd /tmp/bgutil-pot/server
+          npm install --no-audit --no-fund --silent
+          npx tsc
+          nohup node build/main.js > /tmp/bgutil-pot.log 2>&1 &
+          for i in $(seq 1 15); do
+            sleep 2
+            curl -fsS -m 3 http://127.0.0.1:4416/ping >/dev/null 2>&1 && { echo provider up; exit 0; }
+          done
+          echo "provider failed"; tail -40 /tmp/bgutil-pot.log; exit 1
+
+      - name: Download and cut section
+        run: |
+          OUT="/tmp/${VID}_${START//:/-}_${END//:/-}.mp4"
+          yt-dlp -v \
+            --download-sections "*${START}-${END}" \
+            -f "bv*[height<=1080]+ba/b" \
+            --merge-output-format mp4 \
+            --force-keyframes-at-cuts \
+            -o "$OUT" \
+            "https://www.youtube.com/watch?v=${VID}" 2> >(tail -80 >&2)
+          echo "OUT=$OUT" >> "$GITHUB_ENV"
+          ls -lh "$OUT"
+          sha256sum "$OUT" | tee /tmp/sha_runner.txt
+          ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 "$OUT"
+
+      - name: Copy to server /opt/stream
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: ${{ env.OUT }}
+          target: /tmp/stream-incoming/
+          strip_components: 1
+
+      - name: Move into place and verify on server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 55m
+          command_timeout: 10m
           script: |
             set -e
-            VID="${{ github.event.inputs.video_id || 'Bz8z1_pj-Lk' }}"
-            START="${{ github.event.inputs.start || '00:02:00' }}"
-            END="${{ github.event.inputs.end || '00:28:00' }}"
             sudo mkdir -p /opt/stream
-            if ! command -v ffmpeg >/dev/null; then
-              sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
-            fi
-            sudo curl -fsSL -o /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp
-            sudo chmod +x /usr/local/bin/yt-dlp
-            if ! command -v deno >/dev/null && ! sudo test -x /root/.deno/bin/deno; then
-              curl -fsSL https://deno.land/install.sh | sudo DENO_INSTALL=/usr/local sh -s -- -y >/dev/null 2>&1 || true
-            fi
-            JSRT=""
-            command -v deno >/dev/null || { command -v node >/dev/null && JSRT="--js-runtimes node"; }
-            echo "node: $(node --version 2>/dev/null || echo none), deno: $(command -v deno >/dev/null && deno --version | head -1 || echo none)"
-            # PO token provider (bgutil) to pass YouTube bot check on datacenter IP
-            if ! curl -fsS -m 3 http://127.0.0.1:4416/ping >/dev/null 2>&1; then
-              sudo rm -rf /opt/bgutil-pot
-              sudo git clone --depth 1 https://github.com/Brainicism/bgutil-ytdlp-pot-provider /opt/bgutil-pot
-              cd /opt/bgutil-pot/server
-              sudo npm install --no-audit --no-fund --silent
-              sudo npx tsc
-              ls -la build/ || true
-              sudo bash -c 'setsid nohup node /opt/bgutil-pot/server/build/main.js > /var/log/bgutil-pot.log 2>&1 < /dev/null & echo started pid $!'
-              UP=false
-              for i in $(seq 1 15); do
-                sleep 2
-                if curl -fsS -m 3 http://127.0.0.1:4416/ping >/dev/null 2>&1; then UP=true; break; fi
-              done
-              if [ "$UP" != true ]; then
-                echo "--- bgutil-pot.log ---"; sudo tail -60 /var/log/bgutil-pot.log || true
-                sudo ss -ltnp | grep 4416 || true
-                false
-              fi
-            fi
-            PLUGDIR=/etc/yt-dlp/plugins/bgutil-ytdlp-pot-provider/yt_dlp_plugins
-            sudo mkdir -p "$PLUGDIR"
-            sudo cp -r /opt/bgutil-pot/plugin/yt_dlp_plugins/. "$PLUGDIR"/ 2>/dev/null || true
-            OUT="/opt/stream/${VID}_${START//:/-}_${END//:/-}.mp4"
-            sudo rm -f "$OUT"
-            DL_OK=false
-            for CLIENT in default tv android web_embedded; do
-              echo "=== try player_client=$CLIENT ==="
-              if sudo yt-dlp $JSRT \
-                --extractor-args "youtube:player_client=$CLIENT" \
-                --download-sections "*${START}-${END}" \
-                -f "bv*[height<=1080]+ba/b" \
-                --merge-output-format mp4 \
-                --force-keyframes-at-cuts \
-                -o "$OUT" \
-                "https://www.youtube.com/watch?v=${VID}"; then
-                DL_OK=true; break
-              fi
-            done
-            $DL_OK
-            echo "=== RESULT ==="
-            ls -lh "$OUT"
-            sha256sum "$OUT"
-            ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 "$OUT"
+            sudo mv /tmp/stream-incoming/*.mp4 /opt/stream/
+            echo "=== SERVER RESULT ==="
+            ls -lh /opt/stream/
+            sha256sum /opt/stream/*.mp4
