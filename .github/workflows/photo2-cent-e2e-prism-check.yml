@@ -1,4 +1,4 @@
-name: photo2 cent 로그인 → 프리즘 URL 추출 → 실제 렌더링 확인 (E2E)
+name: photo2 cent 로그인 → 프리즘 URL 추출 → 실제 렌더링 확인 (E2E, 재실행 v2)
 on:
   workflow_dispatch:
   push:
