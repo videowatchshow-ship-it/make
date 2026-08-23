@@ -1,1 +1,1 @@
-trigger 2026-08-23 v5 server-side github api push
+trigger 2026-08-23 v6 contents-write permission

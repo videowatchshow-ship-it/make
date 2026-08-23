@@ -4,6 +4,9 @@ on:
     branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
     paths: ['.github/trigger-sync-index.txt']
 
+permissions:
+  contents: write
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -32,29 +35,36 @@ jobs:
             fi
             grep -c 'excelFolderFiles' "$FILE" && echo "폴더스캔 있음" || echo "WARNING: 폴더스캔 없음"
 
-            # Base64 encode
             CONTENT=$(base64 -w 0 "$FILE")
 
-            # Get current file SHA (if exists)
             SHA=$(curl -s -H "Authorization: token $GH_TOKEN" \
               "https://api.github.com/repos/videowatchshow-ship-it/make/contents/gauth-public/index.html?ref=claude/gauth-frontend-backend-fixes-cg2icv" \
-              | grep '"sha"' | head -1 | sed 's/.*"sha": *"\(.*\)".*/\1/')
+              | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('sha',''))" 2>/dev/null || echo "")
 
             echo "Existing SHA: $SHA"
 
-            # Build JSON payload
-            if [ -n "$SHA" ] && [ "$SHA" != "" ]; then
-              PAYLOAD=$(printf '{"message":"Sync server index.html (single source of truth)","content":"%s","branch":"claude/gauth-frontend-backend-fixes-cg2icv","sha":"%s"}' "$CONTENT" "$SHA")
+            TMPJSON=$(mktemp)
+            if [ -n "$SHA" ]; then
+              python3 -c "
+import json
+with open('$TMPJSON','w') as f:
+    json.dump({'message':'Sync server index.html (single source of truth)','content':'$CONTENT','branch':'claude/gauth-frontend-backend-fixes-cg2icv','sha':'$SHA'},f)
+"
             else
-              PAYLOAD=$(printf '{"message":"Sync server index.html (single source of truth)","content":"%s","branch":"claude/gauth-frontend-backend-fixes-cg2icv"}' "$CONTENT")
+              python3 -c "
+import json
+with open('$TMPJSON','w') as f:
+    json.dump({'message':'Sync server index.html (single source of truth)','content':'$CONTENT','branch':'claude/gauth-frontend-backend-fixes-cg2icv'},f)
+"
             fi
 
-            # Push to GitHub
             RESULT=$(curl -s -w "\n%{http_code}" -X PUT \
               -H "Authorization: token $GH_TOKEN" \
               -H "Content-Type: application/json" \
-              -d "$PAYLOAD" \
+              -d @"$TMPJSON" \
               "https://api.github.com/repos/videowatchshow-ship-it/make/contents/gauth-public/index.html")
+
+            rm -f "$TMPJSON"
 
             HTTP_CODE=$(echo "$RESULT" | tail -1)
             echo "HTTP response: $HTTP_CODE"
