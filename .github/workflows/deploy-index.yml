@@ -40,7 +40,9 @@ jobs:
                 echo "$DST done"
               fi
             done
+            sudo a2enmod headers 2>/dev/null || true
             sudo systemctl restart gauth
+            sudo systemctl reload apache2 2>/dev/null || sudo systemctl reload nginx 2>/dev/null || true
             sleep 2
             sudo systemctl is-active gauth && echo "OK" || { echo "FAIL"; exit 1; }
             rm -rf "$SRC"
