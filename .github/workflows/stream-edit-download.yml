@@ -47,6 +47,21 @@ jobs:
             fi
             JSRT=""
             command -v deno >/dev/null || { command -v node >/dev/null && JSRT="--js-runtimes node"; }
+            echo "node: $(node --version 2>/dev/null || echo none), deno: $(command -v deno >/dev/null && deno --version | head -1 || echo none)"
+            # PO token provider (bgutil) to pass YouTube bot check on datacenter IP
+            if ! curl -fsS -m 3 http://127.0.0.1:4416/ping >/dev/null 2>&1; then
+              sudo rm -rf /opt/bgutil-pot
+              sudo git clone --depth 1 https://github.com/Brainicism/bgutil-ytdlp-pot-provider /opt/bgutil-pot
+              cd /opt/bgutil-pot/server
+              sudo npm install --no-audit --no-fund --silent
+              sudo npx tsc
+              sudo bash -c 'nohup node build/main.js > /var/log/bgutil-pot.log 2>&1 & echo started'
+              sleep 4
+              curl -fsS -m 5 http://127.0.0.1:4416/ping || (tail -20 /var/log/bgutil-pot.log; false)
+            fi
+            PLUGDIR=/etc/yt-dlp/plugins/bgutil-ytdlp-pot-provider/yt_dlp_plugins
+            sudo mkdir -p "$PLUGDIR"
+            sudo cp -r /opt/bgutil-pot/plugin/yt_dlp_plugins/. "$PLUGDIR"/ 2>/dev/null || true
             OUT="/opt/stream/${VID}_${START//:/-}_${END//:/-}.mp4"
             sudo rm -f "$OUT"
             DL_OK=false
