@@ -1,0 +1,54 @@
+name: photo+photo2 Cloudflare 캐시 상태 + 서버 캐시 축적량 확인
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-photo2-cache-check.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: cf-cache-status 헤더 실측 (photo/photo2 SNW_1.html, write.php)
+        run: |
+          for u in \
+            "https://xn--9d0bw2fjtyymch7de9d.info/photo/SNW_1.html?ch=cent" \
+            "https://xn--9d0bw2fjtyymch7de9d.info/photo2/SNW_1.html?ch=cent" \
+            "https://xn--9d0bw2fjtyymch7de9d.info/photo2/write.php" \
+            "https://xn--9d0bw2fjtyymch7de9d.info/photo2/auth_check.php" ; do
+            echo "===== $u ====="
+            curl -sS -D - -o /dev/null "$u" | grep -iE "cf-cache-status|cache-control|age:|last-modified|etag"
+            echo ""
+          done
+
+      - name: 서버 디스크 캐시/백업 파일 축적량 확인
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            echo "===== photo/photo2 .bak 백업 파일 총 개수 + 용량 ====="
+            sudo find /var/www/sites/chamgyo/public/photo /var/www/sites/chamgyo/public/photo2 -iname "*.bak*" 2>/dev/null | wc -l
+            sudo du -sh /var/www/sites/chamgyo/public/photo /var/www/sites/chamgyo/public/photo2 2>/dev/null
+            echo ""
+            echo "===== PHP OPcache / Apache 캐시 모듈 상태 (있으면) ====="
+            sudo apache2ctl -M 2>/dev/null | grep -i cache
+            php -v 2>/dev/null | head -1
+            php -i 2>/dev/null | grep -i "opcache.enable " | head -2
+            echo ""
+            echo "===== 디스크 전체 여유 공간 ====="
+            df -h / 2>&1
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
