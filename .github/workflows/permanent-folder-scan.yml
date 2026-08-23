@@ -1,0 +1,108 @@
+name: Permanent folder scan button fix
+on:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-permanent-fix.txt']
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Permanent folder scan patch
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            set -e
+
+            echo "=== 1. 경로 확인 ==="
+            ls -la /var/www/sites/gauth/public/ 2>/dev/null | head -5
+            echo "---"
+            ls -la /opt/gauth-full/public/ 2>/dev/null | head -5
+            echo "---"
+            readlink -f /var/www/sites/gauth/public/ 2>/dev/null || echo "not symlink"
+            readlink -f /opt/gauth-full/public/ 2>/dev/null || echo "not symlink"
+
+            echo ""
+            echo "=== 2. nginx 설정 확인 ==="
+            sudo grep -r 'gauth\|4000' /etc/nginx/sites-enabled/ 2>/dev/null | head -20 || echo "nginx 설정 없음"
+            sudo grep -r 'gauth\|4000' /etc/nginx/conf.d/ 2>/dev/null | head -10 || echo "conf.d 없음"
+
+            echo ""
+            echo "=== 3. 모든 gauth index.html 위치 ==="
+            sudo find / -path "*/gauth*/index.html" -not -path "*/node_modules/*" -not -path "*/profiles/*" 2>/dev/null
+
+            echo ""
+            echo "=== 4. 패치 스크립트 생성 ==="
+            sudo tee /opt/gauth-full/patch-folder-scan.sh > /dev/null << 'PATCHSCRIPT'
+            #!/bin/bash
+            # 폴더 전체 스캔 버튼 영구 패치
+            TARGETS=(
+              "/var/www/sites/gauth/public/index.html"
+              "/opt/gauth-full/public/index.html"
+              "/opt/gauth-full/webroot/gauth/index.html"
+            )
+            for f in "${TARGETS[@]}"; do
+              [ -f "$f" ] || continue
+              grep -q 'excelFolderFiles' "$f" && continue
+              node -e "
+                const fs = require('fs');
+                let html = fs.readFileSync('$f', 'utf8');
+                const old = '<input type=\"file\" id=\"excelFiles\" multiple accept=\".xlsx,.xls,.csv\" style=\"color:#e8ecef;font-size:13px\">';
+                if(!html.includes(old)){ console.log('$f: 패턴 못 찾음'); process.exit(0); }
+                const replacement = old +
+                  '<div style=\"margin-top:8px\">' +
+                  '<button id=\"excelFolderBtn\" style=\"background:#1e3a5f;color:#7dabff;border:1px solid #2b6cff;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px;margin-right:8px\" ' +
+                  'onclick=\"document.getElementById(&#39;excelFolderFiles&#39;).click()\">' +
+                  '📂 폴더 전체 스캔</button>' +
+                  '<input type=\"file\" id=\"excelFolderFiles\" webkitdirectory directory multiple accept=\".xlsx,.xls,.csv\" style=\"display:none\">' +
+                  '<span id=\"excelFolderInfo\" style=\"font-size:12px;color:#9fb3e0\"></span>' +
+                  '</div>';
+                html = html.replace(old, replacement);
+                const folderJS = '(function(){var fi=document.getElementById(\"excelFolderFiles\");var mi=document.getElementById(\"excelFiles\");var info=document.getElementById(\"excelFolderInfo\");if(!fi)return;fi.addEventListener(\"change\",function(){var files=Array.from(this.files).filter(function(f){return /\\\\.(xlsx|xls|csv)$/i.test(f.name);});if(!files.length){info.textContent=\"\\u274c \\uc5d1\\uc140 \\ud30c\\uc77c \\uc5c6\\uc74c\";return;}info.innerHTML=\"\\ud83d\\udcc1 <b style=color:#3ddc84>\"+files.length+\"</b>\\uac1c \\uc5d1\\uc140 \\ud30c\\uc77c \\ubc1c\\uacac\";var dt=new DataTransfer();files.forEach(function(f){dt.items.add(f);});mi.files=dt.files;mi.dispatchEvent(new Event(\"change\"));});})();';
+                if(html.includes('</body>')){
+                  html = html.replace('</body>', '<script>'+folderJS+'<\/script></body>');
+                } else {
+                  html += '<script>'+folderJS+'<\/script>';
+                }
+                fs.writeFileSync('$f', html);
+                console.log('$f: 패치 완료');
+              "
+            done
+            PATCHSCRIPT
+            sudo chmod +x /opt/gauth-full/patch-folder-scan.sh
+
+            echo ""
+            echo "=== 5. 패치 실행 ==="
+            sudo /opt/gauth-full/patch-folder-scan.sh
+
+            echo ""
+            echo "=== 6. systemd ExecStartPost 등록 (재시작 시 자동 패치) ==="
+            sudo mkdir -p /etc/systemd/system/gauth.service.d
+            sudo tee /etc/systemd/system/gauth.service.d/folder-scan-patch.conf > /dev/null << 'SYSCONF'
+            [Service]
+            ExecStartPost=/opt/gauth-full/patch-folder-scan.sh
+            SYSCONF
+            sudo systemctl daemon-reload
+
+            echo ""
+            echo "=== 7. gauth 재시작 ==="
+            sudo systemctl restart gauth || echo "restart warning"
+            sleep 3
+            sudo systemctl is-active gauth && echo "gauth 실행 중" || echo "gauth 실패"
+
+            echo ""
+            echo "=== 8. 패치 확인 ==="
+            for f in /var/www/sites/gauth/public/index.html /opt/gauth-full/public/index.html /opt/gauth-full/webroot/gauth/index.html; do
+              [ -f "$f" ] || continue
+              CNT=$(grep -c 'excelFolderFiles' "$f" 2>/dev/null || echo 0)
+              echo "$f : excelFolderFiles=$CNT"
+            done
+
+            echo ""
+            echo "=== 완료 ==="
