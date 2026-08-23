@@ -1,0 +1,48 @@
+name: 서버 디스크 사용량 상위 항목 분석 (85% 원인 조사)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-disk-usage-breakdown.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: 디스크 사용량 큰 디렉토리/파일 상위 목록
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            echo "===== 전체 디스크 사용량 ====="
+            df -h /
+            echo ""
+            echo "===== 루트 하위 1depth 큰 순서 ====="
+            sudo du -h -d 1 / 2>/dev/null | sort -rh | head -20
+            echo ""
+            echo "===== /var 하위 1depth 큰 순서 ====="
+            sudo du -h -d 1 /var 2>/dev/null | sort -rh | head -15
+            echo ""
+            echo "===== /var/www 하위 1depth 큰 순서 ====="
+            sudo du -h -d 1 /var/www 2>/dev/null | sort -rh | head -15
+            echo ""
+            echo "===== /var/log 하위 1depth 큰 순서 ====="
+            sudo du -h -d 1 /var/log 2>/dev/null | sort -rh | head -15
+            echo ""
+            echo "===== 전체 시스템에서 가장 큰 개별 파일 30개 ====="
+            sudo find / -xdev -type f -printf '%s %p\n' 2>/dev/null | sort -rn | head -30 | awk '{printf "%.1fM  %s\n", $1/1048576, $2}'
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
