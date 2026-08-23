@@ -17,8 +17,8 @@ jobs:
           command_timeout: 30s
           script: |
             cd /opt/gauth-full
-            cp accounts_normalized.json accounts_normalized.json.bak
-            python3 -c "import json; f=open('accounts_normalized.json'); data=json.load(f); f.close(); accts=data if isinstance(data,list) else data.get('accounts',[]); [a.update({'totp_secret':'KGM2DHJ7ZMKNIRO4TCFDVIB3EB63XZL7'}) for a in accts if 'addisonfjmzjocytsopzob' in (a.get('email','') or '').lower()]; f=open('accounts_normalized.json','w'); json.dump(data,f,indent=2,ensure_ascii=False); f.close(); print('UPDATE DONE')"
+            sudo cp accounts_normalized.json accounts_normalized.json.bak
+            sudo python3 -c "import json; f=open('accounts_normalized.json'); data=json.load(f); f.close(); accts=data if isinstance(data,list) else data.get('accounts',[]); [a.update({'totp_secret':'KGM2DHJ7ZMKNIRO4TCFDVIB3EB63XZL7'}) for a in accts if 'addisonfjmzjocytsopzob' in (a.get('email','') or '').lower()]; f=open('accounts_normalized.json','w'); json.dump(data,f,indent=2,ensure_ascii=False); f.close(); print('UPDATE DONE')"
             echo "=== verify ==="
             python3 -c "import json; data=json.load(open('accounts_normalized.json')); accts=data if isinstance(data,list) else data.get('accounts',[]); matches=[a for a in accts if 'addisonfjmzjocytsopzob' in (a.get('email','') or '').lower()]; print('totp_secret:', matches[0].get('totp_secret','???') if matches else 'NOT FOUND')"
             sudo systemctl restart gauth
