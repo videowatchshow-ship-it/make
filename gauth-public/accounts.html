@@ -308,7 +308,7 @@ window.openDetail = function(idx){
   var ytHtml = '';
   if (yurl) {
     ytHtml = '<div class="dp-section"><div class="dp-section-title">📺 채널 정보</div>'+
-      '<div class="yt-info" id="dp-yt"><button onclick="loadYt(\'dp-yt\',\''+esc(yurl)+'\')">  style="background:var(--card);border:1px solid var(--border2);color:var(--accent);border-radius:5px;padding:4px 10px;font-size:11px;cursor:pointer">📊 채널 상태 불러오기</button></div></div>';
+      '<div class="yt-info" id="dp-yt"><button onclick="loadYt(\'dp-yt\',\''+esc(yurl)+'\')" style="background:var(--card);border:1px solid var(--border2);color:var(--accent);border-radius:5px;padding:4px 10px;font-size:11px;cursor:pointer">📊 채널 상태 불러오기</button></div></div>';
   }
 
   document.getElementById('dp-body').innerHTML = '<div class="dp-grid">'+grid+'</div>'+loginHtml+ytHtml;
