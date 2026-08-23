@@ -1,0 +1,51 @@
+name: photo2 전체 setInterval/주기적 갱신 로직 전수 조사
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-all-intervals-search.yml'
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: setInterval/setTimeout 전수 검색 + hot_patch 내용 확인
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            echo "===== SNW_1.html(photo2) 안 script src 전체 ====="
+            sudo grep -oE '<script[^>]*src="[^"]*"' /var/www/sites/chamgyo/public/photo2/SNW_1.html
+            echo ""
+            echo "===== SNW_1.html(photo2) 인라인 <script> 안 setInterval/setTimeout ====="
+            sudo grep -n "setInterval\|setTimeout" /var/www/sites/chamgyo/public/photo2/SNW_1.html
+            echo ""
+            echo "===== bgl.js 안 setInterval/setTimeout 전체 ====="
+            sudo grep -n "setInterval\|setTimeout" /var/www/sites/chamgyo/public/photo2/bgl.js
+            echo ""
+            echo "===== photo2 안 다른 js 파일들에서 setInterval/setTimeout ====="
+            for f in $(sudo find /var/www/sites/chamgyo/public/photo2 -maxdepth 1 -iname "*.js" 2>/dev/null); do
+              echo "--- $f ---"
+              sudo grep -n "setInterval\|setTimeout" "$f" 2>/dev/null
+            done
+            echo ""
+            echo "===== hot_patches.json 현재 내용 ====="
+            sudo cat /var/www/sites/chamgyo/public/photo2/hot_patches.json 2>&1
+            echo ""
+            echo "===== SNW_1.html 안에서 hot_patch 관련 로직 ====="
+            sudo grep -n "hot_patch\|hotPatch" /var/www/sites/chamgyo/public/photo2/SNW_1.html /var/www/sites/chamgyo/public/photo2/bgl.js 2>&1
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
