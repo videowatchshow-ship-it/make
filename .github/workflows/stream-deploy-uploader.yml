@@ -1,0 +1,99 @@
+name: Stream - deploy video uploader page
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/youtube-video-edit-stream-r4ftcx]
+    paths: ['.github/workflows/stream-deploy-uploader.yml']
+
+jobs:
+  deploy-uploader:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Deploy uploader (Node http server on :4610)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 12m
+          script: |
+            set -e
+            sudo mkdir -p /opt/stream /opt/stream-uploader
+            TOKEN=$(head -c 9 /dev/urandom | od -An -tx1 | tr -d ' \n')
+
+            # Self-contained Node uploader (no external deps): streams multipart body to disk.
+            sudo tee /opt/stream-uploader/server.js >/dev/null <<'JS'
+            const http=require('http'),fs=require('fs'),path=require('path');
+            const TOKEN=process.env.UP_TOKEN, DEST='/opt/stream';
+            const PAGE=(msg)=>`<!doctype html><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1">
+            <title>영상 업로드</title><body style="font-family:sans-serif;max-width:640px;margin:40px auto;padding:0 16px">
+            <h2>스트리밍용 영상 업로드</h2>
+            <p>E:\\youtube_editor\\편집완료_스트리밍용.mp4 파일을 아래에 드롭하거나 선택하세요.</p>
+            <form method=post enctype=multipart/form-data action="/up?t=${TOKEN}">
+            <input type=file name=f accept="video/*" required style="display:block;margin:16px 0">
+            <button style="padding:10px 20px;font-size:16px">업로드</button></form>
+            <p style="color:green">${msg||''}</p>
+            <p style="color:#888">저장 위치: /opt/stream/</p></body>`;
+            const srv=http.createServer((req,res)=>{
+              const u=new URL(req.url,'http://x');
+              if(req.method==='GET'&&u.pathname==='/'){res.writeHead(200,{'content-type':'text/html;charset=utf8'});return res.end(PAGE());}
+              if(req.method==='POST'&&u.pathname==='/up'){
+                if(u.searchParams.get('t')!==TOKEN){res.writeHead(403);return res.end('bad token');}
+                const ct=req.headers['content-type']||'';const m=ct.match(/boundary=(.+)$/);
+                if(!m){res.writeHead(400);return res.end('no boundary');}
+                const bnd=Buffer.from('--'+m[1]);
+                let buf=Buffer.alloc(0),head=null,out=null,fname='upload.mp4',bytes=0;
+                const tmp=path.join(DEST,'.incoming.part');
+                req.on('data',d=>{
+                  buf=Buffer.concat([buf,d]);
+                  if(!head){const i=buf.indexOf('\r\n\r\n');if(i>=0){head=buf.slice(0,i).toString();
+                    const fm=head.match(/filename="([^"]*)"/);if(fm&&fm[1])fname=path.basename(fm[1]);
+                    out=fs.createWriteStream(tmp);buf=buf.slice(i+4);}}
+                  if(head&&out){const b=buf.indexOf(bnd);
+                    if(b>=0){let chunk=buf.slice(0,b);if(chunk.slice(-2).toString()==='\r\n')chunk=chunk.slice(0,-2);
+                      out.write(chunk);bytes+=chunk.length;buf=buf.slice(b);req.pause();out.end(()=>finish());}
+                    else{const keep=buf.length-bnd.length;if(keep>0){out.write(buf.slice(0,keep));bytes+=keep;buf=buf.slice(keep);}}}
+                });
+                let done=false;
+                function finish(){if(done)return;done=true;
+                  const final=path.join(DEST,fname);try{fs.renameSync(tmp,final);}catch(e){}
+                  res.writeHead(200,{'content-type':'text/html;charset=utf8'});
+                  res.end(PAGE('✅ 업로드 완료: '+fname+' ('+bytes+' bytes)'));}
+                req.on('end',finish);
+                return;
+              }
+              res.writeHead(404);res.end('nf');
+            });
+            srv.listen(4610,'0.0.0.0',()=>console.log('uploader on 4610'));
+            JS
+
+            # systemd service
+            sudo tee /etc/systemd/system/stream-uploader.service >/dev/null <<UNIT
+            [Unit]
+            Description=Stream video uploader
+            After=network.target
+            [Service]
+            Environment=UP_TOKEN=${TOKEN}
+            ExecStart=$(command -v node) /opt/stream-uploader/server.js
+            Restart=always
+            [Install]
+            WantedBy=multi-user.target
+            UNIT
+
+            sudo systemctl daemon-reload
+            sudo systemctl enable --now stream-uploader
+            sleep 2
+            sudo systemctl is-active stream-uploader || (sudo journalctl -u stream-uploader -n 20 --no-pager; false)
+
+            # open firewall for the port if ufw active
+            sudo ufw allow 4610/tcp 2>/dev/null || true
+
+            IP=$(curl -s -m 5 https://api.ipify.org || echo "<서버IP>")
+            echo "======================================================"
+            echo "UPLOAD URL:  http://${IP}:4610/"
+            echo "TOKEN:       ${TOKEN}"
+            echo "SAVE DIR:    /opt/stream/"
+            echo "======================================================"
+            curl -s -m 5 -o /dev/null -w "local check HTTP %{http_code}\n" http://127.0.0.1:4610/ || true
