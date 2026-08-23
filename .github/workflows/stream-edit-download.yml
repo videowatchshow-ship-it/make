@@ -53,13 +53,21 @@ jobs:
       - name: Download and cut section
         run: |
           OUT="/tmp/${VID}_${START//:/-}_${END//:/-}.mp4"
-          yt-dlp -v \
-            --download-sections "*${START}-${END}" \
-            -f "bv*[height<=1080]+ba/b" \
-            --merge-output-format mp4 \
-            --force-keyframes-at-cuts \
-            -o "$OUT" \
-            "https://www.youtube.com/watch?v=${VID}" 2> >(tail -80 >&2)
+          DL_OK=false
+          for CLIENT in ios android_vr mweb tv_embedded android tv web_safari web_music; do
+            echo "=== try player_client=$CLIENT ==="
+            if yt-dlp \
+              --extractor-args "youtube:player_client=$CLIENT" \
+              --download-sections "*${START}-${END}" \
+              -f "bv*[height<=1080]+ba/b/bv*+ba" \
+              --merge-output-format mp4 \
+              --force-keyframes-at-cuts \
+              -o "$OUT" \
+              "https://www.youtube.com/watch?v=${VID}"; then
+              DL_OK=true; break
+            fi
+          done
+          $DL_OK
           echo "OUT=$OUT" >> "$GITHUB_ENV"
           ls -lh "$OUT"
           sha256sum "$OUT" | tee /tmp/sha_runner.txt
