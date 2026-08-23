@@ -35,7 +35,7 @@ jobs:
             ls -la "$SRC"
             for DST in /var/www/sites/gauth/public /var/www/sites/gauth01/public; do
               if [ -d "$DST" ]; then
-                sudo cp "$SRC"/* "$DST"/
+                sudo cp -r "$SRC"/* "$DST"/
                 sudo chown -R www-data:www-data "$DST" 2>/dev/null || true
                 echo "$DST done"
               fi
