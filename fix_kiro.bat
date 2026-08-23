@@ -16,8 +16,8 @@ echo   - 종료 완료
 echo [2/5] MCP 설정 백업 후 비활성화 (53개 과부하 원인 제거)...
 if exist "%USERPROFILE%\.kiro\settings\mcp.json" (
     copy /Y "%USERPROFILE%\.kiro\settings\mcp.json" "%USERPROFILE%\.kiro\settings\mcp.json.backup" >nul
-    echo {"mcpServers":{}} > "%USERPROFILE%\.kiro\settings\mcp.json"
-    echo   - 글로벌 MCP 전부 비활성화 (백업: mcp.json.backup)
+    echo {"mcpServers":{}}> "%USERPROFILE%\.kiro\settings\mcp.json"
+    echo   - 글로벌 MCP 전부 비활성화. 백업: mcp.json.backup
 ) else (
     echo   - 글로벌 MCP 설정 없음
 )
@@ -25,14 +25,14 @@ if exist "%USERPROFILE%\.kiro\settings\mcp.json" (
 for /d /r "%USERPROFILE%\Desktop" %%d in (.kiro) do (
     if exist "%%d\settings\mcp.json" (
         copy /Y "%%d\settings\mcp.json" "%%d\settings\mcp.json.backup" >nul
-        echo {"mcpServers":{}} > "%%d\settings\mcp.json"
+        echo {"mcpServers":{}}> "%%d\settings\mcp.json"
         echo   - 프로젝트 MCP 비활성화: %%d
     )
 )
 for /d /r "%USERPROFILE%\Documents" %%d in (.kiro) do (
     if exist "%%d\settings\mcp.json" (
         copy /Y "%%d\settings\mcp.json" "%%d\settings\mcp.json.backup" >nul
-        echo {"mcpServers":{}} > "%%d\settings\mcp.json"
+        echo {"mcpServers":{}}> "%%d\settings\mcp.json"
         echo   - 프로젝트 MCP 비활성화: %%d
     )
 )
