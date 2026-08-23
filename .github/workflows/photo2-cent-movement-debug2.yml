@@ -1,0 +1,76 @@
+name: photo2 cent 화면 움직임 디버깅 2차 (404 리소스 + 전체 요소 reflow)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-cent-movement-debug2.yml'
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install playwright@1.48.0
+      - run: npx playwright install --with-deps chromium
+      - name: 404 리소스 + 전체 요소(static 포함) reflow 실측
+        run: |
+          cat > check2.js << 'JSEOF'
+          const { chromium } = require('playwright');
+          (async () => {
+            const browser = await chromium.launch();
+            const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+            const failed = [];
+            const navEvents = [];
+            page.on('requestfailed', req => failed.push(`${req.failure()?.errorText || ''} ${req.url()}`));
+            page.on('response', res => { if (res.status() >= 400) failed.push(`${res.status()} ${res.url()}`); });
+            page.on('framenavigated', fr => navEvents.push(`navigated: ${fr.url()} @ ${Date.now()}`));
+
+            await page.goto('https://xn--9d0bw2fjtyymch7de9d.info/photo2/SNW_1.html?ch=cent', { waitUntil: 'networkidle', timeout: 30000 });
+
+            async function snapshotAll() {
+              return await page.evaluate(() => {
+                const out = {};
+                document.querySelectorAll('body *').forEach(el => {
+                  const r = el.getBoundingClientRect();
+                  if (r.width > 0 && r.height > 0) {
+                    const key = (el.id ? '#'+el.id : el.tagName) + (el.className ? '.'+String(el.className).replace(/\s+/g,'.') : '') + '@' + Array.from(el.parentNode ? el.parentNode.children : []).indexOf(el);
+                    out[key] = { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) };
+                  }
+                });
+                return out;
+              });
+            }
+
+            const s1 = await snapshotAll();
+            await page.waitForTimeout(5000);
+            const s2 = await snapshotAll();
+
+            const moved = [];
+            for (const key of Object.keys(s1)) {
+              if (!s2[key]) continue;
+              const a = s1[key], b = s2[key];
+              const d = Math.abs(a.x-b.x) + Math.abs(a.y-b.y) + Math.abs(a.w-b.w) + Math.abs(a.h-b.h);
+              if (d > 1) moved.push({ key, before: a, after: b });
+            }
+            const added = Object.keys(s2).filter(k => !s1[k]);
+            const removed = Object.keys(s1).filter(k => !s2[k]);
+
+            console.log('===== 404/에러 리소스 =====');
+            console.log(failed.length ? failed.join('\n') : '(없음)');
+            console.log('===== 네비게이션(리로드) 이벤트 =====');
+            console.log(navEvents.length ? navEvents.join('\n') : '(없음, 즉 페이지 자체 리로드는 안 함)');
+            console.log('===== 위치/크기 변한 요소 (' + moved.length + '건) =====');
+            console.log(JSON.stringify(moved.slice(0, 20), null, 2));
+            console.log('===== 새로 추가된 요소 (' + added.length + '건, 상위 20) =====');
+            console.log(JSON.stringify(added.slice(0, 20)));
+            console.log('===== 사라진 요소 (' + removed.length + '건, 상위 20) =====');
+            console.log(JSON.stringify(removed.slice(0, 20)));
+
+            await browser.close();
+          })();
+          JSEOF
+          node check2.js
