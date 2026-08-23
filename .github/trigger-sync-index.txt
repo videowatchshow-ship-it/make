@@ -1,1 +1,1 @@
-trigger 2026-08-23 sync server index.html to repo
+trigger 2026-08-23 v2 sync server index.html to repo via base64
