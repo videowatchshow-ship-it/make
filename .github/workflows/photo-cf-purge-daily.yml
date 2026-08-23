@@ -51,11 +51,20 @@ jobs:
 
           echo "조회된 zone id: $REAL_ZONE_ID"
           echo "===== https://developers.cloudflare.com/api/operations/zone-cache-purge 공식 패턴 ====="
-          curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$REAL_ZONE_ID/purge_cache" \
+          RESP=$(curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$REAL_ZONE_ID/purge_cache" \
             -H "Authorization: Bearer $CF_TOKEN" \
             -H "Content-Type: application/json" \
-            --data '{"purge_everything":true}'
+            --data '{"purge_everything":true}')
+          echo "$RESP"
           echo ""
+          echo "$RESP" | python3 -c "
+          import sys, json
+          d = json.load(sys.stdin)
+          if not d.get('success'):
+              print('PURGE_FAILED:', d.get('errors'))
+              sys.exit(1)
+          print('PURGE_OK')
+          "
 
       - name: 실측 검증 (cf-cache-status)
         run: |
