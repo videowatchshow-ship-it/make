@@ -1,0 +1,42 @@
+name: photo2 img_ver_ 요청 생성 소스 전체 검색
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-imgver-source-search.yml'
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: img_ver 문자열 전체 검색 (photo2 디렉토리 전체)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            echo "===== photo2 디렉토리 전체(js/html/php)에서 img_ver 문자열 검색 ====="
+            sudo grep -rln "img_ver" /var/www/sites/chamgyo/public/photo2 2>/dev/null
+            echo ""
+            echo "===== 각 파일에서 img_ver 관련 라인 ====="
+            for f in $(sudo grep -rln "img_ver" /var/www/sites/chamgyo/public/photo2 2>/dev/null); do
+              echo "--- $f ---"
+              sudo grep -n "img_ver" "$f" 2>/dev/null | head -10
+            done
+            echo ""
+            echo "===== SNW_1.html(photo2) 안의 script src 태그 목록 ====="
+            sudo grep -oE '<script[^>]*src="[^"]*"' /var/www/sites/chamgyo/public/photo2/SNW_1.html 2>/dev/null
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
