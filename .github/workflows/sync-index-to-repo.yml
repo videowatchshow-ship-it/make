@@ -14,43 +14,55 @@ jobs:
           ref: claude/gauth-frontend-backend-fixes-cg2icv
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup SSH agent
-        uses: webfactory/ssh-agent@v0.9.0
+      - name: Fetch index.html from server and push to repo
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          ssh-private-key: ${{ secrets.GAUTH_SSH_KEY }}
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 60s
+          envs: GH_TOKEN
+          script: |
+            FILE="/var/www/sites/gauth/public/index.html"
+            SIZE=$(wc -c < "$FILE")
+            echo "index.html size: $SIZE bytes"
+            if [ "$SIZE" -lt 1000 ]; then
+              echo "ERROR: file too small"
+              exit 1
+            fi
+            grep -c 'excelFolderFiles' "$FILE" && echo "폴더스캔 있음" || echo "WARNING: 폴더스캔 없음"
 
-      - name: Download index.html from server
+            # Base64 encode
+            CONTENT=$(base64 -w 0 "$FILE")
+
+            # Get current file SHA (if exists)
+            SHA=$(curl -s -H "Authorization: token $GH_TOKEN" \
+              "https://api.github.com/repos/videowatchshow-ship-it/make/contents/gauth-public/index.html?ref=claude/gauth-frontend-backend-fixes-cg2icv" \
+              | grep '"sha"' | head -1 | sed 's/.*"sha": *"\(.*\)".*/\1/')
+
+            echo "Existing SHA: $SHA"
+
+            # Build JSON payload
+            if [ -n "$SHA" ] && [ "$SHA" != "" ]; then
+              PAYLOAD=$(printf '{"message":"Sync server index.html (single source of truth)","content":"%s","branch":"claude/gauth-frontend-backend-fixes-cg2icv","sha":"%s"}' "$CONTENT" "$SHA")
+            else
+              PAYLOAD=$(printf '{"message":"Sync server index.html (single source of truth)","content":"%s","branch":"claude/gauth-frontend-backend-fixes-cg2icv"}' "$CONTENT")
+            fi
+
+            # Push to GitHub
+            RESULT=$(curl -s -w "\n%{http_code}" -X PUT \
+              -H "Authorization: token $GH_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "$PAYLOAD" \
+              "https://api.github.com/repos/videowatchshow-ship-it/make/contents/gauth-public/index.html")
+
+            HTTP_CODE=$(echo "$RESULT" | tail -1)
+            echo "HTTP response: $HTTP_CODE"
+            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
+              echo "=== 동기화 완료 ==="
+            else
+              echo "$RESULT" | head -5
+              exit 1
+            fi
         env:
-          SSH_HOST: ${{ secrets.GAUTH_HOST }}
-          SSH_USER: ${{ secrets.GAUTH_USER }}
-        run: |
-          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-
-          # Copy on server (needs sudo)
-          ssh "$SSH_USER@$SSH_HOST" \
-            "sudo cp /var/www/sites/gauth/public/index.html /tmp/gauth_index_download.html && sudo chmod 644 /tmp/gauth_index_download.html && wc -c < /tmp/gauth_index_download.html"
-
-          # Download via scp
-          scp "$SSH_USER@$SSH_HOST:/tmp/gauth_index_download.html" ./gauth_index_download.html
-
-          # Cleanup server
-          ssh "$SSH_USER@$SSH_HOST" "rm -f /tmp/gauth_index_download.html"
-
-      - name: Validate and commit
-        run: |
-          ls -la gauth_index_download.html
-          mkdir -p gauth-public
-          mv gauth_index_download.html gauth-public/index.html
-          SIZE=$(wc -c < gauth-public/index.html)
-          echo "index.html size: $SIZE bytes"
-          if [ "$SIZE" -lt 1000 ]; then
-            echo "ERROR: file too small ($SIZE bytes)"
-            exit 1
-          fi
-          grep -c 'excelFolderFiles' gauth-public/index.html && echo "폴더스캔 있음" || echo "WARNING: 폴더스캔 없음"
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git add gauth-public/index.html
-          git diff --cached --stat
-          git commit -m "Sync server index.html to repo (single source of truth)" || echo "No changes"
-          git push origin claude/gauth-frontend-backend-fixes-cg2icv
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
