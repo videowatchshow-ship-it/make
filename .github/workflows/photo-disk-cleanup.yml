@@ -1,0 +1,60 @@
+name: 서버 디스크 정리 (access.log 로테이션 + 영상 백업 삭제 + .bak 정리)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-disk-cleanup.yml'
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: 정리 실행 + 전후 용량 비교
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            echo "===== 정리 전 디스크 사용량 ====="
+            df -h /
+            echo ""
+            echo "===== 1) chamgyo_access.log 로테이션 (파일은 유지, 내용만 비움 - 아파치가 열고 있는 fd 그대로 이어씀) ====="
+            ls -lh /chamgyo_access.log
+            sudo cp /chamgyo_access.log /chamgyo_access.log.rotated_$(date +%Y%m%d_%H%M%S).gz 2>/dev/null || true
+            sudo gzip -f /chamgyo_access.log.rotated_* 2>/dev/null || true
+            sudo truncate -s 0 /chamgyo_access.log
+            ls -lh /chamgyo_access.log
+            echo ""
+            echo "===== 2) mode-a 백업 영상 스냅샷 2개 삭제 ====="
+            sudo du -sh /var/www/sites/chamgyo/public/admin/mode-a/03-backup-20260804-015840 2>/dev/null
+            sudo du -sh /var/www/sites/chamgyo/public/admin/mode-a/03-backup-20260807-041913 2>/dev/null
+            sudo rm -rf /var/www/sites/chamgyo/public/admin/mode-a/03-backup-20260804-015840
+            sudo rm -rf /var/www/sites/chamgyo/public/admin/mode-a/03-backup-20260807-041913
+            echo "삭제 완료"
+            echo ""
+            echo "===== 3) /var/backup/deleted-videos-20260727 삭제 ====="
+            sudo du -sh /var/backup/deleted-videos-20260727 2>/dev/null
+            sudo rm -rf /var/backup/deleted-videos-20260727
+            echo "삭제 완료"
+            echo ""
+            echo "===== 4) photo/photo2 .bak 백업 파일 삭제 ====="
+            sudo find /var/www/sites/chamgyo/public/photo /var/www/sites/chamgyo/public/photo2 -iname "*.bak*" 2>/dev/null | wc -l
+            sudo find /var/www/sites/chamgyo/public/photo /var/www/sites/chamgyo/public/photo2 -iname "*.bak*" -delete 2>/dev/null
+            echo "삭제 완료"
+            echo ""
+            echo "===== 정리 후 디스크 사용량 ====="
+            df -h /
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
