@@ -1,6 +1,9 @@
 name: Stream edit - download YouTube section to server
 
 on:
+  push:
+    branches: [claude/youtube-video-edit-stream-r4ftcx]
+    paths: ['.github/workflows/stream-edit-download.yml']
   workflow_dispatch:
     inputs:
       video_id:
@@ -30,9 +33,9 @@ jobs:
           command_timeout: 55m
           script: |
             set -e
-            VID="${{ github.event.inputs.video_id }}"
-            START="${{ github.event.inputs.start }}"
-            END="${{ github.event.inputs.end }}"
+            VID="${{ github.event.inputs.video_id || 'Bz8z1_pj-Lk' }}"
+            START="${{ github.event.inputs.start || '00:02:00' }}"
+            END="${{ github.event.inputs.end || '00:28:00' }}"
             sudo mkdir -p /opt/stream
             if ! command -v ffmpeg >/dev/null; then
               sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
