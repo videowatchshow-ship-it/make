@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - name: Check account on server
+      - name: Fix minhketthucdiemoi27484 password
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -15,5 +15,30 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 30s
           script: |
-            echo "=== minhketthucdiemoi27484 account data ==="
-            python3 -c "import json; data=json.load(open('/opt/gauth-full/accounts_normalized.json')); accts=data if isinstance(data,list) else data.get('accounts',[]); matches=[a for a in accts if 'minhketthucdiemoi27484' in (a.get('email','') or '').lower()]; print(json.dumps(matches[0], indent=2, ensure_ascii=False) if matches else 'NOT FOUND')"
+            set -e
+            FILE="/opt/gauth-full/accounts_normalized.json"
+            sudo python3 -c "
+import json
+with open('$FILE') as f:
+    data = json.load(f)
+accts = data if isinstance(data, list) else data.get('accounts', [])
+fixed = False
+for a in accts:
+    if 'minhketthucdiemoi27484' in (a.get('email','') or '').lower():
+        print('BEFORE:', json.dumps(a, ensure_ascii=False))
+        a['password'] = 'Trong666888'
+        if 'Trong666888' in a.get('password_alts', []):
+            a['password_alts'].remove('Trong666888')
+        print('AFTER:', json.dumps(a, ensure_ascii=False))
+        fixed = True
+        break
+if not fixed:
+    print('NOT FOUND')
+    exit(1)
+with open('$FILE', 'w') as f:
+    json.dump(data if not isinstance(data, list) else accts, f, ensure_ascii=False, indent=2)
+print('SAVED')
+"
+            sudo systemctl restart gauth
+            sleep 2
+            sudo systemctl is-active gauth && echo "OK" || { echo "FAIL"; exit 1; }
