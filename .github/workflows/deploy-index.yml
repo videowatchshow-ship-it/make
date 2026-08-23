@@ -14,6 +14,62 @@ jobs:
         with:
           ref: claude/gauth-frontend-backend-fixes-cg2icv
 
+      - name: Backfill account_date from source_file
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 30s
+          script: |
+            set -e
+            sudo python3 << 'PYEOF'
+import json, re, os
+from datetime import datetime
+
+def parse_date_from_filename(name):
+    if not name: return None
+    m = re.search(r'(\d{4})[._-](\d{1,2})[._-](\d{1,2})', name)
+    if m:
+        return int(datetime(int(m.group(1)), int(m.group(2)), int(m.group(3))).timestamp() * 1000)
+    m = re.search(r'(\d{8})', name)
+    if m:
+        ds = m.group(1)
+        y, mo, d = int(ds[:4]), int(ds[4:6]), int(ds[6:8])
+        if 2020 <= y <= 2030 and 1 <= mo <= 12 and 1 <= d <= 31:
+            return int(datetime(y, mo, d).timestamp() * 1000)
+    m = re.search(r'(\d{1,2})월\s*(\d{1,2})일', name)
+    if m:
+        mo, d = int(m.group(1)), int(m.group(2))
+        if 1 <= mo <= 12 and 1 <= d <= 31:
+            return int(datetime(2026, mo, d).timestamp() * 1000)
+    m = re.search(r'[\(（](\d{1,2})[._-](\d{1,2})[\)）]', name)
+    if m:
+        mo, d = int(m.group(1)), int(m.group(2))
+        if 1 <= mo <= 12 and 1 <= d <= 31:
+            return int(datetime(2026, mo, d).timestamp() * 1000)
+    return None
+
+FILE = '/opt/gauth-full/accounts_normalized.json'
+with open(FILE) as f:
+    data = json.load(f)
+accts = data if isinstance(data, list) else data.get('accounts', [])
+fixed = 0
+for a in accts:
+    if not a.get('account_date') and a.get('source_file'):
+        d = parse_date_from_filename(a['source_file'])
+        if d:
+            a['account_date'] = d
+            fixed += 1
+print(f'Backfilled account_date for {fixed} accounts')
+with open(FILE, 'w') as f:
+    json.dump(data if not isinstance(data, list) else accts, f, ensure_ascii=False, indent=2)
+print('SAVED')
+PYEOF
+            sudo systemctl restart gauth
+            sleep 2
+            sudo systemctl is-active gauth && echo "gauth OK"
+
       - name: Upload files to server
         uses: appleboy/scp-action@v0.1.7
         with:
