@@ -42,15 +42,28 @@ jobs:
             fi
             sudo curl -fsSL -o /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp
             sudo chmod +x /usr/local/bin/yt-dlp
+            if ! command -v deno >/dev/null && ! sudo test -x /root/.deno/bin/deno; then
+              curl -fsSL https://deno.land/install.sh | sudo DENO_INSTALL=/usr/local sh -s -- -y >/dev/null 2>&1 || true
+            fi
+            JSRT=""
+            command -v deno >/dev/null || { command -v node >/dev/null && JSRT="--js-runtimes node"; }
             OUT="/opt/stream/${VID}_${START//:/-}_${END//:/-}.mp4"
             sudo rm -f "$OUT"
-            sudo yt-dlp \
-              --download-sections "*${START}-${END}" \
-              -f "bv*[height<=1080]+ba/b" \
-              --merge-output-format mp4 \
-              --force-keyframes-at-cuts \
-              -o "$OUT" \
-              "https://www.youtube.com/watch?v=${VID}"
+            DL_OK=false
+            for CLIENT in default tv android web_embedded; do
+              echo "=== try player_client=$CLIENT ==="
+              if sudo yt-dlp $JSRT \
+                --extractor-args "youtube:player_client=$CLIENT" \
+                --download-sections "*${START}-${END}" \
+                -f "bv*[height<=1080]+ba/b" \
+                --merge-output-format mp4 \
+                --force-keyframes-at-cuts \
+                -o "$OUT" \
+                "https://www.youtube.com/watch?v=${VID}"; then
+                DL_OK=true; break
+              fi
+            done
+            $DL_OK
             echo "=== RESULT ==="
             ls -lh "$OUT"
             sha256sum "$OUT"
