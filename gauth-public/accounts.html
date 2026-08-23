@@ -142,10 +142,6 @@ nav a.active{background:#1e3a5f;color:var(--accent)}
 </div>
 
 <script>
-/* ref: https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage
- * ref: https://developer.mozilla.org/en-US/docs/Web/HTML/Element/details */
-
-/* ref: https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage */
 function getApiToken(){return sessionStorage.getItem('gauth_token')||''}
 function authHeaders(extra){var h=extra||{};var t=getApiToken();if(t)h['Authorization']='Bearer '+t;return h}
 
@@ -176,7 +172,7 @@ function mergeServerLogins(){
 var META = {
   gain:{e:'🟣',k:'게인'},woodong:{e:'🚕',k:'우동'},sunbi:{e:'📘',k:'선비'},
   simmani:{e:'🎬',k:'심마니'},win:{e:'🏆',k:'윈'},aura:{e:'✨',k:'아우라'},
-  bacad:{e:'🎓',k:'바캇'},camstouch:{e:'📷',k:'캠스터치'},james:{e:'👤',k:'제임스'},
+  bacad:{e:'🎓',k:'바캟'},camstouch:{e:'📷',k:'캄스터치'},james:{e:'👤',k:'제임스'},
   misskim:{e:'👩',k:'미스김'},naman:{e:'🧑',k:'나만'},romi:{e:'🐾',k:'로미'},
   second:{e:'2️⃣',k:'세컨드'},soktv:{e:'📺',k:'속TV'},cham:{e:'🐘',k:'참'}
 };
@@ -210,7 +206,7 @@ function renderList(){
     if (a.youtube_url||a.youtube||a.channel_url) badges += '<span class="mbadge mb-ch">CH</span>';
 
     buf.push(
-      '<div class="row" data-i="'+a._idx+'" onclick="openDetail('+a._idx+')">'+
+      '<div class="row" data-i="'+a._idx+'" onclick="openDetail('+a._idx+')">'+ 
         '<span class="row-num">'+(i+1)+'</span>'+
         '<span class="row-dot '+loginDot(email)+'"></span>'+
         '<span class="row-email">'+esc(email)+'</span>'+
@@ -285,6 +281,7 @@ window.openDetail = function(idx){
   if (a.recovery_email) grid += '<div class="dp-label">복구메일</div><div class="dp-val">'+esc(a.recovery_email)+'</div>';
   if (a.phone || a.recovery_phone) grid += '<div class="dp-label">전화</div><div class="dp-val">'+esc(a.phone||a.recovery_phone)+'</div>';
   if (a.status) grid += '<div class="dp-label">상태</div><div class="dp-val">'+esc(a.status)+'</div>';
+  if (a.source) grid += '<div class="dp-label">출처</div><div class="dp-val" style="font-size:11px;color:var(--sub)">'+esc(a.source)+'</div>';
 
   // login section
   var stored = loginStore[email];
@@ -303,7 +300,7 @@ window.openDetail = function(idx){
     }
   }
   var loginHtml = '<div class="dp-section"><div class="dp-section-title">🔑 계정 로그인</div>'+
-    '<div class="login-actions"><button class="'+btnClass+'" id="dp-login-btn" onclick="loginOne('+idx+',\''+esc(email)+'\')">'+btnText+'</button></div>'+
+    '<div class="login-actions"><button class="'+btnClass+'" id="dp-login-btn" onclick="loginOne('+idx+',\''+esc(email)+'\')">' +btnText+'</button></div>'+
     '<div class="login-status" id="dp-login-status">'+storedHtml+'</div></div>';
 
   // yt section
@@ -311,7 +308,7 @@ window.openDetail = function(idx){
   var ytHtml = '';
   if (yurl) {
     ytHtml = '<div class="dp-section"><div class="dp-section-title">📺 채널 정보</div>'+
-      '<div class="yt-info" id="dp-yt"><button onclick="loadYt(\'dp-yt\',\''+esc(yurl)+'\')" style="background:var(--card);border:1px solid var(--border2);color:var(--accent);border-radius:5px;padding:4px 10px;font-size:11px;cursor:pointer">📊 채널 상태 불러오기</button></div></div>';
+      '<div class="yt-info" id="dp-yt"><button onclick="loadYt(\'dp-yt\',\''+esc(yurl)+'\')">  style="background:var(--card);border:1px solid var(--border2);color:var(--accent);border-radius:5px;padding:4px 10px;font-size:11px;cursor:pointer">📊 채널 상태 불러오기</button></div></div>';
   }
 
   document.getElementById('dp-body').innerHTML = '<div class="dp-grid">'+grid+'</div>'+loginHtml+ytHtml;
@@ -385,11 +382,9 @@ window.loginOne = function(idx, email){
       loginStore[email] = {ok:false, ts:Date.now(), err:d.error||d.message||''};
     }
     saveLoginStore();
-    // update the dot in the list row
     var dot = document.querySelector('.row[data-i="'+idx+'"] .row-dot');
     if (dot) dot.className = 'row-dot '+(loginStore[email].ok?'dot-ok':'dot-fail');
     updateSummary();
-    // 결과 확인 후 다음 계정으로 자동 이동 (성공=1.5초, 실패=3초)
     setTimeout(function(){
       var curPos = -1;
       for (var fi = 0; fi < filtered.length; fi++) {
@@ -408,7 +403,6 @@ window.loginOne = function(idx, email){
   });
 };
 
-// keyboard: Escape closes panel
 document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeDetail(); });
 
 var debounceTimer;
@@ -416,21 +410,26 @@ document.getElementById('q').addEventListener('input', function(){ clearTimeout(
 document.getElementById('siteFilter').addEventListener('change', applyFilter);
 document.getElementById('statusFilter').addEventListener('change', applyFilter);
 
-fetch('/api/subsite-accounts',{cache:'no-store',headers:authHeaders()})
+fetch('/api/subsites-pool',{cache:'no-store',headers:authHeaders()})
   .then(function(r){return r.json();})
   .then(function(d){
-    var sites = d.sites || [];
+    var accounts = d.accounts || [];
+    var siteNames = d.sites || [];
+    var bySite = {};
+    siteNames.forEach(function(s){ bySite[s] = []; });
+    accounts.forEach(function(a){ var s = a.site || ''; if (!bySite[s]) bySite[s] = []; bySite[s].push(a); });
+
     var sel = document.getElementById('siteFilter');
-    sites.forEach(function(s){
-      var name = s.site || '';
+    siteNames.forEach(function(name){
       if (!name) return;
+      var siteAccts = bySite[name] || [];
       var m = META[name]||{e:'📁',k:name};
       var opt = document.createElement('option');
       opt.value = name;
-      opt.textContent = m.e+' '+name+' ('+m.k+') — '+(s.accounts?s.accounts.length:s.count||0)+'개';
+      opt.textContent = m.e+' '+name+' ('+m.k+') — '+siteAccts.length+'개';
       sel.appendChild(opt);
 
-      (s.accounts||[]).forEach(function(a){
+      siteAccts.forEach(function(a){
         a.site = a.site || name;
         a._idx = allAccounts.length;
         allAccounts.push(a);
@@ -445,7 +444,7 @@ fetch('/api/subsite-accounts',{cache:'no-store',headers:authHeaders()})
   });
 ;(function(){
   var userEl=document.getElementById('gis-user'), area=document.getElementById('gis-area');
-  function showUser(u){ if(userEl){userEl.style.display='';userEl.textContent=(u.name||u.email||'')+'  로그인됨';} if(area)area.innerHTML=''; }
+  function showUser(u){ if(userEl){userEl.style.display='';userEl.textContent=(u.name||u.email||'')+'  로그인됨';} if(area)area.innerHTML=''; }
   fetch('/api/auth/me',{credentials:'include',cache:'no-store'}).then(function(r){return r.json();}).then(function(d){
     if(d&&d.user){ showUser(d.user); return; }
     fetch('/api/auth/config',{cache:'no-store'}).then(function(r){return r.json();}).then(function(c){
