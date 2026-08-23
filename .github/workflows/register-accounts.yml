@@ -1,0 +1,94 @@
+name: Register 100 accounts to server
+on:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-register.txt']
+
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Copy accounts file to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: ".github/all-new-accounts.json"
+          target: "/tmp/gauth-upload"
+          strip_components: 1
+      - name: Merge accounts into DB and fetch index.html
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            set -e
+            echo "=== 계정 등록 시작 ==="
+            
+            sudo node -e "
+              const fs = require('fs');
+              const newFile = '/tmp/gauth-upload/all-new-accounts.json';
+              const dbFile = '/opt/gauth-full/accounts_normalized.json';
+              
+              const newAccounts = JSON.parse(fs.readFileSync(newFile, 'utf8'));
+              let db = [];
+              try { db = JSON.parse(fs.readFileSync(dbFile, 'utf8')); } catch(e) { console.log('DB 새로 생성'); }
+              if (!Array.isArray(db)) db = db.accounts || [];
+              
+              console.log('기존 DB: ' + db.length + '개');
+              console.log('신규: ' + newAccounts.length + '개');
+              
+              const byEmail = new Map();
+              const byYt = new Map();
+              db.forEach((a,i) => {
+                byEmail.set(a.email, i);
+                if (a.youtube_url) byYt.set(a.youtube_url, i);
+              });
+              
+              let updated = 0, added = 0;
+              for (const na of newAccounts) {
+                let existIdx = -1;
+                if (na.youtube_url && byYt.has(na.youtube_url)) {
+                  existIdx = byYt.get(na.youtube_url);
+                }
+                if (existIdx === -1 && byEmail.has(na.email)) {
+                  existIdx = byEmail.get(na.email);
+                }
+                
+                if (existIdx >= 0) {
+                  db[existIdx] = na;
+                  updated++;
+                } else {
+                  db.push(na);
+                  added++;
+                }
+                byEmail.set(na.email, existIdx >= 0 ? existIdx : db.length - 1);
+                if (na.youtube_url) byYt.set(na.youtube_url, existIdx >= 0 ? existIdx : db.length - 1);
+              }
+              
+              fs.writeFileSync(dbFile, JSON.stringify(db, null, 2));
+              console.log('완료: 갱신 ' + updated + '개, 추가 ' + added + '개, 총 ' + db.length + '개');
+            "
+            
+            echo ""
+            echo "=== gauth 서비스 재시작 ==="
+            sudo systemctl restart gauth || echo "restart warning"
+            sleep 2
+            sudo systemctl is-active gauth && echo "gauth 실행 중" || echo "gauth 실패"
+            
+            echo ""
+            echo "=== index.html 내용 ==="
+            echo "---INDEX_START---"
+            sudo cat /var/www/sites/gauth/public/index.html 2>/dev/null || echo "FILE_NOT_FOUND"
+            echo "---INDEX_END---"
+            
+            echo ""
+            echo "=== ls gauth public ==="
+            sudo ls -la /var/www/sites/gauth/public/ 2>/dev/null | head -20
+            
+            rm -rf /tmp/gauth-upload
