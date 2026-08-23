@@ -19,16 +19,17 @@ jobs:
           command_timeout: 60s
           script: |
             set -e
-            echo "=== phamthivan10071986 검색 ==="
+            KW="nguyennam2023qn"
+            echo "=== $KW 검색 ==="
 
-            echo "--- accounts_normalized.json ---"
+            echo "--- accounts_normalized.json + accounts_subsites.json ---"
             sudo node -e "
               const fs = require('fs');
               const files = [
                 '/opt/gauth-full/accounts_normalized.json',
                 '/opt/gauth-full/accounts_subsites.json'
               ];
-              const kw = 'phamthivan';
+              const kw = '$KW'.toLowerCase();
               for (const f of files) {
                 try {
                   const raw = fs.readFileSync(f,'utf8');
@@ -49,8 +50,7 @@ jobs:
             echo "--- 하위 사이트 accounts.json ---"
             sudo node -e "
               const fs = require('fs');
-              const path = require('path');
-              const kw = 'phamthivan';
+              const kw = '$KW'.toLowerCase();
               const sites = fs.readdirSync('/var/www/sites').filter(d => {
                 try { return fs.statSync('/var/www/sites/'+d+'/accounts.json').isFile(); } catch(e){return false;}
               });
@@ -70,75 +70,5 @@ jobs:
             "
 
             echo ""
-            echo "--- UCQNGR4GY0PrMWodoqBXLmvw 검색 ---"
-            sudo node -e "
-              const fs = require('fs');
-              const kw = 'UCQNGR4GY0PrMWodoqBXLmvw';
-              const files = [
-                '/opt/gauth-full/accounts_normalized.json',
-                '/opt/gauth-full/accounts_subsites.json'
-              ];
-              for (const f of files) {
-                try {
-                  const raw = fs.readFileSync(f,'utf8');
-                  const data = JSON.parse(raw);
-                  const arr = Array.isArray(data) ? data : (data.accounts || []);
-                  const found = arr.filter(a => JSON.stringify(a).includes(kw));
-                  if (found.length) {
-                    console.log(f + ': ' + found.length + '건');
-                    found.forEach(a => console.log(JSON.stringify(a)));
-                  } else {
-                    console.log(f + ': 없음');
-                  }
-                } catch(e) { console.log(f + ': ' + e.message); }
-              }
-              const sites = fs.readdirSync('/var/www/sites').filter(d => {
-                try { return fs.statSync('/var/www/sites/'+d+'/accounts.json').isFile(); } catch(e){return false;}
-              });
-              for (const s of sites) {
-                const f = '/var/www/sites/'+s+'/accounts.json';
-                try {
-                  const raw = fs.readFileSync(f,'utf8');
-                  const data = JSON.parse(raw);
-                  const arr = Array.isArray(data) ? data : (data.accounts || []);
-                  const found = arr.filter(a => JSON.stringify(a).includes(kw));
-                  if (found.length) {
-                    console.log(s + ': ' + found.length + '건');
-                    found.forEach(a => console.log(JSON.stringify(a)));
-                  }
-                } catch(e) {}
-              }
-            "
-
-            echo ""
-            echo "--- mac 키워드 + Lysandra 검색 ---"
-            sudo node -e "
-              const fs = require('fs');
-              const files = [
-                '/opt/gauth-full/accounts_normalized.json',
-                '/opt/gauth-full/accounts_subsites.json'
-              ];
-              for (const f of files) {
-                try {
-                  const raw = fs.readFileSync(f,'utf8');
-                  const data = JSON.parse(raw);
-                  const arr = Array.isArray(data) ? data : (data.accounts || []);
-                  const found = arr.filter(a => {
-                    const s = JSON.stringify(a).toLowerCase();
-                    return s.includes('lysandra') || (s.includes('mac') && s.includes('911'));
-                  });
-                  if (found.length) {
-                    console.log(f + ': ' + found.length + '건');
-                    found.forEach(a => console.log(JSON.stringify(a)));
-                  } else {
-                    console.log(f + ': 없음');
-                  }
-                } catch(e) { console.log(f + ': ' + e.message); }
-              }
-            "
-
-            echo ""
-            echo "--- 업로드 원본 엑셀 검색 ---"
-            sudo grep -rl 'phamthivan' /opt/gauth-full/*.json /opt/gauth-full/*.xlsx 2>/dev/null || echo "grep: 없음"
-            sudo grep -rl 'Lysandra' /opt/gauth-full/*.json 2>/dev/null || echo "grep Lysandra: 없음"
-            sudo grep -rl 'UCQNGR4GY0PrMWodoqBXLmvw' /opt/gauth-full/*.json 2>/dev/null || echo "grep channel: 없음"
+            echo "--- grep 원본 파일 ---"
+            sudo grep -rl '$KW' /opt/gauth-full/*.json /opt/gauth-full/*.xlsx 2>/dev/null || echo "grep: 없음"
