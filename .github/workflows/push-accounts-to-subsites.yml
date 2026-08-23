@@ -19,16 +19,14 @@ jobs:
           command_timeout: 120s
           script: |
             set -e
-            cd /opt/gauth-full
 
             echo "=== 심마니 + 선비 계정 직접 푸시 ==="
-            node -e "
+            sudo node -e "
               const fs = require('fs');
               const today = new Date().toISOString().slice(0, 10);
 
               function pushToSite(siteName, accounts) {
-                const siteDir = '/var/www/sites/' + siteName;
-                const acctFile = siteDir + '/accounts.json';
+                const acctFile = '/var/www/sites/' + siteName + '/accounts.json';
                 let data = {accounts: []};
                 try { data = JSON.parse(fs.readFileSync(acctFile, 'utf8')); } catch(e) {}
                 let arr = Array.isArray(data) ? data : (data.accounts || []);
@@ -38,15 +36,15 @@ jobs:
                   const exists = arr.find(a => (a.email||'').toLowerCase() === na.email.toLowerCase());
                   if (exists) {
                     Object.assign(exists, na);
-                    console.log('  업데이트: ' + na.email);
+                    console.log('  update: ' + na.email);
                   } else {
                     arr.unshift(na);
                     added++;
-                    console.log('  추가: ' + na.email);
+                    console.log('  add: ' + na.email);
                   }
                 }
                 fs.writeFileSync(acctFile, JSON.stringify({accounts: arr}, null, 2));
-                console.log('  ' + siteName + ': ' + added + '개 추가, 전체 ' + arr.length);
+                console.log('  ' + siteName + ': +' + added + ', total=' + arr.length);
               }
 
               console.log('[simmani]');
@@ -67,8 +65,8 @@ jobs:
 
             echo ""
             echo "=== 서비스 재시작 ==="
-            sudo systemctl restart simmani 2>/dev/null && echo "simmani 재시작 완료" || echo "simmani 서비스 없음"
-            sudo systemctl restart sunbi 2>/dev/null && echo "sunbi 재시작 완료" || echo "sunbi 서비스 없음"
+            sudo systemctl restart simmani 2>/dev/null && echo "simmani OK" || echo "simmani no service"
+            sudo systemctl restart sunbi 2>/dev/null && echo "sunbi OK" || echo "sunbi no service"
             sleep 2
 
             echo ""
@@ -77,12 +75,12 @@ jobs:
               f="/var/www/sites/$site/accounts.json"
               if [ -f "$f" ]; then
                 cnt=$(sudo node -e "const d=JSON.parse(require('fs').readFileSync('$f','utf8'));const a=Array.isArray(d)?d:(d.accounts||[]);console.log(a.length)")
-                echo "$site: $cnt 계정"
+                echo "$site: $cnt accounts"
               else
-                echo "$site: accounts.json 없음"
+                echo "$site: no accounts.json"
               fi
             done
 
             sudo systemctl restart gauth
             sleep 2
-            sudo systemctl is-active gauth && echo "gauth 정상" || echo "gauth 재시작 실패"
+            sudo systemctl is-active gauth && echo "gauth OK" || echo "gauth FAIL"
