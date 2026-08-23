@@ -55,9 +55,18 @@ jobs:
               cd /opt/bgutil-pot/server
               sudo npm install --no-audit --no-fund --silent
               sudo npx tsc
-              sudo bash -c 'nohup node build/main.js > /var/log/bgutil-pot.log 2>&1 & echo started'
-              sleep 4
-              curl -fsS -m 5 http://127.0.0.1:4416/ping || (tail -20 /var/log/bgutil-pot.log; false)
+              ls -la build/ || true
+              sudo bash -c 'setsid nohup node /opt/bgutil-pot/server/build/main.js > /var/log/bgutil-pot.log 2>&1 < /dev/null & echo started pid $!'
+              UP=false
+              for i in $(seq 1 15); do
+                sleep 2
+                if curl -fsS -m 3 http://127.0.0.1:4416/ping >/dev/null 2>&1; then UP=true; break; fi
+              done
+              if [ "$UP" != true ]; then
+                echo "--- bgutil-pot.log ---"; sudo tail -60 /var/log/bgutil-pot.log || true
+                sudo ss -ltnp | grep 4416 || true
+                false
+              fi
             fi
             PLUGDIR=/etc/yt-dlp/plugins/bgutil-ytdlp-pot-provider/yt_dlp_plugins
             sudo mkdir -p "$PLUGDIR"
