@@ -12,7 +12,6 @@ on:
       - 'gauth/sw.js'
       - 'advanced-google-login-v2.js'
       - 'package.json'
-      - 'gauth-public/accounts.html'
       - '.github/workflows/deploy-gauth.yml'
 
 jobs:
