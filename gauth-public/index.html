@@ -376,58 +376,11 @@ function accessBadge(a){
       if(result) h+=result;
       return h;
     }
-    out.innerHTML = statusHTML('prep', -1, valid.length+'개 파일 · '+totalKB+'KB'+(skipped?' ('+skipped+'개 임시파일 제외)':'')+' — 하이퍼링크 복원 중…');
-    fixHyperlinksAndUpload(valid, btn, out, startTime, statusHTML, skipped, totalKB);
+    out.innerHTML = statusHTML('prep', -1, valid.length+'개 파일 · '+totalKB+'KB'+(skipped?' ('+skipped+'개 임시파일 제외)':''));
+    var fd = new FormData();
+    for(var i=0;i<valid.length;i++) fd.append('files', valid[i]);
+    doUpload(fd, btn, out, startTime, statusHTML, valid.length);
   });
-  function fixHyperlinksAndUpload(valid, btn, out, startTime, statusHTML, skipped, totalKB){
-    if(typeof XLSX==='undefined'){
-      var fd0 = new FormData();
-      for(var i=0;i<valid.length;i++) fd0.append('files', valid[i]);
-      doUpload(fd0, btn, out, startTime, statusHTML, valid.length);
-      return;
-    }
-    var fixed = []; var done = 0;
-    valid.forEach(function(f, idx){
-      var reader = new FileReader();
-      reader.onload = function(e){
-        try {
-          if(/\.csv$/i.test(f.name)){ fixed[idx]=f; }
-          else {
-            var wb = XLSX.read(new Uint8Array(e.target.result), {type:'array', cellStyles:true});
-            var changed = false;
-            wb.SheetNames.forEach(function(sn){
-              var ws = wb.Sheets[sn];
-              Object.keys(ws).forEach(function(k){
-                if(k[0]==='!') return;
-                var c = ws[k];
-                if(c && c.l && c.l.Target && /^mailto:/i.test(String(c.l.Target))){
-                  var t = String(c.l.Target).replace(/^mailto:/i,'').replace(/\?.*$/,'');
-                  var cv = String(c.v||'').trim();
-                  if(t.includes('@') && (!cv || cv === t.split('@')[0] || cv.toLowerCase() === t.toLowerCase())){
-                    c.v = t; c.w = t; changed = true;
-                  }
-                }
-              });
-            });
-            if(changed){
-              var out2 = XLSX.write(wb, {type:'array', bookType:'xlsx'});
-              var blob = new Blob([out2], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-              fixed[idx] = new File([blob], f.name, {type:blob.type});
-            } else { fixed[idx] = f; }
-          }
-        } catch(_){ fixed[idx] = f; }
-        done++;
-        if(done===valid.length){
-          var fd = new FormData();
-          for(var j=0;j<fixed.length;j++) fd.append('files', fixed[j]);
-          out.innerHTML = statusHTML('prep', -1, valid.length+'개 파일 · '+totalKB+'KB — 하이퍼링크 복원 완료');
-          doUpload(fd, btn, out, startTime, statusHTML, valid.length);
-        }
-      };
-      reader.onerror = function(){ fixed[idx]=f; done++; if(done===valid.length){ var fd=new FormData(); for(var j=0;j<fixed.length;j++) fd.append('files',fixed[j]); doUpload(fd,btn,out,startTime,statusHTML,valid.length); }};
-      reader.readAsArrayBuffer(f);
-    });
-  }
   function doUpload(fd, btn, out, startTime, statusHTML, fileCount){
     localStorage.setItem('gauth_uploading', Date.now());
     updateUploadStatus();
