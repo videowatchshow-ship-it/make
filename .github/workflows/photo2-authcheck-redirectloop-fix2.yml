@@ -1,0 +1,68 @@
+name: photo2 auth_check.php 무한 리다이렉트 루프 긴급 수정 v2
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-authcheck-redirectloop-fix2.yml'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: 서브도메인 강제 이동 IIFE 블록을 마커 기반으로 제거
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            F=/var/www/sites/chamgyo/public/photo2/auth_check.php
+            echo "===== 수정 전 전문 ====="
+            sudo cat -n "$F"
+            sudo cp "$F" "${F}.bak_$(date +%s)"
+            sudo python3 << 'PYEOF'
+            path = "/var/www/sites/chamgyo/public/photo2/auth_check.php"
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+            start_marker = "(function(){"
+            end_marker = "})();\n"
+            si = content.find(start_marker)
+            if si == -1:
+                print("START_NOT_FOUND")
+                raise SystemExit(1)
+            ei = content.find(end_marker, si)
+            if ei == -1:
+                print("END_NOT_FOUND")
+                raise SystemExit(1)
+            ei += len(end_marker)
+            block = content[si:ei]
+            if "sessId" not in block or "header('Location:" not in block:
+                print("BLOCK_SANITY_CHECK_FAILED")
+                print(block)
+                raise SystemExit(1)
+            content = content[:si] + content[ei:]
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
+            print("REMOVED_OK removed_chars=" + str(len(block)))
+            PYEOF
+            sudo chown --reference="${F}.bak_"* "$F" 2>/dev/null || true
+            echo "===== 수정 후 전문 ====="
+            sudo cat -n "$F"
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
+
+      - name: 라이브 실측 - write.php 무한루프 없이 응답하는지
+        run: |
+          sleep 3
+          curl -sS -o /dev/null -w "HTTP %{http_code}, redirect_count %{num_redirects}, effective_url %{url_effective}\n" -L --max-redirs 10 "https://xn--9d0bw2fjtyymch7de9d.info/photo2/write.php"
