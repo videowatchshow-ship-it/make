@@ -1,0 +1,88 @@
+name: photo / photo2 각각 독립 심층 디버깅 (Playwright)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo-photo2-separate-deep-debug.yml'
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install playwright@1.48.0
+      - run: npx playwright install --with-deps chromium
+      - name: photo / photo2 각각 독립적으로 전체 채널 렌더+콘솔에러+타이밍 점검
+        run: |
+          cat > deep.js << 'JSEOF'
+          const { chromium } = require('playwright');
+          (async () => {
+            const base = 'https://xn--9d0bw2fjtyymch7de9d.info';
+            const channels = ['aass0707','cent','otuki','denny','tak','jay','gain','abc01','abc02','abc03','abc04','abc05','abc06','abc07'];
+            const canvasIds = ['cBead','cAskP','cAskB','cBig','cDrv'];
+            const browser = await chromium.launch();
+
+            async function debugFolder(folder) {
+              const results = [];
+              for (const ch of channels) {
+                const url = `${base}/${folder}/SNW_1.html?ch=${ch}`;
+                const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+                const errs = [];
+                const failedReqs = [];
+                page.on('pageerror', e => errs.push(e.message));
+                page.on('console', m => { if (m.type() === 'error') errs.push('[console] ' + m.text()); });
+                page.on('response', res => {
+                  if (res.status() >= 400 && !res.url().includes('img_ver_')) failedReqs.push(`${res.status()} ${res.url()}`);
+                });
+                const t0 = Date.now();
+                let httpStatus = null, navError = null;
+                try {
+                  const resp = await page.goto(url, { waitUntil: 'networkidle', timeout: 15000 });
+                  httpStatus = resp ? resp.status() : null;
+                } catch (e) { navError = e.message; }
+                const loadMs = Date.now() - t0;
+                await page.waitForTimeout(1200);
+                const info = await page.evaluate((ids) => {
+                  const stage = document.getElementById('__stage');
+                  return {
+                    title: document.title,
+                    stageTransform: stage ? stage.style.transform : null,
+                    canvases: ids.map(id => {
+                      const el = document.getElementById(id);
+                      return el ? { id, w: el.width, h: el.height } : { id, missing: true };
+                    }),
+                  };
+                }, canvasIds);
+                results.push({ folder, ch, url, httpStatus, navError, loadMs, info, errs, failedReqs });
+                await page.close();
+              }
+              return results;
+            }
+
+            const photoResults = await debugFolder('photo');
+            const photo2Results = await debugFolder('photo2');
+            await browser.close();
+
+            function summarize(name, results) {
+              console.log(`===== ${name} 요약 =====`);
+              for (const r of results) {
+                const badCanvas = r.info.canvases.filter(c => c.missing || c.w === 0 || c.h === 0);
+                const pass = r.httpStatus === 200 && !r.navError && badCanvas.length === 0;
+                console.log(`${r.ch}\t${pass ? 'PASS' : 'FAIL'}\thttp=${r.httpStatus}\tload=${r.loadMs}ms\terrs=${r.errs.length}\tfailedReqs=${r.failedReqs.length}\tbadCanvas=${badCanvas.length}`);
+                if (!pass) {
+                  console.log('  상세:', JSON.stringify(r, null, 2));
+                }
+              }
+              const fails = results.filter(r => r.httpStatus !== 200 || r.navError || r.info.canvases.some(c => c.missing || c.w === 0 || c.h === 0));
+              console.log(`${name} FAIL 개수: ${fails.length} / ${results.length}`);
+            }
+
+            summarize('PHOTO', photoResults);
+            summarize('PHOTO2', photo2Results);
+          })();
+          JSEOF
+          node deep.js
