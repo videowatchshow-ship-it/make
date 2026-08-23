@@ -1,0 +1,39 @@
+name: photo2 write_upload.php img_ver 작성 포맷 확인 + img_ver_cent.json 생성
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-imgver-cent-writeupload-check.yml'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: write_upload.php 전문 확인 후 img_ver_cent.json 생성
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            INNER=$(cat <<'INNEREOF'
+            echo "===== write_upload.php 전문(img_ver 관련 40~70줄) ====="
+            sudo sed -n '1,80p' /var/www/sites/chamgyo/public/photo2/write_upload.php
+            echo ""
+            echo "===== 공용 img_ver.json 현재 내용(포맷 참고) ====="
+            sudo cat /var/www/sites/chamgyo/public/photo2/data/img_ver.json 2>&1
+            echo ""
+            echo "===== bgl.js 340~365줄 (grab 함수, 404 처리 방식 확인) ====="
+            sudo sed -n '330,365p' /var/www/sites/chamgyo/public/photo2/bgl.js
+            INNEREOF
+            )
+            B64=$(printf '%s' "$INNER" | base64 -w0)
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="echo $B64 | base64 -d | bash"
