@@ -1,1 +1,1 @@
-trigger 2026-08-23 v6 contents-write permission
+trigger 2026-08-23 v7 clean yaml validated

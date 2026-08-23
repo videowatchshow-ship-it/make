@@ -17,8 +17,10 @@ jobs:
           ref: claude/gauth-frontend-backend-fixes-cg2icv
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Fetch index.html from server and push to repo
+      - name: Push server index.html to repo via GitHub API
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
@@ -26,53 +28,39 @@ jobs:
           command_timeout: 60s
           envs: GH_TOKEN
           script: |
+            set -e
             FILE="/var/www/sites/gauth/public/index.html"
             SIZE=$(wc -c < "$FILE")
-            echo "index.html size: $SIZE bytes"
-            if [ "$SIZE" -lt 1000 ]; then
-              echo "ERROR: file too small"
-              exit 1
-            fi
-            grep -c 'excelFolderFiles' "$FILE" && echo "폴더스캔 있음" || echo "WARNING: 폴더스캔 없음"
-
-            CONTENT=$(base64 -w 0 "$FILE")
-
-            SHA=$(curl -s -H "Authorization: token $GH_TOKEN" \
+            echo "size: $SIZE bytes"
+            test "$SIZE" -gt 1000
+            base64 -w 0 "$FILE" > /tmp/b64.txt
+            SHA=$(curl -sf -H "Authorization: token $GH_TOKEN" \
               "https://api.github.com/repos/videowatchshow-ship-it/make/contents/gauth-public/index.html?ref=claude/gauth-frontend-backend-fixes-cg2icv" \
-              | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('sha',''))" 2>/dev/null || echo "")
-
-            echo "Existing SHA: $SHA"
-
-            TMPJSON=$(mktemp)
-            if [ -n "$SHA" ]; then
-              python3 -c "
-import json
-with open('$TMPJSON','w') as f:
-    json.dump({'message':'Sync server index.html (single source of truth)','content':'$CONTENT','branch':'claude/gauth-frontend-backend-fixes-cg2icv','sha':'$SHA'},f)
-"
-            else
-              python3 -c "
-import json
-with open('$TMPJSON','w') as f:
-    json.dump({'message':'Sync server index.html (single source of truth)','content':'$CONTENT','branch':'claude/gauth-frontend-backend-fixes-cg2icv'},f)
-"
-            fi
-
-            RESULT=$(curl -s -w "\n%{http_code}" -X PUT \
+              2>/dev/null | grep -o '"sha":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+            echo "sha: $SHA"
+            export FILE_SHA="$SHA"
+            python3 -c '
+            import json, os
+            with open("/tmp/b64.txt") as f:
+                content = f.read().strip()
+            d = {"message":"Sync server index.html","content":content,"branch":"claude/gauth-frontend-backend-fixes-cg2icv"}
+            sha = os.environ.get("FILE_SHA","")
+            if sha:
+                d["sha"] = sha
+            with open("/tmp/payload.json","w") as f:
+                json.dump(d, f)
+            print("payload built, content length:", len(content))
+            '
+            HTTP=$(curl -s -o /tmp/api_result.txt -w "%{http_code}" -X PUT \
               -H "Authorization: token $GH_TOKEN" \
               -H "Content-Type: application/json" \
-              -d @"$TMPJSON" \
+              -d @/tmp/payload.json \
               "https://api.github.com/repos/videowatchshow-ship-it/make/contents/gauth-public/index.html")
-
-            rm -f "$TMPJSON"
-
-            HTTP_CODE=$(echo "$RESULT" | tail -1)
-            echo "HTTP response: $HTTP_CODE"
-            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
-              echo "=== 동기화 완료 ==="
+            echo "HTTP: $HTTP"
+            if [ "$HTTP" = "200" ] || [ "$HTTP" = "201" ]; then
+              echo "=== done ==="
             else
-              echo "$RESULT" | head -5
+              cat /tmp/api_result.txt | head -3
               exit 1
             fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            rm -f /tmp/b64.txt /tmp/payload.json /tmp/api_result.txt
