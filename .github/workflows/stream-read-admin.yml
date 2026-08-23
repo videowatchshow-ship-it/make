@@ -1,0 +1,29 @@
+name: Stream - read admin page
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/youtube-video-edit-stream-r4ftcx]
+    paths: ['.github/workflows/stream-read-admin.yml']
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Fetch admin page from server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 8m
+          script: |
+            URL="https://xn--9d0bw2fjtyymch7de9d.info/admin/mode-a/03/"
+            echo "=== headers ==="
+            curl -sIL -m 20 -A "Mozilla/5.0" "$URL" | head -30
+            echo "=== body (first 6000 chars) ==="
+            curl -sL -m 25 -A "Mozilla/5.0" "$URL" | sed 's/<[^>]*>/ /g' | tr -s ' \n' ' \n' | head -c 6000
+            echo
+            echo "=== forms / inputs / video / iframe / stream refs ==="
+            curl -sL -m 25 -A "Mozilla/5.0" "$URL" | grep -ioE "<form[^>]*>|<input[^>]*>|<video[^>]*>|<iframe[^>]*>|name=\"[^\"]*\"|action=\"[^\"]*\"|rtmp[^\"' ]*|m3u8|stream[_-]?key|hls" | head -60
