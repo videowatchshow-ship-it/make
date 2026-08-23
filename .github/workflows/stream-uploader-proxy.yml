@@ -1,0 +1,72 @@
+name: Stream - expose uploader via gauth domain
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/youtube-video-edit-stream-r4ftcx]
+    paths: ['.github/workflows/stream-uploader-proxy.yml']
+
+jobs:
+  proxy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Add reverse proxy /vupload -> 127.0.0.1:4610
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 12m
+          script: |
+            set -e
+            echo "=== detect web server fronting gauth ==="
+            HAS_NGINX=$(command -v nginx || true)
+            HAS_APACHE=$(command -v apache2ctl || command -v apachectl || true)
+            echo "nginx=$HAS_NGINX apache=$HAS_APACHE"
+
+            # Find the gauth vhost/server block
+            echo "=== nginx sites mentioning gauth ==="
+            sudo grep -rl "gauth" /etc/nginx 2>/dev/null || true
+            echo "=== apache sites mentioning gauth ==="
+            sudo grep -rl "gauth" /etc/apache2 2>/dev/null || true
+
+            if [ -n "$HAS_NGINX" ]; then
+              CONF=$(sudo grep -rl "server_name.*gauth" /etc/nginx 2>/dev/null | head -1)
+              echo "nginx conf: $CONF"
+              if [ -n "$CONF" ] && ! sudo grep -q "location /vupload" "$CONF"; then
+                sudo cp "$CONF" "$CONF.bak.$(date +%s)"
+                # insert proxy block before the last closing brace of the server block
+                sudo awk '
+                  /location \/vupload\// {found=1}
+                  {lines[NR]=$0}
+                  END{
+                    for(i=1;i<=NR;i++){
+                      print lines[i]
+                    }
+                  }' "$CONF" >/dev/null
+                # simpler: append a new server-less include via a snippet + reload using sed to add inside first server{}
+                sudo sed -i '0,/server_name[^;]*gauth[^;]*;/{s//&\n    client_max_body_size 6g;\n    location \/vupload\/ { proxy_pass http:\/\/127.0.0.1:4610\/; proxy_http_version 1.1; proxy_request_buffering off; proxy_read_timeout 3600s; proxy_send_timeout 3600s; }/}' "$CONF"
+                sudo nginx -t && sudo systemctl reload nginx && echo "nginx proxy added"
+              else
+                echo "nginx: /vupload already present or no conf"
+              fi
+            fi
+
+            if [ -n "$HAS_APACHE" ]; then
+              ACONF=$(sudo grep -rl "ServerName.*gauth\|ServerAlias.*gauth" /etc/apache2 2>/dev/null | head -1)
+              echo "apache conf: $ACONF"
+              sudo a2enmod proxy proxy_http >/dev/null 2>&1 || true
+              if [ -n "$ACONF" ] && ! sudo grep -q "vupload" "$ACONF"; then
+                sudo cp "$ACONF" "$ACONF.bak.$(date +%s)"
+                sudo sed -i '0,/<\/VirtualHost>/s##    ProxyPreserveHost On\n    ProxyPass /vupload/ http://127.0.0.1:4610/\n    ProxyPassReverse /vupload/ http://127.0.0.1:4610/\n    LimitRequestBody 0\n</VirtualHost>#' "$ACONF"
+                sudo apache2ctl configtest && sudo systemctl reload apache2 && echo "apache proxy added"
+              else
+                echo "apache: vupload already present or no conf"
+              fi
+            fi
+
+            echo "=== local checks ==="
+            curl -s -m 5 -o /dev/null -w "direct 4610 HTTP %{http_code}\n" http://127.0.0.1:4610/ || true
+            curl -s -m 5 -o /dev/null -w "proxy  /vupload HTTP %{http_code}\n" -H "Host: gauth.cent-solution.online" http://127.0.0.1/vupload/ || true
+            echo "TRY:  https://gauth.cent-solution.online/vupload/"
