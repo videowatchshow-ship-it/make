@@ -1,0 +1,87 @@
+name: photo2 cent 로그인 → 프리즘 URL 추출 → 실제 렌더링 확인 (E2E)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/photo2-folder-management-94knx8
+    paths:
+      - '.github/workflows/photo2-cent-e2e-prism-check.yml'
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install playwright@1.48.0
+      - run: npx playwright install --with-deps chromium
+      - name: 로그인 → write.php URL 추출 → 렌더링 스크린샷
+        run: |
+          cat > e2e.js << 'JSEOF'
+          const { chromium, request } = require('playwright');
+          (async () => {
+            const base = 'https://xn--9d0bw2fjtyymch7de9d.info';
+            const ctx = await request.newContext();
+
+            const loginRes = await ctx.post(base + '/photo2/login_check.php', {
+              form: { id: 'cent', passwd: 'cent' },
+              maxRedirects: 0,
+            });
+            console.log('===== 로그인 응답 =====');
+            console.log('status:', loginRes.status());
+            console.log('location header:', loginRes.headers()['location']);
+
+            const cookies = await ctx.storageState();
+            console.log('쿠키 개수:', cookies.cookies.length);
+
+            const writeRes = await ctx.get(base + '/photo2/write.php');
+            const writeHtml = await writeRes.text();
+            const m = writeHtml.match(/id="myUrlSN"[^>]*>([^<]+)</);
+            const prismUrl = m ? m[1].trim() : null;
+            console.log('===== write.php 에서 추출한 프리즘(SNW) URL =====');
+            console.log(prismUrl || 'NOT_FOUND');
+
+            if (!prismUrl) {
+              console.log('URL 추출 실패 - write.php 응답 앞부분:', writeHtml.slice(0, 500));
+              await ctx.dispose();
+              process.exit(1);
+            }
+
+            const browser = await chromium.launch();
+            const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+            const errs = [];
+            page.on('pageerror', e => errs.push(e.message));
+            page.on('console', m => { if (m.type() === 'error') errs.push('[console] ' + m.text()); });
+
+            await page.goto(prismUrl, { waitUntil: 'networkidle', timeout: 20000 });
+            await page.waitForTimeout(1500);
+
+            const info = await page.evaluate(() => {
+              const st = document.getElementById('__stage');
+              const wr = document.getElementById('__wrap');
+              const canvases = Array.from(document.querySelectorAll('canvas')).map(c => ({ id: c.id, w: c.width, h: c.height }));
+              return {
+                title: document.title,
+                stageTransform: st ? st.style.transform : null,
+                wrapSize: wr ? { w: wr.style.width, h: wr.style.height } : null,
+                canvases,
+              };
+            });
+            console.log('===== 렌더링 실측 =====');
+            console.log(JSON.stringify(info, null, 2));
+            console.log('===== 콘솔/페이지 에러 =====');
+            console.log(errs.length ? errs.join('\n') : '(없음)');
+
+            await page.screenshot({ path: 'prism_render.jpg', type: 'jpeg', quality: 70 });
+            const fs = require('fs');
+            const b64 = fs.readFileSync('prism_render.jpg').toString('base64');
+            console.log('SCREENSHOT_BASE64_START');
+            console.log(b64);
+            console.log('SCREENSHOT_BASE64_END');
+
+            await browser.close();
+            await ctx.dispose();
+          })();
+          JSEOF
+          node e2e.js
