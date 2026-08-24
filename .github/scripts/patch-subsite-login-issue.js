@@ -14,10 +14,19 @@ const apiPrefix = '/api/' + SITE + '/';
 const serverPath = path.join(DIR, 'server.js');
 const htmlPath = path.join(DIR, 'public', 'index.html');
 const patchMarker = '/* LOGIN_ISSUE_PATCH */';
-const htmlMarker = '/* LOGIN_ISSUE_UI */';
+const htmlMarker = '/* LOGIN_ISSUE_UI_V3 */';
+const oldHtmlMarkers = ['/* LOGIN_ISSUE_UI */', '/* LOGIN_ISSUE_UI_V2 */'];
 
 const serverSrc = fs.readFileSync(serverPath, 'utf8');
-const htmlSrc = fs.readFileSync(htmlPath, 'utf8');
+let htmlSrc = fs.readFileSync(htmlPath, 'utf8');
+
+// Strip previous versions of injected style+script so the new widened
+// selector actually replaces the old one instead of being skipped.
+for (const oldM of oldHtmlMarkers) {
+  const styleRe = new RegExp('<style>\\s*' + oldM.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&') + '[\\s\\S]*?</style>\\s*', 'g');
+  const scriptRe = new RegExp('<script>\\s*' + oldM.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&') + '[\\s\\S]*?</script>\\s*', 'g');
+  htmlSrc = htmlSrc.replace(styleRe, '').replace(scriptRe, '');
+}
 
 // ---------- server.js ----------
 if (serverSrc.includes(patchMarker)) {
