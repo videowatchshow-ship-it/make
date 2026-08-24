@@ -156,7 +156,7 @@ if (htmlSrc.includes(htmlMarker)) {
     '    } catch(e) { return; }',
     '    var byEmail = {};',
     '    accounts.forEach(function(a){ if (a.email) byEmail[a.email.toLowerCase()] = a; });',
-    '    document.querySelectorAll("li,.account-card,.row").forEach(function(el){',
+    '    document.querySelectorAll("li,.account-card,.row,.card,.account,.acct,.item,[data-email],[data-account]").forEach(function(el){',
     '      if (el.querySelector(".__li_panel")) return;',
     '      var text = el.textContent || "";',
     '      var m = text.match(/[A-Za-z0-9._+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/);',
