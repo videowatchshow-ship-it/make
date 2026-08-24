@@ -157,6 +157,23 @@ jobs:
               }
             }
             console.log("  CROSS_SUMMARY: noPw_fixable=" + noPwCross + "/" + noPw.length + " noTotp_fixable=" + noTotpCross + "/" + noTotp.length);
+            // Debug specific emails
+            var debugEmails = ["oaixuan0@gmail.com"];
+            for (var de = 0; de < debugEmails.length; de++) {
+              var dek = debugEmails[de].toLowerCase().trim();
+              console.log("DEBUG_EMAIL[" + dek + "] all_instances:");
+              for (var dai = 0; dai < all.length; dai++) {
+                if (all[dai].email.toLowerCase().trim() === dek) {
+                  console.log("  INSTANCE[" + dai + "] " + JSON.stringify({email:all[dai].email,password:(all[dai].password||'').substring(0,20),totp:(all[dai].totp_secret||'').substring(0,30),backup:(all[dai].backup_codes||'').substring(0,30),recovery:(all[dai].recovery_email||'').substring(0,30),file:(all[dai].source_file||'').substring(0,40)}));
+                }
+              }
+              var dedupMatch = deduped.filter(function(a) { return a.email.toLowerCase().trim() === dek; });
+              if (dedupMatch.length) {
+                console.log("  DEDUPED: " + JSON.stringify({email:dedupMatch[0].email,password:(dedupMatch[0].password||'').substring(0,20),totp:(dedupMatch[0].totp_secret||'').substring(0,30),backup:(dedupMatch[0].backup_codes||'').substring(0,30),recovery:(dedupMatch[0].recovery_email||'').substring(0,30),file:(dedupMatch[0].source_file||'').substring(0,40)}));
+              } else {
+                console.log("  NOT_FOUND_IN_DEDUPED");
+              }
+            }
             var XLSX2 = require("/opt/gauth-full/node_modules/xlsx");
             console.log("NOTOTP_RAW_DUMP (first 20):");
             var noTotpSample = noTotp.slice(0, 20);
