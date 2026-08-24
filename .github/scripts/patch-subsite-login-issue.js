@@ -14,8 +14,8 @@ const apiPrefix = '/api/' + SITE + '/';
 const serverPath = path.join(DIR, 'server.js');
 const htmlPath = path.join(DIR, 'public', 'index.html');
 const patchMarker = '/* LOGIN_ISSUE_PATCH */';
-const htmlMarker = '/* LOGIN_ISSUE_UI_V3 */';
-const oldHtmlMarkers = ['/* LOGIN_ISSUE_UI */', '/* LOGIN_ISSUE_UI_V2 */'];
+const htmlMarker = '/* LOGIN_ISSUE_UI_V4 */';
+const oldHtmlMarkers = ['/* LOGIN_ISSUE_UI */', '/* LOGIN_ISSUE_UI_V2 */', '/* LOGIN_ISSUE_UI_V3 */'];
 
 const serverSrc = fs.readFileSync(serverPath, 'utf8');
 let htmlSrc = fs.readFileSync(htmlPath, 'utf8');
@@ -108,6 +108,8 @@ if (htmlSrc.includes(htmlMarker)) {
     '.__li_panel .__li_t{color:#8a95a5;font-size:11px;margin-bottom:4px;font-weight:600}',
     '.__li_panel label{display:inline-flex;align-items:center;gap:4px;margin-right:8px;color:#e8ecef;cursor:pointer}',
     '.__li_panel input[type=text]{background:#0d1218;border:1px solid #22282f;color:#e8ecef;padding:3px 6px;border-radius:4px;font-size:11px;margin-top:4px;width:100%;display:none}',
+    '.__li_panel input[type=text]::placeholder{color:rgba(232,236,239,0.45);opacity:1}',
+    '.__li_panel input[type=text]::-webkit-input-placeholder{color:rgba(232,236,239,0.45)}',
     '.__li_panel input[type=text].show{display:block}',
     '.__li_panel .__li_saved{color:#3ddc84;font-size:10px;margin-left:6px}',
     '.__li_has{border:1px solid #ff6b6b !important}',
@@ -131,7 +133,7 @@ if (htmlSrc.includes(htmlMarker)) {
     '      + \'<label><input type="radio" name="__li_\' + e + \'" value="password" \' + (t==="password"?"checked":"") + \'> 비밀번호 오류</label>\'',
     '      + \'<label><input type="radio" name="__li_\' + e + \'" value="other" \' + (t==="other"?"checked":"") + \'> 기타</label>\'',
     '      + \'<label style="color:#8a95a5"><input type="radio" name="__li_\' + e + \'" value="" \' + (!t?"checked":"") + \'> 없음</label>\'',
-    '      + \'<input type="text" class="__li_note \' + (t==="other"?"show":"") + \'" placeholder="기타 사유" value="\' + n + \'">\'',
+    '      + \'<input type="text" class="__li_note \' + (t==="other"?"show":"") + \'" placeholder="로그인 불편 사항 수동으로 기입해 주세요." value="\' + n + \'">\'',
     '      + \'<span class="__li_saved"></span></div>\';',
     '    return html;',
     '  }',
