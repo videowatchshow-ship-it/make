@@ -21,11 +21,14 @@ const oldHtmlMarkers = ['/* LOGIN_ISSUE_UI */', '/* LOGIN_ISSUE_UI_V2 */', '/* L
 const serverSrc = fs.readFileSync(serverPath, 'utf8');
 let htmlSrc = fs.readFileSync(htmlPath, 'utf8');
 
-// Strip previous versions of injected style+script so the new widened
-// selector actually replaces the old one instead of being skipped.
-for (const oldM of oldHtmlMarkers) {
-  const styleRe = new RegExp('<style>\\s*' + oldM.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&') + '[\\s\\S]*?</style>\\s*', 'g');
-  const scriptRe = new RegExp('<script>\\s*' + oldM.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&') + '[\\s\\S]*?</script>\\s*', 'g');
+// Strip previous versions of injected style+script so the new blocks
+// actually replace the old ones instead of accumulating.
+// ref: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions/Character_Classes
+function reEscape(s) { return s.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&'); }
+for (const oldM of [...oldHtmlMarkers, htmlMarker]) {
+  const esc = reEscape(oldM);
+  const styleRe = new RegExp('<style>\\s*' + esc + '[\\s\\S]*?</style>\\s*', 'g');
+  const scriptRe = new RegExp('<script>\\s*' + esc + '[\\s\\S]*?</script>\\s*', 'g');
   htmlSrc = htmlSrc.replace(styleRe, '').replace(scriptRe, '');
 }
 
