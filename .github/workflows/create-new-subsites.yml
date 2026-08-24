@@ -3,14 +3,26 @@ on:
   workflow_dispatch:
   push:
     branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
-    paths: ['.github/workflows/create-new-subsites.yml']
+    paths: ['.github/workflows/create-new-subsites.yml', '.github/scripts/create-new-subsites.sh']
 
 jobs:
   create:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Create sites, vhosts, systemd, DNS
+      - uses: actions/checkout@v4
+
+      - name: Upload creator script
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: ".github/scripts/create-new-subsites.sh"
+          target: "/tmp/subsite-create/"
+          strip_components: 2
+
+      - name: Run creator
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -18,106 +30,13 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 300s
           script: |
-            set -e
-            # Template: use bacad as template (already known working, http.createServer based)
-            TEMPLATE=/var/www/sites/bacad
+            sudo bash /tmp/subsite-create/create-new-subsites.sh
+            rm -rf /tmp/subsite-create
 
-            # site name → korean title → port (avoid 3011~3025 used by existing)
-            declare -A NAMES=( [rambo]="람보" [hanrabong]="한라봉" [potential]="포텐샬" )
-            declare -A PORTS=( [rambo]=3031 [hanrabong]=3032 [potential]=3033 )
-
-            for site in rambo hanrabong potential; do
-              KNAME="${NAMES[$site]}"
-              PORT="${PORTS[$site]}"
-              DEST="/var/www/sites/$site"
-              echo "==== $site ($KNAME) port=$PORT ===="
-
-              if [ -d "$DEST" ]; then
-                echo "  이미 존재 — skip"; continue
-              fi
-
-              # 1) Copy template dir (server.js + public/)
-              sudo mkdir -p "$DEST/public"
-              sudo cp "$TEMPLATE/server.js" "$DEST/server.js"
-              sudo cp -r "$TEMPLATE/public/." "$DEST/public/"
-
-              # 2) 계정 파일은 빈 배열
-              echo '{"accounts":[]}' | sudo tee "$DEST/accounts.json" > /dev/null
-
-              # 3) 서버 스크립트에서 사이트 슬러그 치환 (bacad → $site) + 포트
-              sudo sed -i "s|/api/bacad/|/api/$site/|g; s|bacad|$site|g; s|const PORT = [0-9]\\+|const PORT = $PORT|; s|PORT = [0-9]\\+|PORT = $PORT|" "$DEST/server.js" 2>/dev/null || true
-
-              # 4) index.html 타이틀·헤딩 치환 (바캐드 → $KNAME)
-              sudo sed -i "s|바캐드|$KNAME|g; s|bacad|$site|g; s|Bacad|${site^}|g" "$DEST/public/index.html" 2>/dev/null || true
-
-              # 5) 소유권
-              sudo chown -R www-data:www-data "$DEST"
-
-              # 6) systemd unit
-              sudo tee "/etc/systemd/system/$site.service" > /dev/null <<UNIT
-              [Unit]
-              Description=$KNAME ($site) subsite Backend
-              After=network.target
-
-              [Service]
-              Type=simple
-              WorkingDirectory=$DEST
-              ExecStart=/usr/bin/node server.js
-              Restart=always
-              RestartSec=3
-              Environment=PORT=$PORT
-              User=www-data
-              Group=www-data
-
-              [Install]
-              WantedBy=multi-user.target
-              UNIT
-
-              # 7) Apache vhost
-              sudo tee "/etc/apache2/sites-available/$site.conf" > /dev/null <<APACHE
-              <VirtualHost *:80>
-                ServerName $site.cent-solution.online
-                Redirect permanent / https://$site.cent-solution.online/
-              </VirtualHost>
-              <VirtualHost *:443>
-                ServerName $site.cent-solution.online
-                DocumentRoot $DEST/public
-                <Directory $DEST/public>
-                  Options -Indexes +FollowSymLinks
-                  AllowOverride None
-                  Require all granted
-                </Directory>
-                ProxyPass /api/ http://127.0.0.1:$PORT/api/
-                ProxyPassReverse /api/ http://127.0.0.1:$PORT/api/
-                SSLEngine on
-                SSLCertificateFile /etc/letsencrypt/live/cent-solution.online/fullchain.pem
-                SSLCertificateKeyFile /etc/letsencrypt/live/cent-solution.online/privkey.pem
-              </VirtualHost>
-              APACHE
-
-              sudo a2ensite "$site.conf" 2>&1 || true
-              sudo systemctl daemon-reload
-              sudo systemctl enable "$site.service" 2>&1 || true
-              sudo systemctl start "$site.service" 2>&1 || true
-            done
-
-            # Enable required Apache modules (idempotent)
-            sudo a2enmod ssl proxy proxy_http rewrite headers 2>&1 || true
-            sudo apache2ctl configtest 2>&1 && sudo systemctl reload apache2 || echo "::warning::apache config invalid"
-
-            echo ""
-            echo "===== 결과 ====="
-            for site in rambo hanrabong potential; do
-              echo "-- $site --"
-              sudo systemctl is-active "$site.service" 2>&1 || true
-              curl -sS -o /dev/null -w "  https://$site.cent-solution.online/ → HTTP %{http_code}\n" --max-time 5 "https://$site.cent-solution.online/" || true
-            done
-
-      - name: Cloudflare DNS create (CNAME → cent-solution.online root)
+      - name: Cloudflare DNS + purge
         env:
           CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
         run: |
-          # ref: developers.cloudflare.com/api/operations/dns-records-for-a-zone-create-dns-record
           if [ -z "$CF_TOKEN" ]; then echo "::warning::no CF_TOKEN"; exit 0; fi
           ZONE=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=cent-solution.online&status=active" \
             -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
@@ -126,11 +45,11 @@ jobs:
           for site in rambo hanrabong potential; do
             EXISTS=$(curl -s "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records?name=${site}.cent-solution.online" \
               -H "Authorization: Bearer ${CF_TOKEN}" | grep -oP '"id"\s*:\s*"\K[a-f0-9]{32}' | head -1)
-            if [ -n "$EXISTS" ]; then echo "$site DNS already exists ($EXISTS)"; continue; fi
-            RES=$(curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records" \
+            if [ -n "$EXISTS" ]; then echo "$site DNS exists"; continue; fi
+            curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records" \
               -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
-              --data "{\"type\":\"CNAME\",\"name\":\"${site}\",\"content\":\"cent-solution.online\",\"ttl\":1,\"proxied\":true}")
-            echo "$site DNS: $(echo $RES | head -c 200)"
+              --data "{\"type\":\"CNAME\",\"name\":\"${site}\",\"content\":\"cent-solution.online\",\"ttl\":1,\"proxied\":true}" \
+              -o /dev/null -w "$site DNS create %{http_code}\n"
           done
           curl -sS -o /dev/null -w "purge %{http_code}\n" -X POST \
             "https://api.cloudflare.com/client/v4/zones/${ZONE}/purge_cache" \
