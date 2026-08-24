@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>🚫 로그인 문제 - 참교육 스트리밍 계정 정보</title>
-<script>var _V='20260824v8';if(!location.search.match('_v='+_V)){location.replace(location.pathname+'?_v='+_V+location.hash);}</script>
+<script>var _V='20260824v9';if(!location.search.match('_v='+_V)){location.replace(location.pathname+'?_v='+_V+location.hash);}</script>
 <style>
 *{box-sizing:border-box}
 body{font-family:-apple-system,'SF Pro Text',sans-serif;background:#0b0d10;color:#e8ecef;margin:0}
@@ -76,26 +76,32 @@ const TYPE_LABELS = {
   'other': '❓ 기타'
 };
 
+const SITES = ['gain','woodong','sunbi','simmani','win','aura','bacad','camstouch','james','misskim','naman','romi','second','soktv'];
+
+async function fetchSiteIssues(site) {
+  try {
+    const r = await fetch('https://' + site + '.cent-solution.online/api/' + site + '/login-issues', { cache: 'no-store', mode: 'cors' });
+    if (!r.ok) return [];
+    const d = await r.json();
+    return (d.issues || []).map(a => ({
+      email: a.email || '',
+      site: d.site || site,
+      channel_title: a.channel_title || '',
+      name: a.name || '',
+      issue: a.login_issue
+    }));
+  } catch (e) {
+    console.warn('[' + site + '] fetch failed', e && e.message);
+    return [];
+  }
+}
+
 async function loadLoginIssues() {
   try {
-    const r = await fetch('/api/subsites-pool', { cache: 'no-store' });
-    const d = await r.json();
-    const accounts = d.accounts || [];
-    // sites 형태(dict)도 accounts(array)도 모두 지원
-    let list = accounts;
-    if (!list.length && d.sites && typeof d.sites === 'object') {
-      list = [];
-      Object.entries(d.sites).forEach(([siteName, siteData]) => {
-        (siteData.accounts || []).forEach(a => list.push({ ...a, site: a.site || siteName }));
-      });
-    }
-    allIssues = list
-      .filter(a => a && a.login_issue && a.login_issue.type)
-      .map(a => ({
-        email: a.email || '',
-        site: a.site || '',
-        issue: a.login_issue
-      }))
+    const results = await Promise.all(SITES.map(fetchSiteIssues));
+    allIssues = results
+      .flat()
+      .filter(a => a && a.issue && a.issue.type)
       .sort((a, b) => (b.issue.marked_at || '').localeCompare(a.issue.marked_at || ''));
 
     updateStats();
@@ -186,8 +192,11 @@ function renderIssues() {
 async function resolveIssue(email, site) {
   if (!confirm(email + ' (' + site + ')의 로그인 문제를 해결됨으로 표시하시겠습니까?')) return;
   try {
-    const r = await fetch('/api/' + encodeURIComponent(site) + '/login-issue/' + encodeURIComponent(email), {
-      method: 'DELETE'
+    const r = await fetch('https://' + site + '.cent-solution.online/api/' + site + '/accounts/' + encodeURIComponent(email) + '/login-issue', {
+      method: 'PATCH',
+      mode: 'cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: null })
     });
     if (r.ok) {
       allIssues = allIssues.filter(x => !(x.email === email && x.site === site));
