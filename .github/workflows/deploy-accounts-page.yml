@@ -20,8 +20,9 @@ jobs:
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
           source: "gauth-public/accounts.html,gauth-public/subsites.html,jump/accounts.html"
-          target: "/tmp/gauth-deploy"
+          target: "/tmp/gauth-accounts-deploy"
           strip_components: 0
+          overwrite: true
 
       - name: Install and add nav
         uses: appleboy/ssh-action@v1.0.3
@@ -36,15 +37,15 @@ jobs:
             JPUB=/var/www/sites/jump/public
 
             echo "=== 1. Deploy gauth accounts.html + subsites.html ==="
-            sudo cp /tmp/gauth-deploy/gauth-public/accounts.html "$GPUB/accounts.html"
-            sudo cp /tmp/gauth-deploy/gauth-public/subsites.html "$GPUB/subsites.html"
+            sudo cp /tmp/gauth-accounts-deploy/gauth-public/accounts.html "$GPUB/accounts.html"
+            sudo cp /tmp/gauth-accounts-deploy/gauth-public/subsites.html "$GPUB/subsites.html"
             sudo chown www-data:www-data "$GPUB/accounts.html" "$GPUB/subsites.html" 2>/dev/null || true
 
             echo "=== 2. Deploy jump accounts.html ==="
-            sudo cp /tmp/gauth-deploy/jump/accounts.html "$JPUB/accounts.html"
+            sudo cp /tmp/gauth-accounts-deploy/jump/accounts.html "$JPUB/accounts.html"
             sudo chown www-data:www-data "$JPUB/accounts.html" 2>/dev/null || true
 
-            rm -rf /tmp/gauth-deploy
+            rm -rf /tmp/gauth-accounts-deploy
 
             echo "=== 3. Verify ==="
             for f in accounts.html subsites.html; do

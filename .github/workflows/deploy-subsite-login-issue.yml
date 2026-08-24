@@ -1,0 +1,69 @@
+name: Deploy login-issue feature to all subsites
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths:
+      - 'sub-sites/second/server.js'
+      - 'sub-sites/second/public/index.html'
+      - '.github/workflows/deploy-subsite-login-issue.yml'
+      - '.github/scripts/patch-subsite-login-issue.js'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload patcher script
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: ".github/scripts/patch-subsite-login-issue.js"
+          target: "/tmp/subsite-patcher/"
+          strip_components: 2
+
+      - name: Patch each subsite with login-issue endpoints and UI
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          script: |
+            set -e
+            SITES_ROOT="/var/www/sites"
+            PATCHER="/tmp/subsite-patcher/patch-subsite-login-issue.js"
+            ls -la "$PATCHER"
+
+            SITES=$(find "$SITES_ROOT" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | while read d; do
+              site=$(basename "$d")
+              case "$site" in gauth|gauth01) continue;; esac
+              [ -f "$d/server.js" ] && [ -f "$d/public/index.html" ] && echo "$site"
+            done)
+            echo "Discovered subsites: $SITES"
+
+            for SITE in $SITES; do
+              DIR="$SITES_ROOT/$SITE"
+              echo "=== Patching $SITE ==="
+              sudo cp "$DIR/server.js" "$DIR/server.js.bak.$(date +%s)" 2>/dev/null || true
+              sudo cp "$DIR/public/index.html" "$DIR/public/index.html.bak.$(date +%s)" 2>/dev/null || true
+
+              sudo SITE="$SITE" DIR="$DIR" node "$PATCHER" || echo "  [$SITE] patcher failed (continuing)"
+
+              sudo chown -R www-data:www-data "$DIR" 2>/dev/null || true
+
+              for svc in "$SITE" "site-$SITE" "$SITE-site"; do
+                if systemctl list-unit-files 2>/dev/null | grep -q "^${svc}\.service"; then
+                  echo "  [$SITE] restarting $svc"
+                  sudo systemctl restart "$svc" 2>&1 || true
+                  break
+                fi
+              done
+            done
+
+            rm -rf /tmp/subsite-patcher
+            echo "=== done ==="

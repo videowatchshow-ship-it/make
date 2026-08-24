@@ -13,6 +13,16 @@ const DATA_DIR = __dirname;
 const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');
 
 app.use(express.json());
+/* CORS for gauth aggregator (login-issues page)
+   ref: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS
+   ref: https://fetch.spec.whatwg.org/#http-cors-protocol */
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 function readAccounts() {
@@ -73,37 +83,47 @@ app.post('/api/second/accounts', (req, res) => {
   res.json({ ok: true, total: accounts.length });
 });
 
-// LOGIN_ISSUE_PATCH_START
+// LOGIN_ISSUE_PATCH_START — supports both POST and PATCH styles
 app.post('/api/second/login-issue', (req, res) => {
   const { email, type, note } = req.body || {};
   if (!email || !type) return res.status(400).json({ ok: false, error: 'email and type required' });
-
+  const validTypes = ['phone', 'robot', 'password', 'other'];
+  if (!validTypes.includes(type)) return res.status(400).json({ ok: false, error: 'invalid type' });
   const accounts = readAccounts();
-  const key = email.toLowerCase();
-  const account = accounts.find(a => (a.email || '').toLowerCase() === key);
-  
+  const account = accounts.find(a => (a.email || '').toLowerCase() === email.toLowerCase());
   if (!account) return res.status(404).json({ ok: false, error: 'account not found' });
-
-  account.login_issue = {
-    type,
-    note: note || '',
-    marked_at: new Date().toISOString()
-  };
-
+  account.login_issue = { type, note: (note || '').toString().slice(0, 200), marked_at: new Date().toISOString() };
   writeAccounts(accounts);
-  res.json({ ok: true });
+  res.json({ ok: true, login_issue: account.login_issue });
+});
+
+app.patch('/api/second/accounts/:email/login-issue', (req, res) => {
+  const { type, note } = req.body || {};
+  const validTypes = ['phone', 'robot', 'password', 'other', null];
+  if (!validTypes.includes(type)) return res.status(400).json({ ok: false, error: 'invalid type' });
+  const accounts = readAccounts();
+  const acct = accounts.find(a => (a.email || '').toLowerCase() === req.params.email.toLowerCase());
+  if (!acct) return res.status(404).json({ ok: false, error: 'not found' });
+  if (type === null) delete acct.login_issue;
+  else acct.login_issue = { type, note: (note || '').toString().slice(0, 200), marked_at: new Date().toISOString() };
+  writeAccounts(accounts);
+  res.json({ ok: true, login_issue: acct.login_issue || null });
 });
 
 app.delete('/api/second/login-issue/:email', (req, res) => {
   const accounts = readAccounts();
-  const key = req.params.email.toLowerCase();
-  const account = accounts.find(a => (a.email || '').toLowerCase() === key);
-  
+  const account = accounts.find(a => (a.email || '').toLowerCase() === req.params.email.toLowerCase());
   if (!account) return res.status(404).json({ ok: false, error: 'account not found' });
-  
   delete account.login_issue;
   writeAccounts(accounts);
   res.json({ ok: true });
+});
+
+app.get('/api/second/login-issues', (req, res) => {
+  const issues = readAccounts()
+    .filter(a => a.login_issue && a.login_issue.type)
+    .map(a => ({ email: a.email, name: a.name, picture: a.picture, channel_title: a.channel_title, login_issue: a.login_issue, site: 'second' }));
+  res.json({ site: 'second', count: issues.length, issues });
 });
 // LOGIN_ISSUE_PATCH_END
 

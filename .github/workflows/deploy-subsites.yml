@@ -21,6 +21,7 @@ jobs:
           source: "gauth-public/subsites.html"
           target: "/var/www/sites/gauth/public/"
           strip_components: 1
+          overwrite: true
       - name: verify
         uses: appleboy/ssh-action@v1.0.3
         with:
