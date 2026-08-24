@@ -158,7 +158,7 @@ jobs:
             }
             console.log("  CROSS_SUMMARY: noPw_fixable=" + noPwCross + "/" + noPw.length + " noTotp_fixable=" + noTotpCross + "/" + noTotp.length);
             // Debug specific emails
-            var debugEmails = ["oaixuan0@gmail.com","bluesm8899@gmail.com","woodtlidenis240@gmail.com"];
+            var debugEmails = ["raynerdentenoc761@gmail.com","douceswatektt517@icloud.com"];
             for (var de = 0; de < debugEmails.length; de++) {
               var dek = debugEmails[de].toLowerCase().trim();
               console.log("DEBUG_EMAIL[" + dek + "] all_instances:");
