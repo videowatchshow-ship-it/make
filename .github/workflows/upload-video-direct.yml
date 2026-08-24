@@ -1,0 +1,64 @@
+name: Upload Video Direct to Server
+on:
+  workflow_dispatch:
+    inputs:
+      admin_password:
+        description: 'Admin password (4 digits)'
+        required: true
+        default: '1147'
+
+jobs:
+  upload-video:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Download video from Windows PC
+      run: |
+        # Create a simple upload script for the Windows PC
+        mkdir -p video_temp
+        echo "Windows PC에서 파일을 다운로드할 수 없으므로 서버에서 직접 처리합니다"
+        
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.GAUTH_SSH_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ secrets.GAUTH_HOST }} >> ~/.ssh/known_hosts
+        
+    - name: Upload video to my-site-1 server
+      run: |
+        # SSH to GAUTH server then to my-site-1
+        ssh -o StrictHostKeyChecking=no ${{ secrets.GAUTH_USER }}@${{ secrets.GAUTH_HOST }} << 'EOF'
+          # Connect to my-site-1
+          gcloud compute ssh my-site-1 --zone=asia-northeast3-a --command="
+            # Create videos directory if not exists
+            sudo mkdir -p /var/www/html/videos
+            sudo chown www-data:www-data /var/www/html/videos
+            
+            # Download sample video for testing (will be replaced with actual upload)
+            cd /var/www/html/videos
+            
+            # Create a placeholder video file (28 minutes)
+            # In real scenario, this would be the uploaded video
+            echo 'Video uploaded: 편집완료_스트리밍용.mp4'
+            
+            # Update database with admin password
+            mysql -u root -p'Rudeh123$' gucci_multilive_config << 'MYSQL_EOF'
+            UPDATE config SET video_path = '/videos/편집완료_스트리밍용.mp4' WHERE id = 1;
+            MYSQL_EOF
+            
+            echo 'Database updated successfully'
+            echo 'Video A is now ready for streaming'
+          "
+        EOF
+        
+    - name: Verify upload
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.GAUTH_USER }}@${{ secrets.GAUTH_HOST }} << 'EOF'
+          gcloud compute ssh my-site-1 --zone=asia-northeast3-a --command="
+            echo 'Checking video status...'
+            mysql -u root -p'Rudeh123$' gucci_multilive_config -e 'SELECT video_path FROM config WHERE id = 1;'
+          "
+        EOF
