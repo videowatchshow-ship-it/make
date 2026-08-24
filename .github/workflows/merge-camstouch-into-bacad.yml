@@ -1,0 +1,114 @@
+name: Merge camstouch into bacad
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/workflows/merge-camstouch-into-bacad.yml']
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Merge accounts + redirect camstouch → bacad
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          script: |
+            set -e
+            BACAD=/var/www/sites/bacad
+            CAMSTOUCH=/var/www/sites/camstouch
+            TS=$(date +%s)
+
+            echo "=== 1) 백업 ==="
+            sudo cp "$BACAD/accounts.json" "$BACAD/accounts.json.premerge.$TS"
+            sudo cp "$CAMSTOUCH/accounts.json" "$CAMSTOUCH/accounts.json.premerge.$TS"
+
+            echo "=== 2) 병합 ==="
+            sudo node -e "
+              var fs=require('fs');
+              function load(p){try{var d=JSON.parse(fs.readFileSync(p,'utf8'));return Array.isArray(d)?d:(d.accounts||[]);}catch(e){return[];}}
+              var b=load('$BACAD/accounts.json'), c=load('$CAMSTOUCH/accounts.json');
+              var map=new Map();
+              b.forEach(function(a){if(a.email)map.set(a.email.toLowerCase(),Object.assign({},a,{site:'bacad'}));});
+              c.forEach(function(a){
+                if(!a.email)return;
+                var k=a.email.toLowerCase();
+                if(!map.has(k)){map.set(k,Object.assign({},a,{site:'bacad',migrated_from:'camstouch',migrated_at:new Date().toISOString()}));}
+              });
+              var merged=Array.from(map.values());
+              var tmp='$BACAD/accounts.json.tmp.'+process.pid;
+              fs.writeFileSync(tmp,JSON.stringify({accounts:merged},null,2));
+              fs.renameSync(tmp,'$BACAD/accounts.json');
+              console.log('BACAD_BEFORE='+b.length+' CAMSTOUCH='+c.length+' MERGED='+merged.length);
+            "
+
+            echo "=== 3) camstouch 서비스 정지 ==="
+            for svc in camstouch site-camstouch camstouch-site; do
+              if systemctl list-unit-files 2>/dev/null | grep -q "^${svc}\\.service"; then
+                sudo systemctl stop "$svc" 2>&1 || true
+                sudo systemctl disable "$svc" 2>&1 || true
+                echo "  stopped/disabled: $svc"
+                break
+              fi
+            done
+
+            echo "=== 4) Apache vhost 리다이렉트 (camstouch → bacad) ==="
+            VHOST=$(sudo grep -rl "camstouch\\.cent-solution\\.online" /etc/apache2/sites-available/ 2>/dev/null | head -1)
+            if [ -z "$VHOST" ]; then
+              VHOST=/etc/apache2/sites-available/camstouch-redirect.conf
+              echo "  new vhost: $VHOST"
+            else
+              echo "  overwriting: $VHOST"
+              sudo cp "$VHOST" "$VHOST.bak.$TS"
+            fi
+            sudo tee "$VHOST" > /dev/null <<'APACHE'
+            <VirtualHost *:80>
+              ServerName camstouch.cent-solution.online
+              Redirect permanent / https://bacad.cent-solution.online/
+            </VirtualHost>
+            <VirtualHost *:443>
+              ServerName camstouch.cent-solution.online
+              Redirect permanent / https://bacad.cent-solution.online/
+              SSLEngine on
+              SSLCertificateFile /etc/letsencrypt/live/cent-solution.online/fullchain.pem
+              SSLCertificateKeyFile /etc/letsencrypt/live/cent-solution.online/privkey.pem
+            </VirtualHost>
+            APACHE
+            sudo a2ensite "$(basename ${VHOST%.conf})" 2>&1 || true
+            sudo apache2ctl configtest 2>&1 && sudo systemctl reload apache2 || echo "::warning::apache config invalid, not reloading"
+
+            echo "=== 5) bacad 재시작 ==="
+            for svc in bacad site-bacad bacad-site; do
+              if systemctl list-unit-files 2>/dev/null | grep -q "^${svc}\\.service"; then
+                sudo systemctl restart "$svc" 2>&1 || true
+                break
+              fi
+            done
+
+            echo "=== 6) 검증 ==="
+            echo "-- bacad accounts.json count:"
+            sudo node -e "var d=JSON.parse(require('fs').readFileSync('$BACAD/accounts.json','utf8'));var a=Array.isArray(d)?d:(d.accounts||[]);console.log('BACAD_TOTAL='+a.length);"
+            echo "-- camstouch redirect test:"
+            curl -sS -o /dev/null -w "camstouch → HTTP %{http_code} redirect to: %{redirect_url}\\n" --max-time 5 https://camstouch.cent-solution.online/ || true
+            echo "=== done ==="
+
+      - name: Purge Cloudflare cache
+        if: always()
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          if [ -z "$CF_TOKEN" ]; then exit 0; fi
+          if [ -z "$CF_ZONE" ]; then
+            CF_ZONE=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=cent-solution.online&status=active" \
+              -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+              | grep -oP '"id"\s*:\s*"\K[a-f0-9]{32}' | head -1)
+          fi
+          curl -sS -o /dev/null -w "purge %{http_code}\n" -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/purge_cache" \
+            -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}'
