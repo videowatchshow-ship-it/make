@@ -19,6 +19,19 @@ jobs:
           command_timeout: 120s
           script: |
             set -e
+            echo "===== SUBSITE NAME+URL LIST ====="
+            total=0
+            for d in /var/www/sites/*/; do
+              site=$(basename "$d")
+              case "$site" in gauth|gauth01) continue;; esac
+              [ -f "$d/public/index.html" ] || continue
+              kname=$(sudo grep -oE '<title>[^<]+' "$d/public/index.html" 2>/dev/null | head -1 | sed 's|<title>||' | head -c 60)
+              [ -z "$kname" ] && kname=$(sudo grep -oE '<h[12][^>]*>[^<]+' "$d/public/index.html" 2>/dev/null | head -1 | sed 's|<h[12][^>]*>||' | head -c 60)
+              total=$((total+1))
+              printf '%2d) %-12s https://%s.cent-solution.online/    %s\n' "$total" "$site" "$site" "$kname"
+            done
+            echo "총 $total개"
+            echo ""
             echo "===== SUBSITE VERIFICATION REPORT ====="
             printf '%-12s %-8s %-8s %-8s %s\n' "SITE" "ACCTS" "ISSUES" "UI_VER" "HTML_HEAD"
             for d in /var/www/sites/*/; do
