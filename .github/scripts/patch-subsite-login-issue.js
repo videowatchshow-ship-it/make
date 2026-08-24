@@ -14,8 +14,8 @@ const apiPrefix = '/api/' + SITE + '/';
 const serverPath = path.join(DIR, 'server.js');
 const htmlPath = path.join(DIR, 'public', 'index.html');
 const patchMarker = '/* LOGIN_ISSUE_PATCH */';
-const htmlMarker = '/* LOGIN_ISSUE_UI_V4 */';
-const oldHtmlMarkers = ['/* LOGIN_ISSUE_UI */', '/* LOGIN_ISSUE_UI_V2 */', '/* LOGIN_ISSUE_UI_V3 */'];
+const htmlMarker = '/* LOGIN_ISSUE_UI_V5 */';
+const oldHtmlMarkers = ['/* LOGIN_ISSUE_UI */', '/* LOGIN_ISSUE_UI_V2 */', '/* LOGIN_ISSUE_UI_V3 */', '/* LOGIN_ISSUE_UI_V4 */'];
 
 const serverSrc = fs.readFileSync(serverPath, 'utf8');
 let htmlSrc = fs.readFileSync(htmlPath, 'utf8');
@@ -112,6 +112,9 @@ if (htmlSrc.includes(htmlMarker)) {
     '.__li_panel input[type=text]::-webkit-input-placeholder{color:rgba(232,236,239,0.45)}',
     '.__li_panel input[type=text].show{display:block}',
     '.__li_panel .__li_saved{color:#3ddc84;font-size:10px;margin-left:6px}',
+    '.__li_panel button.__li_save{background:#2b6cff;color:#fff;border:none;padding:5px 12px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;margin-top:6px}',
+    '.__li_panel button.__li_save:hover{background:#3d7cff}',
+    '.__li_panel button.__li_save:disabled{background:#3d4550;cursor:not-allowed}',
     '.__li_has{border:1px solid #ff6b6b !important}',
     '</style>',
     '',
@@ -134,7 +137,7 @@ if (htmlSrc.includes(htmlMarker)) {
     '      + \'<label><input type="radio" name="__li_\' + e + \'" value="other" \' + (t==="other"?"checked":"") + \'> 기타</label>\'',
     '      + \'<label style="color:#8a95a5"><input type="radio" name="__li_\' + e + \'" value="" \' + (!t?"checked":"") + \'> 없음</label>\'',
     '      + \'<input type="text" class="__li_note \' + (t==="other"?"show":"") + \'" placeholder="로그인 불편 사항 수동으로 기입해 주세요." value="\' + n + \'">\'',
-    '      + \'<span class="__li_saved"></span></div>\';',
+    '      + \'<div><button type="button" class="__li_save">저장</button><span class="__li_saved"></span></div></div>\';',
     '    return html;',
     '  }',
     '  async function save(panel) {',
@@ -181,12 +184,15 @@ if (htmlSrc.includes(htmlMarker)) {
     '    });',
     '    document.querySelectorAll(".__li_panel input[type=radio]").forEach(function(inp){',
     '      if (inp.__li_wired) return; inp.__li_wired = true;',
-    '      inp.addEventListener("change", function(){ save(inp.closest(".__li_panel")); });',
+    '      inp.addEventListener("change", function(){',
+    '        var panel = inp.closest(".__li_panel");',
+    '        var noteEl = panel.querySelector("input[type=text]");',
+    '        if (inp.value === "other") noteEl.classList.add("show"); else noteEl.classList.remove("show");',
+    '      });',
     '    });',
-    '    document.querySelectorAll(".__li_panel input[type=text]").forEach(function(inp){',
-    '      if (inp.__li_wired) return; inp.__li_wired = true;',
-    '      inp.addEventListener("blur", function(){ save(inp.closest(".__li_panel")); });',
-    '      inp.addEventListener("keydown", function(e){ if (e.key === "Enter") inp.blur(); });',
+    '    document.querySelectorAll(".__li_panel button.__li_save").forEach(function(btn){',
+    '      if (btn.__li_wired) return; btn.__li_wired = true;',
+    '      btn.addEventListener("click", function(){ save(btn.closest(".__li_panel")); });',
     '    });',
     '  }',
     '  function start(){ injectAll(); setInterval(injectAll, 5000); }',
