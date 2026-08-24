@@ -65,6 +65,22 @@ jobs:
               [ -f "$f" ] && echo "$(basename $f): $(sudo stat -c%s $f)B  $(sudo grep -oE '20260824v[0-9]+' $f | head -1)"
             done
             echo ""
+            echo "===== SUNBI CRASH LOG (last 40 journal lines) ====="
+            sudo journalctl -u sunbi --no-pager -n 40 -o cat 2>&1 | tail -40
+            echo ""
+            echo "===== SUNBI server.js patch marker count ====="
+            sudo grep -oE 'LOGIN_ISSUE_PATCH(_V[0-9]+)?' /var/www/sites/sunbi/server.js | sort | uniq -c
+            echo ""
+            echo "===== SUNBI server.js SYNTAX CHECK ====="
+            sudo node --check /var/www/sites/sunbi/server.js 2>&1 || echo "^ SYNTAX ERROR ABOVE"
+            echo ""
+            echo "===== SUNBI server.js size + first 5 & last 5 lines ====="
+            sudo wc -l /var/www/sites/sunbi/server.js
+            echo "--- head ---"
+            sudo head -5 /var/www/sites/sunbi/server.js
+            echo "--- tail ---"
+            sudo tail -10 /var/www/sites/sunbi/server.js
+            echo ""
             echo "===== SUNBI DEEP DIAGNOSTIC ====="
             echo "-- local accounts.json count:"
             sudo node -e "var d=JSON.parse(require('fs').readFileSync('/var/www/sites/sunbi/accounts.json','utf8')); var a=Array.isArray(d)?d:(d.accounts||[]); console.log('LOCAL_ACCOUNTS_COUNT=' + a.length); console.log('SAMPLE_EMAILS=' + a.slice(0,3).map(x=>x.email).join(','));"
