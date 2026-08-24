@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>🚫 로그인 문제 - 참교육 스트리밍 계정 정보</title>
-<script>var _V='20260824v9';if(!location.search.match('_v='+_V)){location.replace(location.pathname+'?_v='+_V+location.hash);}</script>
+<script>var _V='20260824v10';if(!location.search.match('_v='+_V)){location.replace(location.pathname+'?_v='+_V+location.hash);}</script>
 <style>
 *{box-sizing:border-box}
 body{font-family:-apple-system,'SF Pro Text',sans-serif;background:#0b0d10;color:#e8ecef;margin:0}
@@ -27,8 +27,21 @@ select{background:#161a20;border:1px solid #2a323c;color:#e8ecef;padding:9px 10p
 .account-email{font-weight:600;color:#e8ecef;font-size:14px}
 .account-site{color:#7dabff;font-size:12px;margin-left:8px}
 .issue-note{color:#c9d2dc;font-size:13px;margin-top:8px;font-style:italic}
-.resolve-btn{background:#3ddc84;color:#000;border:none;padding:6px 12px;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;position:absolute;top:12px;right:12px}
-.resolve-btn:hover{opacity:0.9}
+.action-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.action-btn{border:none;padding:6px 12px;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer}
+.action-btn.resolved{background:#3ddc84;color:#000}
+.action-btn.hold{background:#8a9dff;color:#0b0d10}
+.action-btn.unknown{background:#c9a0a0;color:#0b0d10}
+.action-btn.pending{background:#ffb84d;color:#0b0d10}
+.action-btn:hover{opacity:0.85}
+.status-pill{display:inline-block;font-size:11px;padding:3px 8px;border-radius:3px;margin-left:8px;font-weight:700}
+.status-pill.pending{background:#3d2f1a;color:#ffb84d}
+.status-pill.resolved{background:#1f3a24;color:#3ddc84}
+.status-pill.hold{background:#2a2a3d;color:#8a9dff}
+.status-pill.unknown{background:#3a2a2a;color:#c9a0a0}
+.hist-log{margin-top:8px;padding:6px 8px;background:#0d1218;border-radius:4px;max-height:100px;overflow-y:auto;font-size:11px;color:#8a95a5;font-family:ui-monospace,monospace}
+.hist-log div{padding:2px 0;border-bottom:1px dotted #1a1f26}
+.hist-log div:last-child{border-bottom:none}
 .filter-chips{display:flex;gap:8px;margin:12px 20px;flex-wrap:wrap}
 .chip{background:#2a323c;color:#c9d2dc;border:1px solid #2a323c;padding:6px 12px;border-radius:16px;font-size:12px;cursor:pointer;transition:all 0.2s}
 .chip:hover{border-color:#7dabff}
@@ -159,6 +172,21 @@ function filterIssues() {
   renderIssues();
 }
 
+const STATUS_LABEL = { pending:'보류중', resolved:'해결됨', hold:'보류', unknown:'미확인' };
+
+function renderHistory(issue) {
+  if (!issue || !Array.isArray(issue.history) || !issue.history.length) return '';
+  const rows = issue.history.slice().reverse().map(h => {
+    const when = (h.at || '').replace('T', ' ').slice(0, 16);
+    const label = h.event === 'status'
+      ? '→ ' + (STATUS_LABEL[h.status] || h.status)
+      : '▪ ' + (h.type || '');
+    return '<div>' + escapeHtml(when) + ' ' + escapeHtml(label) +
+      ' <span style="color:#5a6a7a">(' + escapeHtml(h.actor || '') + ')</span></div>';
+  }).join('');
+  return '<div class="hist-log">' + rows + '</div>';
+}
+
 function renderIssues() {
   const viewport = document.getElementById('viewport');
   document.getElementById('count').textContent = filteredIssues.length + '개 결과';
@@ -169,6 +197,8 @@ function renderIssues() {
   viewport.innerHTML = filteredIssues.map(i => {
     const typeLabel = TYPE_LABELS[i.issue.type] || '❓ 기타';
     const timeAgo = formatTimeAgo(i.issue.marked_at);
+    const status = i.issue.status || 'pending';
+    const statusLabel = STATUS_LABEL[status] || status;
     const note = i.issue.note
       ? '<div class="issue-note">"' + escapeHtml(i.issue.note) + '"</div>'
       : '';
@@ -176,7 +206,8 @@ function renderIssues() {
     const sAttr = escapeAttr(i.site);
     return '<div class="issue-card">' +
       '<div class="issue-header">' +
-        '<span class="issue-type">' + escapeHtml(typeLabel) + '</span>' +
+        '<div><span class="issue-type">' + escapeHtml(typeLabel) + '</span>' +
+        '<span class="status-pill ' + status + '">' + escapeHtml(statusLabel) + '</span></div>' +
         '<span class="issue-time">' + escapeHtml(timeAgo) + '</span>' +
       '</div>' +
       '<div class="account-info">' +
@@ -184,31 +215,31 @@ function renderIssues() {
         '<span class="account-site">@ ' + escapeHtml(i.site) + '</span>' +
       '</div>' +
       note +
-      '<button class="resolve-btn" onclick="resolveIssue(\'' + eAttr + '\',\'' + sAttr + '\')">해결됨</button>' +
+      renderHistory(i.issue) +
+      '<div class="action-row">' +
+        '<button class="action-btn resolved" onclick="setStatus(\'' + eAttr + '\',\'' + sAttr + '\',\'resolved\')">해결됨</button>' +
+        '<button class="action-btn hold" onclick="setStatus(\'' + eAttr + '\',\'' + sAttr + '\',\'hold\')">보류</button>' +
+        '<button class="action-btn unknown" onclick="setStatus(\'' + eAttr + '\',\'' + sAttr + '\',\'unknown\')">미확인</button>' +
+        '<button class="action-btn pending" onclick="setStatus(\'' + eAttr + '\',\'' + sAttr + '\',\'pending\')">재개봉</button>' +
+      '</div>' +
     '</div>';
   }).join('');
 }
 
-async function resolveIssue(email, site) {
-  if (!confirm(email + ' (' + site + ')의 로그인 문제를 해결됨으로 표시하시겠습니까?')) return;
+async function setStatus(email, site, status) {
   try {
     const r = await fetch('https://' + site + '.cent-solution.online/api/' + site + '/accounts/' + encodeURIComponent(email) + '/login-issue', {
       method: 'PATCH',
       mode: 'cors',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: null })
+      body: JSON.stringify({ status, actor: 'gauth' })
     });
-    if (r.ok) {
-      allIssues = allIssues.filter(x => !(x.email === email && x.site === site));
-      updateStats();
-      updateFilterChips();
-      filterIssues();
-    } else {
-      alert('해결 처리 실패 (HTTP ' + r.status + ')');
-    }
-  } catch (e) {
-    alert('해결 처리 오류: ' + (e.message || e));
-  }
+    if (!r.ok) { alert('상태 변경 실패 (HTTP ' + r.status + ')'); return; }
+    const d = await r.json();
+    const target = allIssues.find(x => x.email === email && x.site === site);
+    if (target && d.login_issue) target.issue = d.login_issue;
+    updateStats(); updateFilterChips(); filterIssues();
+  } catch (e) { alert('상태 변경 오류: ' + (e.message || e)); }
 }
 
 function formatTimeAgo(s) {
