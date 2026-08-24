@@ -13,9 +13,10 @@ if (!SITE || !DIR) { console.error('Missing SITE or DIR'); process.exit(2); }
 const apiPrefix = '/api/' + SITE + '/';
 const serverPath = path.join(DIR, 'server.js');
 const htmlPath = path.join(DIR, 'public', 'index.html');
-const patchMarker = '/* LOGIN_ISSUE_PATCH */';
-const htmlMarker = '/* LOGIN_ISSUE_UI_V5 */';
-const oldHtmlMarkers = ['/* LOGIN_ISSUE_UI */', '/* LOGIN_ISSUE_UI_V2 */', '/* LOGIN_ISSUE_UI_V3 */', '/* LOGIN_ISSUE_UI_V4 */'];
+const patchMarker = '/* LOGIN_ISSUE_PATCH_V2 */';
+const oldServerMarkers = ['/* LOGIN_ISSUE_PATCH */'];
+const htmlMarker = '/* LOGIN_ISSUE_UI_V6 */';
+const oldHtmlMarkers = ['/* LOGIN_ISSUE_UI */', '/* LOGIN_ISSUE_UI_V2 */', '/* LOGIN_ISSUE_UI_V3 */', '/* LOGIN_ISSUE_UI_V4 */', '/* LOGIN_ISSUE_UI_V5 */'];
 
 const serverSrc = fs.readFileSync(serverPath, 'utf8');
 let htmlSrc = fs.readFileSync(htmlPath, 'utf8');
@@ -39,6 +40,9 @@ if (serverSrc.includes(patchMarker)) {
     '  res.setHeader("Access-Control-Allow-Origin", "*");',
     '  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");',
     '  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");',
+    '  if (req.path === "/" || req.path.endsWith("/index.html") || req.path.endsWith(".html")) {',
+    '    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");',
+    '  }',
     '  if (req.method === "OPTIONS") return res.sendStatus(204);',
     '  next();',
     '});',
@@ -123,6 +127,17 @@ if (htmlSrc.includes(htmlMarker)) {
   const scriptLines = [
     '<script>' + htmlMarker,
     '(function(){',
+    '  var _V = "V6";',
+    '  try {',
+    '    if (localStorage.getItem("__li_ui_v") !== _V) {',
+    '      localStorage.setItem("__li_ui_v", _V);',
+    '      if (!location.search.match("_liv=" + _V)) {',
+    '        var sep = location.search ? "&" : "?";',
+    '        location.replace(location.pathname + location.search + sep + "_liv=" + _V + location.hash);',
+    '        return;',
+    '      }',
+    '    }',
+    '  } catch(e){}',
     '  var apiPrefix = ' + JSON.stringify(apiPrefix) + ';',
     '  function esc(s){var d=document.createElement("div");d.textContent=String(s==null?"":s);return d.innerHTML;}',
     '  function buildPanel(email, issue) {',
@@ -195,7 +210,16 @@ if (htmlSrc.includes(htmlMarker)) {
     '      btn.addEventListener("click", function(){ save(btn.closest(".__li_panel")); });',
     '    });',
     '  }',
-    '  function start(){ injectAll(); setInterval(injectAll, 5000); }',
+    '  var _pending = false;',
+    '  function scheduleInject(){ if (_pending) return; _pending = true; setTimeout(function(){ _pending = false; injectAll(); }, 100); }',
+    '  function start(){',
+    '    injectAll();',
+    '    setInterval(injectAll, 1000);',
+    '    try {',
+    '      var mo = new MutationObserver(scheduleInject);',
+    '      mo.observe(document.body, { childList: true, subtree: true });',
+    '    } catch(e){}',
+    '  }',
     '  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);',
     '  else start();',
     '})();',
