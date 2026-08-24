@@ -120,6 +120,23 @@ jobs:
               }
             }
             var deduped = Array.from(map.values());
+            // Final safety: any leaked backup code in totp_secret → backup_codes
+            for (var di = 0; di < deduped.length; di++) {
+              var da = deduped[di];
+              if (da.totp_secret) {
+                var s = String(da.totp_secret).trim();
+                var parts = s.split(/\s+/);
+                var validGroups = 0;
+                for (var pi = 0; pi < parts.length; pi++) {
+                  if (/^[a-z0-9]{4}$/i.test(parts[pi])) validGroups++;
+                  else break;
+                }
+                if (validGroups >= 4) {
+                  if (!da.backup_codes) da.backup_codes = parts.slice(0, validGroups).join(' ');
+                  da.totp_secret = '';
+                }
+              }
+            }
             fs.writeFileSync("/opt/gauth-full/accounts_normalized.json", JSON.stringify(deduped, null, 2));
             console.log("Total:", all.length, "Deduped:", deduped.length);
             var noPw = deduped.filter(function(a) { return !a.password; });

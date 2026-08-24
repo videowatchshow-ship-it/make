@@ -916,6 +916,18 @@ function parseExcelFile(filePath, originalName) {
 
   recoverMissingFieldsFromExtra(allAccounts);
 
+  /* Post-parse guard: if any leaked-through backup code sits in totp_secret,
+     move it to backup_codes. Backup codes cannot generate valid TOTP OTPs,
+     so a backup code in totp_secret makes localTOTP() produce wrong codes.
+     ref: https://tools.ietf.org/html/rfc6238 (TOTP requires a shared secret,
+     not one-time backup codes) */
+  for (const a of allAccounts) {
+    if (a.totp_secret && isGoogleBackupCode(a.totp_secret)) {
+      if (!a.backup_codes) a.backup_codes = extractGoogleBackupCode(a.totp_secret);
+      a.totp_secret = '';
+    }
+  }
+
   const byEmail = new Map();
   const scoreEntry = (x) => (x.password && !/[ㄱ-힝]/.test(x.password) ? 4 : 0) +
     (x.password ? 2 : 0) + (x.totp_secret ? 4 : 0) + (x.backup_codes ? 2 : 0);
