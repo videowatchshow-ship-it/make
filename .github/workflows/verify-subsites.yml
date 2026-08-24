@@ -64,4 +64,23 @@ jobs:
             for f in /var/www/sites/gauth/public/index.html /var/www/sites/gauth/public/login-issues.html /var/www/sites/gauth/public/accounts.html; do
               [ -f "$f" ] && echo "$(basename $f): $(sudo stat -c%s $f)B  $(sudo grep -oE '20260824v[0-9]+' $f | head -1)"
             done
+            echo ""
+            echo "===== SUNBI DEEP DIAGNOSTIC ====="
+            echo "-- local accounts.json count:"
+            sudo node -e "var d=JSON.parse(require('fs').readFileSync('/var/www/sites/sunbi/accounts.json','utf8')); var a=Array.isArray(d)?d:(d.accounts||[]); console.log('LOCAL_ACCOUNTS_COUNT=' + a.length); console.log('SAMPLE_EMAILS=' + a.slice(0,3).map(x=>x.email).join(','));"
+            echo "-- systemd sunbi service status:"
+            sudo systemctl is-active sunbi 2>&1 || true
+            sudo systemctl status sunbi --no-pager -n 5 2>&1 | head -20 || true
+            echo "-- listening ports (grep sunbi/subsite processes):"
+            sudo ss -tlnp 2>/dev/null | grep -E "node|sunbi" | head -10 || true
+            echo "-- curl LOCAL /api/sunbi/accounts (should return sunbi's local list):"
+            curl -sS --max-time 5 https://sunbi.cent-solution.online/api/sunbi/accounts 2>&1 | head -c 500
+            echo ""
+            echo "-- curl LOCAL /api/sunbi/login-issues:"
+            curl -sS --max-time 5 https://sunbi.cent-solution.online/api/sunbi/login-issues 2>&1 | head -c 300
+            echo ""
+            echo "-- gauth central pool: sunbi assignment count:"
+            sudo node -e "try{var d=JSON.parse(require('fs').readFileSync('/opt/gauth-full/accounts_subsites.json','utf8'));var a=Array.isArray(d)?d:(d.accounts||[]);console.log('CENTRAL_POOL_TOTAL=' + a.length);var sunbi=a.filter(x=>(x.site||'').toLowerCase()==='sunbi');console.log('CENTRAL_POOL_SUNBI=' + sunbi.length);}catch(e){console.log('POOL_ERR ' + e.message);}"
+            echo "-- LOGIN_ISSUE marker count in sunbi index.html (should be 1 after strip fix):"
+            sudo grep -oE 'LOGIN_ISSUE_UI_V[0-9]+' /var/www/sites/sunbi/public/index.html | sort | uniq -c
             echo "===== done ====="
