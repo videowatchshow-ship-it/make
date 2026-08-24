@@ -179,12 +179,14 @@ jobs:
             // 채널 AS.xlsx 전체 rows raw dump for these emails
             console.log("=== 채널 AS.xlsx per-row raw dump ===");
             try {
+              var _XLSX = require("/opt/gauth-full/node_modules/xlsx");
               var chanFiles = fs.readdirSync(dir).filter(function(f){ return /AS\.xlsx$/.test(f); });
+              console.log("chanFiles.count=" + chanFiles.length);
               for (var cf = 0; cf < chanFiles.length; cf++) {
-                var wbA = XLSX2.readFile(path.join(dir, chanFiles[cf]));
+                var wbA = _XLSX.readFile(path.join(dir, chanFiles[cf]));
                 for (var sA = 0; sA < wbA.SheetNames.length; sA++) {
                   var shName = wbA.SheetNames[sA];
-                  var rowsA = XLSX2.utils.sheet_to_json(wbA.Sheets[shName], {header:1, defval:'', raw:false});
+                  var rowsA = _XLSX.utils.sheet_to_json(wbA.Sheets[shName], {header:1, defval:'', raw:false});
                   console.log("FILE=" + chanFiles[cf] + " SHEET=" + shName + " rows=" + rowsA.length);
                   for (var rA = 0; rA < Math.min(30, rowsA.length); rA++) {
                     var joined = JSON.stringify((rowsA[rA]||[]).map(function(c){ return String(c||'').substring(0,40); }));
