@@ -1,0 +1,59 @@
+name: Restore broken subsite servers
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/workflows/restore-broken-subsites.yml']
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Restore each broken subsite from oldest backup
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          script: |
+            set -e
+            for d in /var/www/sites/*/; do
+              site=$(basename "$d")
+              case "$site" in gauth|gauth01|jump) continue;; esac
+              [ -f "$d/server.js" ] || continue
+              echo "=== $site ==="
+              # syntax check
+              if sudo node --check "$d/server.js" 2>/dev/null; then
+                # check service state
+                svc=""
+                for s in "$site" "site-$site" "$site-site"; do
+                  if systemctl list-unit-files 2>/dev/null | grep -q "^${s}\.service"; then svc="$s"; break; fi
+                done
+                if [ -n "$svc" ] && sudo systemctl is-active "$svc" >/dev/null 2>&1; then
+                  echo "  OK — service $svc active, syntax good"
+                  continue
+                fi
+              fi
+              # Broken. Find oldest .bak
+              OLDEST=$(sudo ls -1 "$d"server.js.bak.* 2>/dev/null | awk -F. '{print $NF" "$0}' | sort -n | head -1 | cut -d' ' -f2-)
+              if [ -z "$OLDEST" ]; then echo "  NO BACKUP AVAILABLE — cannot restore"; continue; fi
+              echo "  restoring from: $(basename $OLDEST)"
+              sudo cp "$OLDEST" "$d/server.js"
+              sudo chown www-data:www-data "$d/server.js" 2>/dev/null || true
+              # restart
+              for s in "$site" "site-$site" "$site-site"; do
+                if systemctl list-unit-files 2>/dev/null | grep -q "^${s}\.service"; then
+                  sudo systemctl restart "$s" 2>&1 || true
+                  sleep 2
+                  if sudo systemctl is-active "$s" >/dev/null 2>&1; then
+                    echo "  ✓ $s active after restore"
+                  else
+                    echo "  ✗ $s still not active"
+                    sudo journalctl -u "$s" --no-pager -n 5 -o cat 2>&1 | tail -5
+                  fi
+                  break
+                fi
+              done
+            done
