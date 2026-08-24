@@ -3,126 +3,262 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>gauth · 로그인 문제 계정</title>
-<meta http-equiv="Cache-Control" content="no-store">
+<title>🚫 로그인 문제 - 참교육 스트리밍 계정 정보</title>
+<script>var _V='20260823v7';if(!location.search.match('_v='+_V)){location.replace(location.pathname+'?_v='+_V+location.hash);}</script>
 <style>
-  :root{--bg:#0d1117;--panel:#0f1620;--card:#161a20;--border:#22282f;--border2:#2a323c;--text:#e8ecef;--sub:#8a95a5;--accent:#7dabff;--red:#ff6b6b;--yellow:#ffb469;--green:#3ddc84}
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo",sans-serif;min-height:100vh}
-  nav{position:sticky;top:0;z-index:20;background:#111418;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;height:48px;gap:6px;overflow-x:auto}
-  nav::-webkit-scrollbar{display:none}
-  nav a{color:var(--sub);text-decoration:none;font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;white-space:nowrap}
-  nav a:hover{background:#1a1f27;color:var(--text)}
-  nav a.active{background:#3a1e1e;color:var(--red)}
-  .wrap{max-width:720px;margin:0 auto;padding:24px 16px}
-  .brand{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
-  h1{margin:0;font-size:20px}
-  .toolbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
-  .chip{background:var(--card);border:1px solid var(--border2);color:var(--sub);border-radius:999px;padding:5px 12px;font-size:12px;cursor:pointer;user-select:none}
-  .chip.on{border-color:var(--red);color:var(--red);background:#2a1414}
-  .chip .n{margin-left:6px;color:var(--text)}
-  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:12px}
-  .row{background:var(--card);border:1px solid var(--border2);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:grid;grid-template-columns:1fr auto;gap:6px 12px;align-items:center}
-  .row .email{font-size:14px;font-weight:600;word-break:break-all}
-  .row .meta{font-size:12px;color:var(--sub);margin-top:2px}
-  .row .site-tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;background:#1e3a5f;color:var(--accent);margin-right:6px}
-  .row .issue{font-size:13px;color:var(--red);font-weight:600;text-align:right}
-  .row .note{font-size:12px;color:var(--yellow);text-align:right;margin-top:2px}
-  .empty{color:var(--sub);text-align:center;padding:40px;font-size:14px}
-  .apiToken{max-width:110px;margin-left:auto;background:#1a1f27;border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 8px;font-size:12px}
+*{box-sizing:border-box}
+body{font-family:-apple-system,'SF Pro Text',sans-serif;background:#0b0d10;color:#e8ecef;margin:0}
+header{padding:14px 20px;background:#111418;border-bottom:1px solid #22282f;position:sticky;top:0;z-index:5}
+h1{margin:0 0 8px;font-size:18px;color:#f47070}
+.stats{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:#9aa5b5}
+.stats b{color:#e8ecef;font-size:15px}
+.stats .issue{color:#f47070}
+.controls{padding:12px 20px;background:#0f1216;border-bottom:1px solid #22282f;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+input{background:#161a20;border:1px solid #2a323c;color:#e8ecef;padding:9px 12px;border-radius:6px;font-size:14px;flex:1;min-width:200px}
+input:focus{outline:0;border-color:#2b6cff}
+select{background:#161a20;border:1px solid #2a323c;color:#e8ecef;padding:9px 10px;border-radius:6px;font-size:13px}
+#count{color:#8a95a5;font-size:12px;white-space:nowrap}
+#viewport{overflow-y:visible;min-height:200px;padding:0 20px}
+.issue-card{background:#1a1f26;border:1px solid #f47070;border-radius:8px;padding:16px;margin:8px 0;position:relative}
+.issue-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.issue-type{background:#2a1e1e;color:#f47070;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:600}
+.issue-time{color:#8a95a5;font-size:11px}
+.account-info{margin-bottom:8px}
+.account-email{font-weight:600;color:#e8ecef;font-size:14px}
+.account-site{color:#7dabff;font-size:12px;margin-left:8px}
+.issue-note{color:#c9d2dc;font-size:13px;margin-top:8px;font-style:italic}
+.resolve-btn{background:#3ddc84;color:#000;border:none;padding:6px 12px;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;position:absolute;top:12px;right:12px}
+.resolve-btn:hover{opacity:0.9}
+.filter-chips{display:flex;gap:8px;margin:12px 20px;flex-wrap:wrap}
+.chip{background:#2a323c;color:#c9d2dc;border:1px solid #2a323c;padding:6px 12px;border-radius:16px;font-size:12px;cursor:pointer;transition:all 0.2s}
+.chip:hover{border-color:#7dabff}
+.chip.active{background:#1c2740;border-color:#7dabff;color:#7dabff}
+.chip .count{margin-left:4px;opacity:0.7}
+.empty{text-align:center;padding:40px;color:#8a95a5}
 </style>
 </head>
 <body>
-<nav>
-  <a href="/">🏠 메인</a>
-  <a href="/subsites.html">📦 사이트별</a>
-  <a href="/login-issues.html" class="active">🚫 로그인 문제</a>
-  <a href="/accounts.html">📋 계정 상세</a>
-  <input id="apiToken" class="apiToken" type="password" placeholder="API 토큰" oninput="sessionStorage.setItem('gauth_token',this.value)">
-</nav>
-<div class="wrap">
-  <div class="brand">
-    <h1>🚫 로그인 문제 계정</h1>
-    <span id="totalCount" style="color:var(--sub);font-size:13px"></span>
-  </div>
-  <div class="toolbar" id="filters"></div>
-  <div class="card"><div id="list" class="empty">불러오는 중…</div></div>
+
+<header>
+  <h1>🚫 로그인 문제 계정</h1>
+  <div class="stats" id="stats">로딩 중...</div>
+</header>
+
+<div id="main-nav" style="display:flex;gap:0;background:#111418;border-bottom:1px solid #22282f;padding:0 16px">
+  <a href="/" style="padding:12px 20px;font-size:14px;font-weight:700;color:#5a6a7a;border-bottom:2px solid transparent;text-decoration:none">📋 전체 계정</a>
+  <a href="/accounts.html" style="padding:12px 20px;font-size:14px;font-weight:700;color:#5a6a7a;border-bottom:2px solid transparent;text-decoration:none">🔑 계정 조회 + 로그인</a>
+  <a href="/login-issues.html" style="padding:12px 20px;font-size:14px;font-weight:700;color:#f47070;border-bottom:2px solid #f47070;text-decoration:none">🚫 로그인 문제</a>
 </div>
+
+<div class="controls">
+  <input type="text" id="searchBox" placeholder="계정 검색...">
+  <span id="count"></span>
+</div>
+
+<div class="filter-chips" id="filterChips"></div>
+
+<div id="viewport">
+  <div class="empty" id="emptyState">로그인 문제가 신고된 계정이 없습니다.</div>
+</div>
+
 <script>
-/* Reads from the existing /api/subsites-pool aggregator on gauth and
-   filters accounts whose subsite-side login_issue field is set.
-   ref: https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch */
-function getApiToken(){return sessionStorage.getItem('gauth_token')||''}
-function authHeaders(){var h={};var t=getApiToken();if(t)h['Authorization']='Bearer '+t;return h}
-function esc(s){var d=document.createElement('div');d.textContent=String(s==null?'':s);return d.innerHTML;}
+let allIssues = [];
+let filteredIssues = [];
+let activeFilter = 'all';
 
-var TYPES={
-  phone:{label:'지정된 전화 입력', emoji:'📞'},
-  robot:{label:'로봇', emoji:'🤖'},
-  password:{label:'비밀번호 오류', emoji:'🔑'},
-  other:{label:'기타', emoji:'✏️'}
-};
-var activeFilter = 'all';
-var allRows = [];
+async function loadLoginIssues() {
+  try {
+    const response = await fetch('/api/subsites-pool?format=json');
+    const data = await response.json();
+    
+    // 모든 사이트에서 login_issue가 있는 계정들만 필터링
+    allIssues = [];
+    Object.entries(data.sites || {}).forEach(([siteName, siteData]) => {
+      (siteData.accounts || []).forEach(account => {
+        if (account.login_issue) {
+          allIssues.push({
+            ...account,
+            site: siteName,
+            issue: account.login_issue
+          });
+        }
+      });
+    });
 
-function render(){
-  var el=document.getElementById('list');
-  var rows = activeFilter==='all' ? allRows : allRows.filter(function(r){return r.type===activeFilter;});
-  if(!rows.length){ el.className='empty'; el.textContent='해당 문제 계정이 없습니다'; return; }
-  el.className='';
-  el.innerHTML = rows.map(function(r){
-    var t=TYPES[r.type]||{label:r.type||'?',emoji:'❓'};
-    var when = r.marked_at ? esc(r.marked_at.slice(0,16).replace('T',' ')) : '';
-    return '<div class="row">'
-      + '<div>'
-      +   '<div><span class="site-tag">'+esc(r.site)+'</span><span class="email">'+esc(r.email)+'</span></div>'
-      +   '<div class="meta">'+when+'</div>'
-      + '</div>'
-      + '<div>'
-      +   '<div class="issue">'+t.emoji+' '+esc(t.label)+'</div>'
-      +   (r.note?'<div class="note">"'+esc(r.note)+'"</div>':'')
-      + '</div>'
-      + '</div>';
-  }).join('');
+    // 최신순 정렬
+    allIssues.sort((a, b) => new Date(b.issue.marked_at || 0) - new Date(a.issue.marked_at || 0));
+    
+    updateStats();
+    updateFilterChips();
+    filterIssues();
+    
+  } catch (e) {
+    console.error('Failed to load login issues:', e);
+    document.getElementById('stats').textContent = '데이터 로딩 실패';
+  }
 }
 
-function renderFilters(){
-  var counts={all:allRows.length,phone:0,robot:0,password:0,other:0};
-  allRows.forEach(function(r){ if(counts[r.type]!=null) counts[r.type]++; });
-  var order=[['all','전체','📋'],['phone','지정된 전화 입력','📞'],['robot','로봇','🤖'],['password','비밀번호 오류','🔑'],['other','기타','✏️']];
-  document.getElementById('filters').innerHTML = order.map(function(o){
-    var k=o[0], label=o[1], em=o[2];
-    return '<span class="chip'+(activeFilter===k?' on':'')+'" data-k="'+k+'">'+em+' '+label+' <span class="n">'+counts[k]+'</span></span>';
-  }).join('');
-  document.querySelectorAll('#filters .chip').forEach(function(c){
-    c.addEventListener('click',function(){ activeFilter=c.getAttribute('data-k'); renderFilters(); render(); });
+function updateStats() {
+  const typeCounts = {};
+  allIssues.forEach(issue => {
+    const type = issue.issue.type || 'other';
+    typeCounts[type] = (typeCounts[type] || 0) + 1;
   });
-  document.getElementById('totalCount').textContent = allRows.length + '건';
+  
+  const statsEl = document.getElementById('stats');
+  const total = allIssues.length;
+  const sites = new Set(allIssues.map(i => i.site)).size;
+  
+  statsEl.innerHTML = 총 <b class="issue"></b>개 문제 · <b></b>개 사이트;
 }
 
-fetch('/api/subsites-pool',{headers:authHeaders(),cache:'no-store'})
-  .then(function(r){return r.json();})
-  .then(function(d){
-    var accounts=d.accounts||[];
-    allRows = accounts.filter(function(a){ return a.login_issue && a.login_issue.type; })
-      .map(function(a){
-        return {
-          email:a.email||a.gmail||'',
-          site:a.site||'',
-          type:a.login_issue.type,
-          note:a.login_issue.note||'',
-          marked_at:a.login_issue.marked_at||''
-        };
-      })
-      .sort(function(a,b){ return (b.marked_at||'').localeCompare(a.marked_at||''); });
-    renderFilters();
-    render();
-  })
-  .catch(function(e){
-    document.getElementById('list').textContent='오류: '+e.message;
+function updateFilterChips() {
+  const typeCounts = { all: allIssues.length };
+  const typeLabels = {
+    'wrong-phone': '📱 지정된 전화',
+    'robot': '🤖 로봇',
+    'wrong-password': '🔒 비밀번호 오류',
+    'other': '❓ 기타'
+  };
+  
+  allIssues.forEach(issue => {
+    const type = issue.issue.type || 'other';
+    typeCounts[type] = (typeCounts[type] || 0) + 1;
   });
+  
+  const chipsEl = document.getElementById('filterChips');
+  const chips = ['all', ...Object.keys(typeLabels)].map(type => {
+    const count = typeCounts[type] || 0;
+    const label = type === 'all' ? '전체' : typeLabels[type];
+    const activeClass = activeFilter === type ? ' active' : '';
+    
+    return <div class="chip" onclick="setFilter('')"><span class="count"></span></div>;
+  }).join('');
+  
+  chipsEl.innerHTML = chips;
+}
 
-(function(){var el=document.getElementById('apiToken');if(el){var t=getApiToken();if(t)el.value=t;}})();
+function setFilter(type) {
+  activeFilter = type;
+  updateFilterChips();
+  filterIssues();
+}
+
+function filterIssues() {
+  const searchTerm = document.getElementById('searchBox').value.toLowerCase();
+  
+  filteredIssues = allIssues.filter(issue => {
+    const matchesFilter = activeFilter === 'all' || issue.issue.type === activeFilter;
+    const matchesSearch = !searchTerm || 
+      issue.email.toLowerCase().includes(searchTerm) ||
+      issue.site.toLowerCase().includes(searchTerm) ||
+      (issue.issue.note || '').toLowerCase().includes(searchTerm);
+    
+    return matchesFilter && matchesSearch;
+  });
+  
+  renderIssues();
+}
+
+function renderIssues() {
+  const viewport = document.getElementById('viewport');
+  const emptyState = document.getElementById('emptyState');
+  const countEl = document.getElementById('count');
+  
+  countEl.textContent = ${filteredIssues.length}개 결과;
+  
+  if (filteredIssues.length === 0) {
+    viewport.innerHTML = '<div class="empty">조건에 맞는 로그인 문제가 없습니다.</div>';
+    return;
+  }
+  
+  const typeLabels = {
+    'wrong-phone': '📱 지정된 전화',
+    'robot': '🤖 로봇',
+    'wrong-password': '🔒 비밀번호 오류',
+    'other': '❓ 기타'
+  };
+  
+  const cards = filteredIssues.map(issue => {
+    const typeLabel = typeLabels[issue.issue.type] || '❓ 기타';
+    const timeAgo = formatTimeAgo(issue.issue.marked_at);
+    const note = issue.issue.note ? <div class="issue-note">""</div> : '';
+    
+    return 
+      <div class="issue-card">
+        <div class="issue-header">
+          <span class="issue-type"></span>
+          <span class="issue-time"></span>
+        </div>
+        <div class="account-info">
+          <span class="account-email"></span>
+          <span class="account-site"></span>
+        </div>
+        
+        <button class="resolve-btn" onclick="resolveIssue('', '')">해결됨</button>
+      </div>
+    ;
+  }).join('');
+  
+  viewport.innerHTML = cards;
+}
+
+async function resolveIssue(email, site) {
+  if (!confirm(${email} ()의 로그인 문제를 해결됨으로 표시하시겠습니까?)) return;
+  
+  try {
+    // 각 사이트별로 해결 API 호출
+    const response = await fetch(/api//login-issue/, {
+      method: 'DELETE'
+    });
+    
+    if (response.ok) {
+      // 로컬에서 제거
+      allIssues = allIssues.filter(issue => !(issue.email === email && issue.site === site));
+      updateStats();
+      updateFilterChips();
+      filterIssues();
+    } else {
+      alert('해결 처리에 실패했습니다.');
+    }
+  } catch (e) {
+    console.error('Resolve error:', e);
+    alert('해결 처리 중 오류가 발생했습니다.');
+  }
+}
+
+function formatTimeAgo(dateStr) {
+  if (!dateStr) return '시간 불명';
+  
+  const now = new Date();
+  const date = new Date(dateStr);
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  
+  if (diffMins < 1) return '방금 전';
+  if (diffMins < 60) return ${diffMins}분 전;
+  if (diffHours < 24) return ${diffHours}시간 전;
+  if (diffDays < 7) return ${diffDays}일 전;
+  
+  return date.toLocaleDateString('ko-KR');
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// 검색 이벤트
+document.getElementById('searchBox').addEventListener('input', filterIssues);
+
+// 초기 로드
+document.addEventListener('DOMContentLoaded', loadLoginIssues);
+
+// 30초마다 자동 새로고침
+setInterval(loadLoginIssues, 30000);
 </script>
 </body>
 </html>
