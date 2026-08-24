@@ -1,0 +1,154 @@
+name: EMERGENCY - Force Patch All Subsites NOW
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  force-patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Force patch all subsites immediately
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 600s
+          script: |
+            set -e
+            echo "🚨🚨🚨 긴급 모든 하부사이트 패치 시작 🚨🚨🚨"
+            
+            cd /var/www/sites
+            
+            # 모든 사이트 디렉토리 찾기
+            SITES=$(find . -maxdepth 1 -type d -name "*" ! -name "." ! -name "gauth*" | sed 's|^\./||')
+            SITE_COUNT=$(echo "$SITES" | wc -w)
+            
+            echo "발견된 $SITE_COUNT개 사이트: $SITES"
+            
+            PATCHED=0
+            
+            for SITE in $SITES; do
+              echo "=== 패치 중: $SITE ==="
+              
+              # 서버 패치
+              if [ -f "$SITE/server.js" ]; then
+                if ! grep -q "LOGIN_ISSUE_PATCH_START" "$SITE/server.js"; then
+                  echo "서버 패치 적용: $SITE"
+                  
+                  # 백업
+                  cp "$SITE/server.js" "$SITE/server.js.backup.$(date +%Y%m%d_%H%M%S)"
+                  
+                  # API 추가 (파일 끝에)
+                  cat >> "$SITE/server.js" << 'EOF'
+
+// LOGIN_ISSUE_PATCH_START  
+app.post('/api/SITENAME/login-issue', (req, res) => {
+  const { email, type, note } = req.body || {};
+  if (!email || !type) return res.status(400).json({ ok: false, error: 'email and type required' });
+  const accounts = readAccounts();
+  const key = email.toLowerCase();
+  const account = accounts.find(a => (a.email || '').toLowerCase() === key);
+  if (!account) return res.status(404).json({ ok: false, error: 'account not found' });
+  account.login_issue = { type, note: note || '', marked_at: new Date().toISOString() };
+  writeAccounts(accounts);
+  res.json({ ok: true });
+});
+
+app.delete('/api/SITENAME/login-issue/:email', (req, res) => {
+  const accounts = readAccounts();
+  const key = req.params.email.toLowerCase();
+  const account = accounts.find(a => (a.email || '').toLowerCase() === key);
+  if (!account) return res.status(404).json({ ok: false, error: 'account not found' });
+  delete account.login_issue;
+  writeAccounts(accounts);
+  res.json({ ok: true });
+});
+// LOGIN_ISSUE_PATCH_END
+EOF
+                  
+                  # 사이트명 치환
+                  sed -i "s/SITENAME/$SITE/g" "$SITE/server.js"
+                  
+                  PATCHED=$((PATCHED + 1))
+                  echo "✅ 서버 패치 완료: $SITE"
+                else
+                  echo "⏩ 서버 이미 패치됨: $SITE"
+                fi
+              fi
+              
+              # HTML 패치
+              if [ -f "$SITE/public/index.html" ]; then
+                if ! grep -q "issue-report-btn" "$SITE/public/index.html"; then
+                  echo "HTML UI 패치 적용: $SITE"
+                  
+                  # 백업
+                  cp "$SITE/public/index.html" "$SITE/public/index.html.backup.$(date +%Y%m%d_%H%M%S)"
+                  
+                  # CSS 추가 (</head> 전에)
+                  CSS='<style>
+.issue-report-btn{background:#ea4335;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;margin:4px 0}
+.issue-report-btn:hover{opacity:0.9}
+.issue-report-btn.reported{background:#666;cursor:not-allowed}
+.issue-badge{background:rgba(234,67,53,0.2);color:#ea4335;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:8px}
+.issue-popup{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);display:none;align-items:center;justify-content:center;z-index:1000}
+.issue-popup.show{display:flex}
+.issue-popup-content{background:#1a1a2e;border:1px solid #2a2a4a;border-radius:12px;padding:24px;max-width:500px;width:90%}
+.issue-popup h3{font-size:18px;margin-bottom:16px;color:#ea4335}
+.issue-options{display:grid;gap:12px;margin-bottom:16px}
+.issue-option{display:flex;align-items:center;padding:12px;background:#0f0f0f;border:1px solid #2a2a4a;border-radius:8px;cursor:pointer}
+.issue-option:hover{border-color:#4285f4}
+.issue-option.selected{border-color:#ea4335;background:rgba(234,67,53,0.1)}
+.issue-note{width:100%;padding:12px;border-radius:6px;margin-bottom:16px;min-height:80px;background:#0f0f0f;color:#fff;border:1px solid #2a2a4a}
+.issue-actions{display:flex;gap:12px;justify-content:flex-end}
+.issue-submit{background:#ea4335;color:#fff;border:none;padding:10px 20px;border-radius:6px}
+.issue-cancel{border:1px solid #666;background:none;color:#ccc;padding:10px 20px;border-radius:6px}
+</style>'
+                  sed -i "s|</head>|$CSS\n</head>|" "$SITE/public/index.html"
+                  
+                  # 팝업 HTML 추가 (</body> 전에)  
+                  POPUP='<div class="issue-popup" id="issuePopup">
+<div class="issue-popup-content">
+<h3>🚫 로그인 문제 신고</h3>
+<div id="issueEmail" style="margin-bottom:16px;color:#888;"></div>
+<div class="issue-options">
+<label class="issue-option"><input type="radio" name="issueType" value="wrong-phone" style="margin-right:12px;">📱 지정된 전화번호 입력</label>
+<label class="issue-option"><input type="radio" name="issueType" value="robot" style="margin-right:12px;">🤖 로봇 인증 (캡차)</label>
+<label class="issue-option"><input type="radio" name="issueType" value="wrong-password" style="margin-right:12px;">🔒 비밀번호 오류</label>
+<label class="issue-option"><input type="radio" name="issueType" value="other" style="margin-right:12px;">❓ 기타 (직접 입력)</label>
+</div>
+<textarea class="issue-note" id="issueNote" placeholder="문제 상세 설명" style="display:none;"></textarea>
+<div class="issue-actions">
+<button class="issue-submit" id="issueSubmit" disabled>신고 제출</button>
+<button class="issue-cancel" id="issueCancel">취소</button>
+</div></div></div>'
+                  sed -i "s|</body>|$POPUP\n</body>|" "$SITE/public/index.html"
+                  
+                  echo "✅ HTML 패치 완료: $SITE"
+                else
+                  echo "⏩ HTML 이미 패치됨: $SITE"
+                fi
+              fi
+              
+            done
+            
+            echo "=== 서비스 재시작 중 ==="
+            # 모든 서비스 재시작
+            sudo systemctl restart gauth
+            for SITE in $SITES; do
+              sudo systemctl restart "$SITE" 2>/dev/null || echo "⚠️ $SITE 서비스 없음 (정상)"
+            done
+            
+            echo ""
+            echo "🎉🎉🎉 긴급 패치 완료! 🎉🎉🎉"
+            echo "총 $SITE_COUNT개 사이트 처리완료"
+            echo "패치된 사이트: $PATCHED개"
+            echo ""
+            echo "확인된 사이트들:"
+            for SITE in $SITES; do
+              STATUS="❌"
+              if [ -f "$SITE/server.js" ] && grep -q "LOGIN_ISSUE_PATCH_START" "$SITE/server.js"; then
+                STATUS="✅"
+              fi
+              echo "$STATUS $SITE"
+            done
