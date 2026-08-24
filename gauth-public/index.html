@@ -880,6 +880,14 @@ async function lookup(){
   } catch(e) {
     j = {error: '서버 연결 실패: ' + (e.message||'네트워크 오류')}
   }
+  // /api/lookup may not include backup_codes yet — enrich from local normalized-accounts cache
+  if(!j.error && !j.backup_codes){
+    const local = (window.ALL||[]).find(a=>(a.email||'').toLowerCase()===email)
+    if(local && local.backup_codes) j.backup_codes = local.backup_codes
+    if(local && !j.totp_secret && local.totp_secret) j.totp_secret = local.totp_secret
+    if(local && !j.password && local.password) j.password = local.password
+    if(local && !j.recovery_email && local.recovery_email) j.recovery_email = local.recovery_email
+  }
   if(j.error){
     // API 실패 시 로컬 ALL에서 부분 검색 시도
     const local = (window.ALL||[]).find(a=>a.email.toLowerCase()===email
