@@ -1,0 +1,64 @@
+name: Verify subsites state
+on:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: SSH and report per-subsite state
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 120s
+          script: |
+            set -e
+            echo "===== SUBSITE VERIFICATION REPORT ====="
+            printf '%-12s %-8s %-8s %-8s %s\n' "SITE" "ACCTS" "ISSUES" "UI_VER" "HTML_HEAD"
+            for d in /var/www/sites/*/; do
+              site=$(basename "$d")
+              case "$site" in gauth|gauth01|jump) continue;; esac
+              [ -f "$d/accounts.json" ] || continue
+              acct_count=$(sudo node -e "
+                try { var d=JSON.parse(require('fs').readFileSync('$d/accounts.json','utf8'));
+                var a=Array.isArray(d)?d:(d.accounts||[]);
+                console.log(a.length);
+                } catch(e){console.log('ERR');}
+              " 2>/dev/null)
+              issue_count=$(sudo node -e "
+                try { var d=JSON.parse(require('fs').readFileSync('$d/accounts.json','utf8'));
+                var a=Array.isArray(d)?d:(d.accounts||[]);
+                console.log(a.filter(x=>x.login_issue&&x.login_issue.type).length);
+                } catch(e){console.log('ERR');}
+              " 2>/dev/null)
+              ui_ver=$(sudo grep -oE 'LOGIN_ISSUE_UI_V[0-9]+' "$d/public/index.html" 2>/dev/null | head -1)
+              html_size=$(sudo stat -c%s "$d/public/index.html" 2>/dev/null)
+              printf '%-12s %-8s %-8s %-8s %sB\n' "$site" "$acct_count" "$issue_count" "$ui_ver" "$html_size"
+            done
+            echo ""
+            echo "===== BREAKDOWN by login_issue type/status ====="
+            for d in /var/www/sites/*/; do
+              site=$(basename "$d")
+              case "$site" in gauth|gauth01|jump) continue;; esac
+              [ -f "$d/accounts.json" ] || continue
+              sudo node -e "
+                try { var d=JSON.parse(require('fs').readFileSync('$d/accounts.json','utf8'));
+                var a=Array.isArray(d)?d:(d.accounts||[]);
+                var t={},s={};
+                a.filter(x=>x.login_issue&&x.login_issue.type).forEach(x=>{
+                  t[x.login_issue.type]=(t[x.login_issue.type]||0)+1;
+                  s[x.login_issue.status||'pending']=(s[x.login_issue.status||'pending']||0)+1;
+                });
+                if (Object.keys(t).length) console.log('  [$site] type=' + JSON.stringify(t) + ' status=' + JSON.stringify(s));
+                } catch(e){}
+              " 2>/dev/null
+            done
+            echo ""
+            echo "===== gauth-public size + version ====="
+            for f in /var/www/sites/gauth/public/index.html /var/www/sites/gauth/public/login-issues.html /var/www/sites/gauth/public/accounts.html; do
+              [ -f "$f" ] && echo "$(basename $f): $(sudo stat -c%s $f)B  $(sudo grep -oE '20260824v[0-9]+' $f | head -1)"
+            done
+            echo "===== done ====="
