@@ -175,7 +175,33 @@ jobs:
             }
             console.log("  CROSS_SUMMARY: noPw_fixable=" + noPwCross + "/" + noPw.length + " noTotp_fixable=" + noTotpCross + "/" + noTotp.length);
             // Debug specific emails
-            var debugEmails = ["raynerdentenoc761@gmail.com","douceswatektt517@icloud.com"];
+            var debugEmails = ["bluesm8899@gmail.com","dongsanm999@gmail.com","koko0315yan@gmail.com"];
+            // 채널 AS.xlsx 전체 rows raw dump for these emails
+            console.log("=== 채널 AS.xlsx per-row raw dump ===");
+            try {
+              var chanFiles = fs.readdirSync(dir).filter(function(f){ return /AS\.xlsx$/.test(f); });
+              for (var cf = 0; cf < chanFiles.length; cf++) {
+                var wbA = XLSX2.readFile(path.join(dir, chanFiles[cf]));
+                for (var sA = 0; sA < wbA.SheetNames.length; sA++) {
+                  var shName = wbA.SheetNames[sA];
+                  var rowsA = XLSX2.utils.sheet_to_json(wbA.Sheets[shName], {header:1, defval:'', raw:false});
+                  console.log("FILE=" + chanFiles[cf] + " SHEET=" + shName + " rows=" + rowsA.length);
+                  for (var rA = 0; rA < Math.min(30, rowsA.length); rA++) {
+                    var joined = JSON.stringify((rowsA[rA]||[]).map(function(c){ return String(c||'').substring(0,40); }));
+                    console.log("  R" + rA + " " + joined);
+                  }
+                  for (var dbE = 0; dbE < debugEmails.length; dbE++) {
+                    var em = debugEmails[dbE].toLowerCase().split('@')[0];
+                    for (var rA2 = 0; rA2 < rowsA.length; rA2++) {
+                      var rowStrA = JSON.stringify(rowsA[rA2]||[]).toLowerCase();
+                      if (rowStrA.indexOf(em) >= 0) {
+                        console.log("  MATCH[" + debugEmails[dbE] + "] R" + rA2 + " " + JSON.stringify((rowsA[rA2]||[]).map(function(c){ return String(c||'').substring(0,50); })));
+                      }
+                    }
+                  }
+                }
+              }
+            } catch(errX) { console.log("chan AS debug err:", errX.message); }
             for (var de = 0; de < debugEmails.length; de++) {
               var dek = debugEmails[de].toLowerCase().trim();
               console.log("DEBUG_EMAIL[" + dek + "] all_instances:");
