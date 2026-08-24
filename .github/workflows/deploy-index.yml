@@ -11,6 +11,8 @@ jobs:
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: claude/gauth-frontend-backend-fixes-cg2icv
 
       - name: Upload files to server
         uses: appleboy/scp-action@v0.1.7
@@ -22,17 +24,19 @@ jobs:
           target: "/tmp/gauth-deploy"
           strip_components: 1
 
-      - name: Install and restart
+      - name: Deploy frontend, replace parser, re-parse, restart
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 30s
+          command_timeout: 120s
           script: |
             set -e
             SRC="/tmp/gauth-deploy"
             ls -la "$SRC"
+
+            # 1) Copy frontend files
             for DST in /var/www/sites/gauth/public /var/www/sites/gauth01/public; do
               if [ -d "$DST" ]; then
                 sudo cp -r "$SRC"/* "$DST"/
@@ -40,31 +44,173 @@ jobs:
                 echo "$DST done"
               fi
             done
+
+            # 2) Replace parser with repo version (all fixes baked in)
+            cd /opt/gauth-full
+            cp upload_excels.js upload_excels.js.bak.$(date +%s)
+            cp accounts_normalized.json accounts_normalized.json.bak.$(date +%s)
+            sudo cp "$SRC/upload_excels.js" /opt/gauth-full/upload_excels.js
+            echo "Parser replaced, size: $(wc -c < /opt/gauth-full/upload_excels.js)"
+            grep -c 'mostlyKorean' /opt/gauth-full/upload_excels.js && echo "Has mostlyKorean: YES" || echo "Has mostlyKorean: NO"
+            grep -c 'isGoogleBackupCode' /opt/gauth-full/upload_excels.js && echo "Has isGoogleBackupCode: YES" || echo "Has isGoogleBackupCode: NO"
+
+            # 3) Clean up SCP temp
+            rm -rf "$SRC"
+
+            # 4) Restart services
             sudo a2enmod headers 2>/dev/null || true
             sudo systemctl restart gauth
             sudo systemctl reload apache2 2>/dev/null || sudo systemctl reload nginx 2>/dev/null || true
-            sleep 2
-            sudo systemctl is-active gauth && echo "OK" || { echo "FAIL"; exit 1; }
-            rm -rf "$SRC"
 
-            # purge CF cache using server-local tokens
-            CF_TOKEN="" CF_ZONE=""
-            for f in /opt/gauth-full/.env /opt/gauth/.env /etc/default/gauth /etc/systemd/system/gauth.service; do
-              [ -f "$f" ] || continue
-              [ -z "$CF_TOKEN" ] && CF_TOKEN=$(grep -oP '(?:CLOUDFLARE_TOKEN|CF_TOKEN|CLOUDFLARE_API_TOKEN)=\K\S+' "$f" 2>/dev/null | head -1)
-              [ -z "$CF_ZONE" ] && CF_ZONE=$(grep -oP '(?:CLOUDFLARE_ZONE_ID|CF_ZONE|CLOUDFLARE_ZONE)=\K\S+' "$f" 2>/dev/null | head -1)
-            done
-            if [ -n "$CF_TOKEN" ] && [ -n "$CF_ZONE" ]; then
-              curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/purge_cache" \
-                -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
-                --data '{"purge_everything":true}' && echo "purge: done" || echo "purge: curl failed"
-            else
-              echo "CF tokens not found on server either — check .env files"
-              echo "CF_TOKEN=${CF_TOKEN:+SET} CF_ZONE=${CF_ZONE:+SET}"
-              ls -la /opt/gauth-full/.env 2>/dev/null || echo "no /opt/gauth-full/.env"
-              grep -c 'CLOUDFLARE\|CF_' /opt/gauth-full/.env 2>/dev/null || echo "no CF vars in .env"
-            fi
-            echo "server deploy done"
+            # 5) Re-parse all Excel files
+            cat > /tmp/reparse.js << 'ENDOFSCRIPT'
+            delete require.cache[require.resolve("/opt/gauth-full/upload_excels")];
+            global.__debugTrackEmail = function(stage, data) {
+              console.log("TRACK_EMAIL[" + stage + "] " + JSON.stringify(data));
+            };
+            global.__debugAnalyze = function(rowCount, maxCols, colStats, mapping) {
+              console.log("DEBUG_ANALYZE rows=" + rowCount + " cols=" + maxCols + " mapping=" + JSON.stringify(mapping));
+              for (var ds = 0; ds < colStats.length; ds++) {
+                var cs = colStats[ds];
+                console.log("  COL" + cs.col + " nonEmpty=" + cs.nonEmpty + " emails=" + cs.emails + " totps=" + cs.totps + " urls=" + cs.urls + " phones=" + cs.phones + " sample=" + JSON.stringify(cs.sample));
+              }
+            };
+            var p = require("/opt/gauth-full/upload_excels");
+            var fs = require("fs");
+            var path = require("path");
+            var dir = "/opt/gauth-full/uploads_debug";
+            var files = fs.readdirSync(dir).filter(function(f) { return f.endsWith(".xlsx") || f.endsWith(".xls"); });
+            console.log("Parsing", files.length, "files...");
+            var all = [];
+            var perFile = {};
+            for (var i = 0; i < files.length; i++) {
+              try {
+                var nfcName = files[i].normalize('NFC');
+                var accts = p.parseExcelFile(path.join(dir, files[i]), nfcName);
+                all = all.concat(accts);
+                perFile[files[i]] = accts.length;
+              } catch (e) { console.log("ERR", files[i].substring(0,30), e.message); }
+            }
+            function dedupScore(a) {
+              var s = 0;
+              if (a.password && !/[ㄱ-힝]/.test(a.password)) s += 4;
+              if (a.password) s += 2;
+              if (a.totp_secret) s += 4;
+              if (a.backup_codes) s += 2;
+              if (a.recovery_email) s += 1;
+              return s;
+            }
+            var map = new Map();
+            for (var j = 0; j < all.length; j++) {
+              var a = all[j];
+              var key = a.email.toLowerCase().trim();
+              var existing = map.get(key);
+              if (!existing) { map.set(key, a); continue; }
+              var scoreA = dedupScore(a);
+              var scoreE = dedupScore(existing);
+              if (scoreA > scoreE || (scoreA === scoreE && (a.source_mtime || 0) > (existing.source_mtime || 0))) {
+                if (!a.backup_codes && existing.backup_codes) a.backup_codes = existing.backup_codes;
+                if (!a.totp_secret && existing.totp_secret) a.totp_secret = existing.totp_secret;
+                if (!a.password && existing.password) a.password = existing.password;
+                map.set(key, a);
+              } else {
+                if (!existing.backup_codes && a.backup_codes) existing.backup_codes = a.backup_codes;
+                if (!existing.totp_secret && a.totp_secret) existing.totp_secret = a.totp_secret;
+                if (!existing.password && a.password) existing.password = a.password;
+              }
+            }
+            var deduped = Array.from(map.values());
+            fs.writeFileSync("/opt/gauth-full/accounts_normalized.json", JSON.stringify(deduped, null, 2));
+            console.log("Total:", all.length, "Deduped:", deduped.length);
+            var noPw = deduped.filter(function(a) { return !a.password; });
+            var noTotp = deduped.filter(function(a) { return !a.totp_secret; });
+            var noBackup = deduped.filter(function(a) { return !a.backup_codes; });
+            var no2FA = deduped.filter(function(a) { return !a.totp_secret && !a.backup_codes; });
+            console.log("AUDIT noPw:", noPw.length, "noTotp:", noTotp.length, "noBackup:", noBackup.length, "no2FA(neither):", no2FA.length);
+            console.log("BAD_TOTP_COUNT:", deduped.filter(function(a) {
+              var t = a.totp_secret || "";
+              return t && (/^https?:\/\//i.test(t) || /[ㄱ-힝]/.test(t) || /^[0-9]+$/.test(t));
+            }).length);
+            var sorted = Object.keys(perFile).sort(function(a,b) { return perFile[b] - perFile[a]; });
+            console.log("TOP_FILES:");
+            for (var tf = 0; tf < Math.min(10, sorted.length); tf++) {
+              var fn = sorted[tf];
+              var fa = all.filter(function(a) { return a.source_file === fn.normalize('NFC'); });
+              var fnPw = fa.filter(function(a) { return !a.password; }).length;
+              var fnTotp = fa.filter(function(a) { return !a.totp_secret; }).length;
+              console.log("  FILE[" + tf + "] accts=" + perFile[fn] + " noPw=" + fnPw + " noTotp=" + fnTotp + " name=" + Buffer.from(fn).toString('hex').substring(0,60));
+            }
+            console.log("CROSSFILE_DEDUP_ANALYSIS:");
+            var noPwEmails = noPw.map(function(a) { return a.email.toLowerCase().trim(); });
+            var noTotpEmails = noTotp.map(function(a) { return a.email.toLowerCase().trim(); });
+            var noPwCross = 0, noTotpCross = 0;
+            for (var cx = 0; cx < all.length; cx++) {
+              var ca = all[cx];
+              var ck = ca.email.toLowerCase().trim();
+              if (noPwEmails.indexOf(ck) >= 0 && ca.password && !/[ㄱ-힝]/.test(ca.password)) {
+                noPwCross++;
+                if (noPwCross <= 10) console.log("  CROSS_HAS_PW: " + ck.substring(0,25) + " file=" + (ca.source_file||'').substring(0,30) + " pw=" + (ca.password||'').substring(0,15));
+              }
+              if (noTotpEmails.indexOf(ck) >= 0 && ca.totp_secret) {
+                noTotpCross++;
+                if (noTotpCross <= 10) console.log("  CROSS_HAS_TOTP: " + ck.substring(0,25) + " file=" + (ca.source_file||'').substring(0,30) + " totp=" + (ca.totp_secret||'').substring(0,20));
+              }
+            }
+            console.log("  CROSS_SUMMARY: noPw_fixable=" + noPwCross + "/" + noPw.length + " noTotp_fixable=" + noTotpCross + "/" + noTotp.length);
+            var XLSX2 = require("/opt/gauth-full/node_modules/xlsx");
+            console.log("NOTOTP_RAW_DUMP (first 20):");
+            var noTotpSample = noTotp.slice(0, 20);
+            var allFiles = fs.readdirSync(dir).filter(function(f) { return f.endsWith(".xlsx") || f.endsWith(".xls"); });
+            for (var ns = 0; ns < noTotpSample.length; ns++) {
+              var ntEmail = noTotpSample[ns].email.toLowerCase().trim();
+              var found = false;
+              for (var af = 0; af < allFiles.length && !found; af++) {
+                try {
+                  var wb2 = XLSX2.readFile(path.join(dir, allFiles[af]));
+                  for (var s2 = 0; s2 < wb2.SheetNames.length && !found; s2++) {
+                    var rows2 = XLSX2.utils.sheet_to_json(wb2.Sheets[wb2.SheetNames[s2]], {header:1, defval:'', raw:false});
+                    for (var r2 = 0; r2 < rows2.length; r2++) {
+                      var rowStr3 = JSON.stringify(rows2[r2]||[]).toLowerCase();
+                      if (rowStr3.indexOf(ntEmail.substring(0, ntEmail.indexOf('@'))) >= 0) {
+                        console.log("  NT[" + ns + "] " + ntEmail.substring(0,30) + " file=" + allFiles[af].substring(0,30) + " sheet=" + wb2.SheetNames[s2] + " => " + JSON.stringify((rows2[r2]||[]).map(function(c) { return String(c||'').substring(0,30); })));
+                        found = true;
+                        break;
+                      }
+                    }
+                  }
+                } catch(e3) {}
+              }
+              if (!found) console.log("  NT[" + ns + "] " + ntEmail.substring(0,30) + " NOT_FOUND_IN_ANY_FILE");
+            }
+            console.log("NOPW_RAW_DUMP (all " + noPw.length + "):");
+            for (var nps = 0; nps < noPw.length; nps++) {
+              var npEmail = noPw[nps].email.toLowerCase().trim();
+              var foundPw = false;
+              for (var af2 = 0; af2 < allFiles.length && !foundPw; af2++) {
+                try {
+                  var wb3 = XLSX2.readFile(path.join(dir, allFiles[af2]));
+                  for (var s3 = 0; s3 < wb3.SheetNames.length && !foundPw; s3++) {
+                    var rows3 = XLSX2.utils.sheet_to_json(wb3.Sheets[wb3.SheetNames[s3]], {header:1, defval:'', raw:false});
+                    for (var r3 = 0; r3 < rows3.length; r3++) {
+                      if (JSON.stringify(rows3[r3]||[]).toLowerCase().indexOf(npEmail.substring(0, npEmail.indexOf('@'))) >= 0) {
+                        console.log("  NP[" + nps + "] " + npEmail.substring(0,30) + " file=" + allFiles[af2].substring(0,30) + " sheet=" + wb3.SheetNames[s3] + " => " + JSON.stringify((rows3[r3]||[]).map(function(c) { return String(c||'').substring(0,30); })));
+                        foundPw = true;
+                        break;
+                      }
+                    }
+                  }
+                } catch(e4) {}
+              }
+              if (!foundPw) console.log("  NP[" + nps + "] " + npEmail.substring(0,30) + " NOT_FOUND_IN_ANY_FILE");
+            }
+            ENDOFSCRIPT
+
+            cd /opt/gauth-full
+            sudo node /tmp/reparse.js 2>&1
+            sudo systemctl restart gauth
+            sleep 2
+            sudo systemctl is-active gauth && echo "gauth OK" || echo "gauth FAIL"
+            rm -f /tmp/reparse.js
 
       - name: Purge Cloudflare cache
         if: always()
@@ -73,12 +219,11 @@ jobs:
           CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
         run: |
           if [ -z "$CF_TOKEN" ]; then
-            echo "::warning::CLOUDFLARE_TOKEN secret not set — cache not purged"
+            echo "::warning::CLOUDFLARE_TOKEN secret not set"
             exit 0
           fi
-          # Auto-discover zone ID if not set
           if [ -z "$CF_ZONE" ]; then
-            echo "CLOUDFLARE_ZONE_ID not set — auto-discovering via API..."
+            echo "Auto-discovering zone ID..."
             CF_ZONE=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=cent-solution.online&status=active" \
               -H "Authorization: Bearer ${CF_TOKEN}" \
               -H "Content-Type: application/json" | grep -oP '"id"\s*:\s*"\K[a-f0-9]{32}' | head -1)

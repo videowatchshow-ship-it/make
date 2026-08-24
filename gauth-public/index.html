@@ -691,12 +691,13 @@ async function render(){
     const a = slice[i]
     const idx = start+i+1
     const _em = escapeHtml(a.email), _pw = escapeHtml(a.password||'—'), _ts = escapeHtml(a.totp_secret||'—')
+    const _bc = escapeHtml(a.backup_codes||'')
     const yt = a.youtube_url || '', _yt = escapeHtml(yt)
     const _rc = escapeHtml(a.recovery_email||a.recovery_phone||'—'), _sf = escapeHtml(a.source_file||'—')
     const _dateMs = a.account_date || a.source_mtime
     const dt = _dateMs ? new Date(_dateMs).toLocaleString('ko-KR') : '—'
     const sess = accessBadge(a)
-    const tfa = a.totp_secret ? '<span class="badge b-2fa">2FA</span>' : ''
+    const tfa = a.totp_secret ? '<span class="badge b-2fa">2FA</span>' : a.backup_codes ? '<span class="badge b-2fa" style="background:#a855f7">백업</span>' : ''
     const lock = a.lock_reason ? `<span class="badge b-lock" title="${escapeHtml(a.lock_reason)}">🔒 ${escapeHtml(a.lock_reason)}</span>` : ''
     const _isCur = a.email===_cur
     const _hl = _isCur ? 'border-left:4px solid #3ddc84;background:#0d2818;' : ''
@@ -706,6 +707,7 @@ async function render(){
         <div class="td-label" style="color:#8a95a5">비밀번호</div><div class="mono td-val td-pw" style="color:#3ddc84">${_pw}${cp(a.password)}</div>
         <div class="td-label" style="color:#8a95a5">2FA 시크릿</div><div class="mono td-val td-secret"><span id="sec-${idx}">${_ts}</span>${cp(a.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${_em}','sec-${idx}')">✏️</button></div>
         <div class="td-label" style="color:#8a95a5">2FA 코드</div><div class="mono td-val td-2fa-code" style="color:#7dabff;font-size:18px;font-weight:700;letter-spacing:2px"><span id="tdcode-${idx}">…</span>${a.totp_secret?cp('_','tdcode-'+idx):''}${a.totp_secret?`<button style="background:#2a323c;padding:3px 8px;font-size:11px;margin-left:6px;color:#c9d2dc" onclick="tdRefreshCode(${idx},'${escapeHtml(a.totp_secret)}',this)">🔄 새로고침</button>`:''}</div>
+        <div class="td-label" style="color:#8a95a5">백업 코드</div><div class="mono td-val" style="color:#a855f7;font-size:13px;letter-spacing:1px">${_bc||'—'}${a.backup_codes?cp(a.backup_codes):''}</div>
         <div class="td-label" style="color:#8a95a5">동작</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button style="background:#7c3aed" onclick="programLogin('${_em}',this)">🔑 로그인</button><button style="background:#1c5a2a;color:#3ddc84;font-weight:700" onclick="ytApiConnect('${_em}',this)">📡 API 연결</button><button style="background:#1c2740;color:#7dabff;font-weight:700" onclick="ytChatShot('${_em}','sky82892 텔레 문의',this)">💬 채팅 샷</button><button style="background:#3a1c00;color:#ff9040;font-weight:700" onclick="ytSpanner('${_em}',this)">🔧 스패너</button></div>
         <div class="td-label" style="color:#8a95a5">YouTube</div><div class="mono td-val" style="color:#ff8a8a;font-size:11px">${yt&&/^https?:\/\//i.test(yt)?`<a href="${_yt}" target="_blank" style="color:#ff8a8a">${_yt}</a>${cp(yt)}`:'—'}</div>
         <div class="td-label" style="color:#8a95a5">복구</div><div class="mono td-val" style="font-size:11px">${_rc}</div>
@@ -898,6 +900,8 @@ async function lookup(){
           <div class="mono"><span id="lookup-sec-local">${escapeHtml(local.totp_secret||'—')}</span>${cp(local.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${escapeHtml(local.email)}','lookup-sec-local')">✏️</button></div>
           <div style="color:#8a95a5">2FA 코드 (지금)</div>
           <div class="mono" style="color:#7dabff;font-size:22px;font-weight:700;letter-spacing:3px"><span id="lookup-code">${escapeHtml(code2)}</span>${local.totp_secret?cp('_','lookup-code'):''} ${local.totp_secret?`<button style="background:#1c2740;padding:10px 18px;font-size:16px;font-weight:700;margin-left:10px;color:#7dabff;border-radius:8px;border:none;cursor:pointer" onclick="lookupRefreshCode('${escapeHtml(local.totp_secret)}',this)">🔄 새로고침</button>`:''}</div>
+          <div style="color:#8a95a5">백업 코드</div>
+          <div class="mono" style="color:#a855f7;font-size:13px;letter-spacing:1px">${escapeHtml(local.backup_codes||'—')}${local.backup_codes?cp(local.backup_codes):''}</div>
           <div style="color:#8a95a5">출처</div><div class="mono" style="font-size:11px;color:#8a95a5">${escapeHtml(local.source_file||'—')}</div>
         </div>`
       if(window.FILTERED && FILTERED.length){
@@ -952,6 +956,8 @@ async function lookup(){
       <div class="mono"><span id="lookup-sec-api">${_jt}</span>${cp(j.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${_je}','lookup-sec-api')">✏️</button></div>
       <div style="color:#8a95a5">2FA 코드 (지금)</div>
       <div class="mono" style="color:#7dabff;font-size:22px;font-weight:700;letter-spacing:3px"><span id="lookup-code">${escapeHtml(code)}</span>${j.totp_secret?cp('_','lookup-code'):cp(code!=='—'?code:'')}${j.totp_secret?`<button style="background:#1c2740;padding:10px 18px;font-size:16px;font-weight:700;margin-left:10px;color:#7dabff;border-radius:8px;border:none;cursor:pointer" onclick="lookupRefreshCode('${escapeHtml(j.totp_secret)}',this)">🔄 새로고침</button>`:''}<button style="background:#7c3aed;margin-left:8px" onclick="programLogin('${_je}',this)">🔑 프로그램 로그인</button></div>
+      <div style="color:#8a95a5">백업 코드</div>
+      <div class="mono" style="color:#a855f7;font-size:13px;letter-spacing:1px">${escapeHtml(j.backup_codes||'—')}${j.backup_codes?cp(j.backup_codes):''}</div>
       <div style="color:#8a95a5">YouTube URL</div>
       <div class="mono" style="color:#ff8a8a">${safeYt ? `<a href="${safeYt}" target="_blank" style="color:#ff8a8a">${safeYt}</a>${cp(yt)}` : '—'}</div>
       <div style="color:#8a95a5">복구 이메일</div>
