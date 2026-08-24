@@ -1,0 +1,107 @@
+name: Find SSL cert + fix vhosts
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/workflows/find-ssl-cert-and-fix-vhosts.yml']
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Locate cert + fix camstouch/rambo/hanrabong/potential vhosts
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          script: |
+            set -e
+            echo "===== Letsencrypt certs ====="
+            sudo ls -la /etc/letsencrypt/live/ 2>&1 || true
+
+            # Take any existing bacad or working *.cent-solution.online vhost as reference
+            REF=$(sudo grep -rl "SSLCertificateFile" /etc/apache2/sites-enabled/ 2>/dev/null | while read f; do
+              if sudo grep -q "cent-solution.online" "$f"; then echo "$f"; break; fi
+            done | head -1)
+            echo "reference vhost: $REF"
+            CERT=$(sudo grep -E "^\s*SSLCertificateFile\s+" "$REF" 2>/dev/null | awk '{print $2}' | head -1)
+            KEY=$(sudo grep -E "^\s*SSLCertificateKeyFile\s+" "$REF" 2>/dev/null | awk '{print $2}' | head -1)
+            echo "CERT=$CERT"
+            echo "KEY=$KEY"
+            if [ -z "$CERT" ] || [ -z "$KEY" ]; then echo "::error::cannot find working SSL cert"; exit 1; fi
+
+            fix_vhost() {
+              local site=$1
+              local port=$2
+              local conf=/etc/apache2/sites-available/${site}-le-ssl.conf
+              [ -f "$conf" ] || conf=/etc/apache2/sites-available/${site}.conf
+              echo "-- $site: $conf (port=$port)"
+              sudo tee "$conf" > /dev/null <<APACHE
+              <VirtualHost *:443>
+                ServerName ${site}.cent-solution.online
+                DocumentRoot /var/www/sites/${site}/public
+                <Directory /var/www/sites/${site}/public>
+                  Options -Indexes +FollowSymLinks
+                  AllowOverride None
+                  Require all granted
+                </Directory>
+                ProxyPass /api/ http://127.0.0.1:${port}/api/
+                ProxyPassReverse /api/ http://127.0.0.1:${port}/api/
+                SSLEngine on
+                SSLCertificateFile ${CERT}
+                SSLCertificateKeyFile ${KEY}
+              </VirtualHost>
+              APACHE
+              sudo a2ensite "$(basename ${conf%.conf})" 2>&1 || true
+            }
+
+            # camstouch: redirect only (no backend needed)
+            echo "-- camstouch redirect vhost --"
+            sudo tee /etc/apache2/sites-available/camstouch-le-ssl.conf > /dev/null <<APACHE
+            <VirtualHost *:443>
+              ServerName camstouch.cent-solution.online
+              Redirect permanent / https://bacad.cent-solution.online/
+              SSLEngine on
+              SSLCertificateFile ${CERT}
+              SSLCertificateKeyFile ${KEY}
+            </VirtualHost>
+            APACHE
+            sudo a2ensite camstouch-le-ssl 2>&1 || true
+
+            # new sites
+            fix_vhost rambo 3031
+            fix_vhost hanrabong 3032
+            fix_vhost potential 3033
+
+            sudo a2enmod ssl proxy proxy_http 2>&1 || true
+            sudo apache2ctl configtest 2>&1
+            sudo systemctl reload apache2 && echo "apache reloaded"
+
+            echo ""
+            echo "===== 검증 ====="
+            for site in camstouch rambo hanrabong potential; do
+              curl -sSk -o /dev/null -w "$site → HTTP %{http_code}  redirect=%{redirect_url}\n" --max-time 5 "https://$site.cent-solution.online/" || true
+            done
+
+            # ensure services up
+            for site in rambo hanrabong potential; do
+              sudo systemctl start "$site.service" 2>&1 || true
+              sudo systemctl is-active "$site.service" && echo "$site service OK" || echo "$site service FAIL"
+            done
+
+      - name: CF cache purge
+        if: always()
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+        run: |
+          if [ -z "$CF_TOKEN" ]; then exit 0; fi
+          ZONE=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=cent-solution.online&status=active" \
+            -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+            | grep -oP '"id"\s*:\s*"\K[a-f0-9]{32}' | head -1)
+          curl -sS -o /dev/null -w "purge %{http_code}\n" -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${ZONE}/purge_cache" \
+            -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}'
