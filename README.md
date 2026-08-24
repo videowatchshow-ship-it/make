@@ -1,81 +1,68 @@
 # videowatchshow-ship-it/make
 
-gauth.cent-solution.online 배포 레포
+`cent-solution.online` 계정 관리 시스템 배포 레포.
+
+각 서브 디렉터리마다 README가 있음 — 세부는 그쪽 참조.
+
+| 서브 | README |
+|------|--------|
+| gauth 메인 프론트엔드 (`gauth.cent-solution.online`) | [`gauth-public/README.md`](./gauth-public/README.md) |
+| 점프 사이트 (`jump.cent-solution.online`) | [`jump/README.md`](./jump/README.md) |
+| 하위 사이트 (14개, `<site>.cent-solution.online`) | [`sub-sites/README.md`](./sub-sites/README.md) |
 
 ---
 
-## 접속 정보
+## 리포 구조
+
+```
+make/
+├─ gauth-public/         # gauth 메인 프론트엔드 + Express 파서
+├─ jump/                 # 점프 사이트 프론트엔드
+├─ sub-sites/second/     # 하위 사이트 템플릿 (모든 하위 사이트에 동일 패치)
+├─ .github/
+│  ├─ workflows/         # GitHub Actions 배포 파이프라인
+│  └─ scripts/           # 하위 사이트 idempotent 패처
+└─ README.md             # 이 파일
+```
+
+## 접속 · 배포
 
 | 항목 | 값 |
 |------|-----|
-| GitHub 계정 | `videowatchshow-ship-it` |
-| 레포 | `videowatchshow-ship-it/make` |
-| 로컬 경로 | `E:\projects\GAuth\make-repo` |
+| GitHub 레포 | `videowatchshow-ship-it/make` |
 | 작업 브랜치 | `claude/gauth-frontend-backend-fixes-cg2icv` |
-| 서버 도메인 | `gauth.cent-solution.online` |
-| 서버 배포 경로 | `/var/www/sites/gauth/public` 또는 `/var/www/sites/gauth01/public` |
-| Cloudflare Zone ID | `2601d4f4ab75c910f8d858ca036ff344` (cent-solution.online) |
+| 서버 IP | `***.***.***.***` (`GAUTH_HOST` secret) |
+| SSH 유저 | `GAUTH_USER` secret |
+| SSH 개인키 | `GAUTH_SSH_KEY` secret |
+| Cloudflare 토큰 | `CLOUDFLARE_TOKEN` secret |
+| Cloudflare Zone | `cent-solution.online` (Zone ID는 CF API로 자동 발견 또는 `CLOUDFLARE_ZONE_ID` secret) |
 
-## GitHub Secrets (Actions)
+시크릿은 GitHub Actions Repository Secrets에서만 관리. 로컬/커밋에 절대 노출 금지.
 
-| Secret 이름 | 설명 |
-|-------------|------|
-| `GAUTH_HOST` | 서버 IP |
-| `GAUTH_USER` | SSH 유저명 |
-| `GAUTH_SSH_KEY` | SSH 개인키 |
-| `CLOUDFLARE_TOKEN` | CF API 토큰 (설정됨) |
-| `CLOUDFLARE_ZONE_ID` | CF Zone ID (미설정 → 자동 발견으로 대체) |
+## 운영 워크플로우 (`.github/workflows/`)
 
-## 로컬 git 인증
+| 파일 | 트리거 | 용도 |
+|------|--------|------|
+| `deploy-index.yml` | `gauth-public/**` push | gauth 프론트+파서 배포, 엑셀 재파싱, CF 캐시 퍼지 |
+| `deploy-subsite-login-issue.yml` | `sub-sites/**`, `.github/scripts/patch-subsite-login-issue.js` push | 14개 하위 사이트에 로그인 문제 UI/API idempotent 패치, CF 캐시 퍼지 |
+| `deploy-subsites.yml` | `sub-sites/**` push | 서브사이트 정적 파일 배포 |
+| `deploy-accounts-page.yml` | `gauth-public/accounts.html` push | accounts.html 단독 배포 |
 
-```
-# .git-credentials 위치: C:\Users\ADMIN\.git-credentials
-# 토큰: C:\Users\ADMIN\.git-credentials 파일에서 확인 (gho_... 형식)
-```
+## 공식 문서 참조 (모든 코드가 이 문서 기반)
 
-## 주요 파일 경로
+- Node.js `fs` / `path`: <https://nodejs.org/api/fs.html>, <https://nodejs.org/api/path.html>
+- Express 5: <https://expressjs.com/en/api.html>
+- MDN Fetch API: <https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API>
+- MDN HTTP CORS: <https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS>
+- MDN DOM: <https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model>
+- MDN MutationObserver: <https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver>
+- Cloudflare Zone Purge API: <https://developers.cloudflare.com/api/operations/zone-purge>
+- RFC 6238 (TOTP): <https://datatracker.ietf.org/doc/html/rfc6238>
 
-| 파일 | 설명 |
-|------|------|
-| `gauth-public/index.html` | 메인 프론트엔드 (계정 관리 UI) |
-| `gauth-public/accounts.html` | 계정 목록 페이지 |
-| `.github/workflows/deploy-index.yml` | index.html 배포 워크플로우 |
-| `.github/workflows/deploy-gauth.yml` | gauth 전체 배포 워크플로우 |
+## 규칙
 
-## 워크플로우 (운영용만 정리)
-
-| 파일 | 용도 |
-|------|------|
-| `deploy-index.yml` | gauth-public/ → 서버 배포 + CF 캐시 퍼지 |
-| `deploy-gauth.yml` | gauth 전체 배포 |
-| `deploy-accounts-page.yml` | accounts.html 배포 |
-| `deploy-second.yml` | 세컨드 사이트 배포 |
-| `deploy-subsites.yml` | 서브사이트 배포 |
-| `query-accounts.yml` | 계정 조회 |
-| `search-account.yml` | 계정 검색 |
-| `register-accounts.yml` | 계정 등록 |
-| `add-account-all-sites.yml` | 전체 사이트 계정 추가 |
-| `login-check.yml` | 로그인 상태 확인 |
-| `recover-missing-totp.yml` | TOTP 복구 |
-| `cloudflare-dns-check.yml` | CF DNS 확인 |
-| `sync-index-to-repo.yml` | 서버 → 레포 동기화 |
-
-## 수동 배포 명령
-
-```powershell
-# 환경 변수 설정
-$env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH","User")
-$env:GH_TOKEN = "<C:\Users\ADMIN\.git-credentials 파일의 gho_... 토큰>"
-
-# deploy-index 수동 트리거
-gh workflow run deploy-index.yml --repo videowatchshow-ship-it/make --ref claude/gauth-frontend-backend-fixes-cg2icv
-
-# 실행 상태 확인
-gh run list --repo videowatchshow-ship-it/make --workflow="deploy-index.yml" --limit 3
-```
-
-## 주요 이슈 히스토리
-
-- **Cloudflare 캐시 퍼지 실패** → `CLOUDFLARE_ZONE_ID` secret 미설정. CF API로 Zone ID 자동 발견으로 해결.
-- **폴더 스캔 배포 안됨** → `deploy-index.yml`에서 `cp` → `cp -r` 수정 (gauth-public/, jump/ 디렉토리 복사 실패)
-- **레포 로컬 경로** → `C:\Users\ADMIN\make-repo` 삭제, `E:\projects\GAuth\make-repo` 사용
+- 유료 라이브러리·서비스 금지
+- 공식 문서만 참조 (MDN, GitHub 원본, W3C, RFC, 각 공식 API 문서)
+- 추측 코딩 금지
+- 서버 IP·토큰 등 시크릿은 README에 마스킹, secrets에만 저장
+- `tak` 계정 테스트 시 다른 계정 건드리지 말 것
