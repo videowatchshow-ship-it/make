@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>🚫 로그인 문제 - 참교육 스트리밍 계정 정보</title>
+<script>var _V='20260824v8';if(!location.search.match('_v='+_V)){location.replace(location.pathname+'?_v='+_V+location.hash);}</script>
+<style>
+*{box-sizing:border-box}
+body{font-family:-apple-system,'SF Pro Text',sans-serif;background:#0b0d10;color:#e8ecef;margin:0}
+header{padding:14px 20px;background:#111418;border-bottom:1px solid #22282f;position:sticky;top:0;z-index:5}
+h1{margin:0 0 8px;font-size:18px;color:#f47070}
+.stats{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:#9aa5b5}
+.stats b{color:#e8ecef;font-size:15px}
+.stats .issue{color:#f47070}
+.controls{padding:12px 20px;background:#0f1216;border-bottom:1px solid #22282f;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+input{background:#161a20;border:1px solid #2a323c;color:#e8ecef;padding:9px 12px;border-radius:6px;font-size:14px;flex:1;min-width:200px}
+input:focus{outline:0;border-color:#2b6cff}
+select{background:#161a20;border:1px solid #2a323c;color:#e8ecef;padding:9px 10px;border-radius:6px;font-size:13px}
+#count{color:#8a95a5;font-size:12px;white-space:nowrap}
+#viewport{overflow-y:visible;min-height:200px;padding:0 20px}
+.issue-card{background:#1a1f26;border:1px solid #f47070;border-radius:8px;padding:16px;margin:8px 0;position:relative}
+.issue-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.issue-type{background:#2a1e1e;color:#f47070;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:600}
+.issue-time{color:#8a95a5;font-size:11px}
+.account-info{margin-bottom:8px}
+.account-email{font-weight:600;color:#e8ecef;font-size:14px}
+.account-site{color:#7dabff;font-size:12px;margin-left:8px}
+.issue-note{color:#c9d2dc;font-size:13px;margin-top:8px;font-style:italic}
+.resolve-btn{background:#3ddc84;color:#000;border:none;padding:6px 12px;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;position:absolute;top:12px;right:12px}
+.resolve-btn:hover{opacity:0.9}
+.filter-chips{display:flex;gap:8px;margin:12px 20px;flex-wrap:wrap}
+.chip{background:#2a323c;color:#c9d2dc;border:1px solid #2a323c;padding:6px 12px;border-radius:16px;font-size:12px;cursor:pointer;transition:all 0.2s}
+.chip:hover{border-color:#7dabff}
+.chip.active{background:#1c2740;border-color:#7dabff;color:#7dabff}
+.chip .count{margin-left:4px;opacity:0.7}
+.empty{text-align:center;padding:40px;color:#8a95a5}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🚫 로그인 문제 계정</h1>
+  <div class="stats" id="stats">로딩 중...</div>
+</header>
+
+<div id="main-nav" style="display:flex;gap:0;background:#111418;border-bottom:1px solid #22282f;padding:0 16px">
+  <a href="/" style="padding:12px 20px;font-size:14px;font-weight:700;color:#5a6a7a;border-bottom:2px solid transparent;text-decoration:none">📋 전체 계정</a>
+  <a href="/accounts.html" style="padding:12px 20px;font-size:14px;font-weight:700;color:#5a6a7a;border-bottom:2px solid transparent;text-decoration:none">🔑 계정 조회 + 로그인</a>
+  <a href="/login-issues.html" style="padding:12px 20px;font-size:14px;font-weight:700;color:#f47070;border-bottom:2px solid #f47070;text-decoration:none">🚫 로그인 문제</a>
+</div>
+
+<div class="controls">
+  <input type="text" id="searchBox" placeholder="계정 검색...">
+  <span id="count"></span>
+</div>
+
+<div class="filter-chips" id="filterChips"></div>
+
+<div id="viewport">
+  <div class="empty" id="emptyState">로그인 문제가 신고된 계정이 없습니다.</div>
+</div>
+
+<script>
+/* ref: https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch */
+let allIssues = [];
+let filteredIssues = [];
+let activeFilter = 'all';
+
+const TYPE_LABELS = {
+  'wrong-phone': '📱 지정된 전화',
+  'phone': '📱 지정된 전화',
+  'robot': '🤖 로봇',
+  'wrong-password': '🔒 비밀번호 오류',
+  'password': '🔒 비밀번호 오류',
+  'other': '❓ 기타'
+};
+
+async function loadLoginIssues() {
+  try {
+    const r = await fetch('/api/subsites-pool', { cache: 'no-store' });
+    const d = await r.json();
+    const accounts = d.accounts || [];
+    // sites 형태(dict)도 accounts(array)도 모두 지원
+    let list = accounts;
+    if (!list.length && d.sites && typeof d.sites === 'object') {
+      list = [];
+      Object.entries(d.sites).forEach(([siteName, siteData]) => {
+        (siteData.accounts || []).forEach(a => list.push({ ...a, site: a.site || siteName }));
+      });
+    }
+    allIssues = list
+      .filter(a => a && a.login_issue && a.login_issue.type)
+      .map(a => ({
+        email: a.email || '',
+        site: a.site || '',
+        issue: a.login_issue
+      }))
+      .sort((a, b) => (b.issue.marked_at || '').localeCompare(a.issue.marked_at || ''));
+
+    updateStats();
+    updateFilterChips();
+    filterIssues();
+  } catch (e) {
+    console.error('Failed to load login issues:', e);
+    document.getElementById('stats').textContent = '데이터 로딩 실패: ' + (e.message || e);
+  }
+}
+
+function updateStats() {
+  const el = document.getElementById('stats');
+  const total = allIssues.length;
+  const sites = new Set(allIssues.map(i => i.site).filter(Boolean)).size;
+  el.innerHTML = '총 <b class="issue">' + total + '</b>개 문제 · <b>' + sites + '</b>개 사이트';
+}
+
+function updateFilterChips() {
+  const counts = { all: allIssues.length };
+  allIssues.forEach(i => {
+    const t = i.issue.type || 'other';
+    counts[t] = (counts[t] || 0) + 1;
+  });
+  const order = ['all', 'wrong-phone', 'phone', 'robot', 'wrong-password', 'password', 'other'];
+  const seen = new Set();
+  const chips = order
+    .filter(k => !seen.has(k) && (k === 'all' || counts[k]) && seen.add(k))
+    .map(k => {
+      const label = k === 'all' ? '전체' : (TYPE_LABELS[k] || k);
+      const cls = 'chip' + (activeFilter === k ? ' active' : '');
+      return '<div class="' + cls + '" onclick="setFilter(\'' + k + '\')">' +
+        escapeHtml(label) + '<span class="count">' + (counts[k] || 0) + '</span></div>';
+    }).join('');
+  document.getElementById('filterChips').innerHTML = chips;
+}
+
+function setFilter(t) {
+  activeFilter = t;
+  updateFilterChips();
+  filterIssues();
+}
+
+function filterIssues() {
+  const q = (document.getElementById('searchBox').value || '').toLowerCase();
+  filteredIssues = allIssues.filter(i => {
+    const t = i.issue.type || 'other';
+    const matchFilter = activeFilter === 'all' || t === activeFilter;
+    const matchSearch = !q ||
+      (i.email || '').toLowerCase().includes(q) ||
+      (i.site || '').toLowerCase().includes(q) ||
+      (i.issue.note || '').toLowerCase().includes(q);
+    return matchFilter && matchSearch;
+  });
+  renderIssues();
+}
+
+function renderIssues() {
+  const viewport = document.getElementById('viewport');
+  document.getElementById('count').textContent = filteredIssues.length + '개 결과';
+  if (!filteredIssues.length) {
+    viewport.innerHTML = '<div class="empty">조건에 맞는 로그인 문제가 없습니다.</div>';
+    return;
+  }
+  viewport.innerHTML = filteredIssues.map(i => {
+    const typeLabel = TYPE_LABELS[i.issue.type] || '❓ 기타';
+    const timeAgo = formatTimeAgo(i.issue.marked_at);
+    const note = i.issue.note
+      ? '<div class="issue-note">"' + escapeHtml(i.issue.note) + '"</div>'
+      : '';
+    const eAttr = escapeAttr(i.email);
+    const sAttr = escapeAttr(i.site);
+    return '<div class="issue-card">' +
+      '<div class="issue-header">' +
+        '<span class="issue-type">' + escapeHtml(typeLabel) + '</span>' +
+        '<span class="issue-time">' + escapeHtml(timeAgo) + '</span>' +
+      '</div>' +
+      '<div class="account-info">' +
+        '<span class="account-email">' + escapeHtml(i.email) + '</span>' +
+        '<span class="account-site">@ ' + escapeHtml(i.site) + '</span>' +
+      '</div>' +
+      note +
+      '<button class="resolve-btn" onclick="resolveIssue(\'' + eAttr + '\',\'' + sAttr + '\')">해결됨</button>' +
+    '</div>';
+  }).join('');
+}
+
+async function resolveIssue(email, site) {
+  if (!confirm(email + ' (' + site + ')의 로그인 문제를 해결됨으로 표시하시겠습니까?')) return;
+  try {
+    const r = await fetch('/api/' + encodeURIComponent(site) + '/login-issue/' + encodeURIComponent(email), {
+      method: 'DELETE'
+    });
+    if (r.ok) {
+      allIssues = allIssues.filter(x => !(x.email === email && x.site === site));
+      updateStats();
+      updateFilterChips();
+      filterIssues();
+    } else {
+      alert('해결 처리 실패 (HTTP ' + r.status + ')');
+    }
+  } catch (e) {
+    alert('해결 처리 오류: ' + (e.message || e));
+  }
+}
+
+function formatTimeAgo(s) {
+  if (!s) return '시간 불명';
+  const now = Date.now();
+  const t = new Date(s).getTime();
+  if (isNaN(t)) return '시간 불명';
+  const diff = now - t;
+  const mins = Math.floor(diff / 60000);
+  const hrs = Math.floor(mins / 60);
+  const days = Math.floor(hrs / 24);
+  if (mins < 1) return '방금 전';
+  if (mins < 60) return mins + '분 전';
+  if (hrs < 24) return hrs + '시간 전';
+  if (days < 7) return days + '일 전';
+  return new Date(s).toLocaleDateString('ko-KR');
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = String(s == null ? '' : s);
+  return d.innerHTML;
+}
+
+function escapeAttr(s) {
+  return String(s == null ? '' : s).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+document.getElementById('searchBox').addEventListener('input', filterIssues);
+document.addEventListener('DOMContentLoaded', loadLoginIssues);
+setInterval(loadLoginIssues, 30000);
+</script>
+</body>
+</html>
