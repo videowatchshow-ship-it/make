@@ -1,0 +1,69 @@
+name: Add 5 accounts to simmani/sunbi/win
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-add-5-accounts.txt']
+
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: SSH add accounts + restart services
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 90s
+          script: |
+            set -e
+            sudo node -e '
+              const fs = require("fs");
+              const NORM = "/opt/gauth-full/accounts_normalized.json";
+              const norm = JSON.parse(fs.readFileSync(NORM, "utf8"));
+              const all = Array.isArray(norm) ? norm : (norm.accounts || norm);
+              const find = (e) => all.find(a => (a.email||"").toLowerCase() === e.toLowerCase());
+
+              const TASKS = [
+                { site: "simmani", email: "atulsinghc767@gmail.com" },
+                { site: "sunbi",   email: "estebitanpatte@gmail.com", note: "9월1일 사용" },
+                { site: "sunbi",   email: "davidninuw@gmail.com" },
+                { site: "sunbi",   email: "atulsinghc767@gmail.com" },
+                { site: "win",     email: "alexandergwub9g86za1vybr@gmail.com", note: "9월1일 사용 추천" },
+              ];
+
+              for (const t of TASKS) {
+                const path = "/var/www/sites/" + t.site + "/accounts.json";
+                const acct = find(t.email);
+                if (!acct) { console.log("SKIP " + t.email + " -> NOT_FOUND in normalized"); continue; }
+                let data = { accounts: [] };
+                try { data = JSON.parse(fs.readFileSync(path, "utf8")); } catch(e) {}
+                const arr = Array.isArray(data) ? data : (data.accounts || []);
+                if (arr.find(a => (a.email||"").toLowerCase() === t.email.toLowerCase())) {
+                  console.log("SKIP " + t.email + " @ " + t.site + " -> already exists"); continue;
+                }
+                const now = new Date().toISOString();
+                arr.unshift({
+                  email: acct.email, password: acct.password||"",
+                  totp_secret: acct.totp_secret||"", backup_codes: acct.backup_codes||"",
+                  recovery_email: acct.recovery_email||"", youtube_url: acct.youtube_url||"",
+                  channel_title: acct.channel_title||"", site: t.site,
+                  status: "active", allocated_date: now.slice(0,10), added_at: now,
+                  note: t.note || "",
+                });
+                const out = Array.isArray(data) ? arr : { accounts: arr };
+                const tmp = path + ".tmp." + process.pid + "." + Date.now();
+                fs.writeFileSync(tmp, JSON.stringify(out, null, 2));
+                fs.renameSync(tmp, path);
+                console.log("ADDED " + t.email + " @ " + t.site + " (total=" + arr.length + ")");
+              }
+            '
+            for svc in simmani sunbi win; do
+              if systemctl list-unit-files 2>/dev/null | grep -q "^${svc}\.service"; then
+                sudo systemctl restart "$svc" && echo "restarted $svc"
+              fi
+            done
+            echo "=== DONE ==="
