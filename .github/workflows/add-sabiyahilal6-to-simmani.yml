@@ -1,0 +1,78 @@
+name: Add sabiyahilal6 to simmani
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/trigger-add-sabiyahilal6.txt']
+
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: SSH into server and add account to simmani
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 60s
+          script: |
+            set -e
+            EMAIL="sabiyahilal6@gmail.com"
+            SIMMANI="/var/www/sites/simmani/accounts.json"
+            NORM="/opt/gauth-full/accounts_normalized.json"
+
+            echo "=== Look up $EMAIL in accounts_normalized ==="
+            sudo node -e "
+              const fs = require('fs');
+              const email = '$EMAIL';
+              const key = email.toLowerCase();
+              const norm = JSON.parse(fs.readFileSync('$NORM', 'utf8'));
+              const arr = Array.isArray(norm) ? norm : (norm.accounts || norm);
+              const acct = arr.find(a => (a.email || '').toLowerCase() === key);
+              if (!acct) { console.log('NOT_FOUND in accounts_normalized'); process.exit(1); }
+              console.log('FOUND:', JSON.stringify({ email:acct.email, hasPw: !!acct.password, hasTotp: !!acct.totp_secret, hasBackup: !!acct.backup_codes, yt: acct.youtube_url }));
+
+              let sim = { accounts: [] };
+              try { sim = JSON.parse(fs.readFileSync('$SIMMANI', 'utf8')); } catch(e) {}
+              const simArr = Array.isArray(sim) ? sim : (sim.accounts || []);
+              const dup = simArr.find(a => (a.email || '').toLowerCase() === key);
+              if (dup) { console.log('ALREADY IN SIMMANI:', dup.email); process.exit(0); }
+
+              const now = new Date().toISOString();
+              const entry = {
+                email: acct.email,
+                password: acct.password || '',
+                totp_secret: acct.totp_secret || '',
+                backup_codes: acct.backup_codes || '',
+                recovery_email: acct.recovery_email || '',
+                youtube_url: acct.youtube_url || '',
+                channel_title: acct.channel_title || '',
+                site: 'simmani',
+                status: 'active',
+                allocated_date: now.slice(0, 10),
+                added_at: now,
+              };
+              simArr.unshift(entry);
+              const out = Array.isArray(sim) ? simArr : { accounts: simArr };
+              const tmp = '$SIMMANI.tmp.' + process.pid + '.' + Date.now();
+              fs.writeFileSync(tmp, JSON.stringify(out, null, 2));
+              fs.renameSync(tmp, '$SIMMANI');
+              console.log('ADDED to simmani. Total:', simArr.length);
+            "
+
+            echo "=== Verify ==="
+            sudo grep -c "sabiyahilal6" "$SIMMANI" || echo "not present"
+
+            # Restart simmani service if managed by systemd
+            for svc in simmani site-simmani simmani-site; do
+              if systemctl list-unit-files 2>/dev/null | grep -q "^${svc}\.service"; then
+                echo "Restarting $svc"
+                sudo systemctl restart "$svc" 2>&1 || true
+                break
+              fi
+            done
+
+            echo "=== DONE ==="
