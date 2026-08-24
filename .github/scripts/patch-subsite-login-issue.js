@@ -15,8 +15,8 @@ const serverPath = path.join(DIR, 'server.js');
 const htmlPath = path.join(DIR, 'public', 'index.html');
 const patchMarker = '/* LOGIN_ISSUE_PATCH_V3 */';
 const oldServerMarkers = ['/* LOGIN_ISSUE_PATCH */', '/* LOGIN_ISSUE_PATCH_V2 */'];
-const htmlMarker = '/* LOGIN_ISSUE_UI_V7 */';
-const oldHtmlMarkers = ['/* LOGIN_ISSUE_UI */', '/* LOGIN_ISSUE_UI_V2 */', '/* LOGIN_ISSUE_UI_V3 */', '/* LOGIN_ISSUE_UI_V4 */', '/* LOGIN_ISSUE_UI_V5 */', '/* LOGIN_ISSUE_UI_V6 */'];
+const htmlMarker = '/* LOGIN_ISSUE_UI_V8 */';
+const oldHtmlMarkers = ['/* LOGIN_ISSUE_UI */', '/* LOGIN_ISSUE_UI_V2 */', '/* LOGIN_ISSUE_UI_V3 */', '/* LOGIN_ISSUE_UI_V4 */', '/* LOGIN_ISSUE_UI_V5 */', '/* LOGIN_ISSUE_UI_V6 */', '/* LOGIN_ISSUE_UI_V7 */'];
 
 const serverSrc = fs.readFileSync(serverPath, 'utf8');
 let htmlSrc = fs.readFileSync(htmlPath, 'utf8');
@@ -243,13 +243,15 @@ if (htmlSrc.includes(htmlMarker)) {
     '    var byEmail = {};',
     '    accounts.forEach(function(a){ if (a.email) byEmail[a.email.toLowerCase()] = a; });',
     '    document.querySelectorAll("li,.account-card,.row,.card,.account,.acct,.item,[data-email],[data-account]").forEach(function(el){',
+    '      try {',
+    '      if (el.classList.contains("__li_panel") || el.closest(".__li_panel")) return;',
     '      var text = el.textContent || "";',
     '      var m = text.match(/[A-Za-z0-9._+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/);',
     '      if (!m) return;',
     '      var a = byEmail[m[0].toLowerCase()];',
     '      if (!a) return;',
     '      var sig = JSON.stringify(a.login_issue || null);',
-    '      var existing = el.querySelector(".__li_panel");',
+    '      var existing = el.querySelector(":scope > .__li_panel");',
     '      if (existing && existing.getAttribute("data-sig") === sig) return;',
     '      if (existing) existing.remove();',
     '      var wrap = document.createElement("div");',
@@ -258,6 +260,7 @@ if (htmlSrc.includes(htmlMarker)) {
     '      node.setAttribute("data-sig", sig);',
     '      el.appendChild(node);',
     '      if (a.login_issue && a.login_issue.type) el.classList.add("__li_has"); else el.classList.remove("__li_has");',
+    '      } catch(err) { /* skip broken card, keep going */ }',
     '    });',
     '    document.querySelectorAll(".__li_panel input[type=radio]").forEach(function(inp){',
     '      if (inp.__li_wired) return; inp.__li_wired = true;',
@@ -272,14 +275,24 @@ if (htmlSrc.includes(htmlMarker)) {
     '      btn.addEventListener("click", function(){ save(btn.closest(".__li_panel")); });',
     '    });',
     '  }',
-    '  var _pending = false;',
-    '  function scheduleInject(){ if (_pending) return; _pending = true; setTimeout(function(){ _pending = false; injectAll(); }, 100); }',
+    '  var _pending = false, _mo = null, _injecting = false;',
+    '  function scheduleInject(muts){',
+    '    if (_injecting || _pending) return;',
+    '    if (muts && muts.every(function(m){',
+    '      var nodes = [].concat([].slice.call(m.addedNodes||[]), [].slice.call(m.removedNodes||[]));',
+    '      return nodes.every(function(n){',
+    '        return n && n.nodeType === 1 && (n.classList && (n.classList.contains("__li_panel") || n.classList.contains("__li_badge") || n.id === "__li_badge_el") || (n.closest && n.closest(".__li_panel")));',
+    '      });',
+    '    })) return;',
+    '    _pending = true;',
+    '    setTimeout(function(){ _pending = false; _injecting = true; try { injectAll(); } finally { _injecting = false; } }, 100);',
+    '  }',
     '  function start(){',
-    '    injectAll();',
-    '    setInterval(injectAll, 1000);',
+    '    _injecting = true; try { injectAll(); } finally { _injecting = false; }',
+    '    setInterval(function(){ _injecting = true; try { injectAll(); } finally { _injecting = false; } }, 3000);',
     '    try {',
-    '      var mo = new MutationObserver(scheduleInject);',
-    '      mo.observe(document.body, { childList: true, subtree: true });',
+    '      _mo = new MutationObserver(scheduleInject);',
+    '      _mo.observe(document.body, { childList: true, subtree: true });',
     '    } catch(e){}',
     '  }',
     '  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);',
