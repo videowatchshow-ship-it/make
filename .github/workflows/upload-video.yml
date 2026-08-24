@@ -1,0 +1,101 @@
+name: Upload Video to 영상A
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_url:
+        description: '영상 다운로드 URL (Google Drive 공유 링크 또는 직링크)'
+        required: true
+        type: string
+      vslot:
+        description: '슬롯 (1=영상A, 2=영상B)'
+        required: false
+        default: '1'
+        type: choice
+        options:
+          - '1'
+          - '2'
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Download and deploy video to my-site-1
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 25m
+          script: |
+            VIDEO_URL="${{ github.event.inputs.video_url }}"
+            VSLOT="${{ github.event.inputs.vslot }}"
+
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="bash -s -- '${VIDEO_URL}' '${VSLOT}'" << 'REMOTE'
+            set -e
+            VIDEO_URL="$1"
+            VSLOT="$2"
+
+            VID_DIR="/var/www/sites/chamgyo/public/admin/mode-a/03/videos"
+            UPLOAD_ID=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 12 | head -n1)
+            FINAL="${VID_DIR}/srv_${UPLOAD_ID}.mp4"
+            TMP_FILE="/tmp/dl_${UPLOAD_ID}.mp4"
+
+            # Google Drive 공유 링크 → 직접 다운로드 링크 변환
+            if echo "$VIDEO_URL" | grep -q 'drive.google.com'; then
+              FILE_ID=$(echo "$VIDEO_URL" | grep -oP '(/d/|id=|open\?id=)\K[a-zA-Z0-9_-]+')
+              if [ -n "$FILE_ID" ]; then
+                echo "Google Drive file ID: ${FILE_ID}"
+                VIDEO_URL="https://drive.google.com/uc?export=download&id=${FILE_ID}&confirm=t"
+              fi
+            fi
+
+            echo "=== Downloading video ==="
+            echo "URL: ${VIDEO_URL}"
+            wget -q --show-progress --no-check-certificate -O "$TMP_FILE" "$VIDEO_URL" 2>&1 || \
+              curl -L -o "$TMP_FILE" "$VIDEO_URL"
+
+            SIZE=$(stat -c%s "$TMP_FILE" 2>/dev/null || echo 0)
+            echo "Downloaded: $(echo "$SIZE/1048576" | bc)MB"
+
+            if [ "$SIZE" -lt 1000000 ]; then
+              echo "ERROR: File too small (${SIZE} bytes), download may have failed"
+              cat "$TMP_FILE" | head -5
+              rm -f "$TMP_FILE"
+              exit 1
+            fi
+
+            mv "$TMP_FILE" "$FINAL"
+            chmod 664 "$FINAL"
+
+            # 길이 확인
+            DUR=$(ffprobe -v quiet -show_entries format=duration -of csv=p=0 "$FINAL" 2>/dev/null || echo "0")
+            DUR_MIN=$(echo "$DUR/60" | bc -l 2>/dev/null | xargs printf "%.1f" 2>/dev/null || echo "?")
+            SIZE_MB=$(du -m "$FINAL" | cut -f1)
+            echo "Duration: ${DUR_MIN}min, Size: ${SIZE_MB}MB"
+
+            # 60분 초과 체크
+            DUR_INT=$(echo "$DUR" | cut -d. -f1)
+            if [ "${DUR_INT:-0}" -gt 3600 ]; then
+              echo "ERROR: 60분 초과 (${DUR_MIN}분)"
+              rm -f "$FINAL"
+              exit 1
+            fi
+
+            # DB 업데이트
+            if [ "$VSLOT" = "2" ]; then
+              mysql -u root -pGuCCiR00t2026Secure db_chamgyo -e \
+                "UPDATE gucci_multilive_config SET video_path_2='${FINAL}', media_type_2='video' WHERE id=1;"
+              echo "=== 영상B 등록 완료: ${FINAL} (${DUR_MIN}min / ${SIZE_MB}MB) ==="
+            else
+              mysql -u root -pGuCCiR00t2026Secure db_chamgyo -e \
+                "UPDATE gucci_multilive_config SET video_path='${FINAL}', media_type='video' WHERE id=1;"
+              echo "=== 영상A 등록 완료: ${FINAL} (${DUR_MIN}min / ${SIZE_MB}MB) ==="
+            fi
+            REMOTE
