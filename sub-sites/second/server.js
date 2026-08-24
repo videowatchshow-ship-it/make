@@ -13,6 +13,16 @@ const DATA_DIR = __dirname;
 const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');
 
 app.use(express.json());
+/* CORS for gauth aggregator (login-issues page)
+   ref: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS
+   ref: https://fetch.spec.whatwg.org/#http-cors-protocol */
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 function readAccounts() {
@@ -71,6 +81,47 @@ app.post('/api/second/accounts', (req, res) => {
 
   writeAccounts(accounts);
   res.json({ ok: true, total: accounts.length });
+});
+
+/* Mark/clear login issue for an account.
+   Body: { type: 'phone'|'robot'|'password'|'other'|null, note?: string }
+   type=null clears the issue. */
+app.patch('/api/second/accounts/:email/login-issue', (req, res) => {
+  const { type, note } = req.body || {};
+  const validTypes = ['phone', 'robot', 'password', 'other', null];
+  if (!validTypes.includes(type)) return res.status(400).json({ ok: false, error: 'invalid type' });
+
+  const accounts = readAccounts();
+  const key = req.params.email.toLowerCase();
+  const acct = accounts.find(a => (a.email || '').toLowerCase() === key);
+  if (!acct) return res.status(404).json({ ok: false, error: 'not found' });
+
+  if (type === null) {
+    delete acct.login_issue;
+  } else {
+    acct.login_issue = {
+      type,
+      note: (note || '').toString().slice(0, 200),
+      marked_at: new Date().toISOString(),
+    };
+  }
+  writeAccounts(accounts);
+  res.json({ ok: true, login_issue: acct.login_issue || null });
+});
+
+/* Aggregated list of accounts flagged with a login issue, for gauth. */
+app.get('/api/second/login-issues', (req, res) => {
+  const issues = readAccounts()
+    .filter(a => a.login_issue && a.login_issue.type)
+    .map(a => ({
+      email: a.email,
+      name: a.name,
+      picture: a.picture,
+      channel_title: a.channel_title,
+      login_issue: a.login_issue,
+      site: 'second',
+    }));
+  res.json({ site: 'second', count: issues.length, issues });
 });
 
 app.delete('/api/second/accounts/:email', (req, res) => {

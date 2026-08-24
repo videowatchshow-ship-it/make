@@ -42,6 +42,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .account-info .meta { font-size: 12px; color: var(--text2); margin-top: 4px; }
 .account-card .remove-btn { background: none; border: 1px solid var(--border); color: var(--text2); padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; }
 .account-card .remove-btn:hover { border-color: var(--red); color: var(--red); }
+.issue-panel { display:flex; flex-direction:column; gap:4px; border-left:1px solid var(--border); padding-left:12px; min-width:150px; }
+.issue-panel .issue-title { font-size:11px; color:var(--text2); margin-bottom:2px; }
+.issue-panel label { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text); cursor:pointer; }
+.issue-panel input[type=radio] { accent-color: var(--red); margin:0; }
+.issue-panel input[type=text] { background:#0d1218; border:1px solid var(--border); color:var(--text); padding:3px 6px; border-radius:4px; font-size:11px; width:100%; margin-top:2px; display:none; }
+.issue-panel input[type=text].show { display:block; }
+.issue-panel .issue-saved { font-size:10px; color:var(--green); margin-top:2px; height:12px; }
+.account-card.has-issue { border-color: var(--red); }
 .empty-state { text-align: center; padding: 48px; color: var(--text2); }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
 .badge.active { background: rgba(52,168,83,0.2); color: var(--green); }
@@ -218,7 +226,22 @@ async function loadAccounts() {
       const channelInfo = a.channel_title
         ? '<div class="channel">' + escHtml(a.channel_title) + '<span class="subs">' + formatSubs(a.subscriber_count) + ' subscribers</span></div>'
         : '';
-      return '<li class="account-card">'
+      const iss = a.login_issue || {};
+      const t = iss.type || '';
+      const emailAttr = escAttr(a.email);
+      const noteVal = escHtml(iss.note || '');
+      const issuePanel =
+          '<div class="issue-panel" data-email="' + escHtml(a.email) + '">'
+        + '<div class="issue-title">로그인 문제</div>'
+        + '<label><input type="radio" name="iss_' + emailAttr + '" value="phone"' + (t==='phone'?' checked':'') + ' onchange="setIssue(this)"> 지정된 전화 입력</label>'
+        + '<label><input type="radio" name="iss_' + emailAttr + '" value="robot"' + (t==='robot'?' checked':'') + ' onchange="setIssue(this)"> 로봇</label>'
+        + '<label><input type="radio" name="iss_' + emailAttr + '" value="password"' + (t==='password'?' checked':'') + ' onchange="setIssue(this)"> 비밀번호 오류</label>'
+        + '<label><input type="radio" name="iss_' + emailAttr + '" value="other"' + (t==='other'?' checked':'') + ' onchange="setIssue(this)"> 기타</label>'
+        + '<input type="text" class="issue-note' + (t==='other'?' show':'') + '" placeholder="기타 사유" value="' + noteVal + '" onblur="setIssue(this)" onkeydown="if(event.key===\'Enter\')this.blur()">'
+        + '<label style="color:var(--text2);font-size:11px"><input type="radio" name="iss_' + emailAttr + '" value=""' + (!t?' checked':'') + ' onchange="setIssue(this)"> 없음</label>'
+        + '<div class="issue-saved"></div>'
+        + '</div>';
+      return '<li class="account-card' + (t?' has-issue':'') + '">'
         + pic
         + '<div class="account-info">'
         + '<div class="email">' + escHtml(a.email) + ' <span class="badge active">active</span></div>'
@@ -226,11 +249,44 @@ async function loadAccounts() {
         + channelInfo
         + '<div class="meta">' + escHtml(a.logged_in_at || '') + '</div>'
         + '</div>'
+        + issuePanel
         + '<button class="remove-btn" onclick="removeAccount(\'' + escAttr(a.email) + '\')">삭제</button>'
         + '</li>';
     }).join('');
   } catch (e) {
     console.error('loadAccounts error:', e);
+  }
+}
+
+/* Persist a login issue selection or note update.
+   ref: https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch */
+async function setIssue(el) {
+  const panel = el.closest('.issue-panel');
+  const email = panel.getAttribute('data-email');
+  const card = el.closest('.account-card');
+  const noteEl = panel.querySelector('input[type=text]');
+  const saved = panel.querySelector('.issue-saved');
+  let type = null;
+  const checked = panel.querySelector('input[type=radio]:checked');
+  if (checked && checked.value) type = checked.value;
+  if (type === 'other') noteEl.classList.add('show'); else noteEl.classList.remove('show');
+  const body = { type, note: type === 'other' ? (noteEl.value || '') : '' };
+  try {
+    const r = await fetch('/api/second/accounts/' + encodeURIComponent(email) + '/login-issue', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      saved.textContent = '저장됨';
+      if (type) card.classList.add('has-issue'); else card.classList.remove('has-issue');
+      setTimeout(function(){ saved.textContent = ''; }, 1500);
+    } else {
+      saved.textContent = '오류: ' + (d.error || '');
+    }
+  } catch (e) {
+    saved.textContent = '오류: ' + e.message;
   }
 }
 
