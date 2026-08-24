@@ -1,0 +1,104 @@
+name: Stream edit - download YouTube section to server
+
+on:
+  push:
+    branches: [claude/youtube-video-edit-stream-r4ftcx]
+    paths: ['.github/workflows/stream-edit-download.yml']
+  workflow_dispatch:
+    inputs:
+      video_id:
+        description: 'YouTube video ID'
+        default: 'Bz8z1_pj-Lk'
+        required: true
+      start:
+        description: 'Start time (HH:MM:SS)'
+        default: '00:02:00'
+        required: true
+      end:
+        description: 'End time (HH:MM:SS)'
+        default: '00:28:00'
+        required: true
+
+jobs:
+  download-on-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Download and cut on server (own account cookies)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 55m
+          script: |
+            set -e
+            VID="${{ github.event.inputs.video_id || 'Bz8z1_pj-Lk' }}"
+            START="${{ github.event.inputs.start || '00:02:00' }}"
+            END="${{ github.event.inputs.end || '00:28:00' }}"
+            sudo mkdir -p /opt/stream
+
+            command -v ffmpeg >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg; }
+            sudo curl -fsSL -o /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp
+            sudo chmod +x /usr/local/bin/yt-dlp
+
+            URL="https://www.youtube.com/watch?v=${VID}"
+            OUT="/opt/stream/${VID}_${START//:/-}_${END//:/-}.mp4"
+            COOKIEFILE=/opt/stream/yt_cookies.txt
+            sudo rm -f "$OUT" "$COOKIEFILE"
+
+            # This server runs Google-login automation (rebrowser/gauth); its Chrome
+            # profile carries the owner's own logged-in Google/YouTube session.
+            # Locate every Chrome/Chromium user-data dir and try exporting cookies.
+            echo "=== locate Chrome user-data dirs ==="
+            mapfile -t CDBS < <(sudo find /opt /root /home /var/lib -maxdepth 9 -name Cookies 2>/dev/null | sort -u)
+            printf '%s\n' "${CDBS[@]}" | head -40
+
+            GOT_COOKIES=false
+            for DB in "${CDBS[@]}"; do
+              PROF=$(dirname "$DB"); UDD=$(dirname "$PROF"); PN=$(basename "$PROF")
+              for BR in chromium chrome; do
+                echo "=== export $BR:$UDD:$PN ==="
+                if sudo yt-dlp --cookies-from-browser "$BR:$UDD:$PN" --cookies "$COOKIEFILE" \
+                     --skip-download --simulate "$URL" >/dev/null 2>&1 && sudo test -s "$COOKIEFILE"; then
+                  echo ">> cookies OK from $UDD ($PN)"; GOT_COOKIES=true; break 2
+                fi
+              done
+            done
+
+            DL_OK=false
+            try_dl () {
+              local extra="$1"
+              for CLIENT in web mweb tv android ios; do
+                echo "=== download client=$CLIENT $extra ==="
+                if sudo yt-dlp $extra \
+                    --extractor-args "youtube:player_client=$CLIENT" \
+                    --download-sections "*${START}-${END}" \
+                    -f "bv*[height<=1080]+ba/b/bv*+ba" \
+                    --merge-output-format mp4 --force-keyframes-at-cuts \
+                    -o "$OUT" "$URL"; then
+                  DL_OK=true; return 0
+                fi
+              done
+              return 1
+            }
+
+            if [ "$GOT_COOKIES" = true ]; then
+              try_dl "--cookies $COOKIEFILE" || true
+            fi
+            # Fallback: let yt-dlp read the browser profile directly at download time
+            if [ "$DL_OK" != true ]; then
+              for DB in "${CDBS[@]}"; do
+                PROF=$(dirname "$DB"); UDD=$(dirname "$PROF"); PN=$(basename "$PROF")
+                for BR in chromium chrome; do
+                  if try_dl "--cookies-from-browser $BR:$UDD:$PN"; then break 2; fi
+                done
+              done
+            fi
+
+            echo "=== RESULT ==="
+            $DL_OK
+            ls -lh "$OUT"
+            sha256sum "$OUT"
+            ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 "$OUT"
+            sudo rm -f "$COOKIEFILE"

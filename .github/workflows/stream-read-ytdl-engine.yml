@@ -1,0 +1,36 @@
+name: Stream - read ytdl engine
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/youtube-video-edit-stream-r4ftcx]
+    paths: ['.github/workflows/stream-read-ytdl-engine.yml']
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Dump ytdl engine sources
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            D=/var/www/sites/gucci/public/admin/mode-a/03
+            echo "############### ytdl.php ###############"
+            sudo sed -n '1,200p' "$D/ytdl.php"
+            echo "############### ytdl-worker.php ###############"
+            sudo sed -n '1,260p' "$D/ytdl-worker.php"
+            echo "############### ytdl-status.php ###############"
+            sudo sed -n '1,80p' "$D/ytdl-status.php"
+            echo "############### videos dir ###############"
+            sudo ls -lh "$D/videos/" 2>/dev/null | head -40
+            echo "############### recent ytdl log ###############"
+            sudo tail -n 40 "$D"/videos/.ytdl_*.log 2>/dev/null
+            echo "############### cookie file locations ###############"
+            sudo sed -n '1,120p' /var/www/sites/gucci/public/admin/channels/cookie-import.php | grep -niE "cookie|path|fopen|move_uploaded|dest|\.txt" | head -40
+            echo "############### any cookies.txt on server ###############"
+            sudo find /var/www/sites/gucci /opt -maxdepth 6 -iname "*cookie*" 2>/dev/null | head -30

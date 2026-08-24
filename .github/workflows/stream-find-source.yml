@@ -1,0 +1,29 @@
+name: Stream - find uploaded source mp4 on server
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/youtube-video-edit-stream-r4ftcx]
+    paths: ['.github/workflows/stream-find-source.yml']
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Search server for the uploaded mp4
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            echo "=== recent mp4 (last 24h) under common upload dirs ==="
+            sudo find /tmp /var/www /opt /home /root /srv /mnt -type f \
+              \( -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.mov" -o -iname "*.webm" \) \
+              -mmin -1440 2>/dev/null -printf '%TY-%Tm-%Td %TH:%TM  %10s  %p\n' | sort | head -60
+            echo "=== any file matching the given name (편집완료 / 스트리밍용) ==="
+            sudo find / -type f \( -iname "*편집완료*" -o -iname "*스트리밍용*" -o -iname "*streaming*" \) 2>/dev/null | head -40
+            echo "=== /opt/stream contents ==="
+            sudo ls -lh /opt/stream/ 2>/dev/null || echo "(empty)"

@@ -1,0 +1,22 @@
+name: Stream - verify uploader URL
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/youtube-video-edit-stream-r4ftcx]
+    paths: ['.github/workflows/stream-uploader-verify.yml']
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check domain routing and proxy from public internet
+        run: |
+          echo "=== headers of gauth root (is it Cloudflare?) ==="
+          curl -sI -m 15 https://gauth.cent-solution.online/ | grep -iE "^server:|^cf-|^http/" || true
+          echo "=== /vupload/ via public domain ==="
+          curl -s -m 20 -o /tmp/page.html -w "HTTP %{http_code}  size=%{size_download}\n" https://gauth.cent-solution.online/vupload/ || true
+          echo "--- first bytes ---"
+          head -c 300 /tmp/page.html; echo
+          echo "=== Cloudflare upload cap note: free plan = 100MB per request ==="

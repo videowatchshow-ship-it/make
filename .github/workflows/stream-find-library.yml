@@ -1,0 +1,36 @@
+name: Stream - debug video library empty slot
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/youtube-video-edit-stream-r4ftcx]
+    paths: ['.github/workflows/stream-find-library.yml']
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Locate library panel + recent uploads
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 12m
+          script: |
+            echo "=== files referencing library / 영상A / 무한루프 / 4개 ==="
+            sudo grep -rlZ -e "영상 라이브러리" -e "영상A" -e "무한루프" -e "media_library" -e "playlist" -e "loop" /var/www/sites/gucci/public 2>/dev/null | tr '\0' '\n' | head -30
+            echo
+            echo "=== recently modified mp4/webm anywhere under gucci (last 3h) ==="
+            sudo find /var/www/sites/gucci -type f \( -iname "*.mp4" -o -iname "*.webm" -o -iname "*.mov" -o -iname "*.part" -o -iname "*.tmp" \) -mmin -180 -printf '%TY-%Tm-%Td %TH:%TM  %10s  %p\n' 2>/dev/null | sort | head -40
+            echo
+            echo "=== recently modified files of ANY type under gucci public (last 90m) ==="
+            sudo find /var/www/sites/gucci/public -type f -mmin -90 -printf '%TY-%Tm-%Td %TH:%TM  %10s  %p\n' 2>/dev/null | sort | tail -40
+            echo
+            echo "=== upload handlers in gucci admin ==="
+            sudo grep -rlniE "move_uploaded_file|\\\$_FILES|multipart" /var/www/sites/gucci/public/admin 2>/dev/null | head -30
+            echo
+            echo "=== php error log tail ==="
+            sudo tail -n 30 /var/log/apache2/error.log 2>/dev/null
+            sudo tail -n 15 /var/www/sites/gucci/public/*error*log 2>/dev/null || true
