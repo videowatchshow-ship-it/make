@@ -31,9 +31,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .status-msg.ok { display: block; background: rgba(52,168,83,0.15); color: var(--green); }
 .status-msg.err { display: block; background: rgba(234,67,53,0.15); color: var(--red); }
 .accounts-list { list-style: none; }
-.account-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; margin-bottom: 12px; display: flex; align-items: center; gap: 16px; transition: border-color 0.2s; position: relative; }
+.account-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; margin-bottom: 12px; display: flex; align-items: center; gap: 16px; transition: border-color 0.2s; }
 .account-card:hover { border-color: var(--accent); }
-.account-card.has-issue { border-color: var(--red); }
 .account-card img { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; background: var(--border); }
 .account-info { flex: 1; min-width: 0; }
 .account-info .email { font-size: 15px; font-weight: 500; word-break: break-all; }
@@ -41,39 +40,28 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .account-info .channel { font-size: 13px; color: var(--accent); margin-top: 4px; }
 .account-info .channel .subs { color: var(--text2); margin-left: 8px; }
 .account-info .meta { font-size: 12px; color: var(--text2); margin-top: 4px; }
-.account-actions { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
 .account-card .remove-btn { background: none; border: 1px solid var(--border); color: var(--text2); padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; }
 .account-card .remove-btn:hover { border-color: var(--red); color: var(--red); }
-.issue-report-btn { background: var(--red); color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; margin-bottom: 4px; }
-.issue-report-btn:hover { opacity: 0.9; }
-.issue-report-btn.reported { background: #666; cursor: not-allowed; }
-.issue-badge { background: rgba(234,67,53,0.2); color: var(--red); font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 8px; }
 .empty-state { text-align: center; padding: 48px; color: var(--text2); }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
 .badge.active { background: rgba(52,168,83,0.2); color: var(--green); }
-
-/* 로그인 문제 신고 팝업 */
-.issue-popup { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: none; align-items: center; justify-content: center; z-index: 1000; }
-.issue-popup.show { display: flex; }
-.issue-popup-content { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; }
-.issue-popup h3 { font-size: 18px; margin-bottom: 16px; color: var(--red); }
-.issue-email { font-size: 14px; color: var(--text2); margin-bottom: 20px; }
-.issue-options { display: grid; grid-template-columns: 1fr; gap: 12px; margin-bottom: 16px; }
+.login-issue-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 24px; }
+.login-issue-panel h3 { font-size: 16px; margin-bottom: 16px; color: var(--red); }
+.issue-options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; }
 .issue-option { display: flex; align-items: center; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; transition: all 0.2s; }
 .issue-option:hover { border-color: var(--accent); }
 .issue-option.selected { border-color: var(--red); background: rgba(234,67,53,0.1); }
-.issue-option input[type="radio"] { margin-right: 12px; }
-.issue-option-label { font-size: 14px; }
-.issue-note { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 12px; border-radius: 6px; font-size: 13px; margin-bottom: 16px; min-height: 80px; resize: vertical; }
+.issue-option input[type="radio"] { margin-right: 8px; }
+.issue-note { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; font-size: 13px; margin-bottom: 12px; }
 .issue-note:focus { outline: none; border-color: var(--accent); }
-.issue-note::placeholder { color: var(--text2); }
-.issue-actions { display: flex; gap: 12px; justify-content: flex-end; }
-.issue-actions button { padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.issue-actions { display: flex; gap: 8px; }
+.issue-actions button { padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .issue-submit { background: var(--red); color: #fff; border: none; }
 .issue-submit:hover { opacity: 0.9; }
-.issue-submit:disabled { background: #666; cursor: not-allowed; }
 .issue-cancel { background: none; border: 1px solid var(--border); color: var(--text2); }
 .issue-cancel:hover { border-color: var(--text); color: var(--text); }
+.account-card.has-issue { border-color: var(--red); }
+.account-card .issue-badge { background: rgba(234,67,53,0.2); color: var(--red); font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 8px; }
 </style>
 </head>
 <body>
@@ -97,45 +85,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   <div class="empty-state" id="emptyState" style="display:none;">등록된 계정이 없습니다</div>
 </div>
 
-<!-- 로그인 문제 신고 팝업 -->
-<div class="issue-popup" id="issuePopup">
-  <div class="issue-popup-content">
-    <h3>🚫 로그인 문제 신고</h3>
-    <div class="issue-email" id="issueEmail"></div>
-    <div class="issue-options">
-      <label class="issue-option">
-        <input type="radio" name="issueType" value="wrong-phone">
-        <span class="issue-option-label">📱 지정된 전화번호 입력 요구</span>
-      </label>
-      <label class="issue-option">
-        <input type="radio" name="issueType" value="robot">
-        <span class="issue-option-label">🤖 로봇 인증 (캡차)</span>
-      </label>
-      <label class="issue-option">
-        <input type="radio" name="issueType" value="wrong-password">
-        <span class="issue-option-label">🔒 비밀번호 오류</span>
-      </label>
-      <label class="issue-option">
-        <input type="radio" name="issueType" value="other">
-        <span class="issue-option-label">❓ 기타 (직접 입력)</span>
-      </label>
-    </div>
-    <textarea class="issue-note" id="issueNote" placeholder="문제 상세 설명을 입력하세요. '기타'를 선택한 경우 필수입니다." style="display:none;"></textarea>
-    <div class="issue-actions">
-      <button class="issue-submit" id="issueSubmit" disabled>신고 제출</button>
-      <button class="issue-cancel" id="issueCancel">취소</button>
-    </div>
-    <div class="status-msg" id="issueStatusMsg"></div>
-  </div>
-</div>
-
-<!-- Google Identity Services (GIS) -->
+<!-- Google Identity Services (GIS)
+     ref: https://developers.google.com/identity/gsi/web/guides/load -->
 <script src="https://accounts.google.com/gsi/client" async defer onload="initGIS()"></script>
 <script>
 let _clientId = '';
 let _pendingUser = null;
 let _tokenClient = null;
-let _currentIssueEmail = null;
 
 async function initGIS() {
   const r = await fetch('/api/second/client-id');
@@ -146,16 +102,20 @@ async function initGIS() {
     return;
   }
 
+  /* ref: https://developers.google.com/identity/gsi/web/reference/js-reference#google.accounts.id.initialize */
   google.accounts.id.initialize({
     client_id: _clientId,
     callback: handleCredentialResponse
   });
 
+  /* ref: https://developers.google.com/identity/gsi/web/reference/js-reference#google.accounts.id.renderButton */
   google.accounts.id.renderButton(
     document.getElementById('g_id_signin'),
     { theme: 'filled_blue', size: 'large', shape: 'rectangular', text: 'signin_with', width: 300 }
   );
 
+  /* ref: https://developers.google.com/identity/protocols/oauth2/javascript-implicit-flow
+     google.accounts.oauth2.initTokenClient */
   _tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: _clientId,
     scope: 'https://www.googleapis.com/auth/youtube.readonly',
@@ -163,9 +123,13 @@ async function initGIS() {
   });
 }
 
+/* JWT credential 디코딩
+   ref: https://developers.google.com/identity/gsi/web/reference/js-reference#credential */
 function handleCredentialResponse(response) {
   try {
     const parts = response.credential.split('.');
+    /* base64url → base64 변환 후 디코딩
+       ref: https://datatracker.ietf.org/doc/html/rfc7519#section-3 */
     const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
     _pendingUser = {
       email: payload.email,
@@ -181,9 +145,12 @@ function handleCredentialResponse(response) {
 
 function connectYouTube() {
   if (!_tokenClient) return;
+  /* ref: https://developers.google.com/identity/oauth2/web/reference/js-reference#google.accounts.oauth2.TokenClient.requestAccessToken */
   _tokenClient.requestAccessToken();
 }
 
+/* OAuth 토큰 수신 → YouTube 채널 조회
+   ref: https://developers.google.com/youtube/v3/docs/channels/list */
 async function handleTokenResponse(tokenResponse) {
   if (tokenResponse.error) {
     showStatus('YouTube 인증 실패: ' + tokenResponse.error, true);
@@ -194,6 +161,9 @@ async function handleTokenResponse(tokenResponse) {
   showStatus('YouTube 채널 정보 조회 중...', false);
 
   try {
+    /* ref: https://developers.google.com/youtube/v3/docs/channels/list
+       mine=true: OAuth 인증된 사용자의 채널 반환
+       part=snippet,statistics: 채널명, 썸네일, 구독자 수 */
     const ytRes = await fetch(
       'https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&mine=true',
       { headers: { 'Authorization': 'Bearer ' + accessToken } }
@@ -262,35 +232,18 @@ async function loadAccounts() {
       const pic = a.picture
         ? '<img src="' + escHtml(a.picture) + '" alt="" referrerpolicy="no-referrer">'
         : '<img src="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 48 48\'%3E%3Ccircle cx=\'24\' cy=\'24\' r=\'24\' fill=\'%232a2a4a\'/%3E%3Ctext x=\'24\' y=\'30\' text-anchor=\'middle\' fill=\'%23888\' font-size=\'20\'%3E%3F%3C/text%3E%3C/svg%3E" alt="">';
-      
       const channelInfo = a.channel_title
         ? '<div class="channel">' + escHtml(a.channel_title) + '<span class="subs">' + formatSubs(a.subscriber_count) + ' subscribers</span></div>'
         : '';
-
-      const hasIssue = a.login_issue;
-      const issueTypes = {
-        'wrong-phone': '📱 전화',
-        'robot': '🤖 로봇',
-        'wrong-password': '🔒 비번',
-        'other': '❓ 기타'
-      };
-      const issueBadge = hasIssue ? '<span class="issue-badge">' + (issueTypes[hasIssue.type] || '❓ 문제') + '</span>' : '';
-      const cardClass = hasIssue ? ' has-issue' : '';
-
-      return '<li class="account-card' + cardClass + '">'
+      return '<li class="account-card">'
         + pic
         + '<div class="account-info">'
-        + '<div class="email">' + escHtml(a.email) + ' <span class="badge active">active</span>' + issueBadge + '</div>'
+        + '<div class="email">' + escHtml(a.email) + ' <span class="badge active">active</span></div>'
         + '<div class="name">' + escHtml(a.name) + '</div>'
         + channelInfo
         + '<div class="meta">' + escHtml(a.logged_in_at || '') + '</div>'
         + '</div>'
-        + '<div class="account-actions">'
-        + (hasIssue 
-          ? '<button class="issue-report-btn reported" disabled>신고됨</button>'
-          : '<button class="issue-report-btn" onclick="openIssueReport(\'' + escAttr(a.email) + '\')">문제 신고</button>')
         + '<button class="remove-btn" onclick="removeAccount(\'' + escAttr(a.email) + '\')">삭제</button>'
-        + '</div>'
         + '</li>';
     }).join('');
   } catch (e) {
@@ -302,72 +255,6 @@ async function removeAccount(email) {
   if (!confirm(email + ' 계정을 삭제하시겠습니까?')) return;
   await fetch('/api/second/accounts/' + encodeURIComponent(email), { method: 'DELETE' });
   loadAccounts();
-}
-
-function openIssueReport(email) {
-  _currentIssueEmail = email;
-  document.getElementById('issueEmail').textContent = '계정: ' + email;
-  document.getElementById('issuePopup').classList.add('show');
-  
-  // 폼 초기화
-  document.querySelectorAll('input[name="issueType"]').forEach(input => input.checked = false);
-  document.querySelectorAll('.issue-option').forEach(option => option.classList.remove('selected'));
-  document.getElementById('issueNote').style.display = 'none';
-  document.getElementById('issueNote').value = '';
-  document.getElementById('issueSubmit').disabled = true;
-  document.getElementById('issueStatusMsg').className = 'status-msg';
-}
-
-function closeIssueReport() {
-  document.getElementById('issuePopup').classList.remove('show');
-  _currentIssueEmail = null;
-}
-
-async function submitIssueReport() {
-  const selectedType = document.querySelector('input[name="issueType"]:checked');
-  if (!selectedType) return;
-  
-  const note = document.getElementById('issueNote').value.trim();
-  if (selectedType.value === 'other' && !note) {
-    showIssueStatus('기타를 선택한 경우 상세 설명이 필요합니다.', true);
-    return;
-  }
-
-  document.getElementById('issueSubmit').disabled = true;
-  showIssueStatus('신고 처리 중...', false);
-
-  try {
-    const response = await fetch('/api/second/login-issue', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: _currentIssueEmail,
-        type: selectedType.value,
-        note: note
-      })
-    });
-
-    const result = await response.json();
-    if (result.ok) {
-      showIssueStatus('신고가 접수되었습니다.', false);
-      setTimeout(() => {
-        closeIssueReport();
-        loadAccounts(); // 목록 새로고침
-      }, 1500);
-    } else {
-      showIssueStatus('신고 처리 실패: ' + (result.error || ''), true);
-      document.getElementById('issueSubmit').disabled = false;
-    }
-  } catch (e) {
-    showIssueStatus('신고 처리 중 오류가 발생했습니다.', true);
-    document.getElementById('issueSubmit').disabled = false;
-  }
-}
-
-function showIssueStatus(msg, isError) {
-  const el = document.getElementById('issueStatusMsg');
-  el.textContent = msg;
-  el.className = 'status-msg ' + (isError ? 'err' : 'ok');
 }
 
 function formatSubs(n) {
@@ -387,43 +274,7 @@ function escAttr(s) {
   return (s || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
 }
 
-// 이벤트 리스너 설정
-document.addEventListener('DOMContentLoaded', function() {
-  loadAccounts();
-  
-  // 라디오 버튼 선택 처리
-  document.querySelectorAll('input[name="issueType"]').forEach(input => {
-    input.addEventListener('change', function() {
-      // 모든 옵션에서 selected 클래스 제거
-      document.querySelectorAll('.issue-option').forEach(option => option.classList.remove('selected'));
-      // 선택된 옵션에 selected 클래스 추가
-      this.closest('.issue-option').classList.add('selected');
-      
-      // '기타' 선택시 텍스트 영역 표시
-      const noteArea = document.getElementById('issueNote');
-      if (this.value === 'other') {
-        noteArea.style.display = 'block';
-        noteArea.focus();
-      } else {
-        noteArea.style.display = 'none';
-      }
-      
-      // 제출 버튼 활성화
-      document.getElementById('issueSubmit').disabled = false;
-    });
-  });
-  
-  // 팝업 닫기 이벤트
-  document.getElementById('issueCancel').addEventListener('click', closeIssueReport);
-  document.getElementById('issueSubmit').addEventListener('click', submitIssueReport);
-  
-  // 팝업 외부 클릭시 닫기
-  document.getElementById('issuePopup').addEventListener('click', function(e) {
-    if (e.target === this) {
-      closeIssueReport();
-    }
-  });
-});
+document.addEventListener('DOMContentLoaded', loadAccounts);
 </script>
 </body>
 </html>
