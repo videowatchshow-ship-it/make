@@ -73,6 +73,40 @@ app.post('/api/second/accounts', (req, res) => {
   res.json({ ok: true, total: accounts.length });
 });
 
+// LOGIN_ISSUE_PATCH_START
+app.post('/api/second/login-issue', (req, res) => {
+  const { email, type, note } = req.body || {};
+  if (!email || !type) return res.status(400).json({ ok: false, error: 'email and type required' });
+
+  const accounts = readAccounts();
+  const key = email.toLowerCase();
+  const account = accounts.find(a => (a.email || '').toLowerCase() === key);
+  
+  if (!account) return res.status(404).json({ ok: false, error: 'account not found' });
+
+  account.login_issue = {
+    type,
+    note: note || '',
+    marked_at: new Date().toISOString()
+  };
+
+  writeAccounts(accounts);
+  res.json({ ok: true });
+});
+
+app.delete('/api/second/login-issue/:email', (req, res) => {
+  const accounts = readAccounts();
+  const key = req.params.email.toLowerCase();
+  const account = accounts.find(a => (a.email || '').toLowerCase() === key);
+  
+  if (!account) return res.status(404).json({ ok: false, error: 'account not found' });
+  
+  delete account.login_issue;
+  writeAccounts(accounts);
+  res.json({ ok: true });
+});
+// LOGIN_ISSUE_PATCH_END
+
 app.delete('/api/second/accounts/:email', (req, res) => {
   const accounts = readAccounts();
   const key = req.params.email.toLowerCase();
