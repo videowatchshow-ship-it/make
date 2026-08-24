@@ -7,6 +7,7 @@ on:
       - 'sub-sites/second/server.js'
       - 'sub-sites/second/public/index.html'
       - '.github/workflows/deploy-subsite-login-issue.yml'
+      - '.github/scripts/patch-subsite-login-issue.js'
 
 jobs:
   deploy:
@@ -15,14 +16,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Upload template
+      - name: Upload patcher script
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          source: "sub-sites/second/server.js,sub-sites/second/public/index.html"
-          target: "/tmp/subsite-template/"
+          source: ".github/scripts/patch-subsite-login-issue.js"
+          target: "/tmp/subsite-patcher/"
           strip_components: 2
 
       - name: Patch each subsite with login-issue endpoints and UI
@@ -35,13 +36,11 @@ jobs:
           script: |
             set -e
             SITES_ROOT="/var/www/sites"
-            TEMPLATE="/tmp/subsite-template"
-            ls -la "$TEMPLATE"
+            PATCHER="/tmp/subsite-patcher/patch-subsite-login-issue.js"
+            ls -la "$PATCHER"
 
-            # List candidate subsite dirs (any dir with server.js + public/index.html)
             SITES=$(find "$SITES_ROOT" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | while read d; do
               site=$(basename "$d")
-              # Skip gauth itself and gauth-derived dirs
               case "$site" in gauth|gauth01) continue;; esac
               [ -f "$d/server.js" ] && [ -f "$d/public/index.html" ] && echo "$site"
             done)
@@ -53,188 +52,10 @@ jobs:
               sudo cp "$DIR/server.js" "$DIR/server.js.bak.$(date +%s)" 2>/dev/null || true
               sudo cp "$DIR/public/index.html" "$DIR/public/index.html.bak.$(date +%s)" 2>/dev/null || true
 
-              sudo SITE="$SITE" TEMPLATE="$TEMPLATE" DIR="$DIR" node <<'ENDNODE'
-              const fs = require('fs');
-              const path = require('path');
-              const SITE = process.env.SITE;
-              const TEMPLATE = process.env.TEMPLATE;
-              const DIR = process.env.DIR;
+              sudo SITE="$SITE" DIR="$DIR" node "$PATCHER" || echo "  [$SITE] patcher failed (continuing)"
 
-              // Load template files (they use /api/second/ paths — rewrite to this site's slug)
-              let tplServer = fs.readFileSync(path.join(TEMPLATE, 'server.js'), 'utf8');
-              let tplHtml = fs.readFileSync(path.join(TEMPLATE, 'public', 'index.html'), 'utf8');
-              const apiPrefix = '/api/' + SITE + '/';
-              tplServer = tplServer.replace(/\/api\/second\//g, apiPrefix);
-              tplHtml = tplHtml.replace(/\/api\/second\//g, apiPrefix);
-
-              const serverPath = path.join(DIR, 'server.js');
-              const htmlPath = path.join(DIR, 'public', 'index.html');
-              const serverSrc = fs.readFileSync(serverPath, 'utf8');
-              const htmlSrc = fs.readFileSync(htmlPath, 'utf8');
-
-              // --- Patch server.js (idempotent) ---
-              let newServer = serverSrc;
-              const patchMarker = '/* LOGIN_ISSUE_PATCH */';
-
-              if (newServer.includes(patchMarker)) {
-                console.log('  [' + SITE + '] server.js already patched, skipping');
-              } else {
-                // Insert CORS + login-issue endpoints just before app.listen(
-                const injection = '\n' + patchMarker + '\n'
-                  + 'app.use((req, res, next) => {\n'
-                  + '  res.setHeader("Access-Control-Allow-Origin", "*");\n'
-                  + '  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");\n'
-                  + '  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");\n'
-                  + '  if (req.method === "OPTIONS") return res.sendStatus(204);\n'
-                  + '  next();\n'
-                  + '});\n'
-                  + 'app.patch("' + apiPrefix + 'accounts/:email/login-issue", (req, res) => {\n'
-                  + '  const { type, note } = req.body || {};\n'
-                  + '  const validTypes = ["phone","robot","password","other",null];\n'
-                  + '  if (!validTypes.includes(type)) return res.status(400).json({ ok:false, error:"invalid type" });\n'
-                  + '  const fs = require("fs"); const path = require("path");\n'
-                  + '  const ACCT = path.join(__dirname, "accounts.json");\n'
-                  + '  let data = { accounts: [] };\n'
-                  + '  try { data = JSON.parse(fs.readFileSync(ACCT, "utf8")); } catch(e) {}\n'
-                  + '  const arr = Array.isArray(data) ? data : (data.accounts || []);\n'
-                  + '  const key = req.params.email.toLowerCase();\n'
-                  + '  const acct = arr.find(a => (a.email || "").toLowerCase() === key);\n'
-                  + '  if (!acct) return res.status(404).json({ ok:false, error:"not found" });\n'
-                  + '  if (type === null) { delete acct.login_issue; }\n'
-                  + '  else { acct.login_issue = { type, note: (note||"").toString().slice(0,200), marked_at: new Date().toISOString() }; }\n'
-                  + '  const tmp = ACCT + ".tmp." + process.pid + "." + Date.now();\n'
-                  + '  fs.writeFileSync(tmp, JSON.stringify(Array.isArray(data) ? arr : { accounts: arr }, null, 2));\n'
-                  + '  fs.renameSync(tmp, ACCT);\n'
-                  + '  res.json({ ok:true, login_issue: acct.login_issue || null });\n'
-                  + '});\n'
-                  + 'app.get("' + apiPrefix + 'login-issues", (req, res) => {\n'
-                  + '  const fs = require("fs"); const path = require("path");\n'
-                  + '  const ACCT = path.join(__dirname, "accounts.json");\n'
-                  + '  let data = { accounts: [] };\n'
-                  + '  try { data = JSON.parse(fs.readFileSync(ACCT, "utf8")); } catch(e) {}\n'
-                  + '  const arr = Array.isArray(data) ? data : (data.accounts || []);\n'
-                  + '  const issues = arr.filter(a => a.login_issue && a.login_issue.type).map(a => ({\n'
-                  + '    email:a.email, name:a.name||"", channel_title:a.channel_title||"",\n'
-                  + '    login_issue:a.login_issue, site: "' + SITE + '"\n'
-                  + '  }));\n'
-                  + '  res.json({ site:"' + SITE + '", count:issues.length, issues });\n'
-                  + '});\n';
-
-                // Also ensure express.json() middleware is present
-                if (!/express\.json\s*\(/.test(newServer)) {
-                  // insert after "const app = express()" line
-                  newServer = newServer.replace(/(const\s+app\s*=\s*express\s*\(\s*\)\s*;?)/, '$1\napp.use(require("express").json());');
-                }
-                // Insert before first app.listen
-                const listenIdx = newServer.search(/app\.listen\s*\(/);
-                if (listenIdx > 0) {
-                  newServer = newServer.slice(0, listenIdx) + injection + '\n' + newServer.slice(listenIdx);
-                } else {
-                  newServer = newServer + '\n' + injection + '\napp.listen(process.env.PORT || 3000, () => console.log("[' + SITE + '] listening"));\n';
-                }
-                fs.writeFileSync(serverPath, newServer);
-                console.log('  [' + SITE + '] server.js patched (+' + (newServer.length - serverSrc.length) + ' bytes)');
-              }
-
-              // --- Patch public/index.html (idempotent) ---
-              const htmlMarker = '/* LOGIN_ISSUE_UI */';
-              if (htmlSrc.includes(htmlMarker)) {
-                console.log('  [' + SITE + '] index.html already patched, skipping');
-              } else {
-                const style = '\n<style>' + htmlMarker + '\n'
-                  + '.__li_panel{border:1px solid #2a323c;border-radius:8px;padding:8px 10px;margin-top:6px;background:#0d1218;font-size:12px}\n'
-                  + '.__li_panel .__li_t{color:#8a95a5;font-size:11px;margin-bottom:4px;font-weight:600}\n'
-                  + '.__li_panel label{display:inline-flex;align-items:center;gap:4px;margin-right:8px;color:#e8ecef;cursor:pointer}\n'
-                  + '.__li_panel input[type=text]{background:#0d1218;border:1px solid #22282f;color:#e8ecef;padding:3px 6px;border-radius:4px;font-size:11px;margin-top:4px;width:100%;display:none}\n'
-                  + '.__li_panel input[type=text].show{display:block}\n'
-                  + '.__li_panel .__li_saved{color:#3ddc84;font-size:10px;margin-left:6px}\n'
-                  + '.__li_has{border:1px solid #ff6b6b !important}\n'
-                  + '</style>\n';
-                const script = '<script>' + htmlMarker + '\n'
-                  + '(function(){\n'
-                  + '  const apiPrefix = "' + apiPrefix + '";\n'
-                  + '  function buildPanel(email, issue) {\n'
-                  + '    issue = issue || {}; const t = issue.type || "";\n'
-                  + '    const esc = s => String(s==null?"":s).replace(/[&<>"\\x27]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;","\\x27":"&#39;"})[c]);\n'
-                  + '    const html = `<div class="__li_panel" data-email="${esc(email)}">'
-                  + '<div class="__li_t">로그인 문제</div>'
-                  + '<label><input type="radio" name="__li_${esc(email)}" value="phone" ${t==="phone"?"checked":""}> 지정된 전화 입력</label>'
-                  + '<label><input type="radio" name="__li_${esc(email)}" value="robot" ${t==="robot"?"checked":""}> 로봇</label>'
-                  + '<label><input type="radio" name="__li_${esc(email)}" value="password" ${t==="password"?"checked":""}> 비밀번호 오류</label>'
-                  + '<label><input type="radio" name="__li_${esc(email)}" value="other" ${t==="other"?"checked":""}> 기타</label>'
-                  + '<label style="color:#8a95a5"><input type="radio" name="__li_${esc(email)}" value="" ${!t?"checked":""}> 없음</label>'
-                  + '<input type="text" class="__li_note ${t===\"other\"?\"show\":\"\"}" placeholder="기타 사유" value="${esc(issue.note||\"\")}">'
-                  + '<span class="__li_saved"></span></div>`;\n'
-                  + '    return html;\n'
-                  + '  }\n'
-                  + '  async function save(panel) {\n'
-                  + '    const email = panel.getAttribute("data-email");\n'
-                  + '    const noteEl = panel.querySelector("input[type=text]");\n'
-                  + '    const savedEl = panel.querySelector(".__li_saved");\n'
-                  + '    const checked = panel.querySelector("input[type=radio]:checked");\n'
-                  + '    const type = checked && checked.value ? checked.value : null;\n'
-                  + '    if (type === "other") noteEl.classList.add("show"); else noteEl.classList.remove("show");\n'
-                  + '    try {\n'
-                  + '      const r = await fetch(apiPrefix + "accounts/" + encodeURIComponent(email) + "/login-issue", {\n'
-                  + '        method:"PATCH", headers:{"Content-Type":"application/json"},\n'
-                  + '        body: JSON.stringify({ type, note: type === "other" ? (noteEl.value||"") : "" })\n'
-                  + '      });\n'
-                  + '      const d = await r.json();\n'
-                  + '      if (d.ok) {\n'
-                  + '        savedEl.textContent = "저장됨";\n'
-                  + '        const card = panel.closest("li,.account-card,.row,.card") || panel.parentElement;\n'
-                  + '        if (card) { if (type) card.classList.add("__li_has"); else card.classList.remove("__li_has"); }\n'
-                  + '        setTimeout(() => savedEl.textContent = "", 1500);\n'
-                  + '      } else savedEl.textContent = "오류:" + (d.error||"");\n'
-                  + '    } catch(e) { savedEl.textContent = "오류:" + e.message; }\n'
-                  + '  }\n'
-                  + '  async function injectAll() {\n'
-                  + '    let accounts = [];\n'
-                  + '    try {\n'
-                  + '      const r = await fetch(apiPrefix + "accounts", { cache:"no-store" });\n'
-                  + '      const d = await r.json();\n'
-                  + '      accounts = d.accounts || [];\n'
-                  + '    } catch(e) { return; }\n'
-                  + '    const byEmail = {};\n'
-                  + '    accounts.forEach(a => { if (a.email) byEmail[a.email.toLowerCase()] = a; });\n'
-                  + '    document.querySelectorAll("li,.account-card,.row").forEach(el => {\n'
-                  + '      if (el.querySelector(".__li_panel")) return;\n'
-                  + '      const text = el.textContent || "";\n'
-                  + '      const m = text.match(/[A-Za-z0-9._+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/);\n'
-                  + '      if (!m) return;\n'
-                  + '      const a = byEmail[m[0].toLowerCase()];\n'
-                  + '      if (!a) return;\n'
-                  + '      const wrap = document.createElement("div");\n'
-                  + '      wrap.innerHTML = buildPanel(a.email, a.login_issue);\n'
-                  + '      el.appendChild(wrap.firstElementChild);\n'
-                  + '      if (a.login_issue && a.login_issue.type) el.classList.add("__li_has");\n'
-                  + '    });\n'
-                  + '    document.querySelectorAll(".__li_panel input[type=radio]").forEach(inp => {\n'
-                  + '      if (inp.__li_wired) return; inp.__li_wired = true;\n'
-                  + '      inp.addEventListener("change", () => save(inp.closest(".__li_panel")));\n'
-                  + '    });\n'
-                  + '    document.querySelectorAll(".__li_panel input[type=text]").forEach(inp => {\n'
-                  + '      if (inp.__li_wired) return; inp.__li_wired = true;\n'
-                  + '      inp.addEventListener("blur", () => save(inp.closest(".__li_panel")));\n'
-                  + '      inp.addEventListener("keydown", e => { if (e.key === "Enter") inp.blur(); });\n'
-                  + '    });\n'
-                  + '  }\n'
-                  + '  document.addEventListener("DOMContentLoaded", () => { injectAll(); setInterval(injectAll, 5000); });\n'
-                  + '  if (document.readyState !== "loading") { injectAll(); setInterval(injectAll, 5000); }\n'
-                  + '})();\n'
-                  + '</script>\n';
-                let newHtml = htmlSrc;
-                if (newHtml.includes('</body>')) newHtml = newHtml.replace('</body>', style + script + '</body>');
-                else newHtml = newHtml + style + script;
-                fs.writeFileSync(htmlPath, newHtml);
-                console.log('  [' + SITE + '] index.html patched (+' + (newHtml.length - htmlSrc.length) + ' bytes)');
-              }
-              ENDNODE
-
-              # Fix ownership
               sudo chown -R www-data:www-data "$DIR" 2>/dev/null || true
 
-              # Restart matching systemd service if present
               for svc in "$SITE" "site-$SITE" "$SITE-site"; do
                 if systemctl list-unit-files 2>/dev/null | grep -q "^${svc}\.service"; then
                   echo "  [$SITE] restarting $svc"
@@ -244,5 +65,5 @@ jobs:
               done
             done
 
-            rm -rf /tmp/subsite-template
+            rm -rf /tmp/subsite-patcher
             echo "=== done ==="
