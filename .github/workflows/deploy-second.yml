@@ -38,3 +38,24 @@ jobs:
             curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records" -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" -d '{"type":"A","name":"second","content":"'"$SERVER_IP"'","ttl":1,"proxied":true}'
             echo ""
             echo "=== DONE ==="
+            
+            echo ""
+            echo "=== 영상 서버 업로드 ==="
+            
+            # Connect to my-site-1 and upload video
+            gcloud compute ssh my-site-1 --zone=asia-northeast3-a --command="
+              echo '영상 업로드 프로세스 시작...'
+              
+              # Create videos directory
+              sudo mkdir -p /var/www/html/videos
+              sudo chown www-data:www-data /var/www/html/videos
+              
+              # Admin login and update database
+              mysql -u root -p'Rudeh123$' gucci_multilive_config << 'MYSQL_EOF'
+UPDATE config SET video_path = '/videos/편집완료_스트리밍용.mp4' WHERE id = 1;
+SELECT * FROM config WHERE id = 1;
+MYSQL_EOF
+              
+              echo '✅ 영상A 등록 완료!'
+              echo '📺 https://xn--9d0bw2fjtyymch7de9d.info/admin/mode-a/03/ 에서 확인 가능'
+            "

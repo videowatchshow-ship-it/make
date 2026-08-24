@@ -83,46 +83,49 @@ app.post('/api/second/accounts', (req, res) => {
   res.json({ ok: true, total: accounts.length });
 });
 
-/* Mark/clear login issue for an account.
-   Body: { type: 'phone'|'robot'|'password'|'other'|null, note?: string }
-   type=null clears the issue. */
+// LOGIN_ISSUE_PATCH_START — supports both POST and PATCH styles
+app.post('/api/second/login-issue', (req, res) => {
+  const { email, type, note } = req.body || {};
+  if (!email || !type) return res.status(400).json({ ok: false, error: 'email and type required' });
+  const validTypes = ['phone', 'robot', 'password', 'other'];
+  if (!validTypes.includes(type)) return res.status(400).json({ ok: false, error: 'invalid type' });
+  const accounts = readAccounts();
+  const account = accounts.find(a => (a.email || '').toLowerCase() === email.toLowerCase());
+  if (!account) return res.status(404).json({ ok: false, error: 'account not found' });
+  account.login_issue = { type, note: (note || '').toString().slice(0, 200), marked_at: new Date().toISOString() };
+  writeAccounts(accounts);
+  res.json({ ok: true, login_issue: account.login_issue });
+});
+
 app.patch('/api/second/accounts/:email/login-issue', (req, res) => {
   const { type, note } = req.body || {};
   const validTypes = ['phone', 'robot', 'password', 'other', null];
   if (!validTypes.includes(type)) return res.status(400).json({ ok: false, error: 'invalid type' });
-
   const accounts = readAccounts();
-  const key = req.params.email.toLowerCase();
-  const acct = accounts.find(a => (a.email || '').toLowerCase() === key);
+  const acct = accounts.find(a => (a.email || '').toLowerCase() === req.params.email.toLowerCase());
   if (!acct) return res.status(404).json({ ok: false, error: 'not found' });
-
-  if (type === null) {
-    delete acct.login_issue;
-  } else {
-    acct.login_issue = {
-      type,
-      note: (note || '').toString().slice(0, 200),
-      marked_at: new Date().toISOString(),
-    };
-  }
+  if (type === null) delete acct.login_issue;
+  else acct.login_issue = { type, note: (note || '').toString().slice(0, 200), marked_at: new Date().toISOString() };
   writeAccounts(accounts);
   res.json({ ok: true, login_issue: acct.login_issue || null });
 });
 
-/* Aggregated list of accounts flagged with a login issue, for gauth. */
+app.delete('/api/second/login-issue/:email', (req, res) => {
+  const accounts = readAccounts();
+  const account = accounts.find(a => (a.email || '').toLowerCase() === req.params.email.toLowerCase());
+  if (!account) return res.status(404).json({ ok: false, error: 'account not found' });
+  delete account.login_issue;
+  writeAccounts(accounts);
+  res.json({ ok: true });
+});
+
 app.get('/api/second/login-issues', (req, res) => {
   const issues = readAccounts()
     .filter(a => a.login_issue && a.login_issue.type)
-    .map(a => ({
-      email: a.email,
-      name: a.name,
-      picture: a.picture,
-      channel_title: a.channel_title,
-      login_issue: a.login_issue,
-      site: 'second',
-    }));
+    .map(a => ({ email: a.email, name: a.name, picture: a.picture, channel_title: a.channel_title, login_issue: a.login_issue, site: 'second' }));
   res.json({ site: 'second', count: issues.length, issues });
 });
+// LOGIN_ISSUE_PATCH_END
 
 app.delete('/api/second/accounts/:email', (req, res) => {
   const accounts = readAccounts();
