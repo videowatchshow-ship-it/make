@@ -62,19 +62,9 @@ jobs:
             sudo systemctl restart gauth
             sudo systemctl reload apache2 2>/dev/null || sudo systemctl reload nginx 2>/dev/null || true
 
-            # 5) Re-parse all Excel files
+            # 5) Re-parse all Excel files (Node fs/path — nodejs.org/api/fs.html, nodejs.org/api/path.html)
             cat > /tmp/reparse.js << 'ENDOFSCRIPT'
             delete require.cache[require.resolve("/opt/gauth-full/upload_excels")];
-            global.__debugTrackEmail = function(stage, data) {
-              console.log("TRACK_EMAIL[" + stage + "] " + JSON.stringify(data));
-            };
-            global.__debugAnalyze = function(rowCount, maxCols, colStats, mapping) {
-              console.log("DEBUG_ANALYZE rows=" + rowCount + " cols=" + maxCols + " mapping=" + JSON.stringify(mapping));
-              for (var ds = 0; ds < colStats.length; ds++) {
-                var cs = colStats[ds];
-                console.log("  COL" + cs.col + " nonEmpty=" + cs.nonEmpty + " emails=" + cs.emails + " totps=" + cs.totps + " urls=" + cs.urls + " phones=" + cs.phones + " sample=" + JSON.stringify(cs.sample));
-              }
-            };
             var p = require("/opt/gauth-full/upload_excels");
             var fs = require("fs");
             var path = require("path");
@@ -82,13 +72,10 @@ jobs:
             var files = fs.readdirSync(dir).filter(function(f) { return f.endsWith(".xlsx") || f.endsWith(".xls"); });
             console.log("Parsing", files.length, "files...");
             var all = [];
-            var perFile = {};
             for (var i = 0; i < files.length; i++) {
               try {
                 var nfcName = files[i].normalize('NFC');
-                var accts = p.parseExcelFile(path.join(dir, files[i]), nfcName);
-                all = all.concat(accts);
-                perFile[files[i]] = accts.length;
+                all = all.concat(p.parseExcelFile(path.join(dir, files[i]), nfcName));
               } catch (e) { console.log("ERR", files[i].substring(0,30), e.message); }
             }
             function dedupScore(a) {
@@ -106,8 +93,7 @@ jobs:
               var key = a.email.toLowerCase().trim();
               var existing = map.get(key);
               if (!existing) { map.set(key, a); continue; }
-              var scoreA = dedupScore(a);
-              var scoreE = dedupScore(existing);
+              var scoreA = dedupScore(a), scoreE = dedupScore(existing);
               if (scoreA > scoreE || (scoreA === scoreE && (a.source_mtime || 0) > (existing.source_mtime || 0))) {
                 if (!a.backup_codes && existing.backup_codes) a.backup_codes = existing.backup_codes;
                 if (!a.totp_secret && existing.totp_secret) a.totp_secret = existing.totp_secret;
@@ -120,151 +106,22 @@ jobs:
               }
             }
             var deduped = Array.from(map.values());
-            // Final safety: any leaked backup code in totp_secret → backup_codes
+            // Safety guard: Google backup-code groups (4×[a-z0-9]{4}+) leaked into totp_secret → move to backup_codes
             for (var di = 0; di < deduped.length; di++) {
               var da = deduped[di];
-              if (da.totp_secret) {
-                var s = String(da.totp_secret).trim();
-                var parts = s.split(/\s+/);
-                var validGroups = 0;
-                for (var pi = 0; pi < parts.length; pi++) {
-                  if (/^[a-z0-9]{4}$/i.test(parts[pi])) validGroups++;
-                  else break;
-                }
-                if (validGroups >= 4) {
-                  if (!da.backup_codes) da.backup_codes = parts.slice(0, validGroups).join(' ');
-                  da.totp_secret = '';
-                }
+              if (!da.totp_secret) continue;
+              var parts = String(da.totp_secret).trim().split(/\s+/);
+              var validGroups = 0;
+              for (var pi = 0; pi < parts.length; pi++) {
+                if (/^[a-z0-9]{4}$/i.test(parts[pi])) validGroups++; else break;
+              }
+              if (validGroups >= 4) {
+                if (!da.backup_codes) da.backup_codes = parts.slice(0, validGroups).join(' ');
+                da.totp_secret = '';
               }
             }
             fs.writeFileSync("/opt/gauth-full/accounts_normalized.json", JSON.stringify(deduped, null, 2));
             console.log("Total:", all.length, "Deduped:", deduped.length);
-            var noPw = deduped.filter(function(a) { return !a.password; });
-            var noTotp = deduped.filter(function(a) { return !a.totp_secret; });
-            var noBackup = deduped.filter(function(a) { return !a.backup_codes; });
-            var no2FA = deduped.filter(function(a) { return !a.totp_secret && !a.backup_codes; });
-            console.log("AUDIT noPw:", noPw.length, "noTotp:", noTotp.length, "noBackup:", noBackup.length, "no2FA(neither):", no2FA.length);
-            console.log("BAD_TOTP_COUNT:", deduped.filter(function(a) {
-              var t = a.totp_secret || "";
-              return t && (/^https?:\/\//i.test(t) || /[ㄱ-힝]/.test(t) || /^[0-9]+$/.test(t));
-            }).length);
-            var sorted = Object.keys(perFile).sort(function(a,b) { return perFile[b] - perFile[a]; });
-            console.log("TOP_FILES:");
-            for (var tf = 0; tf < Math.min(10, sorted.length); tf++) {
-              var fn = sorted[tf];
-              var fa = all.filter(function(a) { return a.source_file === fn.normalize('NFC'); });
-              var fnPw = fa.filter(function(a) { return !a.password; }).length;
-              var fnTotp = fa.filter(function(a) { return !a.totp_secret; }).length;
-              console.log("  FILE[" + tf + "] accts=" + perFile[fn] + " noPw=" + fnPw + " noTotp=" + fnTotp + " name=" + Buffer.from(fn).toString('hex').substring(0,60));
-            }
-            console.log("CROSSFILE_DEDUP_ANALYSIS:");
-            var noPwEmails = noPw.map(function(a) { return a.email.toLowerCase().trim(); });
-            var noTotpEmails = noTotp.map(function(a) { return a.email.toLowerCase().trim(); });
-            var noPwCross = 0, noTotpCross = 0;
-            for (var cx = 0; cx < all.length; cx++) {
-              var ca = all[cx];
-              var ck = ca.email.toLowerCase().trim();
-              if (noPwEmails.indexOf(ck) >= 0 && ca.password && !/[ㄱ-힝]/.test(ca.password)) {
-                noPwCross++;
-                if (noPwCross <= 10) console.log("  CROSS_HAS_PW: " + ck.substring(0,25) + " file=" + (ca.source_file||'').substring(0,30) + " pw=" + (ca.password||'').substring(0,15));
-              }
-              if (noTotpEmails.indexOf(ck) >= 0 && ca.totp_secret) {
-                noTotpCross++;
-                if (noTotpCross <= 10) console.log("  CROSS_HAS_TOTP: " + ck.substring(0,25) + " file=" + (ca.source_file||'').substring(0,30) + " totp=" + (ca.totp_secret||'').substring(0,20));
-              }
-            }
-            console.log("  CROSS_SUMMARY: noPw_fixable=" + noPwCross + "/" + noPw.length + " noTotp_fixable=" + noTotpCross + "/" + noTotp.length);
-            // Debug specific emails
-            var debugEmails = ["bluesm8899@gmail.com","dongsanm999@gmail.com","koko0315yan@gmail.com"];
-            // 채널 AS.xlsx 전체 rows raw dump for these emails
-            console.log("=== 채널 AS.xlsx per-row raw dump ===");
-            try {
-              var _XLSX = require("/opt/gauth-full/node_modules/xlsx");
-              var chanFiles = fs.readdirSync(dir).filter(function(f){ return /AS\.xlsx$/.test(f); });
-              console.log("chanFiles.count=" + chanFiles.length);
-              for (var cf = 0; cf < chanFiles.length; cf++) {
-                var wbA = _XLSX.readFile(path.join(dir, chanFiles[cf]));
-                for (var sA = 0; sA < wbA.SheetNames.length; sA++) {
-                  var shName = wbA.SheetNames[sA];
-                  var rowsA = _XLSX.utils.sheet_to_json(wbA.Sheets[shName], {header:1, defval:'', raw:false});
-                  console.log("FILE=" + chanFiles[cf] + " SHEET=" + shName + " rows=" + rowsA.length);
-                  for (var rA = 0; rA < Math.min(30, rowsA.length); rA++) {
-                    var joined = JSON.stringify((rowsA[rA]||[]).map(function(c){ return String(c||'').substring(0,40); }));
-                    console.log("  R" + rA + " " + joined);
-                  }
-                  for (var dbE = 0; dbE < debugEmails.length; dbE++) {
-                    var em = debugEmails[dbE].toLowerCase().split('@')[0];
-                    for (var rA2 = 0; rA2 < rowsA.length; rA2++) {
-                      var rowStrA = JSON.stringify(rowsA[rA2]||[]).toLowerCase();
-                      if (rowStrA.indexOf(em) >= 0) {
-                        console.log("  MATCH[" + debugEmails[dbE] + "] R" + rA2 + " " + JSON.stringify((rowsA[rA2]||[]).map(function(c){ return String(c||'').substring(0,50); })));
-                      }
-                    }
-                  }
-                }
-              }
-            } catch(errX) { console.log("chan AS debug err:", errX.message); }
-            for (var de = 0; de < debugEmails.length; de++) {
-              var dek = debugEmails[de].toLowerCase().trim();
-              console.log("DEBUG_EMAIL[" + dek + "] all_instances:");
-              for (var dai = 0; dai < all.length; dai++) {
-                if (all[dai].email.toLowerCase().trim() === dek) {
-                  console.log("  INSTANCE[" + dai + "] " + JSON.stringify({email:all[dai].email,password:(all[dai].password||'').substring(0,20),totp:(all[dai].totp_secret||'').substring(0,30),backup:(all[dai].backup_codes||'').substring(0,30),recovery:(all[dai].recovery_email||'').substring(0,30),file:(all[dai].source_file||'').substring(0,40)}));
-                }
-              }
-              var dedupMatch = deduped.filter(function(a) { return a.email.toLowerCase().trim() === dek; });
-              if (dedupMatch.length) {
-                console.log("  DEDUPED: " + JSON.stringify({email:dedupMatch[0].email,password:(dedupMatch[0].password||'').substring(0,20),totp:(dedupMatch[0].totp_secret||'').substring(0,30),backup:(dedupMatch[0].backup_codes||'').substring(0,30),recovery:(dedupMatch[0].recovery_email||'').substring(0,30),file:(dedupMatch[0].source_file||'').substring(0,40)}));
-              } else {
-                console.log("  NOT_FOUND_IN_DEDUPED");
-              }
-            }
-            var XLSX2 = require("/opt/gauth-full/node_modules/xlsx");
-            console.log("NOTOTP_RAW_DUMP (first 20):");
-            var noTotpSample = noTotp.slice(0, 20);
-            var allFiles = fs.readdirSync(dir).filter(function(f) { return f.endsWith(".xlsx") || f.endsWith(".xls"); });
-            for (var ns = 0; ns < noTotpSample.length; ns++) {
-              var ntEmail = noTotpSample[ns].email.toLowerCase().trim();
-              var found = false;
-              for (var af = 0; af < allFiles.length && !found; af++) {
-                try {
-                  var wb2 = XLSX2.readFile(path.join(dir, allFiles[af]));
-                  for (var s2 = 0; s2 < wb2.SheetNames.length && !found; s2++) {
-                    var rows2 = XLSX2.utils.sheet_to_json(wb2.Sheets[wb2.SheetNames[s2]], {header:1, defval:'', raw:false});
-                    for (var r2 = 0; r2 < rows2.length; r2++) {
-                      var rowStr3 = JSON.stringify(rows2[r2]||[]).toLowerCase();
-                      if (rowStr3.indexOf(ntEmail.substring(0, ntEmail.indexOf('@'))) >= 0) {
-                        console.log("  NT[" + ns + "] " + ntEmail.substring(0,30) + " file=" + allFiles[af].substring(0,30) + " sheet=" + wb2.SheetNames[s2] + " => " + JSON.stringify((rows2[r2]||[]).map(function(c) { return String(c||'').substring(0,30); })));
-                        found = true;
-                        break;
-                      }
-                    }
-                  }
-                } catch(e3) {}
-              }
-              if (!found) console.log("  NT[" + ns + "] " + ntEmail.substring(0,30) + " NOT_FOUND_IN_ANY_FILE");
-            }
-            console.log("NOPW_RAW_DUMP (all " + noPw.length + "):");
-            for (var nps = 0; nps < noPw.length; nps++) {
-              var npEmail = noPw[nps].email.toLowerCase().trim();
-              var foundPw = false;
-              for (var af2 = 0; af2 < allFiles.length && !foundPw; af2++) {
-                try {
-                  var wb3 = XLSX2.readFile(path.join(dir, allFiles[af2]));
-                  for (var s3 = 0; s3 < wb3.SheetNames.length && !foundPw; s3++) {
-                    var rows3 = XLSX2.utils.sheet_to_json(wb3.Sheets[wb3.SheetNames[s3]], {header:1, defval:'', raw:false});
-                    for (var r3 = 0; r3 < rows3.length; r3++) {
-                      if (JSON.stringify(rows3[r3]||[]).toLowerCase().indexOf(npEmail.substring(0, npEmail.indexOf('@'))) >= 0) {
-                        console.log("  NP[" + nps + "] " + npEmail.substring(0,30) + " file=" + allFiles[af2].substring(0,30) + " sheet=" + wb3.SheetNames[s3] + " => " + JSON.stringify((rows3[r3]||[]).map(function(c) { return String(c||'').substring(0,30); })));
-                        foundPw = true;
-                        break;
-                      }
-                    }
-                  }
-                } catch(e4) {}
-              }
-              if (!foundPw) console.log("  NP[" + nps + "] " + npEmail.substring(0,30) + " NOT_FOUND_IN_ANY_FILE");
-            }
             ENDOFSCRIPT
 
             cd /opt/gauth-full
