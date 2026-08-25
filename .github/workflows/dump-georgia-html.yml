@@ -1,0 +1,36 @@
+name: Dump georgia HTML to artifact
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/workflows/dump-georgia-html.yml']
+jobs:
+  d:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: fetch + syntax check
+        run: |
+          curl -s "https://georgia.cent-solution.online/?cb=$(date +%s%N)" -H "Cache-Control: no-cache" -o /tmp/g.html
+          echo "size=$(wc -c </tmp/g.html)"
+          echo "===== script tag count ====="
+          grep -c "<script" /tmp/g.html
+          echo "===== extract all inline JS to /tmp/all.js ====="
+          python3 - <<'PY'
+          import re
+          html=open('/tmp/g.html').read()
+          scripts=re.findall(r'<script[^>]*>(.*?)</script>', html, re.S)
+          with open('/tmp/all.js','w') as f:
+            for i,s in enumerate(scripts):
+              f.write(f'// ===== script #{i} =====\n')
+              f.write(s)
+              f.write('\n\n')
+          print(f'wrote {len(scripts)} script blocks, total {sum(len(s) for s in scripts)} chars')
+          PY
+          echo "===== Node syntax check ====="
+          node --check /tmp/all.js 2>&1 | head -40 || echo "SYNTAX ERROR - see above"
+          echo "===== search for common bug markers ====="
+          for pat in "TOTP_CLIENT" "LOGIN_ISSUE_UI" "renderCards" "account-list" "fetch\(.*/api/"; do
+            echo "--- $pat ---"
+            grep -n "$pat" /tmp/g.html | head -5
+          done
