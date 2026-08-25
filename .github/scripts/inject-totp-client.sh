@@ -2,9 +2,8 @@
 # ref: RFC 6238, MDN SubtleCrypto (HMAC-SHA1)
 set -e
 
-# JS 파일을 먼저 서버 임시 위치에 저장 (heredoc으로 안전하게)
 cat > /tmp/totp-client-injection.html <<'INJECT_END'
-<script>/* TOTP_CLIENT_V1 */
+<script>/* TOTP_CLIENT_V2 */
 (function(){
   function b32d(s){
     var chars="ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
@@ -18,11 +17,11 @@ cat > /tmp/totp-client-injection.html <<'INJECT_END'
     return new Uint8Array(out);
   }
   async function totp(secret){
-    var key=b32d(secret); if(!key||!key.length) return "";
-    var counter=Math.floor(Date.now()/1000/30);
-    var buf=new Uint8Array(8);
-    new DataView(buf.buffer).setUint32(4, counter>>>0);
     try{
+      var key=b32d(secret); if(!key||!key.length) return "";
+      var counter=Math.floor(Date.now()/1000/30);
+      var buf=new Uint8Array(8);
+      new DataView(buf.buffer).setUint32(4, counter>>>0);
       var ck=await crypto.subtle.importKey("raw",key,{name:"HMAC",hash:"SHA-1"},false,["sign"]);
       var sig=new Uint8Array(await crypto.subtle.sign("HMAC",ck,buf));
       var off=sig[sig.length-1]&0xf;
@@ -30,49 +29,36 @@ cat > /tmp/totp-client-injection.html <<'INJECT_END'
       return String(bin%1000000).padStart(6,"0");
     }catch(e){ return ""; }
   }
-  function findSecrets(){
-    var out=[];
-    var all=document.body.querySelectorAll("*");
-    for(var i=0;i<all.length;i++){
-      var el=all[i];
-      if(el.children.length>0) continue;
-      var t=(el.textContent||"").trim();
-      if(/^[A-Z2-7]{16,64}$/.test(t)){ out.push({el:el, secret:t}); }
-    }
-    return out;
-  }
-  function findCodeSlot(fromEl){
-    var card=fromEl.closest("li,.account-card,.row,.card,.account,.acct,.item,[data-email],[data-account]") || fromEl.parentElement;
-    if(!card) return null;
-    var walker=document.createTreeWalker(card, NodeFilter.SHOW_TEXT, null);
-    var foundLabel=false, node;
-    while((node=walker.nextNode())){
-      var v=(node.nodeValue||"").trim();
-      if(!foundLabel){
-        if(v==="2FA 코드" || v.indexOf("2FA 코드")===0) foundLabel=true;
-      } else {
-        if(v==="—" || v==="-" || /^\d{6}$/.test(v)) return node;
-      }
-    }
-    return null;
-  }
-  async function refreshAll(){
-    var items=findSecrets();
-    for(var i=0;i<items.length;i++){
-      var code=await totp(items[i].secret);
-      if(!code) continue;
-      var slot=findCodeSlot(items[i].el);
-      if(slot){ slot.nodeValue=code; }
+  async function tick(){
+    var spans=document.querySelectorAll('span[id^="tdcode-"]');
+    for(var i=0;i<spans.length;i++){
+      var s=spans[i];
+      var idx=s.id.substring(7);
+      var secEl=document.getElementById('sec-'+idx);
+      if(!secEl) continue;
+      var raw=(secEl.textContent||"").replace(/\s+/g,"").toUpperCase().replace(/[^A-Z2-7]/g,"");
+      if(!/^[A-Z2-7]{16,64}$/.test(raw)) continue;
+      var code=await totp(raw);
+      if(code) s.textContent=code;
     }
   }
-  function start(){ refreshAll(); setInterval(refreshAll, 5000); }
+  function start(){
+    tick();
+    setInterval(tick, 3000);
+    var list=document.getElementById('account-list');
+    if(list && window.MutationObserver){
+      var mo=new MutationObserver(function(){ tick(); });
+      mo.observe(list,{childList:true, subtree:true});
+    }
+  }
   if(document.readyState==="loading") document.addEventListener("DOMContentLoaded", start);
   else start();
 })();
 </script>
 INJECT_END
 
-MARKER="TOTP_CLIENT_V1"
+MARKER_OLD="TOTP_CLIENT_V1"
+MARKER_NEW="TOTP_CLIENT_V2"
 
 for d in /var/www/sites/*/; do
   site=$(basename "$d")
@@ -80,27 +66,22 @@ for d in /var/www/sites/*/; do
   HTML="$d/public/index.html"
   [ -f "$HTML" ] || continue
   echo "==== ${site} ===="
-  if grep -qF "$MARKER" "$HTML"; then
-    echo "  이미 patched"
-    continue
-  fi
   cp "$HTML" "$HTML.totpc.bak.$(date +%s)"
-  # Node로 안전하게 삽입
   node -e "
     var fs=require('fs');
     var html=fs.readFileSync('$HTML','utf8');
     var inj=fs.readFileSync('/tmp/totp-client-injection.html','utf8');
+    // Remove any prior V1 or V2 block
+    html=html.replace(/<script>\/\* TOTP_CLIENT_V[12] \*\/[\s\S]*?<\/script>\s*/g,'');
     if(html.indexOf('</body>')>=0){
       html=html.replace('</body>', inj+'</body>');
     } else {
       html=html+inj;
     }
     fs.writeFileSync('$HTML', html);
-    console.log('  ✓ injected');
+    console.log('  ✓ injected V2');
   "
   chown www-data:www-data "$HTML" 2>/dev/null || true
 done
 
 rm -f /tmp/totp-client-injection.html
-
-# gauth-public도 이미 자체 TOTP 있지만, jump에도 넣어두면 유용 (skip)
