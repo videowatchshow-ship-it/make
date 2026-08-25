@@ -1,0 +1,47 @@
+name: Verify live TOTP V2 + purge CF
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths:
+      - '.github/workflows/verify-live-totp.yml'
+      - '.github/scripts/verify-live-totp.sh'
+jobs:
+  v:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: CF purge (every zone we own)
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+        run: |
+          [ -z "$CF_TOKEN" ] && exit 0
+          for Z in cent-solution.online; do
+            ZID=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=$Z&status=active" \
+              -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+              | grep -oP '"id"\s*:\s*"\K[a-f0-9]{32}' | head -1)
+            [ -z "$ZID" ] && continue
+            curl -sS -o /dev/null -w "purge $Z %{http_code}\n" -X POST \
+              "https://api.cloudflare.com/client/v4/zones/${ZID}/purge_cache" \
+              -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+              --data '{"purge_everything":true}'
+          done
+      - uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: ".github/scripts/verify-live-totp.sh"
+          target: "/tmp/vlt/"
+          strip_components: 2
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 90s
+          script: |
+            sleep 5
+            bash /tmp/vlt/verify-live-totp.sh
+            rm -rf /tmp/vlt
