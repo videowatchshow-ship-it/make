@@ -1,0 +1,31 @@
+name: Move ssaddam65665 woodong → cham
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths:
+      - '.github/workflows/move-ssaddam-woodong-to-cham.yml'
+      - '.github/scripts/move-ssaddam-woodong-to-cham.sh'
+jobs:
+  mv:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: ".github/scripts/move-ssaddam-woodong-to-cham.sh"
+          target: "/tmp/mvss/"
+          strip_components: 2
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 60s
+          script: |
+            sudo bash /tmp/mvss/move-ssaddam-woodong-to-cham.sh
+            rm -rf /tmp/mvss
