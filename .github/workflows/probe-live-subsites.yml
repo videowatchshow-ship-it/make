@@ -1,0 +1,21 @@
+name: Probe live subsites (real DNS + SNI)
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths:
+      - '.github/workflows/probe-live-subsites.yml'
+jobs:
+  p:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Probe each subsite
+        run: |
+          for s in georgia simmani win cham poten bacad aura james misskim rambo sunbi woodong; do
+            URL="https://$s.cent-solution.online/api/$s/accounts"
+            R=$(curl -s --max-time 10 -o /tmp/r -w "%{http_code}" "$URL?cb=$(date +%s%N)" -H "Cache-Control: no-cache")
+            SZ=$(wc -c </tmp/r 2>/dev/null || echo 0)
+            HEAD=$(head -c 200 /tmp/r 2>/dev/null | tr '\n' ' ')
+            echo "$s $R size=$SZ  $HEAD"
+          done
