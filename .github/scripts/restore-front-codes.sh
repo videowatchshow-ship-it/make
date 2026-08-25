@@ -12,7 +12,7 @@ for d in /var/www/sites/*/; do
   cp "$HTML" "$HTML.rfc2.bak.$(date +%s)"
   node - "$HTML" "$site" <<'NODE'
   const fs=require('fs');
-  const p=process.argv[1], site=process.argv[2];
+  const p=process.argv[2], site=process.argv[3];
   let h=fs.readFileSync(p,'utf8');
   // placeholder codes 배열을 서버 fetch Promise.all로 교체 ('—' 문자 무관)
   const re=/var codes = ALL\.map\(function\(\)\{[\s\S]*?\}\)/;
