@@ -11,7 +11,7 @@ for d in /var/www/sites/*/; do
   [ -f "$HTML" ] || continue
   if grep -qF "var codes = ALL.map(function(){ return '—' })" "$HTML"; then
     cp "$HTML" "$HTML.rfc.bak.$(date +%s)"
-    node <<'NODE' "$HTML"
+    node - "$HTML" <<'NODE'
     const fs=require('fs'); const p=process.argv[1];
     let h=fs.readFileSync(p,'utf8');
     const r="var codes = await Promise.all(ALL.map(function(a){\n"
