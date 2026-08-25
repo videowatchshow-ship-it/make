@@ -12,7 +12,7 @@ for f in "$ACCT" "$GEO"; do
   [ -f "$f" ] && cp "$f" "$f.bak.$TS"
 done
 
-node > /tmp/normrun.js <<'ENDNODE'
+cat > /tmp/normrun.js <<'ENDNODE'
 const fs = require('fs');
 // 4자 그룹 8~16개 (RFC 4648 Base32 알파벳)
 const RE_GROUPS = /^(?:[A-Za-z2-7]{4}\s+){7,15}[A-Za-z2-7]{4}$/;
