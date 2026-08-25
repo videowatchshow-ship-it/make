@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# ref: RFC 6238, MDN SubtleCrypto (HMAC-SHA1)
+# ref: RFC 6238 (TOTP), RFC 4648 (Base32), MDN SubtleCrypto
+# V4: MutationObserver 제거 — 렌더링과 절대 충돌하지 않는 안전한 폴링만 사용
 set -e
 
 cat > /tmp/totp-client-injection.html <<'INJECT_END'
-<script>/* TOTP_CLIENT_V3 */
+<script>/* TOTP_CLIENT_V4 */
 (function(){
   function b32d(s){
     var chars="ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
@@ -29,52 +30,40 @@ cat > /tmp/totp-client-injection.html <<'INJECT_END'
       return String(bin%1000000).padStart(6,"0");
     }catch(e){ return ""; }
   }
-  // Find the Base32 secret string anywhere inside a card container
-  function extractSecret(card){
-    var walker=document.createTreeWalker(card, NodeFilter.SHOW_TEXT, null);
-    var node;
-    while((node=walker.nextNode())){
-      var v=(node.nodeValue||"").replace(/\s+/g,"").toUpperCase().replace(/[^A-Z2-7]/g,"");
-      if(/^[A-Z2-7]{16,64}$/.test(v)) return v;
-    }
+  function findSecret(card){
+    try{
+      var w=document.createTreeWalker(card, NodeFilter.SHOW_TEXT, null);
+      var n;
+      while((n=w.nextNode())){
+        var v=(n.nodeValue||"").replace(/\s+/g,"").toUpperCase().replace(/[^A-Z2-7]/g,"");
+        if(v.length>=16 && v.length<=64 && /^[A-Z2-7]+$/.test(v)) return v;
+      }
+    }catch(e){}
     return "";
   }
+  var running=false;
   async function tick(){
-    // Every element that carries the TOTP code display slot
-    var slots=document.querySelectorAll('.totp-code, [id^="tdcode-"], [class*="totp-code"]');
-    for(var i=0;i<slots.length;i++){
-      var slot=slots[i];
-      // walk up to a plausible card container
-      var card=slot.closest('li,tr,.card,.account-card,.row,.acct,.account,.item,[data-email],[data-account]') || slot.parentElement && slot.parentElement.parentElement || slot.parentElement;
-      if(!card) continue;
-      var secret=extractSecret(card);
-      if(!secret) continue;
-      var code=await totp(secret);
-      if(!code) continue;
-      // Prefer inner span if present
-      var target = slot.querySelector('span[id^="tdcode-"]') || slot;
-      // If slot is a span/div, replace text; keep only text
-      if(target.children && target.children.length===0){
-        target.textContent = code;
-      } else {
-        // find first text node and set
-        var tn=null;
-        for(var j=0;j<target.childNodes.length;j++){
-          if(target.childNodes[j].nodeType===3){ tn=target.childNodes[j]; break; }
-        }
-        if(tn) tn.nodeValue = code;
-        else target.textContent = code;
-      }
-    }
-  }
-  function start(){
-    tick();
-    setInterval(tick, 3000);
+    if(running) return;
+    running=true;
     try{
-      var mo=new MutationObserver(function(){ tick(); });
-      mo.observe(document.body,{childList:true, subtree:true, characterData:true});
+      var slots=document.querySelectorAll('.totp-code, [id^="tdcode-"]');
+      for(var i=0;i<slots.length;i++){
+        try{
+          var slot=slots[i];
+          var card=slot.closest('li,tr,.card,.account-card,.row,.acct,.account,.item') || slot.parentElement;
+          if(!card) continue;
+          var secret=findSecret(card);
+          if(!secret) continue;
+          var code=await totp(secret);
+          if(!code) continue;
+          var t=slot.querySelector('span[id^="tdcode-"]') || slot;
+          if(t.children.length===0 && t.textContent.trim()!==code) t.textContent=code;
+        }catch(e){}
+      }
     }catch(e){}
+    running=false;
   }
+  function start(){ setTimeout(tick, 1500); setInterval(tick, 5000); }
   if(document.readyState==="loading") document.addEventListener("DOMContentLoaded", start);
   else start();
 })();
@@ -92,16 +81,16 @@ for d in /var/www/sites/*/; do
     var fs=require('fs');
     var html=fs.readFileSync('$HTML','utf8');
     var inj=fs.readFileSync('/tmp/totp-client-injection.html','utf8');
-    html=html.replace(/<script>\/\* TOTP_CLIENT_V[123] \*\/[\s\S]*?<\/script>\s*/g,'');
-    if(html.indexOf('</body>')>=0){
-      html=html.replace('</body>', inj+'</body>');
-    } else {
-      html=html+inj;
-    }
+    var before=html.length;
+    html=html.replace(/<script>\/\* TOTP_CLIENT_V[1234] \*\/[\s\S]*?<\/script>\s*/g,'');
+    console.log('  removed old: ' + (before-html.length) + ' chars');
+    if(html.indexOf('</body>')>=0){ html=html.replace('</body>', inj+'</body>'); }
+    else { html=html+inj; }
     fs.writeFileSync('$HTML', html);
-    console.log('  ✓ V3 injected');
+    console.log('  V4 injected');
   "
   chown www-data:www-data "$HTML" 2>/dev/null || true
 done
 
 rm -f /tmp/totp-client-injection.html
+echo "DONE"
