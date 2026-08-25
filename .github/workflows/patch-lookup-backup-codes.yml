@@ -1,0 +1,44 @@
+name: Patch /api/lookup to include backup_codes
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths:
+      - '.github/workflows/patch-lookup-backup-codes.yml'
+      - '.github/scripts/patch-lookup-backup-codes.sh'
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: ".github/scripts/patch-lookup-backup-codes.sh"
+          target: "/tmp/pbk/"
+          strip_components: 2
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 60s
+          script: |
+            sudo bash /tmp/pbk/patch-lookup-backup-codes.sh
+            rm -rf /tmp/pbk
+      - name: CF cache purge
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+        run: |
+          [ -z "$CF_TOKEN" ] && exit 0
+          ZONE=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=cent-solution.online&status=active" \
+            -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+            | grep -oP '"id"\s*:\s*"\K[a-f0-9]{32}' | head -1)
+          curl -sS -o /dev/null -w "purge %{http_code}\n" -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${ZONE}/purge_cache" \
+            -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}'
