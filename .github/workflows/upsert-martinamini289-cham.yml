@@ -1,0 +1,32 @@
+name: Upsert martinamini289@cham
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths:
+      - '.github/workflows/upsert-martinamini289-cham.yml'
+      - '.github/scripts/upsert-martinamini289-cham.sh'
+
+jobs:
+  upd:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: ".github/scripts/upsert-martinamini289-cham.sh"
+          target: "/tmp/mart/"
+          strip_components: 2
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 60s
+          script: |
+            sudo bash /tmp/mart/upsert-martinamini289-cham.sh
+            rm -rf /tmp/mart
