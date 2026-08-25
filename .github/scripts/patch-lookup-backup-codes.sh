@@ -13,9 +13,21 @@ if grep -q "backup_codes: account.backup_codes" "$SRC"; then
   exit 0
 fi
 
-# res.json 응답에 backup_codes 추가 — recovery_email 라인 뒤에 삽입
-# 매칭: `        recovery_email: account.recovery_email || '',`
-sed -i "/recovery_email: account.recovery_email/a\\        backup_codes: account.backup_codes || '','" "$SRC"
+# node로 정확한 텍스트 삽입 (sed는 인용부호 이스케이프 위험)
+node -e "
+var fs=require('fs');
+var p='$SRC';
+var src=fs.readFileSync(p,'utf8');
+var needle=\"recovery_email: account.recovery_email || '',\";
+var insert=\"\\n        backup_codes: account.backup_codes || '',\";
+var i=src.indexOf(needle);
+if(i<0){console.log('needle not found — abort'); process.exit(2);}
+var out=src.slice(0,i+needle.length) + insert + src.slice(i+needle.length);
+var tmp=p+'.tmp.'+process.pid;
+fs.writeFileSync(tmp,out);
+fs.renameSync(tmp,p);
+console.log('inserted after position',i);
+"
 
 # syntax check
 if ! node --check "$SRC" 2>&1; then
