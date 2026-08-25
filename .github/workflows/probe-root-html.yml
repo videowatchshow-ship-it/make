@@ -1,0 +1,22 @@
+name: Probe root HTML of subsites
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/workflows/probe-root-html.yml']
+jobs:
+  p:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: probe root
+        continue-on-error: true
+        run: |
+          for s in georgia simmani cham poten bacad aura james misskim rambo sunbi woodong woodong2 hanrabong second gain; do
+            for path in "/" "/index.html"; do
+              R=$(curl -s --max-time 8 -o /tmp/r -w "%{http_code}" "https://$s.cent-solution.online$path?cb=$(date +%s%N)" -H "Cache-Control: no-cache" 2>/dev/null)
+              SZ=$(wc -c </tmp/r 2>/dev/null || echo 0)
+              V2=$(grep -c "TOTP_CLIENT_V" /tmp/r 2>/dev/null || echo 0)
+              echo "$s$path → $R size=$SZ TOTP=$V2"
+            done
+          done
