@@ -1,0 +1,58 @@
+name: Verify 2FA on ALL subsites
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/workflows/verify-all-2fa.yml']
+jobs:
+  v:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm i -D playwright && npx playwright install --with-deps chromium
+      - name: check all
+        run: |
+          cat > c.js <<'JS'
+          const { chromium } = require('playwright');
+          (async () => {
+            const sites = ['georgia','simmani','poten','bacad','aura','james','misskim','rambo','sunbi','woodong','woodong2','hanrabong','gain','cha','romi','win','cham','second','camstouch'];
+            const browser = await chromium.launch();
+            const summary = [];
+            for (const s of sites) {
+              const ctx = await browser.newContext();
+              const page = await ctx.newPage();
+              let httpErr = '';
+              try {
+                const resp = await page.goto('https://'+s+'.cent-solution.online/', { waitUntil:'networkidle', timeout:30000 });
+                if (resp && resp.status() >= 400) httpErr = 'HTTP '+resp.status();
+              } catch(e) { httpErr = 'GOTO_FAIL'; }
+              await page.waitForTimeout(4000);
+              const info = await page.evaluate(() => {
+                const box = document.getElementById('account-list');
+                const loading = box && /불러오는 중|새로고침 중/.test(box.textContent||'');
+                const spans = [...document.querySelectorAll('.totp-code span[id^="tdcode-"], span[id^="tdcode-"]')];
+                const vals = spans.map(e => (e.textContent||'').trim());
+                const six = vals.filter(v => /^\d{6}$/.test(v)).length;
+                const dash = vals.filter(v => v === '—' || v === '-').length;
+                // 첫 계정 카드 존재?
+                const cards = box ? box.querySelectorAll('.card, li, tr').length : 0;
+                return { loading, total: vals.length, six, dash, cards, sample: vals.slice(0,3) };
+              });
+              const verdict = httpErr ? httpErr
+                : info.loading ? '멈춤(로딩)'
+                : info.total === 0 ? '코드슬롯없음'
+                : info.six > 0 ? 'OK 6자리='+info.six+(info.dash?(' /—='+info.dash):'')
+                : info.dash > 0 ? '전부— (시크릿미등록?)'
+                : '?';
+              console.log(s.padEnd(11)+' : '+verdict+'  cards='+info.cards+'  sample='+JSON.stringify(info.sample));
+              summary.push(s+':'+verdict);
+              await ctx.close();
+            }
+            console.log('\n===== SUMMARY =====');
+            summary.forEach(x=>console.log(x));
+            await browser.close();
+          })();
+          JS
+          node c.js
