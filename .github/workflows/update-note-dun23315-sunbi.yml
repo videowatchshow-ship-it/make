@@ -1,0 +1,32 @@
+name: Update note dun23315@sunbi
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths:
+      - '.github/workflows/update-note-dun23315-sunbi.yml'
+      - '.github/scripts/update-note-dun23315-sunbi.sh'
+
+jobs:
+  upd:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: ".github/scripts/update-note-dun23315-sunbi.sh"
+          target: "/tmp/dun/"
+          strip_components: 2
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 60s
+          script: |
+            sudo bash /tmp/dun/update-note-dun23315-sunbi.sh
+            rm -rf /tmp/dun
