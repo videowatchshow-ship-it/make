@@ -1,0 +1,52 @@
+name: Headless browser console check
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/workflows/browser-console-check.yml']
+jobs:
+  b:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: install playwright
+        run: npm i -D playwright && npx playwright install --with-deps chromium
+      - name: run
+        run: |
+          cat > check.js <<'JS'
+          const { chromium } = require('playwright');
+          (async () => {
+            const sites = ['georgia','simmani','poten','bacad'];
+            const browser = await chromium.launch();
+            for (const s of sites) {
+              const ctx = await browser.newContext();
+              const page = await ctx.newPage();
+              const errs = [], reqfail = [], resp = [];
+              page.on('console', m => { if (m.type()==='error') errs.push(m.text()); });
+              page.on('pageerror', e => errs.push('PAGEERROR: ' + e.message));
+              page.on('requestfailed', r => reqfail.push(r.url() + ' :: ' + (r.failure()||{}).errorText));
+              page.on('response', r => { if (r.url().includes('/api/')) resp.push(r.status()+' '+r.url()); });
+              console.log('\n========== ' + s + ' ==========');
+              try {
+                await page.goto('https://'+s+'.cent-solution.online/', { waitUntil:'networkidle', timeout:30000 });
+              } catch(e) { console.log('GOTO FAIL: ' + e.message); }
+              await page.waitForTimeout(4000);
+              const listText = await page.evaluate(() => {
+                const el = document.getElementById('account-list');
+                return el ? el.innerText.slice(0,300) : '(no #account-list)';
+              });
+              const codes = await page.evaluate(() =>
+                [...document.querySelectorAll('.totp-code, [id^="tdcode-"]')].map(e=>e.textContent.trim()).slice(0,5));
+              console.log('API responses:', resp.length ? resp : '(none)');
+              console.log('console errors:', errs.length ? errs.slice(0,10) : '(none)');
+              console.log('request failures:', reqfail.length ? reqfail.slice(0,10) : '(none)');
+              console.log('#account-list text:', JSON.stringify(listText));
+              console.log('TOTP slots:', JSON.stringify(codes));
+              await ctx.close();
+            }
+            await browser.close();
+          })();
+          JS
+          node check.js
