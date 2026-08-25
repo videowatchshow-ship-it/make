@@ -1,0 +1,31 @@
+name: Add 2 accounts to georgia
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths:
+      - '.github/workflows/add-2-to-georgia.yml'
+      - '.github/scripts/add-2-to-georgia.sh'
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: ".github/scripts/add-2-to-georgia.sh"
+          target: "/tmp/geo2/"
+          strip_components: 2
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 60s
+          script: |
+            sudo bash /tmp/geo2/add-2-to-georgia.sh
+            rm -rf /tmp/geo2
