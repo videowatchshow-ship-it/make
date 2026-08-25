@@ -1,0 +1,31 @@
+name: Revive dead subsite services
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths:
+      - '.github/workflows/revive-win-woodong.yml'
+      - '.github/scripts/revive-win-woodong.sh'
+jobs:
+  rv:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: ".github/scripts/revive-win-woodong.sh"
+          target: "/tmp/rvw/"
+          strip_components: 2
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 150s
+          script: |
+            sudo bash /tmp/rvw/revive-win-woodong.sh
+            rm -rf /tmp/rvw
