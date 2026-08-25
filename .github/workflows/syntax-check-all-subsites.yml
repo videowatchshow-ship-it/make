@@ -1,0 +1,39 @@
+name: Syntax check inline JS on ALL subsites
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/workflows/syntax-check-all-subsites.yml']
+jobs:
+  s:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: check every subsite
+        run: |
+          SITES="georgia simmani cham poten bacad aura james misskim rambo sunbi woodong woodong2 hanrabong gain cha romi second"
+          FAIL=""
+          for s in $SITES; do
+            code=$(curl -s --max-time 10 -o /tmp/g.html -w "%{http_code}" "https://$s.cent-solution.online/?cb=$(date +%s%N)" -H "Cache-Control: no-cache" 2>/dev/null || echo 000)
+            if [ "$code" != "200" ]; then
+              echo "### $s → HTTP $code (SKIP)"
+              FAIL="$FAIL $s:http$code"
+              continue
+            fi
+            python3 - <<'PY'
+          import re
+          html=open('/tmp/g.html').read()
+          scripts=re.findall(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', html, re.S)
+          open('/tmp/all.js','w').write('\n;\n'.join(scripts))
+          PY
+            if node --check /tmp/all.js 2>/tmp/err.txt; then
+              echo "### $s → OK (size=$(wc -c </tmp/g.html))"
+            else
+              echo "### $s → *** JS SYNTAX ERROR ***"
+              head -20 /tmp/err.txt
+              FAIL="$FAIL $s:jserr"
+            fi
+          done
+          echo
+          echo "================ SUMMARY ================"
+          if [ -n "$FAIL" ]; then echo "PROBLEM SITES:$FAIL"; else echo "ALL OK"; fi
