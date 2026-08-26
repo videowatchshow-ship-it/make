@@ -20,7 +20,7 @@ jobs:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          source: "gauth-public/*"
+          source: "gauth-public"
           target: "/tmp/gauth-deploy"
           strip_components: 1
 
