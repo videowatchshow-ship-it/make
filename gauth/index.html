@@ -575,6 +575,64 @@ function updateUploadStatus(){
 updateUploadStatus();
 </script>
 
+<!-- Google 회원가입 / 로그인
+     ref: https://developers.google.com/identity/gsi/web/guides/display-button
+     ref: https://developers.google.com/identity/gsi/web/reference/js-reference -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<div id="gsignup-box" style="padding:14px 20px;background:#0f1620;border-bottom:1px solid #22282f;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+  <span style="font-size:14px;color:#3ddc84;font-weight:700">🟢 Google 회원가입 / 로그인</span>
+  <div id="gsignup-btn" style="min-height:44px"></div>
+  <div id="gsignup-status" style="font-size:13px;color:#8a95a5"></div>
+  <div id="gsignup-user" style="font-size:13px;color:#e8ecef;display:none;align-items:center;gap:10px">
+    <img id="gsignup-pic" alt="" style="width:32px;height:32px;border-radius:50%;background:#22282f">
+    <span><b id="gsignup-name"></b> <span style="color:#8a95a5" id="gsignup-email"></span></span>
+    <button id="gsignup-out" style="background:#3a1c1c;color:#ff8080">로그아웃</button>
+  </div>
+</div>
+<script>
+(function(){
+  var statusEl = document.getElementById('gsignup-status');
+  var btnEl = document.getElementById('gsignup-btn');
+  var userEl = document.getElementById('gsignup-user');
+  var picEl = document.getElementById('gsignup-pic');
+  var nameEl = document.getElementById('gsignup-name');
+  var emEl = document.getElementById('gsignup-email');
+  var outEl = document.getElementById('gsignup-out');
+  function showUser(u){
+    if(!u){ userEl.style.display='none'; btnEl.style.display='block'; return; }
+    picEl.src = u.picture || 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><rect fill=%22%2322282f%22 width=%2232%22 height=%2232%22/></svg>';
+    nameEl.textContent = u.name || '';
+    emEl.textContent = u.email || '';
+    userEl.style.display='flex'; btnEl.style.display='none';
+  }
+  try { var saved = JSON.parse(localStorage.getItem('gsignup_user')||'null'); if(saved) showUser(saved); } catch(e){}
+  outEl.onclick = function(){ localStorage.removeItem('gsignup_user'); try{ google.accounts.id.disableAutoSelect(); }catch(e){} showUser(null); statusEl.textContent=''; };
+  window.__gsignupCallback = function(resp){
+    if(!resp || !resp.credential){ statusEl.textContent='❌ credential 없음'; return; }
+    statusEl.textContent='⏳ 검증 중…';
+    fetch('/api/google-signup/verify', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ credential: resp.credential }) })
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        if(!j.ok){ statusEl.textContent='❌ 실패: '+(j.error||'unknown'); return; }
+        localStorage.setItem('gsignup_user', JSON.stringify(j.user));
+        statusEl.textContent = j.new_user ? '✅ 가입 완료' : '✅ 로그인 완료';
+        showUser(j.user);
+      })
+      .catch(function(e){ statusEl.textContent='❌ 네트워크 오류: '+e.message; });
+  };
+  function initGsi(){
+    if(!window.google || !google.accounts || !google.accounts.id){ return setTimeout(initGsi, 300); }
+    fetch('/api/google-signup/client-id').then(function(r){return r.json();}).then(function(j){
+      var cid = j.client_id||'';
+      if(!cid){ statusEl.textContent='⚠️ GOOGLE_SIGNUP_CLIENT_ID 미설정'; btnEl.style.display='none'; return; }
+      google.accounts.id.initialize({ client_id: cid, callback: window.__gsignupCallback, auto_select: false, cancel_on_tap_outside: true });
+      google.accounts.id.renderButton(btnEl, { theme:'filled_blue', size:'large', shape:'pill', text:'signin_with', logo_alignment:'left' });
+    }).catch(function(e){ statusEl.textContent='⚠️ client-id 로드 실패'; });
+  }
+  initGsi();
+})();
+</script>
+
 <!-- 계정 정보 조회 -->
 <div style="padding:14px 20px;background:#0f1620;border-bottom:1px solid #22282f;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
   <span style="font-size:14px;color:#7dabff;font-weight:700">🔎 계정 정보 확인</span>
