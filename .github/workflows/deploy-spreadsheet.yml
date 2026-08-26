@@ -1,0 +1,23 @@
+name: Deploy spreadsheet page
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths:
+      - 'gauth-public/spreadsheet.html'
+      - 'gauth-public/index.html'
+      - 'gauth-public/accounts.html'
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: "gauth-public/spreadsheet.html,gauth-public/index.html,gauth-public/accounts.html"
+          target: "/var/www/sites/gauth/public/"
+          strip_components: 1

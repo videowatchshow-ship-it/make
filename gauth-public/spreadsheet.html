@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script>var _V='20260826v1';if(!location.search.match('_v='+_V)){location.replace(location.pathname+'?_v='+_V+location.hash);}</script>
+<title>gauth · 엑셀 계정</title>
+<meta http-equiv="Cache-Control" content="no-store">
+<style>
+:root{--bg:#0d1117;--panel:#0f1620;--card:#161a20;--border:#22282f;--border2:#2a323c;--text:#e8ecef;--sub:#8a95a5;--accent:#7dabff;--accent2:#3ddc84;--warn:#ffb469;--err:#f47070}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo",sans-serif;min-height:100vh}
+nav{position:sticky;top:0;z-index:20;background:#111418;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;height:48px;gap:0;overflow-x:auto;-webkit-overflow-scrolling:touch}
+nav::-webkit-scrollbar{display:none}
+nav a{color:var(--sub);text-decoration:none;font-size:13px;font-weight:700;padding:12px 18px;white-space:nowrap;border-bottom:2px solid transparent;transition:color .15s}
+nav a:hover{color:var(--text)}
+nav a.active{color:var(--accent);border-bottom-color:#2b6cff}
+.toolbar{position:sticky;top:48px;z-index:15;padding:8px 16px;background:#0f1216;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center}
+.toolbar input{background:var(--card);border:1px solid var(--border2);color:var(--text);padding:7px 12px;border-radius:6px;font-size:13px;flex:1}
+.toolbar input:focus{outline:0;border-color:var(--accent)}
+#count{color:var(--sub);font-size:11px;white-space:nowrap}
+.wrap{max-width:1100px;margin:0 auto;padding:12px 12px 40px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:10px}
+.card-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.card-num{color:var(--sub);font-size:12px;min-width:28px}
+.card-email{font-size:15px;font-weight:700;font-family:monospace;flex:1;word-break:break-all}
+.card-yt a{font-size:11px;color:var(--accent);text-decoration:none;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.card-yt a:hover{text-decoration:underline}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 14px}
+.field{background:#0f1318;border-radius:6px;padding:8px 10px}
+.f-label{font-size:10px;font-weight:600;color:var(--sub);margin-bottom:3px}
+.f-val{font-family:monospace;font-size:13px;word-break:break-all;display:flex;align-items:center;gap:6px}
+.f-val span{flex:1}
+.totp-code{font-size:20px;font-weight:800;letter-spacing:4px;color:#ffcc40}
+.totp-bar{height:3px;border-radius:2px;background:#ffcc40;margin-top:4px;transition:width .5s linear}
+.cp{background:#22282f;border:0;color:#c9d2dc;padding:3px 8px;border-radius:4px;font-size:11px;cursor:pointer}
+.cp:hover{background:#2a323c}
+.cp.done{background:#0d3222;color:var(--accent2)}
+</style>
+</head>
+<body>
+<nav>
+  <a href="/">📋 전체 계정</a>
+  <a href="/accounts.html">🔑 계정 조회</a>
+  <a href="/login-issues.html">🚫 로그인 문제</a>
+  <a href="/spreadsheet.html" class="active">📊 엑셀 계정</a>
+</nav>
+<div class="toolbar">
+  <input type="text" id="q" placeholder="이메일 · 비번 · URL 검색…" oninput="filter()">
+  <span id="count"></span>
+</div>
+<div class="wrap" id="list"></div>
+<script>
+const ACCTS = [
+  {email:"hafsyabdallah34@gmail.com",pw:"Mahfuz67@@6566",rec:"3st.mail.ibrahim@gmail.com",secret:"i5p25qv7hf6dkar2h2fxjvxbt2khweib",yt:"https://www.youtube.com/@hafsatabdallah2022"},
+  {email:"krishnakumarsharma19051984@gmail.com",pw:"75mghcps02y4j",rec:"1at.mail.ibrahim@gmail.com",secret:"rhu7kc7t5jjlabhdjzxq7urprvsu5bv2",yt:"https://www.youtube.com/@KrishnakumarSharma-j9r"},
+  {email:"rajaraja6300891524@gmail.com",pw:"2gl1425nv898k",rec:"2at.ibrahim.it@gmail.com",secret:"bimjih3fsivzrbzuxuclthwbctabdehx",yt:"https://www.youtube.com/@RajaRaja-l3w2h"},
+  {email:"usmanijinjiri1@gmail.com",pw:"Mahfuz67@@6566",rec:"2st.mail.ibrahim@gmail.com",secret:"ktuzwbxut5nvx2zdi2xvx3tqvyqcqgfk",yt:"https://www.youtube.com/@UsmanJinjiri-b3k"},
+  {email:"aminaamm20@gmail.com",pw:"Mahfuz67@@6566",rec:"2at.ibrahim.it@gmail.com",secret:"w4n55essplolc4rarvfff6ov47yqfbsl",yt:"https://www.youtube.com/@aminaumar4805"},
+  {email:"aadhireddy2961@gmail.com",pw:"75mghcps02y4j",rec:"1st.mail.ibrahim@gmail.com",secret:"qggsexpr6gp66or4r5fqxnxbg3xkokjg",yt:"https://www.youtube.com/@AadhiReddy-k7c"},
+  {email:"mdamarul79@gmail.com",pw:"wj53spgmn0z4l",rec:"6st.ibrahim71@gmail.com",secret:"5hntnxvpfiij4j2rmicmgnfsr66rivgd",yt:"https://www.youtube.com/@MdAmarul-z6r"},
+  {email:"baijnathujp79720@gmail.com",pw:"2gl1425nv898k",rec:"3at.ibrahim.it@gmail.com",secret:"ixxfehlykflpsghxhogpsfjnsy5qvwwy",yt:"https://www.youtube.com/@BaijnathKumar-m4b"},
+  {email:"sayedashabibi996@gmail.com",pw:"jl6c425nv898k",rec:"2st.mail.ibrahim@gmail.com",secret:"b5523vt4jahmtoxzqkj752d7dotodgtt",yt:"https://www.youtube.com/@SayedAshabibi"},
+  {email:"shuklamahadev808@gmail.com",pw:"g13ub0jw2eaif",rec:"bd71.mahfuz.dev@gmail.com",secret:"ibynx7o2tu2zq7ho3aziyvo234t3zjsv",yt:"https://www.youtube.com/@MahadevShukla-h9t"}
+];
+async function totp(secret) {
+  const base32chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  const s = secret.toUpperCase().replace(/=+$/,'');
+  let bits = 0, val = 0;
+  const bytes = [];
+  for (const c of s) {
+    const idx = base32chars.indexOf(c);
+    if (idx < 0) continue;
+    val = (val << 5) | idx;
+    bits += 5;
+    if (bits >= 8) { bits -= 8; bytes.push((val >> bits) & 0xff); }
+  }
+  const key = await crypto.subtle.importKey('raw', new Uint8Array(bytes), {name:'HMAC',hash:'SHA-1'}, false, ['sign']);
+  const step = Math.floor(Date.now() / 1000 / 30);
+  const msg = new Uint8Array(8);
+  let s2 = step;
+  for (let i = 7; i >= 0; i--) { msg[i] = s2 & 0xff; s2 = Math.floor(s2 / 256); }
+  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, msg));
+  const offset = sig[19] & 0xf;
+  const code = ((sig[offset] & 0x7f) << 24 | sig[offset+1] << 16 | sig[offset+2] << 8 | sig[offset+3]) % 1000000;
+  return String(code).padStart(6, '0');
+}
+function cp(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = '✓';
+    btn.classList.add('done');
+    setTimeout(() => { btn.textContent = '복사'; btn.classList.remove('done'); }, 1500);
+  });
+}
+let visible = ACCTS.map((_,i) => i);
+function filter() {
+  const q = document.getElementById('q').value.toLowerCase();
+  visible = ACCTS.map((_,i) => i).filter(i => {
+    const a = ACCTS[i];
+    return !q || a.email.toLowerCase().includes(q) || a.pw.toLowerCase().includes(q) || a.yt.toLowerCase().includes(q) || a.rec.toLowerCase().includes(q);
+  });
+  render();
+}
+function render() {
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+  document.getElementById('count').textContent = visible.length + '/' + ACCTS.length + '개';
+  visible.forEach(i => {
+    const a = ACCTS[i];
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.idx = i;
+    const ytName = a.yt.replace('https://www.youtube.com/@','@');
+    const safeEmail = a.email.replace(/'/g, "'");
+    const safePw = a.pw.replace(/'/g, "'");
+    const safeRec = a.rec.replace(/'/g, "'");
+    const safeSecret = a.secret;
+    card.innerHTML = `
+<div class="card-head">
+  <span class="card-num">${i+1}</span>
+  <span class="card-email">${a.email}</span>
+  <span class="card-yt"><a href="${a.yt}" target="_blank">${ytName}</a></span>
+</div>
+<div class="grid">
+  <div class="field">
+    <div class="f-label">Gmail</div>
+    <div class="f-val"><span>${a.email}</span><button class="cp" onclick="cp('${safeEmail}',this)">복사</button></div>
+  </div>
+  <div class="field">
+    <div class="f-label">비밀번호</div>
+    <div class="f-val"><span>${a.pw}</span><button class="cp" onclick="cp('${safePw}',this)">복사</button></div>
+  </div>
+  <div class="field">
+    <div class="f-label">복구 이메일</div>
+    <div class="f-val"><span>${a.rec}</span><button class="cp" onclick="cp('${safeRec}',this)">복사</button></div>
+  </div>
+  <div class="field">
+    <div class="f-label">2FA 코드</div>
+    <div class="f-val">
+      <span class="totp-code" id="totp-${i}">------</span>
+      <button class="cp" id="cp-totp-${i}" onclick="(async()=>{const c=await totp('${safeSecret}');cp(c,this)})()">복사</button>
+    </div>
+    <div class="totp-bar" id="bar-${i}" style="width:100%"></div>
+  </div>
+</div>`;
+    list.appendChild(card);
+  });
+  updateAll();
+}
+async function updateAll() {
+  const rem = 30 - (Math.floor(Date.now()/1000) % 30);
+  const pct = (rem / 30 * 100).toFixed(1);
+  for (const i of visible) {
+    const el = document.getElementById('totp-'+i);
+    const bar = document.getElementById('bar-'+i);
+    if (!el) continue;
+    try {
+      const code = await totp(ACCTS[i].secret);
+      el.textContent = code;
+    } catch(e) { el.textContent = 'ERR'; }
+    if (bar) bar.style.width = pct + '%';
+  }
+}
+render();
+setInterval(updateAll, 1000);
+</script>
+</body>
+</html>
