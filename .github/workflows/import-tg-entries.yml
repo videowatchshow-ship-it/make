@@ -1,0 +1,94 @@
+name: Import telegram entries to jeongsan data.json
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/jeongsan-page-management-evm5h3]
+    paths:
+      - 'jeongsan-import/**'
+      - '.github/workflows/import-tg-entries.yml'
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare entries + merge script
+        run: |
+          mkdir -p .tg-import
+          cp jeongsan-import/new_entries.json .tg-import/new_entries.json
+          cp jeongsan-import/merge.py       .tg-import/merge.py
+          echo "=== entries ==="
+          python3 -c "import json; d=json.load(open('.tg-import/new_entries.json')); print('entries:', len(d))"
+
+      - name: SCP to bastion
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: ".tg-import/new_entries.json,.tg-import/merge.py"
+          target: "/tmp/"
+          overwrite: true
+
+      - name: Merge on my-site-1
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 300s
+          script: |
+            set -e
+            /snap/bin/gcloud compute scp /tmp/.tg-import/new_entries.json /tmp/.tg-import/merge.py \
+              videowatch_show@my-site-1:/tmp/ \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --scp-flag="-o StrictHostKeyChecking=no" \
+              --quiet
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='
+            set -e
+            SD="/var/www/sites/chamgyo/settlement-data"
+            TS=$(date +%s)
+            echo "===== BACKUP ====="
+            sudo cp "$SD/data.json" "$SD/backups/data.pre-tgimport-${TS}.json"
+            echo "backup: data.pre-tgimport-${TS}.json ($(sudo wc -c < $SD/backups/data.pre-tgimport-${TS}.json) bytes)"
+            echo ""
+            echo "===== MERGE ====="
+            sudo python3 /tmp/merge.py /tmp/new_entries.json "$SD/data.json"
+            echo ""
+            echo "===== VERIFY count + last 3 ====="
+            sudo python3 -c "import json; d=json.load(open(\"/var/www/sites/chamgyo/settlement-data/data.json\", encoding=\"utf-8\")); ms=d.get(\"members\",[]); print(\"total:\", len(ms)); [print(\" \", m.get(\"date\"), m.get(\"start\"), m.get(\"name\"), m.get(\"type\"), m.get(\"deposit\"), (m.get(\"note\") or \"\")[:40]) for m in ms[-5:]]"
+            echo ""
+            echo "===== HTTP VERIFY (cent 로그인 후 GET data.php) ====="
+            CJ=$(mktemp)
+            curl -si -c "$CJ" -X POST \
+              --data-urlencode "id=cent" --data-urlencode "passwd=1147" \
+              "http://localhost/%ec%a0%95%ec%82%b0%ed%91%9c/login_check.php" | head -3
+            SZ=$(curl -s -b "$CJ" "http://localhost/%ec%a0%95%ec%82%b0%ed%91%9c/data.php" | wc -c)
+            echo "authed data.php size: $SZ bytes"
+            rm -f "$CJ"
+            sudo chown www-data:www-data "$SD/data.json"
+            sudo chmod 644 "$SD/data.json"
+            sudo rm -f /tmp/new_entries.json /tmp/merge.py
+            echo "===== DONE ====="
+            '
+
+      - name: Cloudflare purge
+        if: success()
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE:  ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          curl -sf -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/purge_everything" \
+            -H "Authorization: Bearer ${CF_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}' | head -c 300
+          echo ""

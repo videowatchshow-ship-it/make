@@ -1,0 +1,249 @@
+#!/usr/bin/env python3
+"""통합 최종 정리 (멱등 — 몇 번을 돌려도 같은 결과):
+1) 확정 삭제: 강시원 중복(07-20 21:00), 마키아벨리 이중집계(07-22 01:04),
+   파서 오탐(07-25 14:20 $460, 14:21 $95), 캔슬(07-31 04:04)
+2) 금액 없는 7월 미상 행 삭제 (06-22 원본 제외)
+3) 테더 표기 미상 → 마키아벨리
+4) 이름 확정: 07-25 13:29·14:25 → 김성삼 / 07-26 03:11·07-27 04:07 → 마키아벨리 /
+   07-08 00:34 성명미상 → 니우니우
+"""
+import json, os
+from collections import defaultdict
+
+p = "/var/www/sites/chamgyo/settlement-data/data.json"
+d = json.load(open(p, encoding="utf-8"))
+ms = d.get("members", [])
+print(f"before: {len(ms)}")
+
+def is_misang(m): return m.get("name") in ("미상","성명미상","")
+def dep(m):
+    try: return float(m.get("deposit") or 0)
+    except ValueError: return 0
+
+DELETE = {
+    ("2026-07-20","21:00"),  # 강시원 중복 — 여신 $3000 은 20:58 1건뿐 (절대 2건 아님)
+    ("2026-07-22","01:04"),
+    ("2026-07-25","14:20"),
+    ("2026-07-25","14:21"),
+    ("2026-07-31","04:04"),
+    ("2026-07-25","13:29"),  # $666 파서 오탐 (₩1,000,000 환산 오류 — 실존 안 함)
+    ("2026-07-17","23:53"),  # $666 동일 오탐 패턴 (₩1,000,000 환산)
+    ("2026-07-27","02:33"),  # $800 — 같은 입금($793) 이중집계
+    ("2026-07-27","02:36"),  # 박진숙 793 텍스트행 — 실제 입금은 02:29 (이중집계 방지)
+    ("2026-07-25","12:21"),  # 사용자 확인: 이 거래 없음
+    ("2026-07-25","14:25"),  # $455 — 13:43 $455 와 같은 건 (사용자 확인)
+}
+# 07-22 18:46 김진호 $510 — 같은 분 서정남 $500(₩765,250) 이중집계 → 김진호 행만 삭제
+DELETE_NAMED = {("2026-07-22","18:46","김진호")}
+ASSIGN = {
+    ("2026-07-25","14:25"): "김성삼",
+    ("2026-07-26","03:11"): "박진숙",
+    ("2026-07-27","04:07"): "마키아벨리",
+    ("2026-07-08","00:34"): "니우니우",
+}
+
+kept = []
+for m in ms:
+    k = (m.get("date",""), m.get("start",""))
+    if k in DELETE:
+        print(f"  삭제(확정): {k[0]} {k[1]} ${m.get('deposit')}")
+        continue
+    if (k[0], k[1], m.get("name","")) in DELETE_NAMED:
+        print(f"  삭제(이중집계): {k[0]} {k[1]} {m.get('name')} ${m.get('deposit')}")
+        continue
+    # (빈금액 행 삭제 규칙 폐지 — 이미지로만 온 애매한 거래도 전부 표에 남긴다)
+    if is_misang(m) and "테더" in (m.get("note") or ""):
+        print(f"  테더→마키아벨리: {k[0]} {k[1]} ${m.get('deposit')}")
+        m["name"] = "마키아벨리"
+    if k in ASSIGN and m.get("name") != ASSIGN[k]:
+        print(f"  이름확정: {k[0]} {k[1]} ${m.get('deposit')} {m.get('name')} → {ASSIGN[k]}")
+        m["name"] = ASSIGN[k]
+    kept.append(m)
+ms = kept
+
+# ---- 복원/추가: 강시원 여신 더블(2건) + 이미지로만 온 애매 거래 전부 ----
+def row(date, start, name, typ, depv, result, note, nick="", phone="", account=""):
+    return {"date": date, "start": start, "end": "", "nick": nick, "name": name,
+            "phone": phone, "account": account, "type": typ, "deposit": depv,
+            "result": result, "rolling": "", "note": note}
+RESTORE = [
+    row("2026-07-08","06:37","최동학","캐쉬","1000","Lose","신규 바인 $1,000 · 입금자명 박태영 [이미지확인] [tg:보물섬]",
+        phone="01064743313", account="카카오뱅크 3333212353835"),
+    row("2026-07-22","00:59","마키아벨리","테더","","Lose","바인 [이미지·금액미상] [tg:성천지]"),
+    row("2026-07-25","13:25","김성삼","캐쉬","","Lose","바인 [이미지·금액미상] [tg:보물섬]"),
+    row("2026-07-25","13:43","김성삼","캐쉬","","Lose","바인 [이미지·금액미상] [tg:보물섬]"),
+    row("2026-07-25","15:27","마키아벨리","캐쉬","","Lose","바인 [이미지확인·금액미상] [tg:성천지]"),
+    row("2026-07-25","15:58","마키아벨리","캐쉬","","Lose","바인 [이미지확인·금액미상] [tg:성천지]"),
+    row("2026-07-25","16:27","마키아벨리","캐쉬","","Lose","바인 [이미지·금액미상] [tg:성천지]"),
+    row("2026-07-25","16:47","마키아벨리","캐쉬","","Lose","바인 [이미지·금액미상] [tg:성천지]"),
+    row("2026-07-25","18:43","마키아벨리","테더","","Lose","바인 [이미지·금액미상] [tg:성천지]"),
+    row("2026-07-25","19:12","마키아벨리","캐쉬","","Lose","리바인 [이미지·금액미상] [tg:성천지]"),
+    row("2026-07-25","20:08","마키아벨리","캐쉬","","Lose","리바인 [이미지·금액미상] [tg:성천지]"),
+    row("2026-07-25","20:37","마키아벨리","캐쉬","","Lose","리바인 [이미지·금액미상] [tg:성천지]"),
+    row("2026-07-26","01:42","마키아벨리","테더","","Lose","바인 [이미지·금액미상] [tg:성천지]"),
+    row("2026-07-26","02:36","마키아벨리","환전","","Win","역송 [이미지·금액미상] [tg:성천지]"),
+    row("2026-07-27","02:29","박진숙","캐쉬","793","Lose","바인 $793 [이미지확정] [tg:성천지]"),
+    row("2026-08-01","01:00","마키아벨리","테더","1600","Lose","바인 $1,600 (8월 첫 거래)"),
+    row("2026-08-03","02:00","마키아벨리","테더","1000","Lose","바인 $1,000 (새벽2시)"),
+    row("2026-08-03","02:05","마키아벨리","환전","4000","Win","역송 $4,000 (새벽2시)"),
+    row("2026-07-27","03:29","마키아벨리","캐쉬","","Lose","리바인 [이미지·금액미상] [tg:성천지]"),
+]
+# 마키아벨리 $1,600 은 8월 첫 거래 — 8월 그대로 (7월로 옮겼던 것 원복)
+for m in ms:
+    if m.get("date")=="2026-07-31" and m.get("start")=="23:59" and m.get("name")=="마키아벨리" and str(m.get("deposit"))=="1600":
+        m["date"] = "2026-08-01"
+        m["start"] = "01:00"
+        m["note"] = "바인 $1,600 (8월 첫 거래)"
+        print("  원복: 마키아벨리 $1,600 → 08-01 01:00 (8월 시작)")
+
+# 최동학 입금 확정: 06:45 임시행 → 06:37 · $1,000 · 입금자명 박태영
+for m in ms:
+    if m.get("date")=="2026-07-08" and m.get("name")=="최동학" and m.get("type")!="환전":
+        if m.get("start") in ("06:45","06:37"):
+            m["start"] = "06:37"
+            m["deposit"] = "1000"
+            m["note"] = "신규 바인 $1,000 · 입금자명 박태영 [이미지확인] [tg:보물섬]"
+            print("  최동학 입금 확정: 06:37 $1,000 (입금자 박태영)")
+
+# 같은 (날짜,시각) 에 이미 행이 있으면 새로 넣지 않고 그 행에 이름/비고를 병합 (이중 생성 방지)
+by_time = {}
+for m in ms:
+    by_time.setdefault((m.get("date",""), m.get("start","")), []).append(m)
+added = merged = 0
+for r in RESTORE:
+    tk = (r["date"], r["start"])
+    slots = by_time.get(tk, [])
+    same_name = [m for m in slots if m.get("name","") == r["name"]]
+    if same_name:
+        continue  # 이미 이름까지 있는 행 존재
+    blank = [m for m in slots if m.get("name") in ("미상","성명미상","")]
+    if blank:
+        m = blank[0]
+        m["name"] = r["name"]
+        if not (m.get("note") or "").strip(): m["note"] = r["note"]
+        if not (m.get("type") or "").strip(): m["type"] = r["type"]
+        merged += 1
+        print(f"  병합(이름부여): {tk[0]} {tk[1]} → {r['name']}")
+    elif not slots:
+        ms.append(r); by_time.setdefault(tk, []).append(r); added += 1
+        print(f"  복원: {tk[0]} {tk[1]} {r['name']} ${r['deposit'] or '미상'}")
+print(f"복원 추가: {added}건 · 병합: {merged}건")
+# 같은 시각에 이름 있는 행과 미상 빈 행이 둘 다 있으면 미상 쪽 제거 (이중 표시 정리)
+drop = set()
+for tk, slots in by_time.items():
+    named = [m for m in slots if m.get("name") not in ("미상","성명미상","")]
+    if named:
+        for m in slots:
+            if m.get("name") in ("미상","성명미상","") and not str(m.get("deposit") or "").strip():
+                drop.add(id(m))
+                print(f"  미상중복 제거: {tk[0]} {tk[1]}")
+ms = [m for m in ms if id(m) not in drop]
+
+# ---- 이미지 금액 확정 (사용자가 이미지 보고 불러준 값) ----
+FIX = {
+    ("2026-07-22","00:59"): dict(name="마키아벨리", deposit="500",  type="테더", result="Lose", note="바인 $500 [이미지확정]"),
+    ("2026-07-25","15:58"): dict(name="마키아벨리", deposit="4000", type="환전", result="Win",  note="역송 $4,000 [이미지확정]"),
+    ("2026-07-25","15:22"): dict(name="마키아벨리", deposit="1000", type="테더", result="Lose", note="바인 $1,000 [이미지확정]"),
+    ("2026-07-25","16:27"): dict(name="마키아벨리", deposit="1000", type="캐쉬", result="Lose", note="바인 $1,000 [이미지확정]"),
+    ("2026-07-25","16:47"): dict(name="마키아벨리", deposit="3000", type="환전", result="Win",  note="역송 $3,000 (16:43) [이미지확정]"),
+    ("2026-07-25","18:43"): dict(name="마키아벨리", deposit="1000", type="테더", result="Lose", note="바인 $1,000 [이미지확정]"),
+    ("2026-07-27","03:29"): dict(name="최명진",     deposit="1000", type="캐쉬", result="Lose", note="리바인 $1,000 [이미지확정]"),
+    ("2026-07-25","19:12"): dict(name="마키아벨리", deposit="1000", type="캐쉬", result="Lose", note="리바인 $1,000 [이미지확정]"),
+    ("2026-07-25","20:08"): dict(name="마키아벨리", deposit="1000", type="캐쉬", result="Lose", note="리바인 $1,000 [이미지확정]"),
+    ("2026-07-25","20:37"): dict(name="마키아벨리", deposit="2000", type="캐쉬", result="Lose", note="리바인 $2,000 [이미지확정]"),
+    ("2026-07-26","01:42"): dict(name="마키아벨리", deposit="2000", type="테더", result="Lose", note="바인 $2,000 [이미지확정]"),
+    ("2026-07-26","02:36"): dict(name="마키아벨리", deposit="5000", type="환전", result="Win",  note="역송 $5,000 [이미지확정]"),
+    ("2026-07-25","13:25"): dict(name="김성삼",     deposit="594",  type="캐쉬", result="Lose", note="바인 $594 [이미지확정]"),
+    ("2026-07-25","13:43"): dict(name="김성삼",     deposit="455",  type="캐쉬", result="Lose", note="바인 $455 [이미지확정]"),
+    ("2026-07-27","02:29"): dict(name="박진숙",     deposit="793",  type="캐쉬", result="Lose", note="바인 $793 [이미지확정]"),
+}
+for m in ms:
+    k = (m.get("date",""), m.get("start",""))
+    if k in FIX:
+        m.update(FIX[k])
+        print(f"  금액확정: {k[0]} {k[1]} {m['name']} ${m['deposit']} {m['type']}")
+# 07-25 15:27 = 바인 $1,000 한 건뿐. 역송 $3,000 은 16:43 이 맞음 → 15:27 환전/빈 행 제거
+before_1527 = len(ms)
+ms = [m for m in ms if not ((m.get("date"), m.get("start")) == ("2026-07-25","15:27")
+      and (m.get("type") == "환전" or not str(m.get("deposit") or "").strip()))]
+if len(ms) != before_1527:
+    print(f"  15:27 정리: 환전/빈 행 {before_1527 - len(ms)}건 제거 (바인 $1,000 만 유지)")
+
+# 결과값 정규화 (7월만): 환전=Win(역송), 나머지=Lose(입금) — 입금 행이 Win 으로 잘못 저장돼
+# 수익 소계가 마이너스로 나오던 원인 제거
+for m in ms:
+    if not m.get("date","").startswith("2026-07"):
+        continue
+    want = "Win" if m.get("type") == "환전" else "Lose"
+    if m.get("result") != want:
+        print(f"  결과정규화: {m.get('date')} {m.get('start')} {m.get('name')} {m.get('result')}→{want}")
+        m["result"] = want
+
+# 7월 중복 제거: (날짜, 시각, 이름, 금액, 종류) 동일 행은 1개만 유지 (note 긴 것 우선)
+# 6월 데이터는 확정본 — 어떤 규칙도 건드리지 않는다
+seen = {}
+_june = 0
+for m in ms:
+    if not m.get("date","").startswith("2026-07"):
+        _june += 1
+        seen[("JUNE", _june)] = m
+        continue
+    key = (m.get("date",""), m.get("start",""), m.get("name",""), str(m.get("deposit","")), m.get("type",""))
+    if key in seen:
+        if len(m.get("note") or "") > len(seen[key].get("note") or ""):
+            seen[key] = m
+    else:
+        seen[key] = m
+if len(seen) != len(ms):
+    print(f"중복 제거: {len(ms) - len(seen)}건")
+ms = list(seen.values())
+print(f"after-clean: {len(ms)}")
+
+ms.sort(key=lambda x: (x.get("date",""), x.get("start","")))
+d["members"]  = ms
+d["saved_at"] = "2026-07-31 05:10:00"
+d["saved_by"] = "final5"
+
+tmp = p + ".f5.tmp"
+with open(tmp, "w", encoding="utf-8") as f:
+    json.dump(d, f, ensure_ascii=False, indent=4)
+os.rename(tmp, p)
+
+ms = d["members"]  # (정렬 반영본)
+
+# ---- 자금 장부: 개인 차용 5명 × 10칸 (제이·센트·탁·데니(퇴사)·하바드) ----
+# 금액은 공란 (사이트에서 직접 입력). AI 비용·회사 차입금·구명단 차용 행 제거.
+# 이미 새 명단 행이 있으면 입력된 금액 보존, 10칸 미만이면 빈 칸으로 채움.
+NAMES = ["제이", "센트", "탁", "데니(퇴사)", "하바드"]
+old_ledger = d.get("ledger", [])
+LEGACY = ("회사 차입금", "AI 비용", "cent 차용", "jay 차용", "tak 차용", "ha 차용", "점프대표 차용")
+new_ledger = []
+for nm in NAMES:
+    item = f"{nm} 차용"
+    keep_rows = [r for r in old_ledger if r.get("item") == item]
+    keep_rows = keep_rows[:10]
+    while len(keep_rows) < 10:
+        keep_rows.append({"date": "", "item": item, "sign": "+", "amount": "", "note": ""})
+    new_ledger.extend(keep_rows)
+removed = [r for r in old_ledger if r.get("item") in LEGACY]
+for r in removed:
+    print(f"  장부 삭제: {r.get('date')} {r.get('item')} {r.get('sign')}{r.get('amount')}")
+d["ledger"] = new_ledger
+print(f"장부: {len(new_ledger)}칸 (5명 × 10)")
+
+tmp2 = p + ".f5b.tmp"
+with open(tmp2, "w", encoding="utf-8") as f:
+    json.dump(d, f, ensure_ascii=False, indent=4)
+os.rename(tmp2, p)
+
+misang = [m for m in ms if is_misang(m)]
+print(f"미상 남음: {len(misang)}")
+for m in misang: print(f"  {m.get('date')} {m.get('start')} ${m.get('deposit')}")
+by_in = defaultdict(float); by_out = defaultdict(float)
+for m in ms:
+    (by_out if m.get("type")=="환전" else by_in)[m.get("name","")] += dep(m)
+for nm in ("김성삼","마키아벨리","강시원","니우니우"):
+    print(f"{nm}: IN ${by_in[nm]:,.0f} OUT ${by_out[nm]:,.0f}")
+jul_in  = sum(dep(m) for m in ms if m.get('date','').startswith('2026-07') and m.get('type')!='환전')
+jul_out = sum(dep(m) for m in ms if m.get('date','').startswith('2026-07') and m.get('type')=='환전')
+print(f"7월 IN ${jul_in:,.0f} / OUT ${jul_out:,.0f}")

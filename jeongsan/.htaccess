@@ -1,0 +1,28 @@
+# 정산표 전용 Apache 설정 (PHP-FPM 환경 · mod_rewrite 기반, php_value 사용 안 함)
+# 참조: https://httpd.apache.org/docs/current/mod/mod_rewrite.html
+#       https://httpd.apache.org/docs/current/mod/mod_dir.html#directoryindex
+#       https://www.php.net/manual/en/configuration.file.per-user.php
+
+DirectoryIndex index.php index.html
+
+RewriteEngine On
+
+# ===== HTML → PHP wrapper (정규식 매칭, 내부 rewrite - URL 유지) =====
+# /정산표/index.html   → 서버가 index.php 실행
+# /정산표/excel.html   → excel.php
+# /정산표/udongka.html → udongka.php
+# /정산표/원장.html    → 원장.php
+RewriteRule "^(index|excel|udongka|원장)\.html$" "$1.php" [L]
+
+# ===== 세션 폴더 · 백업 파일 · users 설정 완전 차단 =====
+RewriteRule "^data(/|$)" - [F,L]
+RewriteRule "\.(bak|old|backup|log|swp)$" - [F,L]
+RewriteRule "\.bak-" - [F,L]
+RewriteRule "~$" - [F,L]
+
+# ===== 캐시 무효화 (동적 PHP 는 이미 no-cache) =====
+<IfModule mod_headers.c>
+    <FilesMatch "\.(html|php)$">
+        Header set Cache-Control "no-store, no-cache, must-revalidate"
+    </FilesMatch>
+</IfModule>

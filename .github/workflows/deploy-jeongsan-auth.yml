@@ -1,0 +1,250 @@
+name: Deploy jeongsan auth (5 accounts + isolated session)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/jeongsan-page-management-evm5h3]
+    paths:
+      - 'jeongsan/**'
+      - '.github/workflows/deploy-jeongsan-auth.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare payload (tar in workspace)
+        run: |
+          cd jeongsan
+          tar czf ../jeongsan-payload.tgz .
+          echo "=== payload contents ==="
+          tar tzf ../jeongsan-payload.tgz
+          ls -la ../jeongsan-payload.tgz
+
+      - name: SCP payload to bastion
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: "jeongsan-payload.tgz"
+          target: "/tmp/"
+          overwrite: true
+
+      - name: Deploy via bastion → gcloud → my-site-1
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 600s
+          script: |
+            set -e
+            /snap/bin/gcloud compute scp /tmp/jeongsan-payload.tgz \
+              videowatch_show@my-site-1:/tmp/jeongsan-payload.tgz \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --scp-flag="-o StrictHostKeyChecking=no" \
+              --quiet
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command='
+            set -e
+            J="/var/www/sites/chamgyo/public/정산표"
+            SD="/var/www/sites/chamgyo/settlement-data"
+            TS=$(date +%s)
+
+            echo "===== BACKUP existing critical files ====="
+            sudo mkdir -p "$SD/backups"
+            for f in .htaccess data.php excel-data.php udongka-data.php; do
+              if sudo test -f "$J/$f"; then
+                sudo cp "$J/$f" "$SD/backups/${f}.pre-auth2-${TS}.bak"
+              fi
+            done
+
+            echo "===== EXTRACT payload ====="
+            sudo mkdir -p /tmp/jsp-deploy && sudo rm -rf /tmp/jsp-deploy/*
+            sudo tar xzf /tmp/jeongsan-payload.tgz -C /tmp/jsp-deploy
+            sudo ls -la /tmp/jsp-deploy
+
+            echo "===== INSTALL auth files + wrappers + APIs ====="
+            for f in session_conf.php auth_check.php login.php login_check.php logout.php \
+                     index.php excel.php udongka.php 원장.php \
+                     data.php excel-data.php udongka-data.php .htaccess; do
+              sudo install -o www-data -g www-data -m 644 "/tmp/jsp-deploy/$f" "$J/$f"
+              echo "installed: $f ($(sudo wc -c < "$J/$f") bytes)"
+            done
+
+            echo "===== INSTALL users config (OUTSIDE webroot) ====="
+            sudo install -o www-data -g www-data -m 600 \
+              "/tmp/jsp-deploy/jeongsan_users.php" \
+              "$SD/jeongsan_users.php"
+            sudo ls -la "$SD/jeongsan_users.php"
+
+            echo "===== CREATE isolated session dir ====="
+            sudo mkdir -p "$J/data/sessions"
+            sudo chown -R www-data:www-data "$J/data"
+            sudo chmod 700 "$J/data/sessions"
+
+            echo "===== INSTALL single canonical README ====="
+            sudo install -o www-data -g www-data -m 644 "/tmp/jsp-deploy/README.md" "$J/README.md"
+
+            echo "===== REMOVE README backups ====="
+            sudo find "$J" -maxdepth 1 \( -iname "readme*.bak*" -o -iname "readme*.md.bak*" \) -print -delete
+
+            echo "===== APACHE reload ====="
+            sudo apachectl configtest 2>&1
+            sudo systemctl reload apache2
+
+            echo ""
+            echo "===== ============ LOCAL VERIFY ============ ====="
+            BASE_LOCAL="http://localhost/%ec%a0%95%ec%82%b0%ed%91%9c"
+
+            echo ""
+            echo "-- 1) unauth GET / (expect: 200 login form OR 302 → login.php) --"
+            curl -si "$BASE_LOCAL/" | head -15
+
+            echo ""
+            echo "-- 2) unauth GET /index.html (expect: 302 → login.php via wrapper) --"
+            curl -sI "$BASE_LOCAL/index.html" | head -6
+
+            echo ""
+            echo "-- 3) unauth POST /data.php (expect: 401 JSON) --"
+            curl -si -X POST -H "Content-Type: application/json" -d "{}" \
+              "$BASE_LOCAL/data.php"
+
+            echo ""
+            echo "-- 4) unauth GET /login.php (expect: 200 login page) --"
+            curl -sI "$BASE_LOCAL/login.php" | head -6
+
+            echo ""
+            echo "-- 5) session dir 403 --"
+            curl -sI "$BASE_LOCAL/data/" | head -3
+
+            echo ""
+            echo "-- 6) .bak deny --"
+            curl -sI "$BASE_LOCAL/data.php.bak-official-20260707-142054" | head -3
+
+            echo ""
+            echo "-- 7) LOGIN flow (tak/7272) → GET data.php --"
+            CJ=$(mktemp)
+            curl -si -c "$CJ" -X POST \
+              --data-urlencode "id=tak" --data-urlencode "passwd=7272" \
+              "$BASE_LOCAL/login_check.php" | head -6
+            echo ""
+            echo "-- authed HEAD index.html (should 200, page served) --"
+            curl -sI -b "$CJ" "$BASE_LOCAL/index.html" | head -6
+            echo ""
+            echo "-- authed body index.html first 300 chars --"
+            curl -s -b "$CJ" "$BASE_LOCAL/index.html" | head -c 300
+            echo ""
+            echo ""
+            echo "-- authed GET data.php (should return JSON with members/ledger) --"
+            curl -s -b "$CJ" "$BASE_LOCAL/data.php" | head -c 300
+            echo ""
+
+            echo ""
+            echo "-- 8) SAVE test (POST data.json copy) --"
+            sudo cp "$SD/data.json" "/tmp/jsp-verify-$TS.json"
+            SAVE_RES=$(curl -si -b "$CJ" -X POST \
+              -H "Content-Type: application/json" \
+              --data-binary @"/tmp/jsp-verify-$TS.json" \
+              "$BASE_LOCAL/data.php")
+            echo "$SAVE_RES" | head -8
+            echo ""
+            echo "-- latest backup file --"
+            sudo ls -lt "$SD/backups/" | head -3
+            sudo rm -f "/tmp/jsp-verify-$TS.json"
+
+            echo ""
+            echo "-- 9) BAD password (should 302 → login.php?err=bad) --"
+            curl -sI -X POST \
+              --data-urlencode "id=tak" --data-urlencode "passwd=WRONG" \
+              "$BASE_LOCAL/login_check.php" | head -4
+
+            echo ""
+            echo "-- 10) 점프대표 (Korean · read-only) login --"
+            CJ2=$(mktemp)
+            curl -si -c "$CJ2" -X POST \
+              --data-urlencode "id=점프대표" --data-urlencode "passwd=1147" \
+              "$BASE_LOCAL/login_check.php" | head -4
+            echo ""
+            echo "-- 점프대표 GET data.php (허용) --"
+            curl -s -b "$CJ2" "$BASE_LOCAL/data.php" | head -c 100
+            echo ""
+            echo "-- 점프대표 POST data.php (403 예상) --"
+            curl -si -b "$CJ2" -X POST -H "Content-Type: application/json" -d "{\"members\":[]}" \
+              "$BASE_LOCAL/data.php" | head -10
+            rm -f "$CJ" "$CJ2"
+
+            echo ""
+            echo "===== FINAL LS jeongsan (php files) ====="
+            sudo ls -la "$J/"*.php "$J/.htaccess" 2>&1 | head -25
+
+            sudo rm -rf /tmp/jsp-deploy /tmp/jeongsan-payload.tgz
+            echo "===== DONE ====="
+            '
+
+      - name: Cloudflare cache purge
+        if: success()
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE:  ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          curl -sf -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/purge_everything" \
+            -H "Authorization: Bearer ${CF_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}' | head -c 400
+          echo ""
+
+      - name: External verify (through Cloudflare)
+        if: success()
+        run: |
+          sleep 8
+          T=$(date +%s)
+          BASE="https://xn--9d0bw2fjtyymch7de9d.info/%ec%a0%95%ec%82%b0%ed%91%9c"
+
+          echo "=== [EXT] HEAD / ==="
+          curl -sI "$BASE/?_t=$T" | head -8
+
+          echo ""
+          echo "=== [EXT] HEAD /index.html (should 302 to login.php) ==="
+          curl -sI "$BASE/index.html?_t=$T" | head -8
+
+          echo ""
+          echo "=== [EXT] HEAD /login.php (200) ==="
+          curl -sI "$BASE/login.php?_t=$T" | head -6
+
+          echo ""
+          echo "=== [EXT] body / (follow redirect - should show LOGIN form) ==="
+          curl -sL "$BASE/?_t=$T" | grep -oE "<title>[^<]+</title>|아이디|비밀번호|L O G I N" | head -5
+
+          echo ""
+          echo "=== [EXT] POST data.php unauth (401 JSON) ==="
+          curl -si -X POST -H "Content-Type: application/json" -d "{}" \
+            "$BASE/data.php?_t=$T" | head -12
+
+          echo ""
+          echo "=== [EXT] login as jump ==="
+          CJ=$(mktemp)
+          curl -si -c "$CJ" -X POST \
+            --data-urlencode "id=jay" --data-urlencode "passwd=8282" \
+            "$BASE/login_check.php?_t=$T" | head -5
+
+          echo ""
+          echo "=== [EXT] authed data.php ==="
+          curl -s -b "$CJ" "$BASE/data.php?_t=$T" | head -c 300
+          echo ""
+
+          echo ""
+          echo "=== [EXT] authed index.html (page loads) ==="
+          curl -s -b "$CJ" "$BASE/index.html?_t=$T" | head -c 200
+          echo ""
+
+          rm -f "$CJ"
+          echo "=== ALL EXT CHECKS DONE ==="

@@ -1,0 +1,66 @@
+name: Deploy jeongsan index.html (역송 + 합계 + 월별헤더)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/jeongsan-page-management-evm5h3]
+    paths:
+      - 'jeongsan/index.html'
+      - '.github/workflows/deploy-index-html.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: SCP index.html
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: "jeongsan/index.html"
+          target: "/tmp/"
+          overwrite: true
+
+      - name: Install on my-site-1 + verify 강시원
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 180s
+          script: |
+            set -e
+            /snap/bin/gcloud compute scp /tmp/jeongsan/index.html \
+              videowatch_show@my-site-1:/tmp/new_index.html \
+              --zone=asia-northeast1-a --project=quantum-bonus-455522-b4 \
+              --scp-flag="-o StrictHostKeyChecking=no" --quiet
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" --quiet \
+              --command='
+            set -e
+            J="/var/www/sites/chamgyo/public/정산표"
+            SD="/var/www/sites/chamgyo/settlement-data"
+            TS=$(date +%s)
+            sudo cp "$J/index.html" "$SD/backups/index.html.pre-cols-${TS}.bak"
+            sudo install -o www-data -g www-data -m 644 /tmp/new_index.html "$J/index.html"
+            sudo rm -f /tmp/new_index.html
+            echo "installed: $(sudo wc -c < $J/index.html) bytes"
+            echo ""
+            echo "===== 강시원 서버 상태 확인 ====="
+            sudo grep -A1 강시원 "$SD/data.json" | head -20
+            '
+
+      - name: Cloudflare purge
+        if: success()
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE:  ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          curl -sf -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/purge_everything" \
+            -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}' | head -c 200
+          echo ""
