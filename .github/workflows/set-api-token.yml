@@ -1,0 +1,48 @@
+name: Set API token
+on:
+  push:
+    branches: ['claude/broadcast-ip-check-z57wox']
+    paths: ['.github/workflows/set-api-token.yml']
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Set GAUTH_API_TOKEN and restart
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            set -e
+
+            # Generate a random token if not already set
+            if sudo grep -q 'GAUTH_API_TOKEN=' /opt/gauth-full/.env 2>/dev/null; then
+              echo "GAUTH_API_TOKEN already exists"
+              sudo grep 'GAUTH_API_TOKEN=' /opt/gauth-full/.env | sed 's/=.*/=***set***/' 
+            else
+              TOKEN=$(openssl rand -hex 32)
+              echo "GAUTH_API_TOKEN=$TOKEN" | sudo tee -a /opt/gauth-full/.env > /dev/null
+              echo "GAUTH_API_TOKEN set: ${TOKEN:0:8}...${TOKEN: -4}"
+            fi
+
+            # Restart gauth service
+            sudo systemctl restart gauth
+            sleep 2
+            sudo systemctl is-active gauth && echo "gauth service: RUNNING" || echo "gauth service: FAILED"
+
+            # Test login-one with the token
+            TOKEN_VAL=$(sudo grep -oP 'GAUTH_API_TOKEN=\K.*' /opt/gauth-full/.env)
+            echo ""
+            echo "=== Test login-one with new token ==="
+            curl -s -w "\nHTTP:%{http_code}" http://127.0.0.1:4000/api/login-one \
+              -X POST -H "content-type: application/json" \
+              -H "Authorization: Bearer $TOKEN_VAL" \
+              -d '{"email":"test-not-exist@gmail.com"}'
+
+            echo ""
+            echo "=== Token for accounts.html ==="
+            echo "$TOKEN_VAL"

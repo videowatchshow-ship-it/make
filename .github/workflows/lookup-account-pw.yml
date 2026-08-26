@@ -1,0 +1,44 @@
+name: Lookup account password
+on:
+  push:
+    branches: ['claude/broadcast-ip-check-z57wox']
+    paths: ['.github/workflows/lookup-account-pw.yml']
+
+jobs:
+  lookup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Lookup account
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            echo "=== lookup abbadmekonn.en@gmail.com ==="
+            node -e '
+            const data = JSON.parse(require("fs").readFileSync("/opt/gauth-full/accounts_normalized.json","utf8"));
+            const acc = data.find(a => a.email === "abbadmekonn.en@gmail.com");
+            if (!acc) { console.log("NOT FOUND"); process.exit(0); }
+            console.log("email:", acc.email);
+            console.log("password:", acc.password);
+            console.log("totp_secret:", acc.totp_secret || "(none)");
+            console.log("recovery:", acc.recovery_email || "(none)");
+            '
+
+            echo ""
+            echo "=== check failed_accounts for this email ==="
+            node -e '
+            try {
+              const f = JSON.parse(require("fs").readFileSync("/opt/gauth-full/failed_accounts.json","utf8"));
+              const entry = f["abbadmekonn.en@gmail.com"];
+              if (entry) console.log("FAILED:", JSON.stringify(entry));
+              else console.log("Not in failed list");
+            } catch(e) { console.log("No failed_accounts.json or parse error"); }
+            '
+
+            echo ""
+            echo "=== check auth middleware in rebrowser-login.js ==="
+            grep -n 'middleware\|app.use.*auth\|verifyToken\|requireAuth\|isAuthenticated' /opt/gauth-full/rebrowser-login.js || echo "(no auth middleware found)"

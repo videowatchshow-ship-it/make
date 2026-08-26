@@ -1,0 +1,30 @@
+name: YouTube OAuth env check
+on:
+  push:
+    branches: ['claude/broadcast-ip-check-z57wox']
+    paths: ['.github/workflows/yt-oauth-check.yml']
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check YouTube OAuth vars on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            echo "=== systemd unit ==="
+            sudo grep -i "youtube\|oauth\|client" /etc/systemd/system/gauth.service 2>/dev/null || echo "(none)"
+            echo ""
+            echo "=== systemd drop-in ==="
+            sudo cat /etc/systemd/system/gauth.service.d/*.conf 2>/dev/null || echo "(no drop-ins)"
+            echo ""
+            echo "=== .env file ==="
+            sudo grep -i "youtube\|oauth\|client" /opt/gauth-full/.env 2>/dev/null || echo "(none)"
+            echo ""
+            echo "=== process env (masked values) ==="
+            sudo cat /proc/$(pgrep -f rebrowser-login | head -1)/environ 2>/dev/null | tr '\0' '\n' | grep -iE "youtube|oauth|client" | sed 's/=.\{4\}/=****/;s/\(.\{20\}\).*/\1.../' || echo "(process not running)"

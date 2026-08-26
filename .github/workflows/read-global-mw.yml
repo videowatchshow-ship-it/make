@@ -1,0 +1,29 @@
+name: Read global middleware
+on:
+  push:
+    branches: ['claude/broadcast-ip-check-z57wox']
+    paths: ['.github/workflows/read-global-mw.yml']
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read global middleware
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            echo "=== lines 80-130 (global middleware) ==="
+            sed -n '80,130p' /opt/gauth-full/rebrowser-login.js
+
+            echo ""
+            echo "=== grep unauthorized ==="
+            grep -an 'unauthorized' /opt/gauth-full/rebrowser-login.js
+
+            echo ""
+            echo "=== check_channel_status.js first 30 lines ==="
+            head -30 /opt/gauth-full/check_channel_status.js 2>/dev/null || echo "(not found)"

@@ -1,0 +1,38 @@
+name: Read login auth
+on:
+  push:
+    branches: ['claude/broadcast-ip-check-z57wox']
+    paths: ['.github/workflows/read-login-auth.yml']
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read login-one auth code
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            echo "=== login-one line number ==="
+            grep -an 'login-one' /opt/gauth-full/rebrowser-login.js
+
+            echo ""
+            echo "=== 40 lines before login-one ==="
+            LINE=$(grep -an 'login-one' /opt/gauth-full/rebrowser-login.js | head -1 | cut -d: -f1)
+            if [ -n "$LINE" ]; then
+              START=$((LINE - 40))
+              END=$((LINE + 5))
+              sed -n "${START},${END}p" /opt/gauth-full/rebrowser-login.js
+            fi
+
+            echo ""
+            echo "=== requireLogin / requireAuth / isAdmin functions ==="
+            grep -an 'function.*require\|function.*isAdmin\|function.*checkAuth\|const requireAuth\|const isAdmin\|function ck' /opt/gauth-full/rebrowser-login.js
+
+            echo ""
+            echo "=== lines 510-530 (after auth endpoints) ==="
+            sed -n '510,540p' /opt/gauth-full/rebrowser-login.js

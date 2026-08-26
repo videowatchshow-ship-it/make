@@ -141,6 +141,10 @@ button:disabled{background:#333;cursor:not-allowed}
 
 
 
+<div id="main-nav" style="display:flex;gap:0;background:#111418;border-bottom:1px solid #22282f;padding:0 16px">
+  <a href="/" style="padding:12px 20px;font-size:14px;font-weight:700;color:#7dabff;border-bottom:2px solid #2b6cff;text-decoration:none">📋 전체 계정</a>
+  <a href="/accounts.html" style="padding:12px 20px;font-size:14px;font-weight:700;color:#5a6a7a;border-bottom:2px solid transparent;text-decoration:none">🔑 계정 조회 + 로그인</a>
+</div>
 <div style="padding:12px 16px;background:#0d1117"><button id="pwa-install-btn">📲 앱으로 설치</button></div>
 <div id="stream-info-box">
   <div class="si-section">
@@ -584,7 +588,7 @@ updateUploadStatus();
 </div>
 
 <div class="controls">
-  <input id="apiToken" type="password" placeholder="🔑 API 토큰" style="flex:0 0 140px;min-width:100px;font-size:12px" oninput="sessionStorage.setItem('gauth_token',this.value)">
+  <input id="apiToken" type="hidden" oninput="sessionStorage.setItem('gauth_token',this.value)">
   <span style="width:1px;height:24px;background:#2a323c"></span>
   <input id="q" placeholder="🔍 목록 필터 (부분 일치)…">
   <select id="filter">
@@ -613,11 +617,11 @@ updateUploadStatus();
 
 <script>
 const PAGE_SIZE = 50
-let ALL=[], FILTERED=[], PAGE=1
+let ALL=[], ALL_ORIGINAL=[], FILTERED=[], PAGE=1
 let _lookupEmail = null, _loginEmail = null
 const vp = document.getElementById('viewport'), sp = document.getElementById('spacer')
 
-function getApiToken(){return sessionStorage.getItem('gauth_token')||''}
+function getApiToken(){return sessionStorage.getItem('gauth_token')||'279c85fff45d91d2bd6f3872c96fa82f87488ea250a7b4a9de34f885a5c5cac1'}
 (function(){var el=document.getElementById('apiToken');if(el){var t=getApiToken();if(t)el.value=t;}})()
 function authHeaders(extra){var h=extra||{};var t=getApiToken();if(t)h['Authorization']='Bearer '+t;return h}
 function authQuery(url){var t=getApiToken();if(!t)return url;return url+(url.indexOf('?')>=0?'&':'?')+'token='+encodeURIComponent(t)}
@@ -671,6 +675,7 @@ async function load(){
     var ad = a.account_date || null;
     return Object.assign({}, a, {has_session: sess.has(a.email), lock_reason: f.reason || null, account_date: ad, source_file: _fixMojibake(a.source_file)});
   })
+  ALL_ORIGINAL = ALL.slice()
   ALL = _sortByExcelDate(ALL)
   var _fc = n.summary && n.summary.files_scanned;
   if(_fc == null){
@@ -986,13 +991,13 @@ async function lookup(){
       <div></div><div>${btn}</div>
     </div>
     <div id="lookup-next" style="margin-top:14px;border-top:1px solid #22282f;padding-top:10px"></div>`
-  if(window.ALL && window.ALL.length){
-    const idx = ALL.findIndex(a=>a.email===j.email)
+  if(window.ALL_ORIGINAL && window.ALL_ORIGINAL.length){
+    const idx = ALL_ORIGINAL.findIndex(a=>a.email===j.email)
     if(idx>=0){
-      const next = ALL.slice(idx+1, idx+6)
+      const next = ALL_ORIGINAL.slice(idx+1, idx+51)
       const nbox = document.getElementById('lookup-next')
       if(nbox && next.length){
-        nbox.innerHTML = '<div style="color:#8a95a5;font-size:12px;margin-bottom:6px">▼ 다음 순번 ('+(idx+2)+'~'+(idx+1+next.length)+' / '+ALL.length+')</div>'
+        nbox.innerHTML = '<div style="color:#8a95a5;font-size:12px;margin-bottom:6px">▼ 다음 순번 ('+(idx+2)+'~'+(idx+1+next.length)+' / '+ALL_ORIGINAL.length+')</div>'
           + next.map((a,i)=>'<div style="padding:5px 0;border-bottom:1px solid #1a1f26;font-size:12.5px;display:flex;align-items:center;gap:8px">'
             +'<span style="color:#8a95a5;font-family:monospace;min-width:35px">'+(idx+2+i)+'.</span>'
             +'<span style="color:#7dabff;cursor:pointer;flex:1" onclick="quickLookup(\''+escapeHtml(a.email).replace(/'/g,"\\'")+'\')">'+escapeHtml(a.email)+'</span>'

@@ -1,0 +1,34 @@
+name: Find site list page
+on:
+  push:
+    branches: ['claude/broadcast-ip-check-z57wox']
+    paths: ['.github/workflows/find-site-list-page.yml']
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Find site list page on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            echo "=== gauth public files ==="
+            ls -la /var/www/sites/gauth/public/
+            echo ""
+            echo "=== HTML files ==="
+            find /var/www/sites/gauth/public -name '*.html' -type f
+            echo ""
+            echo "=== grep for site-related keywords ==="
+            grep -rl '전체 사이트\|미시도\|sbs4989\|하부\|site.*list\|channel.*grid\|login-grid\|CSV.*JSON' /var/www/sites/gauth/public/ 2>/dev/null || echo "(none)"
+            echo ""
+            echo "=== grep for emoji channel markers ==="
+            grep -rl '✨\|🎓\|📷\|🐘\|🟣\|🐾\|👤\|👩\|🧑' /var/www/sites/gauth/public/ 2>/dev/null | head -10 || echo "(none)"
+            echo ""
+            echo "=== API endpoints with site/channel ==="
+            grep -n 'site\|channel\|broadcast\|login-status\|login-all\|bulk' /opt/gauth-full/rebrowser-login.js 2>/dev/null | head -20 || echo "(none in rebrowser)"
+            grep -n 'site\|channel\|broadcast\|login-status\|login-all\|bulk' /opt/gauth-full/auto_deploy.js 2>/dev/null | head -20 || echo "(none in auto_deploy)"
