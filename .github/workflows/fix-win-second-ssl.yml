@@ -1,0 +1,31 @@
+name: Fix win/second SSL certs + HTTPS
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths:
+      - '.github/workflows/fix-win-second-ssl.yml'
+      - '.github/scripts/fix-win-second-ssl.sh'
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: ".github/scripts/fix-win-second-ssl.sh"
+          target: "/tmp/fwssl/"
+          strip_components: 2
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 600s
+          script: |
+            sudo bash /tmp/fwssl/fix-win-second-ssl.sh
+            rm -rf /tmp/fwssl
