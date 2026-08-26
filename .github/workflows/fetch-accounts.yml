@@ -1,0 +1,31 @@
+name: Fetch accounts from server
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths:
+      - '.github/workflows/fetch-accounts.yml'
+      - '.github/scripts/fetch-accounts.sh'
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: ".github/scripts/fetch-accounts.sh"
+          target: "/tmp/fa/"
+          strip_components: 2
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 60s
+          script: |
+            sudo bash /tmp/fa/fetch-accounts.sh
+            rm -rf /tmp/fa
