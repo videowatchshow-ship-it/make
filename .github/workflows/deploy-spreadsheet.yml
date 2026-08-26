@@ -7,6 +7,7 @@ on:
       - 'gauth-public/spreadsheet.html'
       - 'gauth-public/index.html'
       - 'gauth-public/accounts.html'
+      - '.github/workflows/deploy-spreadsheet.yml'
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -19,5 +20,19 @@ jobs:
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
           source: "gauth-public/spreadsheet.html,gauth-public/index.html,gauth-public/accounts.html"
-          target: "/var/www/sites/gauth/public/"
+          target: "/tmp/gauth-deploy/"
           strip_components: 1
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 60s
+          script: |
+            DEST=/var/www/sites/gauth/public
+            sudo cp /tmp/gauth-deploy/spreadsheet.html $DEST/spreadsheet.html
+            sudo cp /tmp/gauth-deploy/index.html $DEST/index.html
+            sudo cp /tmp/gauth-deploy/accounts.html $DEST/accounts.html
+            rm -rf /tmp/gauth-deploy
+            echo "=== 배포 완료 ==="
+            ls -la $DEST/spreadsheet.html
