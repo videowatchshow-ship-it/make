@@ -19,6 +19,12 @@
 - "확인 부탁드립니다" 금지
 - 진행 계획 나열 금지 — 결과만 보고
 
+## 캡처 규칙
+**화면 캡처(스크린샷) 전에는 반드시 6초 대기한다.**
+- Playwright/Puppeteer: 스크린샷 직전 `waitForTimeout(6000)`
+- 예외 없음. 새 워크플로를 만들 때도 무조건 6초
+- 보드는 로드 직후 캔버스가 비어 있고 bgl.js가 1.2초 폴링으로 그리기 때문에, 덜 기다리고 찍으면 빈 판을 찍어 놓고 오판하게 된다
+
 ## gauth 서버 정보 (gucci-yanolza)
 - URL: https://gauth.cent-solution.online/
 - 프론트엔드: `/var/www/sites/gauth/public/index.html`
