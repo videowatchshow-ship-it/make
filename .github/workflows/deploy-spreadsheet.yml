@@ -5,8 +5,10 @@ on:
     branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
     paths:
       - 'gauth-public/spreadsheet.html'
+      - 'gauth-public/cent-works.html'
       - 'gauth-public/index.html'
       - 'gauth-public/accounts.html'
+      - 'gauth-public/login-issues.html'
       - '.github/workflows/deploy-spreadsheet.yml'
 jobs:
   deploy:
@@ -19,7 +21,7 @@ jobs:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          source: "gauth-public/spreadsheet.html,gauth-public/index.html,gauth-public/accounts.html"
+          source: "gauth-public/spreadsheet.html,gauth-public/cent-works.html,gauth-public/index.html,gauth-public/accounts.html,gauth-public/login-issues.html"
           target: "/tmp/gauth-deploy/"
           strip_components: 1
       - uses: appleboy/ssh-action@v1.0.3
@@ -31,8 +33,10 @@ jobs:
           script: |
             DEST=/var/www/sites/gauth/public
             sudo cp /tmp/gauth-deploy/spreadsheet.html $DEST/spreadsheet.html
+            sudo cp /tmp/gauth-deploy/cent-works.html $DEST/cent-works.html
             sudo cp /tmp/gauth-deploy/index.html $DEST/index.html
             sudo cp /tmp/gauth-deploy/accounts.html $DEST/accounts.html
+            sudo cp /tmp/gauth-deploy/login-issues.html $DEST/login-issues.html
             rm -rf /tmp/gauth-deploy
             echo "=== 배포 완료 ==="
-            ls -la $DEST/spreadsheet.html
+            ls -la $DEST/cent-works.html

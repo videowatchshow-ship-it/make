@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<script>var _V='20260826v2';if(!location.search.match('_v='+_V)){location.replace(location.pathname+'?_v='+_V+location.hash);}</script>
-<title>gauth · 엑셀 계정</title>
+<script>var _V='20260826v1';if(!location.search.match('_v='+_V)){location.replace(location.pathname+'?_v='+_V+location.hash);}</script>
+<title>gauth · 센트작품</title>
 <meta http-equiv="Cache-Control" content="no-store">
 <style>
 :root{--bg:#0d1117;--panel:#0f1620;--card:#161a20;--border:#22282f;--border2:#2a323c;--text:#e8ecef;--sub:#8a95a5;--accent:#7dabff;--accent2:#3ddc84;--warn:#ffb469;--err:#f47070}
@@ -43,8 +43,8 @@ nav a.active{color:var(--accent);border-bottom-color:#2b6cff}
   <a href="/">📋 전체 계정</a>
   <a href="/accounts.html">🔑 계정 조회</a>
   <a href="/login-issues.html">🚫 로그인 문제</a>
-  <a href="/spreadsheet.html" class="active">📊 엑셀 계정</a>
-  <a href="/cent-works.html">🎨 센트작품</a>
+  <a href="/spreadsheet.html">📊 엑셀 계정</a>
+  <a href="/cent-works.html" class="active">🎨 센트작품</a>
 </nav>
 <div class="toolbar">
   <input type="text" id="q" placeholder="이메일 · 비번 · URL 검색…" oninput="filter()">
@@ -62,9 +62,7 @@ const ACCTS = [
   {email:"mdamarul79@gmail.com",pw:"wj53spgmn0z4l",rec:"6st.ibrahim71@gmail.com",secret:"5hntnxvpfiij4j2rmicmgnfsr66rivgd",yt:"https://www.youtube.com/@MdAmarul-z6r"},
   {email:"baijnathujp79720@gmail.com",pw:"2gl1425nv898k",rec:"3at.ibrahim.it@gmail.com",secret:"ixxfehlykflpsghxhogpsfjnsy5qvwwy",yt:"https://www.youtube.com/@BaijnathKumar-m4b"},
   {email:"sayedashabibi996@gmail.com",pw:"jl6c425nv898k",rec:"2st.mail.ibrahim@gmail.com",secret:"b5523vt4jahmtoxzqkj752d7dotodgtt",yt:"https://www.youtube.com/@SayedAshabibi"},
-  {email:"shuklamahadev808@gmail.com",pw:"g13ub0jw2eaif",rec:"bd71.mahfuz.dev@gmail.com",secret:"ibynx7o2tu2zq7ho3aziyvo234t3zjsv",yt:"https://www.youtube.com/@MahadevShukla-h9t"},
-  {email:"amanylove129@gmail.com",pw:"DXrbBGgfvbxOkB",rec:"amanylove12907.05ntc@hotmail.com",secret:"enlne2qwkgnnsynpi7ju6kmcplt4ussf",yt:"https://youtube.com/user/taylorfootball24/videos"},
-  {email:"hendabadlla@gmail.com",pw:"BojICpgWeIXDbd",rec:"hendabadlla06.05ntc@hotmail.com",secret:"zxojjbopklumafkmv36b6koqst7atfz4",yt:"https://youtube.com/user/pillows900/videos"}
+  {email:"shuklamahadev808@gmail.com",pw:"g13ub0jw2eaif",rec:"bd71.mahfuz.dev@gmail.com",secret:"ibynx7o2tu2zq7ho3aziyvo234t3zjsv",yt:"https://www.youtube.com/@MahadevShukla-h9t"}
 ];
 async function totp(secret) {
   const base32chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -88,13 +86,6 @@ async function totp(secret) {
   const code = ((sig[offset] & 0x7f) << 24 | sig[offset+1] << 16 | sig[offset+2] << 8 | sig[offset+3]) % 1000000;
   return String(code).padStart(6, '0');
 }
-function cp(text, btn) {
-  navigator.clipboard.writeText(text).then(() => {
-    btn.textContent = '✓';
-    btn.classList.add('done');
-    setTimeout(() => { btn.textContent = '복사'; btn.classList.remove('done'); }, 1500);
-  });
-}
 let visible = ACCTS.map((_,i) => i);
 function filter() {
   const q = document.getElementById('q').value.toLowerCase();
@@ -113,9 +104,6 @@ function render() {
     const card = document.createElement('div');
     card.className = 'card';
     const ytName = a.yt.replace('https://www.youtube.com/@','@').replace('https://youtube.com/user/','');
-    const safeEmail = a.email.replace(/"/g,'&quot;');
-    const safePw = a.pw.replace(/"/g,'&quot;');
-    const safeRec = a.rec.replace(/"/g,'&quot;');
     card.innerHTML = `
 <div class="card-head">
   <span class="card-num">${i+1}</span>
