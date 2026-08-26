@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<script>var _V='20260826v1';if(!location.search.match('_v='+_V)){location.replace(location.pathname+'?_v='+_V+location.hash);}</script>
+<script>var _V='20260826v2';if(!location.search.match('_v='+_V)){location.replace(location.pathname+'?_v='+_V+location.hash);}</script>
 <title>gauth · 엑셀 계정</title>
 <meta http-equiv="Cache-Control" content="no-store">
 <style>
@@ -61,11 +61,13 @@ const ACCTS = [
   {email:"mdamarul79@gmail.com",pw:"wj53spgmn0z4l",rec:"6st.ibrahim71@gmail.com",secret:"5hntnxvpfiij4j2rmicmgnfsr66rivgd",yt:"https://www.youtube.com/@MdAmarul-z6r"},
   {email:"baijnathujp79720@gmail.com",pw:"2gl1425nv898k",rec:"3at.ibrahim.it@gmail.com",secret:"ixxfehlykflpsghxhogpsfjnsy5qvwwy",yt:"https://www.youtube.com/@BaijnathKumar-m4b"},
   {email:"sayedashabibi996@gmail.com",pw:"jl6c425nv898k",rec:"2st.mail.ibrahim@gmail.com",secret:"b5523vt4jahmtoxzqkj752d7dotodgtt",yt:"https://www.youtube.com/@SayedAshabibi"},
-  {email:"shuklamahadev808@gmail.com",pw:"g13ub0jw2eaif",rec:"bd71.mahfuz.dev@gmail.com",secret:"ibynx7o2tu2zq7ho3aziyvo234t3zjsv",yt:"https://www.youtube.com/@MahadevShukla-h9t"}
+  {email:"shuklamahadev808@gmail.com",pw:"g13ub0jw2eaif",rec:"bd71.mahfuz.dev@gmail.com",secret:"ibynx7o2tu2zq7ho3aziyvo234t3zjsv",yt:"https://www.youtube.com/@MahadevShukla-h9t"},
+  {email:"amanylove129@gmail.com",pw:"DXrbBGgfvbxOkB",rec:"amanylove12907.05ntc@hotmail.com",secret:"enlne2qwkgnnsynpi7ju6kmcplt4ussf",yt:"https://youtube.com/user/taylorfootball24/videos"},
+  {email:"hendabadlla@gmail.com",pw:"BojICpgWeIXDbd",rec:"hendabadlla06.05ntc@hotmail.com",secret:"zxojjbopklumafkmv36b6koqst7atfz4",yt:"https://youtube.com/user/pillows900/videos"}
 ];
 async function totp(secret) {
   const base32chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  const s = secret.toUpperCase().replace(/=+$/,'');
+  const s = secret.toUpperCase().replace(/[^A-Z2-7]/g,'');
   let bits = 0, val = 0;
   const bytes = [];
   for (const c of s) {
@@ -109,12 +111,10 @@ function render() {
     const a = ACCTS[i];
     const card = document.createElement('div');
     card.className = 'card';
-    card.dataset.idx = i;
-    const ytName = a.yt.replace('https://www.youtube.com/@','@');
-    const safeEmail = a.email.replace(/'/g, "'");
-    const safePw = a.pw.replace(/'/g, "'");
-    const safeRec = a.rec.replace(/'/g, "'");
-    const safeSecret = a.secret;
+    const ytName = a.yt.replace('https://www.youtube.com/@','@').replace('https://youtube.com/user/','');
+    const safeEmail = a.email.replace(/"/g,'&quot;');
+    const safePw = a.pw.replace(/"/g,'&quot;');
+    const safeRec = a.rec.replace(/"/g,'&quot;');
     card.innerHTML = `
 <div class="card-head">
   <span class="card-num">${i+1}</span>
@@ -124,21 +124,21 @@ function render() {
 <div class="grid">
   <div class="field">
     <div class="f-label">Gmail</div>
-    <div class="f-val"><span>${a.email}</span><button class="cp" onclick="cp('${safeEmail}',this)">복사</button></div>
+    <div class="f-val"><span>${a.email}</span><button class="cp" onclick="navigator.clipboard.writeText(ACCTS[${i}].email).then(()=>{this.textContent='✓';this.classList.add('done');setTimeout(()=>{this.textContent='복사';this.classList.remove('done')},1500)})">복사</button></div>
   </div>
   <div class="field">
     <div class="f-label">비밀번호</div>
-    <div class="f-val"><span>${a.pw}</span><button class="cp" onclick="cp('${safePw}',this)">복사</button></div>
+    <div class="f-val"><span>${a.pw}</span><button class="cp" onclick="navigator.clipboard.writeText(ACCTS[${i}].pw).then(()=>{this.textContent='✓';this.classList.add('done');setTimeout(()=>{this.textContent='복사';this.classList.remove('done')},1500)})">복사</button></div>
   </div>
   <div class="field">
     <div class="f-label">복구 이메일</div>
-    <div class="f-val"><span>${a.rec}</span><button class="cp" onclick="cp('${safeRec}',this)">복사</button></div>
+    <div class="f-val"><span>${a.rec}</span><button class="cp" onclick="navigator.clipboard.writeText(ACCTS[${i}].rec).then(()=>{this.textContent='✓';this.classList.add('done');setTimeout(()=>{this.textContent='복사';this.classList.remove('done')},1500)})">복사</button></div>
   </div>
   <div class="field">
     <div class="f-label">2FA 코드</div>
     <div class="f-val">
       <span class="totp-code" id="totp-${i}">------</span>
-      <button class="cp" id="cp-totp-${i}" onclick="(async()=>{const c=await totp('${safeSecret}');cp(c,this)})()">복사</button>
+      <button class="cp" onclick="totp(ACCTS[${i}].secret).then(c=>navigator.clipboard.writeText(c).then(()=>{this.textContent='✓';this.classList.add('done');setTimeout(()=>{this.textContent='복사';this.classList.remove('done')},1500)}))">복사</button>
     </div>
     <div class="totp-bar" id="bar-${i}" style="width:100%"></div>
   </div>
@@ -154,10 +154,7 @@ async function updateAll() {
     const el = document.getElementById('totp-'+i);
     const bar = document.getElementById('bar-'+i);
     if (!el) continue;
-    try {
-      const code = await totp(ACCTS[i].secret);
-      el.textContent = code;
-    } catch(e) { el.textContent = 'ERR'; }
+    try { el.textContent = await totp(ACCTS[i].secret); } catch(e) { el.textContent = 'ERR'; }
     if (bar) bar.style.width = pct + '%';
   }
 }
