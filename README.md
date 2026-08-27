@@ -59,6 +59,74 @@ make/
 - Cloudflare Zone Purge API: <https://developers.cloudflare.com/api/operations/zone-purge>
 - RFC 6238 (TOTP): <https://datatracker.ietf.org/doc/html/rfc6238>
 
+---
+
+## TOTP / 2FA 핵심 지식 (삽질 방지용)
+
+### backup_codes → TOTP 시크릿 변환 로직
+
+Google backup codes 형식: `mp4q sdm7 xmug p2jd ual4 osgo cbrp bvek` (8그룹 × 4자)
+
+이 코드는 일회성 복구 코드가 아니라 **TOTP 시크릿으로도 사용 가능**. gauth가 이 방식으로 처리함.
+
+```js
+// gauth rebrowser-login.js line 71 — 모든 사이트에 동일 로직 적용해야 함
+secret = String(secret).toUpperCase()
+  .replace(/[\s\-_=]/g, "")   // 공백·하이픈 제거
+  .replace(/[^A-Z2-7]/g, ""); // Base32 아닌 문자 제거 (숫자 3,4,8,9,0,1 등)
+if (secret.length < 16) return null; // 너무 짧으면 무효
+return authenticator.generate(secret); // otplib
+```
+
+**예시 변환**:
+- 입력: `mp4q sdm7 xmug p2jd ual4 osgo cbrp bvek`
+- uppercase + 공백제거: `MP4QSDM7XMUGP2JDUAL4OSGOCBRPBVEK`
+- 비-Base32 제거(4 제거): `MPQSDM7XMUGP2JDUALOSGOCBRPBVEK` (31자 → 유효)
+
+### 서버·파일 위치
+
+| 사이트 | 서버 파일 위치 | 포트 | 서비스명 |
+|--------|-------------|------|---------|
+| gauth | `/opt/gauth-full/rebrowser-login.js` | 4000 | `gauth` |
+| hae | `/var/www/sites/hae/server.js` | 3037 | `bacad` (복사본, 미수정) |
+| misskim | `/var/www/sites/misskim/server.js` | - | - |
+
+**hae accounts.json**: `/var/www/sites/hae/accounts.json`
+- 필드: `email`, `password`, `totp_secret`(빈 경우 多), `backup_codes`(있는 경우), `status`, `allocated_date`
+- `totp_secret`이 비어 있으면 `backup_codes`에서 위 로직으로 TOTP 추출
+
+**gauth accounts_normalized.json**: `/opt/gauth-full/accounts_normalized.json`
+- 형식: **배열** (객체가 아님). `norm.accounts` 접근하면 undefined → 0 accounts
+- 올바른 접근: `const arr = Array.isArray(raw) ? raw : (raw.accounts || Object.values(raw))`
+
+### hae index.html 패치 포인트 (3곳)
+
+`/var/www/sites/hae/public/index.html` 에서 backup_codes → TOTP 처리가 필요한 위치:
+
+1. **Promise.all map** (코드 fetch 루프): `secret`이 없을 때 backup_codes 변환 후 `/codes/:secret` 호출
+2. **renderCards _ts** (UI 표시): 2FA 시크릿 셀에 표시할 값 결정
+3. **refreshAllCodes** (30초 자동갱신): `if(!secret) continue` 전에 backup_codes 변환 삽입
+
+### index.html 패치 시 주의사항
+
+- 파일 내 em-dash는 **리터럴 `—`** (6문자: `\`, `u`, `2`, `0`, `1`, `4`)로 저장됨
+- node -e에서 `'\\u2014'`로 검색해야 매칭됨 (`'—'` = 실제 em-dash 문자로 변환되어 불일치)
+- 문자열 매칭 실패 시 workflow 내 debug 출력으로 실제 바이트 확인:
+  ```js
+  const idx = html.indexOf("관련 키워드");
+  console.log('BYTES:', Buffer.from(html.substring(idx, idx+80)).toString('hex'));
+  console.log('TEXT:', JSON.stringify(html.substring(idx, idx+80)));
+  ```
+
+### 계정별 TOTP 유형
+
+| 사이트 | totp_secret | backup_codes | TOTP 방식 |
+|--------|------------|-------------|----------|
+| misskim | `KNBEMS55LMXXY7AZ5Q2Y...` (실제 Base32) | 없음 | 직접 사용 |
+| hae (wagwiresamuel 등) | 없음 | `mp4q sdm7...` 형식 | backup_codes 변환 |
+
+---
+
 ## 규칙
 
 - 유료 라이브러리·서비스 금지
