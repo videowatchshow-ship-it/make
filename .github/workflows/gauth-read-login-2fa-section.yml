@@ -1,0 +1,27 @@
+name: gauth - read login script 2FA section
+on:
+  push:
+    paths:
+      - '.github/workflows/gauth-read-login-2fa-section.yml'
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read 2FA handling section of rebrowser-login.js
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            echo "=== Lines 260-320 (LOCKED set + state detection) ==="
+            sudo sed -n '260,320p' /opt/gauth-full/rebrowser-login.js
+
+            echo "=== Lines 35-60 (account data loading) ==="
+            sudo sed -n '35,60p' /opt/gauth-full/rebrowser-login.js
+
+            echo "=== 2FA 코드 입력 처리 부분 검색 ==="
+            sudo grep -n "BACKUP_CODE\|backupCode\|backup.*code\|tryAnotherWay\|try.*another\|useBackup\|enterBackup" /opt/gauth-full/rebrowser-login.js -i | head -30
