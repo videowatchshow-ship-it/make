@@ -1,0 +1,37 @@
+name: gauth - check jump login-issues count
+on:
+  push:
+    paths:
+      - '.github/workflows/gauth-check-jump-count.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Count login-issues across all sub-sites
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo python3 -c "
+            import json, os, glob
+            sites = ['james','win','sunbi','soktv','simmani','bacad','aura','naman','second','camstouch','romi','misskim','woodong','gain']
+            total = 0
+            for site in sites:
+                p = f'/var/www/sites/{site}/accounts.json'
+                if not os.path.exists(p):
+                    print(f'{site}: accounts.json 없음')
+                    continue
+                try:
+                    data = json.loads(open(p).read())
+                    issues = [a for a in data if a.get('login_issue') and a['login_issue'].get('status') not in ('resolved', None)]
+                    print(f'{site}: {len(issues)}건')
+                    total += len(issues)
+                except Exception as e:
+                    print(f'{site}: 에러 {e}')
+            print(f'=== 전체 합계: {total}건 ===')
+            "
