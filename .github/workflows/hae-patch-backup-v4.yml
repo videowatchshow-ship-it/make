@@ -1,0 +1,68 @@
+name: HAE - patch v4 fix code cell backup display
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/hae-patch-backup-v4.yml'
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fix code cell to show backup codes when no TOTP secret
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            echo "=== lines 147-155 (Promise.all area) ==="
+            sudo sed -n '147,155p' /var/www/sites/hae/public/index.html
+
+            sudo node << 'JSEOF'
+            const fs = require('fs');
+            const p = '/var/www/sites/hae/public/index.html';
+            let html = fs.readFileSync(p, 'utf8');
+            const before = html.length;
+            let changes = 0;
+
+            // Fix: in Promise.all map, when no secret show backup codes in code cell
+            // The em dash in the file is the actual — character (U+2014)
+            const dash = '—';
+
+            const old_noSecret = `if(!secret) return Promise.resolve('${dash}')`;
+            const new_noSecret = `if(!secret) return Promise.resolve(a.backup_codes ? '🔑 ' + a.backup_codes.split(' ').slice(0,4).join(' ') : '${dash}')`;
+
+            if (html.includes(old_noSecret)) {
+              html = html.replace(old_noSecret, new_noSecret);
+              changes++;
+              console.log('Fix: code cell backup fallback added');
+            } else {
+              // Show what's actually around Promise.resolve in the file
+              const idx = html.indexOf('Promise.resolve');
+              if (idx >= 0) {
+                console.log('Promise.resolve context:', JSON.stringify(html.substring(idx-30, idx+80)));
+              }
+            }
+
+            // Also clean up the duplicate || '' in backupCodes declaration
+            html = html.replace(
+              "var backupCodes = a.backup_codes || '' || ''",
+              "var backupCodes = a.backup_codes || ''"
+            );
+
+            console.log('changes:', changes, 'size:', before, '->', html.length);
+            fs.writeFileSync(p, html);
+            console.log('written');
+            JSEOF
+
+            echo "=== verify Promise.all area after patch ==="
+            sudo sed -n '147,155p' /var/www/sites/hae/public/index.html
+
+            sudo chown www-data:www-data /var/www/sites/hae/public/index.html
+            for svc in hae site-hae; do
+              sudo systemctl restart "$svc" 2>/dev/null && echo "restarted: $svc" && break
+            done
+            echo "DONE"
