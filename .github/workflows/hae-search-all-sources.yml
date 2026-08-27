@@ -1,0 +1,61 @@
+name: HAE - search ALL data sources for hae account TOTP
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/hae-search-all-sources.yml'
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Search every possible source for hae account 2FA data
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo node -e "
+            const fs = require('fs');
+            const EMAIL = 'wagwiresamuel@gmail.com';
+
+            function searchFile(path, label) {
+              try {
+                const raw = JSON.parse(fs.readFileSync(path, 'utf8'));
+                const arr = Array.isArray(raw) ? raw
+                  : Array.isArray(raw.accounts) ? raw.accounts
+                  : typeof raw === 'object' ? Object.values(raw)
+                  : [];
+                const found = arr.find(a => a && (a.email||'').toLowerCase().trim() === EMAIL.toLowerCase());
+                if (found) {
+                  console.log('['+label+'] FOUND:', JSON.stringify(found));
+                } else {
+                  console.log('['+label+'] not found ('+arr.length+' entries)');
+                }
+              } catch(e) {
+                console.log('['+label+'] ERROR:', e.message);
+              }
+            }
+
+            searchFile('/opt/gauth-full/accounts_normalized.json', 'accounts_normalized');
+            searchFile('/opt/gauth-full/accounts_subsites.json', 'accounts_subsites');
+            searchFile('/var/www/sites/hae/accounts.json', 'hae/accounts.json');
+
+            // Search all upload_excels source files for any mention of the email
+            console.log('');
+            console.log('=== grep in /opt/gauth-full/uploads_debug ===');
+            " 2>&1
+
+            sudo grep -r "wagwiresamuel" /opt/gauth-full/uploads_debug/ 2>/dev/null | head -5 || echo "not found in xlsx debug"
+            sudo grep -r "wagwiresamuel" /opt/gauth-full/ --include="*.json" 2>/dev/null | grep -v "accounts_normalized\|hae" | head -5 || echo "not in other json files"
+
+            echo ""
+            echo "=== All JSON files in /opt/gauth-full that mention wagwiresamuel ==="
+            sudo grep -rl "wagwiresamuel" /opt/gauth-full/ 2>/dev/null || echo "none"
+
+            echo ""
+            echo "=== Parse fail log for hae accounts ==="
+            sudo grep -E "wagwiresamuel|akawunuhu|alexnyangolei" /opt/gauth-full/parse_fail.log 2>/dev/null | head -10 || echo "not in parse_fail.log"
