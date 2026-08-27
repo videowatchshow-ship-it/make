@@ -1,0 +1,59 @@
+name: gauth - fix source_file encoding
+on:
+  push:
+    paths:
+      - '.github/workflows/gauth-fix-encoding.yml'
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fix garbled Korean in source_file
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo node << 'NODESCRIPT'
+            const fs = require('fs');
+            const path = '/opt/gauth-full/accounts_normalized.json';
+
+            // backup
+            fs.copyFileSync(path, path + '.bak.' + Date.now());
+
+            const data = JSON.parse(fs.readFileSync(path, 'utf8'));
+            const arr = Array.isArray(data) ? data : (data.accounts || []);
+
+            function fixEncoding(str) {
+              if (!str) return str;
+              // mojibake: UTF-8 bytes were read as latin1
+              // fix by re-encoding: latin1 -> Buffer -> utf8
+              try {
+                const fixed = Buffer.from(str, 'latin1').toString('utf8');
+                // check if fixed has Korean (valid UTF-8 Korean range)
+                if (/[가-힣ᄀ-ᇿ㄰-㆏]/.test(fixed)) {
+                  return fixed;
+                }
+              } catch(e) {}
+              return str;
+            }
+
+            let fixedCount = 0;
+            arr.forEach(acct => {
+              if (acct.source_file) {
+                const fixed = fixEncoding(acct.source_file);
+                if (fixed !== acct.source_file) {
+                  console.log('fixed:', JSON.stringify(acct.source_file), '->', JSON.stringify(fixed));
+                  acct.source_file = fixed;
+                  fixedCount++;
+                }
+              }
+            });
+
+            const output = Array.isArray(data) ? arr : { ...data, accounts: arr };
+            fs.writeFileSync(path, JSON.stringify(output, null, 2));
+            console.log('done. fixed', fixedCount, 'entries out of', arr.length);
+            NODESCRIPT
