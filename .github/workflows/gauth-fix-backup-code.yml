@@ -9,132 +9,95 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Patch gauth to handle backup codes and restart
+      - name: Patch rebrowser-login.js (backupCodes + LOCKED)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 9m
+          command_timeout: 4m
           script: |
-            set -e
+            sudo cp /opt/gauth-full/rebrowser-login.js /opt/gauth-full/rebrowser-login.js.bak-bkfix
+            sudo sed -i 's/rawData\.push({ email: a\.email, password: a\.password, twoFA: a\.totp_secret })/rawData.push({ email: a.email, password: a.password, twoFA: a.totp_secret, backupCodes: a.backup_codes || '\'''\'' })/' /opt/gauth-full/rebrowser-login.js
+            sudo sed -i "s/'PHONE_REQUIRED','PASSKEY_REQUIRED','DEVICE_PROMPT','SECURITY_KEY','BACKUP_CODE','REJECTED'/'PHONE_REQUIRED','PASSKEY_REQUIRED','DEVICE_PROMPT','SECURITY_KEY','REJECTED'/" /opt/gauth-full/rebrowser-login.js
+            echo "=== rebrowser-login.js 패치 확인 ==="
+            sudo grep -n "backupCodes\|BACKUP_CODE\|LOCKED" /opt/gauth-full/rebrowser-login.js | head -8
 
-            echo "=== 백업 파일 생성 ==="
-            sudo cp /opt/gauth-full/rebrowser-login.js /opt/gauth-full/rebrowser-login.js.bak-backup-fix
-            sudo cp /opt/gauth-full/lib/login/google.js /opt/gauth-full/lib/login/google.js.bak-backup-fix
-
-            echo "=== Node.js 패치 스크립트 실행 ==="
-            sudo node - << 'NODEJS'
-            const fs = require('fs');
-
-            // ── 1. rebrowser-login.js 패치 ──────────────────────────────────────────
-            let rbl = fs.readFileSync('/opt/gauth-full/rebrowser-login.js', 'utf-8');
-
-            // (a) 계정 로딩 시 backupCodes 포함
-            const oldPush = "rawData.push({ email: a.email, password: a.password, twoFA: a.totp_secret })";
-            const newPush = "rawData.push({ email: a.email, password: a.password, twoFA: a.totp_secret, backupCodes: a.backup_codes || '' })";
-            if (!rbl.includes(oldPush)) {
-              console.error('PATCH FAIL: rawData.push 패턴 없음');
-              process.exit(1);
-            }
-            rbl = rbl.replace(oldPush, newPush);
-
-            // (b) LOCKED set 에서 BACKUP_CODE 제거
-            const oldLocked = "const LOCKED = new Set(['PHONE_REQUIRED','PASSKEY_REQUIRED','DEVICE_PROMPT','SECURITY_KEY','BACKUP_CODE','REJECTED'])";
-            const newLocked = "const LOCKED = new Set(['PHONE_REQUIRED','PASSKEY_REQUIRED','DEVICE_PROMPT','SECURITY_KEY','REJECTED'])";
-            if (!rbl.includes(oldLocked)) {
-              console.error('PATCH FAIL: LOCKED set 패턴 없음');
-              process.exit(1);
-            }
-            rbl = rbl.replace(oldLocked, newLocked);
-
-            fs.writeFileSync('/opt/gauth-full/rebrowser-login.js', rbl, 'utf-8');
-            console.log('rebrowser-login.js 패치 완료 (backupCodes 로딩 + LOCKED 제거)');
-
-            // ── 2. google.js 패치 ────────────────────────────────────────────────────
-            let gjs = fs.readFileSync('/opt/gauth-full/lib/login/google.js', 'utf-8');
-
-            // 현재 패턴: BACKUP_CODE 가 다른 locked 상태들과 같이 처리됨
-            const oldCheck = "if (['PHONE_REQUIRED', 'DEVICE_PROMPT', 'SECURITY_KEY', 'PASSKEY_REQUIRED', 'BACKUP_CODE'].includes(cls.kind)) {";
-            const newCheck = `if (cls.kind === 'BACKUP_CODE') {
-          // 백업 코드 입력 처리
-          const rawCodes = (account.backupCodes || '').trim();
-          if (!rawCodes) {
-            broadcast({ type: 'log', message: \`[\${account.email}] BACKUP_CODE 요청됐으나 저장된 백업 코드 없음\` });
-            return { success: false, reason: 'BACKUP_CODE' };
-          }
-          // Google 백업 코드: "lc2w nixf tjhw ..." 형식 (공백 구분, 그룹 4자)
-          const codes = rawCodes.split(/\\s+/).filter(Boolean);
-          const code = codes[0]; // 첫 번째 코드 사용
-          broadcast({ type: 'log', message: \`[\${account.email}] 백업 코드 입력 시도: \${code}\` });
-          try {
-            // 입력 필드 대기 및 입력
-            const inputSel = 'input[type="text"], input[type="tel"], input[autocomplete="one-time-code"]';
-            await page.waitForSelector(inputSel, { timeout: 8000 });
-            await page.click(inputSel);
-            await page.fill(inputSel, code.replace(/\\s/g, ''));
-            await page.keyboard.press('Enter');
-            await page.waitForTimeout(4000);
-            const afterUrl = page.url();
-            if (afterUrl && !afterUrl.includes('accounts.google.com/signin') && !afterUrl.includes('/challenge')) {
-              broadcast({ type: 'log', message: \`[\${account.email}] 백업 코드 로그인 성공\` });
-              return { success: true };
-            }
-            broadcast({ type: 'log', message: \`[\${account.email}] 백업 코드 입력 후 로그인 실패: \${afterUrl}\` });
-            return { success: false, reason: 'BACKUP_CODE_FAILED' };
-          } catch (e) {
-            broadcast({ type: 'log', message: \`[\${account.email}] 백업 코드 입력 오류: \${e.message}\` });
-            return { success: false, reason: 'BACKUP_CODE_FAILED' };
-          }
-        } else if (['PHONE_REQUIRED', 'DEVICE_PROMPT', 'SECURITY_KEY', 'PASSKEY_REQUIRED'].includes(cls.kind)) {`;
-
-            if (!gjs.includes(oldCheck)) {
-              console.error('PATCH FAIL: google.js BACKUP_CODE if 패턴 없음');
-              console.error('현재 656번 줄 근처:');
-              const lines = gjs.split('\n');
-              for (let i = 650; i < 665 && i < lines.length; i++) {
-                console.error(`${i+1}: ${lines[i]}`);
+      - name: Patch google.js (BACKUP_CODE handling)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo cp /opt/gauth-full/lib/login/google.js /opt/gauth-full/lib/login/google.js.bak-bkfix
+            sudo python3 -c "
+            import re, sys
+            f = '/opt/gauth-full/lib/login/google.js'
+            c = open(f).read()
+            old = \"if (['PHONE_REQUIRED', 'DEVICE_PROMPT', 'SECURITY_KEY', 'PASSKEY_REQUIRED', 'BACKUP_CODE'].includes(cls.kind)) {\"
+            if old not in c:
+                print('PATCH FAIL: 패턴 없음')
+                lines = c.split('\n')
+                for i,l in enumerate(lines[648:668], 649):
+                    print(f'{i}: {l}')
+                sys.exit(1)
+            new = '''if (cls.kind === 'BACKUP_CODE') {
+              const rawCodes = (account.backupCodes || '').trim()
+              if (!rawCodes) {
+                broadcast({ type: 'log', message: '[' + account.email + '] BACKUP_CODE 요청됐으나 백업 코드 없음' })
+                return { success: false, reason: 'BACKUP_CODE' }
               }
-              process.exit(1);
-            }
-            gjs = gjs.replace(oldCheck, newCheck);
+              const codes = rawCodes.split(/\\\\s+/).filter(Boolean)
+              const code = codes[0].replace(/\\\\s/g, '')
+              broadcast({ type: 'log', message: '[' + account.email + '] 백업 코드 입력: ' + code })
+              try {
+                const inputSel = 'input[type=\"text\"], input[type=\"tel\"], input[autocomplete=\"one-time-code\"]'
+                await page.waitForSelector(inputSel, { timeout: 8000 })
+                await page.click(inputSel)
+                await page.fill(inputSel, code)
+                await page.keyboard.press('Enter')
+                await page.waitForTimeout(4000)
+                const afterUrl = page.url()
+                if (afterUrl && !afterUrl.includes('accounts.google.com/signin') && !afterUrl.includes('/challenge')) {
+                  broadcast({ type: 'log', message: '[' + account.email + '] 백업 코드 로그인 성공' })
+                  return { success: true }
+                }
+                broadcast({ type: 'log', message: '[' + account.email + '] 백업 코드 실패: ' + afterUrl })
+                return { success: false, reason: 'BACKUP_CODE_FAILED' }
+              } catch (e) {
+                broadcast({ type: 'log', message: '[' + account.email + '] 백업 코드 오류: ' + e.message })
+                return { success: false, reason: 'BACKUP_CODE_FAILED' }
+              }
+            } else if (['PHONE_REQUIRED', 'DEVICE_PROMPT', 'SECURITY_KEY', 'PASSKEY_REQUIRED'].includes(cls.kind)) {'''
+            open(f, 'w').write(c.replace(old, new))
+            print('google.js 패치 완료')
+            "
+            echo "=== google.js 패치 확인 ==="
+            sudo sed -n '650,705p' /opt/gauth-full/lib/login/google.js
 
-            fs.writeFileSync('/opt/gauth-full/lib/login/google.js', gjs, 'utf-8');
-            console.log('google.js 패치 완료 (BACKUP_CODE 처리 분리)');
-            NODEJS
-
-            echo "=== failed 목록에서 BACKUP_CODE 항목 제거 ==="
-            # failed_accounts.json 에서 BACKUP_CODE reason 계정 제거 (재시도 허용)
-            sudo node - << 'NODEJS'
-            const fs = require('fs');
-            const p = '/opt/gauth-full/failed_accounts.json';
-            if (!fs.existsSync(p)) { console.log('failed_accounts.json 없음, 스킵'); process.exit(0); }
-            let data;
-            try { data = JSON.parse(fs.readFileSync(p, 'utf-8')); } catch { data = {}; }
-            let removed = 0;
-            for (const [email, info] of Object.entries(data)) {
-              if (info && info.reason === 'BACKUP_CODE') { delete data[email]; removed++; }
-            }
-            fs.writeFileSync(p, JSON.stringify(data, null, 2), 'utf-8');
-            console.log(`BACKUP_CODE 항목 ${removed}개 제거됨`);
-            NODEJS
-
-            echo "=== parse_fail.log 에서 BACKUP_CODE 항목 제거 ==="
-            if sudo test -f /opt/gauth-full/parse_fail.log; then
-              sudo grep -v "BACKUP_CODE" /opt/gauth-full/parse_fail.log > /tmp/pf_clean.log || true
-              sudo cp /tmp/pf_clean.log /opt/gauth-full/parse_fail.log
-              echo "parse_fail.log 정리 완료"
-            fi
-
-            echo "=== 패치 결과 검증 ==="
-            echo "--- rebrowser-login.js 패치 확인 ---"
-            sudo grep -n "backupCodes\|BACKUP_CODE\|LOCKED" /opt/gauth-full/rebrowser-login.js | head -10
-
-            echo "--- google.js 패치 확인 ---"
-            sudo sed -n '650,700p' /opt/gauth-full/lib/login/google.js
-
-            echo "=== gauth 서비스 재시작 ==="
+      - name: Clear BACKUP_CODE from failed list and restart
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            sudo python3 -c "
+            import json, os
+            p = '/opt/gauth-full/failed_accounts.json'
+            if not os.path.exists(p):
+                print('failed_accounts.json 없음')
+            else:
+                d = json.loads(open(p).read())
+                removed = [e for e,i in d.items() if i.get('reason') == 'BACKUP_CODE']
+                for e in removed: del d[e]
+                open(p,'w').write(json.dumps(d, indent=2))
+                print(f'BACKUP_CODE 항목 {len(removed)}개 제거: {removed[:5]}')
+            "
             sudo systemctl restart gauth
-            sleep 5
+            sleep 4
             sudo systemctl is-active gauth
             echo "=== 완료 ==="
