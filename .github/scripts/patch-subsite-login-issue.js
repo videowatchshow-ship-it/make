@@ -35,7 +35,7 @@ for (const oldM of [...oldHtmlMarkers, htmlMarker]) {
 // ---------- server.js ----------
 // Guard: only patch if this is an Express-based server (has `app = express()`)
 // Plain http.createServer() servers cannot use `app.use/patch/get` — crashes with ReferenceError.
-if (!/\bapp\s*=\s*express\s*\(/.test(serverSrc)) {
+if (!/express\s*\(\s*\)/.test(serverSrc)) {
   console.log('  [' + SITE + '] server.js is not Express-based — SKIPPING server patch (HTML still patches)');
 } else if (serverSrc.includes(patchMarker)) {
   console.log('  [' + SITE + '] server.js already patched');
