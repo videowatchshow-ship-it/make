@@ -1,0 +1,87 @@
+name: HAE - fix TOTP display (restart + diagnose HTML structure)
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/hae-fix-totp-display.yml'
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Restart hae + check totp in accounts + show HTML TOTP section
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            echo "=== 1. hae accounts.json totp check ==="
+            sudo node -e "
+              const fs = require('fs');
+              const raw = JSON.parse(fs.readFileSync('/var/www/sites/hae/accounts.json','utf8'));
+              const arr = Array.isArray(raw) ? raw : (raw.accounts || Object.values(raw));
+              const withTotp = arr.filter(a => a.totp_secret && a.totp_secret.length > 4);
+              const withoutTotp = arr.filter(a => !a.totp_secret || a.totp_secret.length <= 4);
+              console.log('total:', arr.length);
+              console.log('with totp_secret:', withTotp.length);
+              console.log('without totp_secret:', withoutTotp.length);
+              if (withTotp.length > 0) console.log('sample totp:', withTotp[0].email, '->', withTotp[0].totp_secret.substring(0,8) + '...');
+              if (withoutTotp.length > 0) {
+                const emails = withoutTotp.map(a=>a.email).slice(0,5);
+                console.log('missing totp emails:', emails.join(', '));
+                // Try to find them in gauth DB
+                const gd = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+                const ga = Array.isArray(gd) ? gd : (gd.accounts || []);
+                for (const e of emails) {
+                  const found = ga.find(a => (a.email||'').toLowerCase() === e.toLowerCase());
+                  if (found) console.log('gauth has', e, '-> totp:', found.totp_secret ? found.totp_secret.substring(0,8)+'...' : 'NONE');
+                  else console.log('gauth MISSING:', e);
+                }
+              }
+            "
+
+            echo "=== 2. Re-enrich missing totp_secret from gauth DB ==="
+            sudo node -e "
+              const fs = require('fs');
+              const gd = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+              const ga = Array.isArray(gd) ? gd : (gd.accounts || []);
+              const totpMap = {};
+              for (const a of ga) {
+                if (a.email && a.totp_secret) totpMap[a.email.toLowerCase().trim()] = a.totp_secret.trim();
+              }
+              const raw = JSON.parse(fs.readFileSync('/var/www/sites/hae/accounts.json','utf8'));
+              const isArr = Array.isArray(raw);
+              const arr = isArr ? raw : (raw.accounts || Object.values(raw));
+              let enriched = 0;
+              for (const a of arr) {
+                const k = (a.email||'').toLowerCase().trim();
+                if ((!a.totp_secret || a.totp_secret.length<=4) && totpMap[k]) {
+                  a.totp_secret = totpMap[k];
+                  enriched++;
+                }
+              }
+              console.log('enriched:', enriched);
+              const out = isArr ? arr : Object.assign({}, raw, {accounts: arr});
+              fs.writeFileSync('/var/www/sites/hae/accounts.json', JSON.stringify(out, null, 2));
+            "
+
+            echo "=== 3. Restart hae service ==="
+            for svc in hae site-hae hae-site; do
+              if sudo systemctl is-active --quiet "$svc" 2>/dev/null || sudo systemctl cat "$svc" &>/dev/null; then
+                sudo systemctl restart "$svc" && echo "restarted: $svc" && break
+              fi
+            done
+            sleep 2
+            sudo systemctl is-active hae 2>/dev/null || sudo systemctl is-active site-hae 2>/dev/null || echo "service status unknown"
+
+            echo "=== 4. HAE index.html TOTP-related HTML (grep) ==="
+            sudo grep -n "totp\|2fa\|2FA\|secret\|twofa\|otp" /var/www/sites/hae/public/index.html | head -40
+
+            echo "=== 5. HAE index.html script tags count ==="
+            sudo grep -c "<script" /var/www/sites/hae/public/index.html || echo 0
+
+            echo "=== 6. Check if TOTP_CLIENT already injected ==="
+            sudo grep -c "TOTP_CLIENT" /var/www/sites/hae/public/index.html || echo "NOT injected"
