@@ -1,1 +1,1293 @@
-$(cat /tmp/fixed_index.html)
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>참교육 스트리밍 계정 정보</title>
+<script>var _V='20260827v2';if(!location.search.match('_v='+_V)){location.replace(location.pathname+'?_v='+_V+location.hash);}</script>
+<link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0a0d12"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%230a0d12' width='100' height='100' rx='20'/><text x='50' y='70' text-anchor='middle' font-size='60'>📺</text></svg>">
+<style>
+*{box-sizing:border-box}
+body{font-family:-apple-system,'SF Pro Text',sans-serif;background:#0b0d10;color:#e8ecef;margin:0}
+header{padding:14px 20px;background:#111418;border-bottom:1px solid #22282f;position:sticky;top:0;z-index:5}
+h1{margin:0 0 8px;font-size:18px}
+.stats{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:#9aa5b5}
+.stats b{color:#e8ecef;font-size:15px}
+.stats .ok{color:#3ddc84}
+.controls{padding:12px 20px;background:#0f1216;border-bottom:1px solid #22282f;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+input{background:#161a20;border:1px solid #2a323c;color:#e8ecef;padding:9px 12px;border-radius:6px;font-size:14px;flex:1;min-width:200px}
+input:focus{outline:0;border-color:#2b6cff}
+select{background:#161a20;border:1px solid #2a323c;color:#e8ecef;padding:9px 10px;border-radius:6px;font-size:13px}
+#count{color:#8a95a5;font-size:12px;white-space:nowrap}
+#viewport{overflow-y:visible;min-height:200px}
+#spacer{display:block}
+.row{padding:10px 20px;border-bottom:1px solid #1a1f26;display:grid;grid-template-columns:280px 100px 1fr 1fr 180px 170px;gap:10px;align-items:center;font-size:12.5px}
+.row:hover{background:#141821}
+.email{font-weight:500;word-break:break-all}
+.badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:10.5px;font-weight:600}
+.b-on{background:#0d3222;color:#3ddc84}
+.b-today{background:#0d3222;color:#3ddc84;font-weight:700}
+.b-old{background:#2a2f36;color:#8a95a5}
+.b-never{background:#2a1e1e;color:#f47070}
+.b-off{background:#2a1e1e;color:#f47070}
+.b-2fa{background:#1c2740;color:#7dabff}
+.b-lock{background:#3a1c1c;color:#ff8080}
+.mono{font-family:'SF Mono',Monaco,monospace;color:#c9d2dc;font-size:12px;word-break:break-all}
+.pw{color:#e8ecef}
+button{background:#2b6cff;color:#fff;border:0;padding:7px 12px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600}
+button:hover{background:#1e5ae0}
+button:disabled{background:#333;cursor:not-allowed}
+.no-sess{background:#555}
+.cp{background:#2a323c;padding:3px 8px;font-size:11px;margin-left:6px;color:#c9d2dc}
+.cp:hover{background:#39434f}
+
+/* --- Mobile responsive --- */
+@media(max-width:768px){
+  header{padding:10px 12px}
+  h1{font-size:15px}
+  .stats{font-size:11px;gap:8px}
+  .controls{padding:8px 12px;gap:6px}
+  .controls input{min-width:120px;font-size:13px;padding:8px}
+  #viewport{height:auto;max-height:none;overflow:visible}
+  .controls{flex-wrap:wrap;padding:8px 12px}
+  .controls input#q{min-width:100px}
+  .row{grid-template-columns:1fr!important;gap:4px!important;padding:10px 12px!important;font-size:13px}
+  #viewport .td-card{padding:14px!important}
+  #viewport .td-card .td-grid{grid-template-columns:1fr!important;gap:8px 0!important;font-size:15px!important}
+  #viewport .td-card .td-label{color:#8a95a5;font-size:12px;font-weight:600;margin-bottom:2px}
+  #viewport .td-card .td-val{font-size:15px;line-height:1.5;word-break:break-all}
+  #viewport .td-card .td-email{font-size:17px!important}
+  #viewport .td-card .td-pw{font-size:17px!important}
+  #viewport .td-card .td-2fa-code{font-size:24px!important;letter-spacing:3px!important}
+  #viewport .td-card .td-secret{font-size:13px!important}
+  #viewport .td-card .cp{padding:6px 14px!important;font-size:13px!important;margin-left:8px!important;border-radius:4px}
+  #viewport .td-card button{padding:8px 14px!important;font-size:13px!important}
+  #excelUpBox{margin:10px 8px;padding:10px}
+  #pagination{flex-wrap:wrap}
+}
+@media(min-width:769px){
+  #viewport .td-card .td-grid{grid-template-columns:100px 1fr;gap:6px 12px;font-size:14px}
+  #viewport .td-card{padding:16px;margin-bottom:10px}
+  #viewport .td-card .td-email{font-size:16px}
+  #viewport .td-card .td-pw{font-size:15px}
+  #viewport .td-card .td-2fa-code{font-size:20px;letter-spacing:2px}
+  #viewport .td-card .cp{padding:4px 10px;font-size:12px}
+  #viewport .td-card button{padding:6px 12px;font-size:12px}
+}
+#pwa-install-btn{display:none;width:calc(100% - 32px);margin:0 auto;padding:16px 24px;background:linear-gradient(135deg,#ff9040,#ff6020);color:#fff;border:none;border-radius:12px;font-size:20px;font-weight:800;cursor:pointer;box-shadow:0 4px 16px rgba(255,144,64,.4);text-align:center}
+#pwa-install-btn:hover{transform:scale(1.02);box-shadow:0 6px 24px rgba(255,144,64,.5)}
+</style></head>
+<body>
+<script>
+(function(){
+  var V='v39';
+  if(localStorage.getItem('gauth_sw')===V) return;
+  if(window.caches){
+    caches.keys().then(function(ks){
+      ks.forEach(function(k){ if(k!=='gauth-'+V) caches.delete(k); });
+    });
+  }
+  if(navigator.serviceWorker){
+    navigator.serviceWorker.getRegistrations().then(function(regs){
+      regs.forEach(function(r){r.unregister()});
+      navigator.serviceWorker.register('sw.js?v='+V).then(function(){
+        localStorage.setItem('gauth_sw',V);
+      });
+    });
+  } else {
+    localStorage.setItem('gauth_sw',V);
+  }
+})();
+</script>
+<div id="hero-banner">
+  <div class="hero-glow"></div>
+  <div class="hero-particles" id="heroParticles"></div>
+  <h1 class="hero-title">
+    <span class="hero-icon">🎬</span>
+    <span class="hero-text">참교육 스트리밍</span>
+    <span class="hero-sub">계정 정보</span>
+  </h1>
+  <div class="hero-line"></div>
+</div>
+<style>
+#hero-banner{position:relative;overflow:hidden;padding:24px 20px 18px;background:linear-gradient(135deg,#0a0d12 0%,#111828 40%,#1a1030 70%,#0a0d12 100%);text-align:center;border-bottom:none}
+.hero-glow{position:absolute;top:-60%;left:50%;transform:translateX(-50%);width:600px;height:300px;background:radial-gradient(ellipse,rgba(255,144,64,.15) 0%,rgba(124,58,237,.08) 40%,transparent 70%);pointer-events:none;animation:glowPulse 4s ease-in-out infinite}
+@keyframes glowPulse{0%,100%{opacity:.6;transform:translateX(-50%) scale(1)}50%{opacity:1;transform:translateX(-50%) scale(1.15)}}
+.hero-particles{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;overflow:hidden}
+.hero-particle{position:absolute;width:3px;height:3px;border-radius:50%;animation:particleFloat linear infinite;opacity:0}
+@keyframes particleFloat{0%{transform:translateY(100px) scale(0);opacity:0}20%{opacity:1}80%{opacity:.6}100%{transform:translateY(-80px) scale(1.5);opacity:0}}
+.hero-title{position:relative;margin:0;display:flex;flex-direction:column;align-items:center;gap:2px}
+.hero-icon{font-size:36px;filter:drop-shadow(0 0 12px rgba(255,144,64,.6));animation:iconBounce 3s ease-in-out infinite}
+@keyframes iconBounce{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-4px) scale(1.08)}}
+.hero-text{font-size:28px;font-weight:900;letter-spacing:3px;background:linear-gradient(90deg,#ff9040 0%,#ffcc40 25%,#ff6090 50%,#a060ff 75%,#ff9040 100%);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:shimmer 3s linear infinite}
+@keyframes shimmer{0%{background-position:0% center}100%{background-position:200% center}}
+.hero-sub{font-size:14px;font-weight:700;color:#c9d2dc;letter-spacing:6px;text-transform:uppercase;margin-top:2px;text-shadow:0 0 20px rgba(125,171,255,.3)}
+.hero-line{position:relative;height:3px;margin-top:14px;background:linear-gradient(90deg,transparent,#ff9040,#ffcc40,#a060ff,#ff6090,#ff9040,transparent);border-radius:2px;animation:lineGlow 2s ease-in-out infinite alternate}
+@keyframes lineGlow{0%{opacity:.6;filter:blur(0px)}100%{opacity:1;filter:blur(1px)}}
+@media(max-width:768px){
+  #hero-banner{padding:18px 12px 14px}
+  .hero-icon{font-size:28px}
+  .hero-text{font-size:22px;letter-spacing:2px}
+  .hero-sub{font-size:11px;letter-spacing:4px}
+  .hero-glow{width:350px;height:200px}
+}
+</style>
+<script>
+(function(){
+  var c=document.getElementById('heroParticles');if(!c)return;
+  var colors=['#ff9040','#ffcc40','#a060ff','#ff6090','#7dabff','#3ddc84'];
+  for(var i=0;i<20;i++){
+    var p=document.createElement('div');p.className='hero-particle';
+    p.style.cssText='left:'+Math.round(Math.random()*100)+'%;bottom:0;width:'+(2+Math.random()*3)+'px;height:'+(2+Math.random()*3)+'px;background:'+colors[i%colors.length]+';animation-duration:'+(2+Math.random()*3)+'s;animation-delay:'+(Math.random()*4)+'s';
+    c.appendChild(p);
+  }
+})();
+</script>
+
+
+
+<div id="main-nav" style="display:flex;gap:0;background:#111418;border-bottom:1px solid #22282f;padding:0 16px">
+  <a href="/" style="padding:12px 20px;font-size:14px;font-weight:700;color:#7dabff;border-bottom:2px solid #2b6cff;text-decoration:none">📋 전체 계정</a>
+  <a href="/accounts.html" style="padding:12px 20px;font-size:14px;font-weight:700;color:#5a6a7a;border-bottom:2px solid transparent;text-decoration:none">🔑 계정 조회 + 로그인</a>
+  <a href="/login-issues.html" style="padding:12px 20px;font-size:14px;font-weight:700;color:#5a6a7a;border-bottom:2px solid transparent;text-decoration:none">🚫 로그인 문제</a>
+  <a href="/spreadsheet.html" style="padding:12px 20px;font-size:14px;font-weight:700;color:#5a6a7a;border-bottom:2px solid transparent;text-decoration:none">📊 엑셀 계정</a>
+  <a href="/cent-works.html" style="padding:12px 20px;font-size:14px;font-weight:700;color:#5a6a7a;border-bottom:2px solid transparent;text-decoration:none">🎨 센트작품</a>
+</div>
+<div style="padding:12px 16px;background:#0d1117"><button id="pwa-install-btn">📲 앱으로 설치</button></div>
+<div id="stream-info-box">
+  <div class="si-section">
+    <div class="si-header"><span class="si-label">🎙️ 스트리밍 제목</span><button class="si-btn si-refresh" onclick="cycleStreamTitle()">🔄 새로고침</button><button class="si-btn si-copy" onclick="copyStreamTitle(event)">📋 복사</button></div>
+    <div class="si-content" id="streamTitle">참교육 당해야 하는 것인가?</div>
+  </div>
+  <div class="si-section">
+    <div class="si-header"><span class="si-label">📝 설명</span><button class="si-btn si-copy" onclick="copyStreamDesc(event)">📋 복사</button></div>
+    <div class="si-content" id="streamDesc">#실시간게임 #라이브캄보디아 #대리운전 #아바타 🎮🔥 란 ?<br>참교육 채널입니다. 👊<br>24시간 365일 1등급 생방송 스피드 하게 진행! ⚡️<br>탁&amp;제이 여러분 환영합니다. 🙌<br>시아누크빌 현장에서 진행합니다. 🇰🇭<br>필리핀 아님XX ❌🇵🇭</div>
+  </div>
+</div>
+<style>
+#stream-info-box{padding:12px 16px;background:#0d1117;border-bottom:1px solid #22282f}
+.si-section{background:#161b22;border:1px solid #2a323c;border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.si-section:last-child{margin-bottom:0}
+.si-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.si-label{font-size:14px;font-weight:700;color:#c9d2dc;flex:1}
+.si-btn{border:none;border-radius:10px;padding:14px 24px;font-size:18px;font-weight:800;cursor:pointer;transition:all .15s}
+.si-refresh{background:#1c2740;color:#7dabff}.si-refresh:hover{background:#253356}
+.si-copy{background:#1c3a2a;color:#3ddc84}.si-copy:hover{background:#254a34}
+.si-content{font-size:15px;color:#e8ecef;line-height:1.6;word-break:break-word;padding:8px 10px;background:#0f1318;border-radius:6px;border:1px solid #1e242c}
+#streamTitle{font-size:17px;font-weight:700;color:#ffcc40}
+@media(max-width:768px){
+  #stream-info-box{padding:10px 10px}
+  .si-section{padding:10px 12px}
+  .si-content{font-size:14px;padding:8px}
+  #streamTitle{font-size:16px}
+  .si-btn{padding:16px 28px;font-size:20px}
+}
+</style>
+<script>
+var _streamTitles=[
+  '참교육 당해야 하는 것인가?',
+  '사랑하고 존경합니다.',
+  '아름다운 밤이에요!',
+  '탁 진행~ 쇼쇼쇼!!',
+  '제이 진행 쇼쇼쇼!!',
+  '여러분 충분히 사랑받고 부자 될 자격 있습니다.'
+];
+var _stIdx=0;
+function cycleStreamTitle(){
+  _stIdx=(_stIdx+1)%_streamTitles.length;
+  document.getElementById('streamTitle').textContent=_streamTitles[_stIdx];
+}
+function _siCopy(text,btn){
+  navigator.clipboard.writeText(text).then(function(){
+    var orig=btn.innerHTML;btn.innerHTML='✅ 복사됨';btn.style.background='#0d3222';
+    setTimeout(function(){btn.innerHTML=orig;btn.style.background='';},1200);
+  });
+}
+function copyStreamTitle(e){
+  _siCopy(document.getElementById('streamTitle').textContent,e.currentTarget||e);
+}
+function copyStreamDesc(e){
+  var el=document.getElementById('streamDesc');
+  var text=el.innerHTML.replace(/<br\s*\/?>/gi,'\n').replace(/<[^>]*>/g,'').replace(/&amp;/g,'&');
+  _siCopy(text,e.currentTarget||e);
+}
+</script>
+
+<div id="accStats" style="padding:8px 20px;background:#0d1520;border-bottom:1px solid #22282f;font-size:13px;color:#9aa5b5;text-align:center"></div>
+<div id="monthlyGroups" style="padding:6px 20px;background:#0d1520;border-bottom:1px solid #22282f;font-size:12px;color:#c9d2dc;text-align:center"></div>
+<script>
+/* MDN: Element.innerHTML XSS 방지 — https://developer.mozilla.org/en-US/docs/Web/API/Element/innerHTML#security_considerations */
+function _esc(s){return String(s==null?'':s).replace(/[&<>"'`\\]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;','\\':'&#92;'}[c];})}
+var escapeHtml=_esc;
+async function refreshAccStats(){
+  try {
+    const [rp, j, na] = await Promise.all([
+      fetch(authQuery('/api/parse-report'),{cache:'no-store',headers:authHeaders()}).then(r=>r.json()).catch(()=>({})),
+      fetch(authQuery('/api/accounts'),{cache:'no-store',headers:authHeaders()}).then(r=>r.json()).catch(()=>({})),
+      fetch(authQuery('/api/normalized-accounts'),{cache:'no-store',headers:authHeaders()}).then(r=>r.json()).catch(()=>({}))
+    ]);
+    const _files = (na.summary && na.summary.files_scanned) || (rp && rp.last_run ? rp.last_run.files : 0) || 0;
+    var el = document.getElementById('accStats');
+    var _2fa = (j.accounts||[]).filter(function(a){return a.has2FA;}).length;
+    if(el) el.innerHTML = '📄 엑셀 파일 <b style="color:#7dabff">'+_esc(_files)+'</b>장 · 📊 원본 <b style="color:#7dabff">'+_esc(j.file_total||0)+'</b>개 · 로그인 가능 <b style="color:#3ddc84">'+_esc(j.usable||0)+'</b>개 · 제외 <b style="color:#f47070">'+_esc(j.invalid||0)+'</b>개 (이메일/비번 미비) · 2FA <b style="color:#f5c842">'+_esc(_2fa)+'</b>개';
+    var mg = document.getElementById('monthlyGroups');
+    var fileBreakdown = (rp && rp.last_run && rp.last_run.file_details) || (na.summary && na.summary.file_details) || null;
+    var mgHtml = '';
+    if(rp && rp.last_run && rp.last_run.by_date){
+      mgHtml += '📅 ';
+      Object.entries(rp.last_run.by_date).sort().reverse().forEach(function(e){
+        mgHtml += '<span style="margin:0 6px;padding:3px 8px;background:#161a20;border-radius:6px">'+_esc(e[0])+': <b style="color:#3ddc84">'+_esc(e[1])+'</b></span>';
+      });
+    }
+    if(fileBreakdown && fileBreakdown.length){
+      mgHtml += '<details style="margin-top:6px;display:inline-block;text-align:left"><summary style="cursor:pointer;color:#7dabff;font-weight:700;font-size:12px">📁 파일별 계정 수 ('+fileBreakdown.length+'개)</summary><div style="margin-top:4px;max-height:200px;overflow-y:auto">';
+      fileBreakdown.forEach(function(f,i){
+        mgHtml += '<div style="padding:2px 8px;font-size:11px;border-bottom:1px solid #1a1f26;display:flex;justify-content:space-between"><span style="color:#8a95a5;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(i+1)+'. '+_esc(f.name)+'</span><span style="color:'+(f.count>0?'#3ddc84':'#f47070')+';font-weight:700">'+_esc(f.count)+'개</span></div>';
+      });
+      mgHtml += '</div></details>';
+    } else {
+      var fileCounts = {};
+      (j.accounts||[]).forEach(function(a){ var src = a.source_file||'unknown'; fileCounts[src] = (fileCounts[src]||0)+1; });
+      var fileEntries = Object.entries(fileCounts).sort(function(a,b){return b[1]-a[1]});
+      if(fileEntries.length){
+        mgHtml += '<details style="margin-top:6px;display:inline-block;text-align:left"><summary style="cursor:pointer;color:#7dabff;font-weight:700;font-size:12px">📁 파일별 계정 수 ('+fileEntries.length+'개)</summary><div style="margin-top:4px;max-height:200px;overflow-y:auto">';
+        fileEntries.forEach(function(e,i){
+          mgHtml += '<div style="padding:2px 8px;font-size:11px;border-bottom:1px solid #1a1f26;display:flex;justify-content:space-between"><span style="color:#8a95a5;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(i+1)+'. '+_esc(e[0])+'</span><span style="color:#3ddc84;font-weight:700">'+_esc(e[1])+'개</span></div>';
+        });
+        mgHtml += '</div></details>';
+      }
+    }
+    if(mg) mg.innerHTML = mgHtml;
+  } catch(e){
+    var el = document.getElementById('accStats');
+    if(el && !el.innerHTML) el.style.display='none';
+  }
+}
+refreshAccStats();
+/* 새로고침 후 업로드 진행 상태 폴링 */
+(function(){
+  var ts = localStorage.getItem('gauth_uploading');
+  if(!ts) return;
+  /* 600000ms = 10분 — 업로드 타임아웃과 일치 (서버 req.setTimeout(600000)) */
+  if(Date.now() - Number(ts) > 600000){ localStorage.removeItem('gauth_uploading'); return; }
+  var bar = document.getElementById('accStats');
+  var origText = bar ? bar.innerHTML : '';
+  if(bar) bar.innerHTML = '⏳ 서버에서 엑셀 처리 중… 잠시 후 자동 갱신됩니다';
+  var prevMaster = 0;
+  var poll = setInterval(function(){
+    fetch(authQuery('/api/parse-report'),{cache:'no-store',headers:authHeaders()}).then(function(r){return r.json()}).then(function(rp){
+      var lr = rp.last_run || {};
+      var updAt = new Date(lr.updated_at||0).getTime();
+      if(updAt > Number(ts)){
+        clearInterval(poll);
+        localStorage.removeItem('gauth_uploading');
+        refreshAccStats();
+        var banner = document.createElement('div');
+        banner.id = 'uploadDoneBanner';
+        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;padding:14px 20px;background:linear-gradient(135deg,#0d3222,#1c4a35);color:#3ddc84;font-size:15px;font-weight:700;text-align:center;z-index:9999;border-bottom:2px solid #3ddc84';
+        banner.textContent = '✅ 엑셀 처리 완료 — 마스터 ' + (lr.total_master||0) + '개';
+        document.body.prepend(banner);
+        setTimeout(function(){ var b=document.getElementById('uploadDoneBanner'); if(b) b.remove(); }, 8000);
+      }
+    }).catch(function(){});
+  }, 3000);
+  /* 600000ms = 10분 — 폴링 최대 시간, 서버 타임아웃과 일치 */
+  setTimeout(function(){ clearInterval(poll); localStorage.removeItem('gauth_uploading'); }, 600000);
+})();
+</script>
+
+<style>#excelUpProg::-webkit-progress-bar{background:#1a1f26;border-radius:10px}#excelUpProg::-webkit-progress-value{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px;transition:width .2s}#excelUpProg::-moz-progress-bar{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px}#excelUpProg{-webkit-appearance:none;appearance:none;border:none;border-radius:10px;background:#1a1f26}</style><div id="excelUpBox" style="display:block;margin:16px 20px;padding:16px;background:#161a20;border:1px solid #2a323c;border-radius:8px">
+  <h3 style="margin:0 0 10px 0;color:#3ddc84;font-size:14px">📤 엑셀 일괄 업로드 (한번에 여러 파일)</h3>
+  <input type="file" id="excelFiles" multiple accept=".xlsx,.xls,.csv" style="color:#e8ecef;font-size:13px"><div style="margin-top:8px"><button id="excelFolderBtn" style="background:#1e3a5f;color:#7dabff;border:1px solid #2b6cff;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px;margin-right:8px" onclick="document.getElementById('excelFolderFiles').click()">📂 폴더 전체 스캔</button><input type="file" id="excelFolderFiles" webkitdirectory directory multiple style="display:none"><span id="excelFolderInfo" style="font-size:12px;color:#9fb3e0"></span></div>
+  <div id="excelFileList" style="margin-top:8px;font-size:12px;color:#9fb3e0;font-family:monospace"></div>
+  <button id="excelUpBtn" style="margin-left:10px">▶ 업로드 &amp; 취합</button>
+  <div id="excelUpProgWrap" style="margin-top:10px;display:none"><progress id="excelUpProg" value="0" max="100" style="width:100%;height:20px"></progress><div id="excelUpProgTxt" style="margin-top:4px;font-size:12px;color:#3ddc84;text-align:right;font-family:monospace">0%</div></div><div id="excelUpResult" style="margin-top:12px;font-size:12.5px;color:#c9d2dc;font-family:'SF Mono',monospace;white-space:pre-wrap"></div>
+</div>
+<script>
+/* MDN: KST 자정 = 오늘 00:00 Asia/Seoul → epoch ms
+ * ref: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat */
+function kstTodayMidnightMs(){
+  var now = new Date();
+  var parts = new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Seoul', year:'numeric', month:'2-digit', day:'2-digit'}).formatToParts(now);
+  var y = parts.find(p=>p.type==='year').value;
+  var m = parts.find(p=>p.type==='month').value;
+  var d = parts.find(p=>p.type==='day').value;
+  /* 해당 KST 자정 = UTC 15:00 (전일) */
+  return Date.parse(y+'-'+m+'-'+d+'T00:00:00+09:00');
+}
+function accessBadge(a){
+  var mt = a.session_mtime || 0;
+  if(!mt) return '<span class="badge b-never">미접속</span>';
+  if(mt >= kstTodayMidnightMs()) return '<span class="badge b-today">🟢 오늘</span>';
+  /* 86400000 = 24h × 60min × 60s × 1000ms — POSIX day in milliseconds */
+  var days = Math.floor((Date.now()-mt)/86400000);
+  return '<span class="badge b-old">'+(days<=1?'어제':days+'일 전')+'</span>';
+}
+
+(function(){
+  var btn = document.getElementById('excelUpBtn');
+  var fi = document.getElementById('excelFiles');
+  var out = document.getElementById('excelUpResult');
+  if(!btn||!fi||!out) return;
+  /* ref: MDN HTMLInputElement change event https://developer.mozilla.org/en-US/docs/Web/API/HTMLInputElement/change_event */
+  /* ref: MDN FileList https://developer.mozilla.org/en-US/docs/Web/API/FileList */
+  /* ref: MDN File.name, File.size https://developer.mozilla.org/en-US/docs/Web/API/File */
+  /* MDN: FileList는 change마다 replace. 누적 위해 DataTransfer 사용 https://developer.mozilla.org/en-US/docs/Web/API/DataTransfer */
+  window._picked = window._picked || [];
+  function renderList(){
+    var list = document.getElementById('excelFileList');
+    if(!list) return;
+    if(window._picked.length===0){ list.innerHTML=''; return; }
+    /* 100개 초과 시 DOM 렌더 제한 — 수천 개 파일에서 freeze 방지 */
+    var MAX_SHOW = 100;
+    var shown = window._picked.slice(0, MAX_SHOW);
+    var arr = shown.map(function(f,i){ return (i+1)+'. '+_esc(f.name)+' ('+Math.round(f.size/1024)+'KB)'; });
+    var extra = window._picked.length > MAX_SHOW ? '<br><span style="color:#9fb3e0">…외 '+(window._picked.length-MAX_SHOW)+'개</span>' : '';
+    list.innerHTML = '📎 <b>' + window._picked.length + '개 선택됨:</b> <button id="_clearFiles" style="padding:2px 8px;font-size:11px">🗑 초기화</button><br>' + arr.join('<br>') + extra;
+    var cb = document.getElementById('_clearFiles');
+    if(cb) cb.onclick = function(){ window._picked=[]; try{fi.value='';}catch(_){} renderList(); };
+  }
+  fi.addEventListener('change', function(){
+    /* 새 선택된 파일을 누적 (같은 이름 중복은 이름+size로 dedup) */
+    for(var i=0;i<fi.files.length;i++){
+      var f = fi.files[i];
+      var dup = window._picked.some(function(x){ return x.name===f.name && x.size===f.size; });
+      if(!dup) window._picked.push(f);
+    }
+    renderList();
+  });
+  /* 폴더 스캔 핸들러가 _picked 에 직접 push 후 발생시키는 이벤트 — DataTransfer 우회 */
+  fi.addEventListener('_folderScanned', function(){
+    renderList();
+  });
+  btn.addEventListener('click', function(){
+    if(!window._picked.length){ out.textContent = '⚠️ 파일 선택 먼저'; return; }
+    btn.disabled = true;
+    var startTime = Date.now();
+    var valid = window._picked.filter(function(f){ return f.size > 0 && f.name.indexOf('~$') !== 0; });
+    var skipped = window._picked.length - valid.length;
+    var totalKB = Math.round(valid.reduce(function(s,f){return s+f.size},0)/1024);
+    if(!valid.length){ out.innerHTML='<div style="color:#f47070;font-size:14px;padding:12px">❌ 유효한 파일 없음 (0KB·임시파일만 있음)</div>'; btn.disabled=false; return; }
+    function statusHTML(phase, pct, detail, result){
+      var phases = [
+        {id:'prep',label:'준비'},
+        {id:'upload',label:'업로드'},
+        {id:'parse',label:'서버 파싱'},
+        {id:'done',label:'완료'}
+      ];
+      var h = '<div style="display:flex;gap:6px;margin-bottom:12px">';
+      var pi = phases.findIndex(function(p){return p.id===phase});
+      phases.forEach(function(p,i){
+        var active = i===pi;
+        var done = i<pi || phase==='done';
+        var bg = done?'#3ddc84':active?'#2b6cff':'#2a323c';
+        var fg = done?'#000':active?'#fff':'#8a95a5';
+        h+='<div style="flex:1;text-align:center;padding:6px 0;border-radius:4px;font-size:11px;font-weight:700;background:'+bg+';color:'+fg+'">'+(done?'✓ ':active?'● ':'')+p.label+'</div>';
+      });
+      h+='</div>';
+      if(pct>=0 && phase==='upload'){
+        h+='<div style="background:#1a1f26;border-radius:6px;overflow:hidden;height:8px;margin-bottom:8px"><div style="height:100%;background:linear-gradient(90deg,#2b6cff,#3ddc84);width:'+pct+'%;transition:width .2s"></div></div>';
+      }
+      h+='<div style="font-size:13px;color:#c9d2dc;font-family:monospace">'+detail+'</div>';
+      if(result) h+=result;
+      return h;
+    }
+    out.innerHTML = statusHTML('prep', -1, valid.length+'개 파일 · '+totalKB+'KB'+(skipped?' ('+skipped+'개 임시파일 제외)':''));
+    var fd = new FormData();
+    for(var i=0;i<valid.length;i++) fd.append('files', valid[i]);
+    doUpload(fd, btn, out, startTime, statusHTML, valid.length);
+  });
+  function doUpload(fd, btn, out, startTime, statusHTML, fileCount){
+    localStorage.setItem('gauth_uploading', Date.now());
+    updateUploadStatus();
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', authQuery('/api/upload-excels'), true);
+    /* 300000ms = 5분 — 대용량 엑셀 업로드 허용 (서버측 10분보다 짧게 설정) */
+    xhr.timeout = 300000;
+    var t=getApiToken();if(t)xhr.setRequestHeader('Authorization','Bearer '+t);
+    xhr.ontimeout = function(){
+      out.innerHTML = statusHTML('upload', 100, '<span style="color:#f47070;font-size:15px;font-weight:700">❌ 서버 응답 타임아웃 (5분)</span>');
+      btn.disabled=false; localStorage.removeItem('gauth_uploading'); updateUploadStatus();
+    };
+    xhr.onerror = function(){
+      out.innerHTML = statusHTML('upload', 0, '<span style="color:#f47070;font-size:15px;font-weight:700">❌ 서버 연결 실패 — 네트워크 오류 또는 서버 다운</span>');
+      btn.disabled=false; localStorage.removeItem('gauth_uploading'); updateUploadStatus();
+    };
+    var progWrap = document.getElementById('excelUpProgWrap');
+    var progEl = document.getElementById('excelUpProg');
+    var progTxt = document.getElementById('excelUpProgTxt');
+    if(progWrap){ progWrap.style.display='block'; progEl.value=0; progTxt.textContent='0%'; }
+    xhr.upload.addEventListener('progress', function(ev){
+      if(ev.lengthComputable){
+        var pct = Math.round(100*ev.loaded/ev.total);
+        if(progEl) progEl.value=pct;
+        if(progTxt) progTxt.textContent=pct+'%';
+        out.innerHTML = statusHTML('upload', pct, '전송 중 '+Math.round(ev.loaded/1024)+'/'+Math.round(ev.total/1024)+'KB');
+      }
+    });
+    xhr.upload.addEventListener('load', function(){
+      if(progEl) progEl.value=100;
+      if(progTxt) progTxt.textContent='100%';
+      out.innerHTML = statusHTML('parse', -1, '서버에서 '+fileCount+'개 파일 파싱 중…');
+    });
+    xhr.upload.addEventListener('error', function(){
+      out.innerHTML = statusHTML('upload', 0, '<span style="color:#f47070;font-size:15px;font-weight:700">❌ 업로드 실패 — 네트워크 오류</span>');
+      btn.disabled=false; localStorage.removeItem('gauth_uploading'); updateUploadStatus();
+    });
+    xhr.onreadystatechange = function(){
+      if(xhr.readyState===4){
+        var elapsed = ((Date.now()-startTime)/1000).toFixed(1);
+        var d = null;
+        try { d = JSON.parse(xhr.responseText); } catch(e){
+          out.innerHTML = statusHTML('parse', -1, '<span style="color:#f47070;font-size:15px;font-weight:700">❌ 서버 응답 오류 (HTTP '+xhr.status+')</span><br><span style="font-size:11px;color:#8a95a5">'+elapsed+'초 소요</span>');
+          btn.disabled=false; localStorage.removeItem('gauth_uploading'); updateUploadStatus(); return;
+        }
+        if(!d.ok){
+          out.innerHTML = statusHTML('parse', -1, '<span style="color:#f47070;font-size:15px;font-weight:700">❌ '+_esc(d.error||'서버 처리 실패')+'</span><br><span style="font-size:11px;color:#8a95a5">HTTP '+xhr.status+' · '+elapsed+'초</span>');
+          btn.disabled=false; localStorage.removeItem('gauth_uploading'); updateUploadStatus(); return;
+        }
+        var fileRows = (d.files||[]).map(function(f,i){
+          var ok = !f.error && (f.accounts||0)>0;
+          var fname = (f.name||'').normalize ? (f.name||'').normalize('NFC') : (f.name||'');
+          return '<tr style="border-bottom:1px solid #22282f"><td style="padding:4px 8px;color:#8a95a5;font-size:11px">'+(i+1)+'</td><td style="padding:4px 8px;font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escapeHtml(fname)+'</td><td style="padding:4px 8px;text-align:right;font-weight:700;color:'+(ok?'#3ddc84':'#f47070')+'">'+escapeHtml(f.accounts||0)+'개'+(f.error?' ❌':'')+'</td></tr>';
+        }).join('');
+        var resultHTML = '<div style="margin-top:14px;padding:16px;background:#0d2818;border:2px solid #3ddc84;border-radius:8px">'
+          +'<div style="font-size:18px;font-weight:800;color:#3ddc84;margin-bottom:10px">✅ 업로드 완료</div>'
+          +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">'
+          +'<div style="background:#1a2a1a;padding:10px;border-radius:6px;text-align:center"><div style="font-size:22px;font-weight:800;color:#3ddc84">'+(d.total_parsed||0)+'</div><div style="font-size:10px;color:#8a95a5">파싱</div></div>'
+          +'<div style="background:#1a1a2a;padding:10px;border-radius:6px;text-align:center"><div style="font-size:22px;font-weight:800;color:#7dabff">'+(d.added||0)+'</div><div style="font-size:10px;color:#8a95a5">신규</div></div>'
+          +'<div style="background:#2a1a1a;padding:10px;border-radius:6px;text-align:center"><div style="font-size:22px;font-weight:800;color:#ffaa55">'+(d.updated||0)+'</div><div style="font-size:10px;color:#8a95a5">업데이트</div></div>'
+          +'</div>'
+          +'<div style="display:flex;justify-content:space-between;font-size:12px;color:#8a95a5;margin-bottom:8px"><span>마스터 총 <b style="color:#e8ecef">'+(d.total_master||0)+'</b>건</span><span>충돌 <b style="color:'+(d.conflicts_count?'#ffaa55':'#8a95a5')+'">'+(d.conflicts_count||0)+'</b>건</span><span>'+elapsed+'초 소요</span></div>';
+        if(fileRows){
+          resultHTML+='<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12px;color:#7dabff;font-weight:700">파일별 상세 ('+((d.files||[]).length)+'개)</summary>'
+            +'<table style="width:100%;margin-top:6px;font-family:monospace;border-collapse:collapse">'+fileRows+'</table></details>';
+        }
+        if((d.conflicts||[]).length){
+          var confRows = d.conflicts.slice(0,5).map(function(c){
+            return '<div style="padding:4px 0;font-size:11px;border-bottom:1px solid #22282f"><b>'+escapeHtml(c.email)+'</b>: '+c.fields.map(function(f){return escapeHtml(f.field)}).join(', ')+'</div>';
+          }).join('');
+          resultHTML+='<details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px;color:#ffaa55;font-weight:700">충돌 상세 ('+(d.conflicts||[]).length+'건)</summary><div style="margin-top:4px">'+confRows;
+          if(d.conflicts.length>5) resultHTML+='<div style="font-size:11px;color:#8a95a5">… 외 '+(d.conflicts.length-5)+'건</div>';
+          resultHTML+='</div></details>';
+        }
+        resultHTML+='</div>';
+        out.innerHTML = statusHTML('done', -1, '', resultHTML);
+        if(progWrap) progWrap.style.display='none';
+        if(typeof refreshAccStats==='function') refreshAccStats();
+        btn.disabled = false;
+        window._picked = []; renderList();
+        var banner = document.createElement('div');
+        banner.id = 'uploadDoneBanner';
+        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;padding:14px 20px;background:linear-gradient(135deg,#0d3222,#1c4a35);color:#3ddc84;font-size:15px;font-weight:700;text-align:center;z-index:9999;border-bottom:2px solid #3ddc84';
+        banner.textContent = '✅ 완료 — '+(d.total_parsed||0)+'건 파싱 · '+(d.added||0)+'건 추가 · '+(d.updated||0)+'건 업데이트 · 마스터 '+(d.total_master||0)+'건 · '+elapsed+'초';
+        document.body.prepend(banner);
+        setTimeout(function(){ var b=document.getElementById('uploadDoneBanner'); if(b) b.remove(); }, 15000);
+        localStorage.removeItem('gauth_uploading');
+        localStorage.setItem('gauth_last_upload', JSON.stringify({
+          time: new Date().toLocaleString('ko-KR',{timeZone:'Asia/Seoul'}),
+          total_parsed: d.total_parsed||0,
+          added: d.added||0,
+          updated: d.updated||0,
+          total_master: d.total_master||0,
+          files_count: (d.files||[]).length
+        }));
+        updateUploadStatus();
+        load();
+        return;
+      }
+    };
+    xhr.send(fd);
+  }
+})();
+</script>
+
+
+
+<!-- 엑셀 다중 업로드 UI (gauth.cent-solution.online)
+     ref: MDN <input type=file multiple> https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input/file
+     ref: FormData API https://developer.mozilla.org/en-US/docs/Web/API/FormData -->
+
+
+<header>
+  <h1 style="display:none">gauth</h1>
+  <div class="stats">
+    <span>엑셀 <b id="s-files">–</b></span>
+    <span>계정 <b id="s-acc">–</b></span>
+    <span>세션 <b class="ok" id="s-sess">–</b></span>
+    <span>2FA <b id="s-2fa">–</b></span>
+    <span>비번만 <b id="s-pw">–</b></span>
+  </div>
+  <div id="upload-status" style="margin-top:6px;padding:6px 12px;border-radius:6px;font-size:12px;font-family:monospace;display:none"></div>
+</header>
+<script>
+function updateUploadStatus(){
+  var el = document.getElementById('upload-status');
+  if(!el) return;
+  var uploading = localStorage.getItem('gauth_uploading');
+  var lastUp = localStorage.getItem('gauth_last_upload');
+  if(uploading){
+    el.style.display='block';
+    el.style.background='#2a1a00';
+    el.style.border='1px solid #d29922';
+    el.style.color='#d29922';
+    el.textContent='⏳ 업로드 진행 중… (시작: '+new Date(parseInt(uploading)).toLocaleTimeString('ko-KR')+')';
+  } else if(lastUp){
+    try{
+      var d=JSON.parse(lastUp);
+      el.style.display='block';
+      el.style.background='#0d2818';
+      el.style.border='1px solid #3ddc84';
+      el.style.color='#3ddc84';
+      el.textContent='✅ 마지막 업로드: '+d.time+' | 파일 '+d.files_count+'개 → '+d.total_parsed+'건 파싱, '+d.added+'건 추가, '+d.updated+'건 업데이트 | 마스터 총 '+d.total_master+'건';
+    }catch(e){ el.style.display='none'; }
+  } else {
+    el.style.display='none';
+  }
+}
+updateUploadStatus();
+</script>
+
+<!-- 계정 정보 조회 -->
+<div style="padding:14px 20px;background:#0f1620;border-bottom:1px solid #22282f;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+  <span style="font-size:14px;color:#7dabff;font-weight:700">🔎 계정 정보 확인</span>
+  <input id="lookup" placeholder="이메일 입력 후 Enter (예: gtayerai78@gmail.com)" style="flex:1;min-width:300px">
+  <button id="lookup-btn">조회</button>
+  <div id="lookup-result" style="width:100%;display:none;background:#161a20;border:1px solid #2a323c;border-radius:8px;padding:16px;font-size:14px;margin-top:6px"></div>
+</div>
+
+<div class="controls">
+  <input id="apiToken" type="hidden" oninput="sessionStorage.setItem('gauth_token',this.value)">
+  <span style="width:1px;height:24px;background:#2a323c"></span>
+  <input id="q" placeholder="🔍 목록 필터 (부분 일치)…">
+  <select id="filter">
+    <option value="all">전체</option>
+    <option value="today">🟢 오늘 접속만</option>
+    <option value="2fa">2FA 있음</option>
+    <option value="never">미접속만</option>
+    <option value="locked">잠김만 (폰/패스키/기기)</option>
+  </select>
+  <select id="td-order" style="flex:0 0 auto">
+    <option value="desc" selected>최신순</option>
+    <option value="asc">오래된순</option>
+  </select>
+  <span id="count"></span>
+  <span style="width:1px;height:24px;background:#2a323c"></span>
+  <span style="font-size:12px;color:#9aa5b5">엑셀로</span>
+  <input id="parts" type="number" min="1" max="500" value="5" style="width:70px;flex:0 0 auto">
+  <span style="font-size:12px;color:#9aa5b5">등분</span>
+  <button id="export">📥 다운로드</button>
+  <span style="width:1px;height:24px;background:#2a323c"></span>
+  <button id="batch-run" style="background:#e0503a">▶ 미로그인만 로그인 (순서대로)</button>
+  <button id="batch-stop" style="background:#666">■ 정지</button>
+</div>
+<div id="viewport"><div id="spacer"></div></div>
+<div id="pagination" style="padding:12px 20px;background:#0f1216;border-top:1px solid #22282f;display:flex;gap:6px;flex-wrap:wrap;justify-content:center;align-items:center"></div>
+
+<script>
+const PAGE_SIZE = 50
+let ALL=[], ALL_ORIGINAL=[], FILTERED=[], PAGE=1
+let _lookupEmail = null, _loginEmail = null
+const vp = document.getElementById('viewport'), sp = document.getElementById('spacer')
+
+function getApiToken(){return sessionStorage.getItem('gauth_token')||'279c85fff45d91d2bd6f3872c96fa82f87488ea250a7b4a9de34f885a5c5cac1'}
+(function(){var el=document.getElementById('apiToken');if(el){var t=getApiToken();if(t)el.value=t;}})()
+function authHeaders(extra){var h=extra||{};var t=getApiToken();if(t)h['Authorization']='Bearer '+t;return h}
+function authQuery(url){var t=getApiToken();if(!t)return url;return url+(url.indexOf('?')>=0?'&':'?')+'token='+encodeURIComponent(t)}
+function noCacheQuery(url){var u=authQuery(url);return u+(u.includes('?')?'&':'?')+'_t='+Date.now()}
+
+var escapeHtml = _esc
+/* 엑셀 내 날짜(account_date) 기준 정렬
+ * 날짜 있는 계정 → 선택순(desc/asc) / 날짜 없는 계정 → 맨 뒤
+ * ref: MDN Array.prototype.sort https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort */
+function _sortByExcelDate(arr, order){
+  var withDate = arr.filter(function(a){ return a.account_date })
+  var noDate   = arr.filter(function(a){ return !a.account_date })
+  var asc = order === 'asc'
+  withDate.sort(function(a, b){
+    var aVal = Number(a.account_date) || 0
+    var bVal = Number(b.account_date) || 0
+    return asc ? aVal - bVal : bVal - aVal
+  })
+  return withDate.concat(noDate)
+}
+let FAILED = {}
+async function load(){
+  var n, p, f
+  function safeJson(r, fallback){
+    if(!r.ok) return fallback;
+    return r.json().catch(function(){ return fallback });
+  }
+  try {
+    var r1 = await fetch(authQuery('/api/normalized-accounts'),{headers:authHeaders()}).catch(function(){ return {ok:false} });
+    var r2 = await fetch(authQuery('/api/profiles'),{headers:authHeaders()}).catch(function(){ return {ok:false} });
+    var r3 = await fetch(authQuery('/api/failed-accounts'),{headers:authHeaders()}).catch(function(){ return {ok:false} });
+    n = await safeJson(r1, {accounts:[],summary:{}});
+    p = await safeJson(r2, {profiles:[]});
+    f = await safeJson(r3, {});
+    if(!r1.ok || !n.accounts){
+      var _msg = r1.ok ? 'accounts 키 없음 (응답: '+JSON.stringify(n).slice(0,200)+')' : 'HTTP '+r1.status;
+      document.getElementById('spacer').innerHTML='<div style="padding:20px;color:#ffb469;font-size:14px">⚠ API 상태: '+_esc(_msg)+'</div>';
+    }
+  } catch(e) { n={accounts:[],summary:{}}; p={profiles:[]}; f={}; }
+  FAILED = f || {}
+  var _profiles = (p && p.profiles) || []
+  var _accounts = (n && n.accounts) || []
+  var sess = new Set(_profiles.map(function(x){ return x.email || x.folder.replace(/^([^_]+)_(.+)$/, function(_, u, d){ return u + '@' + d.replace(/_/g, '.') }) }))
+  function _fixMojibake(s){
+    if(!s) return s;
+    try{
+      var b=new Uint8Array(s.length),ok=true;
+      for(var i=0;i<s.length;i++){var c=s.charCodeAt(i);if(c>255){ok=false;break;}b[i]=c;}
+      if(!ok) return s;
+      var d=new TextDecoder('utf-8').decode(b);
+      if(d!==s&&d.indexOf('�')<0) return d;
+    }catch(e){}
+    return s;
+  }
+  ALL = _accounts.map(function(a){
+    var f = (FAILED[a.email] || {});
+    var ad = a.account_date || null;
+    return Object.assign({}, a, {has_session: sess.has(a.email), lock_reason: f.reason || null, account_date: ad, source_file: _fixMojibake(a.source_file)});
+  })
+  ALL_ORIGINAL = ALL.slice()
+  ALL = _sortByExcelDate(ALL)
+  var _fc = n.summary && n.summary.files_scanned;
+  if(_fc == null){
+    try { var _rp = await fetch(authQuery('/api/parse-report'),{cache:'no-store',headers:authHeaders()}).then(r=>r.json()); _fc = _rp && _rp.last_run && _rp.last_run.files; } catch(_){}
+  }
+  document.getElementById('s-files').textContent = (_fc != null ? _fc : 0).toLocaleString()
+  document.getElementById('s-acc').textContent = ALL.length.toLocaleString()
+  document.getElementById('s-sess').textContent = ALL.filter(a=>a.has_session).length.toLocaleString()
+  var _2faCount = ALL.filter(a => a.totp_secret && a.totp_secret.trim()).length
+  var _pwOnly = ALL.filter(a => a.password && (!a.totp_secret || !a.totp_secret.trim())).length
+  document.getElementById('s-2fa').textContent = ((n.summary && n.summary.PASSWORD_2FA) || _2faCount).toLocaleString()
+  document.getElementById('s-pw').textContent = ((n.summary && n.summary.PASSWORD_ONLY) || _pwOnly).toLocaleString()
+  applyFilter()
+}
+function applyFilter(){
+  const q = document.getElementById('q').value.trim().toLowerCase()
+  const f = document.getElementById('filter').value
+  const orderEl = document.getElementById('td-order')
+  const order = (orderEl && orderEl.value) || 'desc'
+  FILTERED = ALL.filter(a => {
+    if (q && !(a.email||'').toLowerCase().includes(q)) return false
+    if (f==='today' && !(a.session_mtime && a.session_mtime>=kstTodayMidnightMs())) return false
+    if (f==='2fa' && !a.totp_secret) return false
+    if (f==='never' && a.session_mtime) return false
+    const LOCK = ['PHONE_REQUIRED','PASSKEY_REQUIRED','DEVICE_PROMPT','SECURITY_KEY','BACKUP_CODE','REJECTED']
+    if (f==='locked' && !LOCK.includes(a.lock_reason)) return false
+    return true
+  })
+  FILTERED = _sortByExcelDate(FILTERED, order)
+  PAGE = 1
+  const totalPages = Math.max(1, Math.ceil(FILTERED.length / PAGE_SIZE))
+  document.getElementById('count').textContent = `${FILTERED.length.toLocaleString()}개 · ${totalPages}페이지`
+  render()
+}
+async function render(){
+  try{
+  var totalPages = Math.max(1, Math.ceil(FILTERED.length / PAGE_SIZE))
+  if (PAGE > totalPages) PAGE = totalPages
+  var start = (PAGE-1) * PAGE_SIZE
+  var end = Math.min(FILTERED.length, start + PAGE_SIZE)
+  const slice = FILTERED.slice(start, end)
+  const _cur = localStorage.getItem('gauth_last_lookup')||''
+  var rows = []
+  for (let i=0;i<slice.length;i++){
+    const a = slice[i]
+    const idx = start+i+1
+    const _em = escapeHtml(a.email), _pw = escapeHtml(a.password||'—'), _ts = escapeHtml(a.totp_secret||'—')
+    const _bc = escapeHtml(a.backup_codes||'')
+    const yt = a.youtube_url || '', _yt = escapeHtml(yt)
+    const _rc = escapeHtml(a.recovery_email||a.recovery_phone||'—'), _sf = escapeHtml(a.source_file||'—')
+    const _dateMs = a.account_date || a.source_mtime
+    const dt = _dateMs ? new Date(_dateMs).toLocaleString('ko-KR') : '—'
+    const sess = accessBadge(a)
+    const tfa = a.totp_secret ? '<span class="badge b-2fa">2FA</span>' : a.backup_codes ? '<span class="badge b-2fa" style="background:#a855f7">백업</span>' : ''
+    const lock = a.lock_reason ? `<span class="badge b-lock" title="${escapeHtml(a.lock_reason)}">🔒 ${escapeHtml(a.lock_reason)}</span>` : ''
+    const _isCur = a.email===_cur
+    const _hl = _isCur ? 'border-left:4px solid #3ddc84;background:#0d2818;' : ''
+    rows.push(`<div class="td-card" style="background:#161a20;border:1px solid #2a323c;border-radius:8px;padding:12px;margin-bottom:8px;${_hl}">
+      <div class="td-grid" style="display:grid;grid-template-columns:100px 1fr;gap:6px 12px;font-size:13px">
+        <div class="td-label" style="color:#8a95a5">#${idx}</div><div><b class="td-email" style="color:#ffb469;font-size:14px;cursor:pointer" onclick="quickLookup('${_em}')">${_em}</b>${cp(a.email)} ${sess}${tfa}${lock}</div>
+        <div class="td-label" style="color:#8a95a5">비밀번호</div><div class="mono td-val td-pw" style="color:#3ddc84">${_pw}${cp(a.password)}</div>
+        <div class="td-label" style="color:#8a95a5">2FA 시크릿</div><div class="mono td-val td-secret"><span id="sec-${idx}">${_ts}</span>${cp(a.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${_em}','sec-${idx}')">✏️</button></div>
+        <div class="td-label" style="color:#8a95a5">2FA 코드</div><div class="mono td-val td-2fa-code" style="color:#7dabff;font-size:18px;font-weight:700;letter-spacing:2px"><span id="tdcode-${idx}">…</span>${a.totp_secret?cp('_','tdcode-'+idx):''}${a.totp_secret?`<button style="background:#2a323c;padding:3px 8px;font-size:11px;margin-left:6px;color:#c9d2dc" onclick="tdRefreshCode(${idx},'${escapeHtml(a.totp_secret)}',this)">🔄 새로고침</button>`:''}</div>
+        <div class="td-label" style="color:#8a95a5">백업 코드</div><div class="mono td-val" style="color:#a855f7;font-size:13px;letter-spacing:1px">${_bc||'—'}${a.backup_codes?cp(a.backup_codes):''}</div>
+        <div class="td-label" style="color:#8a95a5">동작</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button style="background:#7c3aed" onclick="programLogin('${_em}',this)">🔑 로그인</button><button style="background:#1c5a2a;color:#3ddc84;font-weight:700" onclick="ytApiConnect('${_em}',this)">📡 API 연결</button><button style="background:#1c2740;color:#7dabff;font-weight:700" onclick="ytChatShot('${_em}','sky82892 텔레 문의',this)">💬 채팅 샷</button><button style="background:#3a1c00;color:#ff9040;font-weight:700" onclick="ytSpanner('${_em}',this)">🔧 스패너</button></div>
+        <div class="td-label" style="color:#8a95a5">YouTube</div><div class="mono td-val" style="color:#ff8a8a;font-size:11px">${yt&&/^https?:\/\//i.test(yt)?`<a href="${_yt}" target="_blank" style="color:#ff8a8a">${_yt}</a>${cp(yt)}`:'—'}</div>
+        <div class="td-label" style="color:#8a95a5">복구</div><div class="mono td-val" style="font-size:11px">${_rc}</div>
+        <div class="td-label" style="color:#8a95a5">엑셀</div><div class="mono td-val" style="font-size:11px;color:#8a95a5">${_sf} · ${dt}</div>
+      </div>
+    </div>`)
+  }
+  sp.innerHTML = rows.join('')
+  renderPagination(totalPages)
+  // TOTP 코드는 카드 렌더링 후 비동기로 채움
+  slice.forEach(function(a, i){
+    if(!a.totp_secret) return
+    var idx = start+i+1
+    var ctrl = new AbortController()
+    setTimeout(function(){ctrl.abort()},5000)
+    fetch(authQuery('/codes/'+a.totp_secret),{headers:authHeaders(),signal:ctrl.signal}).then(function(r){return r.json()}).then(function(j){
+      var el=document.getElementById('tdcode-'+idx); if(el) el.textContent=j.code||'—'
+    }).catch(function(){
+      var el=document.getElementById('tdcode-'+idx); if(el) el.textContent='—'
+    })
+  })
+  }catch(e){console.error('render error:',e);sp.innerHTML='<div style="padding:20px;color:#f47070">렌더링 오류: '+e.message+'</div>'}
+}
+function renderPagination(totalPages){
+  const pg = document.getElementById('pagination')
+  if (totalPages <= 1) { pg.innerHTML=''; return }
+  const btn = (label, page, disabled, active) =>
+    `<button ${disabled?'disabled':''} style="min-width:36px;background:${active?'#2b6cff':'#2a323c'}" onclick="gotoPage(${page})">${label}</button>`
+  let html = btn('«', 1, PAGE===1) + btn('‹', PAGE-1, PAGE===1)
+  // 앞뒤 5개 정도만 표시
+  const from = Math.max(1, PAGE-3), to = Math.min(totalPages, PAGE+3)
+  if (from > 1) html += '<span style="color:#8a95a5">…</span>'
+  for (let i=from; i<=to; i++) html += btn(i, i, false, i===PAGE)
+  if (to < totalPages) html += '<span style="color:#8a95a5">…</span>'
+  html += btn('›', PAGE+1, PAGE===totalPages) + btn('»', totalPages, PAGE===totalPages)
+  html += `<span style="color:#8a95a5;font-size:12px;margin-left:10px">${PAGE} / ${totalPages}</span>`
+  pg.innerHTML = html
+}
+function gotoPage(n){
+  const total = Math.max(1, Math.ceil(FILTERED.length / PAGE_SIZE))
+  PAGE = Math.max(1, Math.min(total, n))
+  render()
+  vp.scrollTo({top:0})
+}
+async function quickLookup(email){
+  document.getElementById('lookup').value = email
+  _lookupEmail = email; render()
+  await lookup()
+  _lookupEmail = null; render()
+  window.scrollTo({top:0,behavior:'smooth'})
+}
+async function openIt(email){
+  const r = await fetch(authQuery('/api/open-profile'),{method:'POST',headers:authHeaders({'content-type':'application/json'}),body:JSON.stringify({email})})
+  const j = await r.json()
+  if(j.error) alert('실패: '+j.error)
+}
+async function login(email){
+  if(!confirm(`${email} 지금 로그인 시도?`)) return
+  const r = await fetch(authQuery('/api/login'),{method:'POST',headers:authHeaders({'content-type':'application/json'}),body:JSON.stringify({email})})
+  alert('결과: '+JSON.stringify(await r.json()))
+  load()
+}
+// 복사 버튼 — data 속성 사용. targetId가 있으면 그 엘리먼트의 현재 textContent를 복사(항상 최신)
+function cp(v, targetId){
+  if(v===undefined || v===null || v==='—') return ''
+  const esc = String(v).replace(/"/g,'&quot;').replace(/</g,'&lt;')
+  return targetId
+    ? `<button class="cp" data-copy-target="${targetId}">복사</button>`
+    : `<button class="cp" data-copy="${esc}">복사</button>`
+}
+/* MDN Clipboard API: https://developer.mozilla.org/en-US/docs/Web/API/Clipboard/writeText
+ * Secure context (HTTPS) 필수. 구형 브라우저 폴백은 Selection API 사용:
+ * https://developer.mozilla.org/en-US/docs/Web/API/Selection */
+async function doCopy(text){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    try { await navigator.clipboard.writeText(text); return true } catch {}
+  }
+  var ta = document.createElement('textarea')
+  ta.value = text; ta.style.cssText='position:fixed;opacity:0;left:-9999px'
+  document.body.appendChild(ta); ta.focus(); ta.select()
+  var ok = false
+  try {
+    var sel = window.getSelection()
+    var range = document.createRange()
+    range.selectNodeContents(ta)
+    sel.removeAllRanges(); sel.addRange(range)
+    ok = document.execCommand('copy')
+  } catch(e) {}
+  ta.remove()
+  return ok
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('button.cp')
+  if(!b) return
+  let text = b.dataset.copy
+  if(!text && b.dataset.copyTarget){
+    const el = document.getElementById(b.dataset.copyTarget)
+    if(el) text = el.textContent.trim()
+  }
+  if(!text) return
+  const ok = await doCopy(text)
+  const orig = b.textContent
+  b.textContent = ok ? '✓ 복사됨' : '❌ 실패'
+  setTimeout(()=>{b.textContent = orig}, 900)
+})
+// 프로그램 로그인 (로컬 서버 :4000 필요)
+async function unlockAccount(email, btn){
+  if(!confirm(`${email}\n잠금 상태 해제 (다음 배치에서 다시 시도)?`)) return
+  btn.disabled=true
+  try{
+    const r = await fetch(authQuery('/api/failed-accounts/'+encodeURIComponent(email)),{method:'DELETE',headers:authHeaders()})
+    if(r.ok){ btn.textContent='✓ 해제'; setTimeout(()=>load(), 500); return }
+  }catch{}
+  alert('해제 실패'); btn.disabled=false
+}
+// 잠금 성격 실패 = 사람 개입 필요 (재시도 무의미) → "실패"로만 표시
+const LOCK_REASONS = new Set([
+  'PHONE_REQUIRED','PASSKEY_REQUIRED','DEVICE_PROMPT','SECURITY_KEY','BACKUP_CODE','REJECTED',
+  'AFTER_TOTP_DEVICE_PROMPT','AFTER_TOTP_PHONE_REQUIRED','AFTER_TOTP_PASSKEY_REQUIRED',
+  'WRONG_PASSWORD','UNKNOWN_PASSWORD','2FA_NO_SECRET','TOTP_MAX_ATTEMPTS'
+, 'BROWSER_UNSAFE'])
+async function programLogin(email, btn){
+  const orig = btn.textContent; btn.disabled=true; btn.textContent='⏳ 시도 중…'
+  _loginEmail = email; render()
+  let reason = '', reachedServer = false
+  try{
+    const r = await fetch(authQuery('/api/login-one'), {method:'POST',headers:authHeaders({'content-type':'application/json'}),body:JSON.stringify({email})})
+    const j = await r.json().catch(()=>({}))
+    reachedServer = true
+    if(r.ok && j.success !== false && !j.error){
+      _loginEmail = null
+      btn.textContent = '✅ 로그인 성공'
+      btn.style.background = '#3ddc84'
+      btn.style.color = '#000'
+      try { await load() } catch { location.reload() }
+      setTimeout(()=>{btn.textContent=orig;btn.disabled=false;btn.style.background='';btn.style.color=''}, 3000)
+      return
+    }
+    reason = j.reason || j.error || `HTTP ${r.status}`
+  }catch(e){
+    reason = e.message
+  }
+  btn.textContent = '❌ 실패'
+  btn.style.background = '#e0503a'
+  if (reachedServer && LOCK_REASONS.has(reason)) {
+    // 사람 개입 필요한 실패 (폰인증·패스키·기기승인·잘못된비번 등) → 간단히 표시
+    alert(`❌ ${email}\n실패: ${reason}\n\n(이 계정은 사람이 직접 로그인해야 합니다.)`)
+  } else if (reachedServer) {
+    alert(`❌ ${email}\n실패: ${reason}`)
+  } else {
+    alert(`❌ 서버 도달 실패: ${reason}`)
+  }
+  _loginEmail = null; render()
+  setTimeout(()=>{btn.textContent=orig;btn.disabled=false;btn.style.background=''}, 2000)
+}
+async function lookup(){
+  const rawEmail = document.getElementById('lookup').value.trim()
+  const box = document.getElementById('lookup-result')
+  if(!rawEmail){box.style.display='none';localStorage.removeItem('gauth_last_lookup');return}
+  const email = rawEmail.toLowerCase()
+  document.getElementById('lookup').value = email
+  localStorage.setItem('gauth_last_lookup', email)
+  box.style.display='block'
+  box.innerHTML = '<span style="color:#8a95a5">조회 중…</span>'
+  let r, j
+  try {
+    r = await fetch(authQuery('/api/lookup/'+encodeURIComponent(email)), {headers:authHeaders()})
+    j = await r.json()
+  } catch(e) {
+    j = {error: '서버 연결 실패: ' + (e.message||'네트워크 오류')}
+  }
+  // /api/lookup may not include backup_codes yet — enrich from local normalized-accounts cache
+  if(!j.error && !j.backup_codes){
+    const local = (window.ALL||[]).find(a=>(a.email||'').toLowerCase()===email)
+    if(local && local.backup_codes) j.backup_codes = local.backup_codes
+    if(local && !j.totp_secret && local.totp_secret) j.totp_secret = local.totp_secret
+    if(local && !j.password && local.password) j.password = local.password
+    if(local && !j.recovery_email && local.recovery_email) j.recovery_email = local.recovery_email
+  }
+  if(j.error){
+    // API 실패 시 로컬 ALL에서 부분 검색 시도
+    const local = (window.ALL||[]).find(a=>a.email.toLowerCase()===email
+      || a.email.toLowerCase().includes(email))
+    if(local){
+      // 로컬 데이터로 표시
+      document.getElementById('lookup').value = local.email
+      localStorage.setItem('gauth_last_lookup', local.email)
+      let code2='—'
+      if(local.totp_secret){try{const c=await(await fetch(authQuery('/codes/'+local.totp_secret),{headers:authHeaders()})).json();code2=c.code||'—'}catch{}}
+      box.innerHTML = `
+        <div style="background:#2a1a00;border:1px solid #d29922;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#d29922">⚠ 서버 조회 실패 — 로컬 캐시 데이터로 표시 중</div>
+        <div style="display:grid;grid-template-columns:130px 1fr;gap:10px 14px">
+          <div style="color:#8a95a5">이메일</div>
+          <div><b style="font-size:15px">${escapeHtml(local.email)}</b>${cp(local.email)}</div>
+          <div style="color:#8a95a5">비밀번호</div>
+          <div class="mono" style="color:#3ddc84;font-size:15px">${escapeHtml(local.password||'—')}${cp(local.password)}</div>
+          <div style="color:#8a95a5">2FA 시크릿</div>
+          <div class="mono"><span id="lookup-sec-local">${escapeHtml(local.totp_secret||'—')}</span>${cp(local.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${escapeHtml(local.email)}','lookup-sec-local')">✏️</button></div>
+          <div style="color:#8a95a5">2FA 코드 (지금)</div>
+          <div class="mono" style="color:#7dabff;font-size:22px;font-weight:700;letter-spacing:3px"><span id="lookup-code">${escapeHtml(code2)}</span>${local.totp_secret?cp('_','lookup-code'):''} ${local.totp_secret?`<button style="background:#1c2740;padding:10px 18px;font-size:16px;font-weight:700;margin-left:10px;color:#7dabff;border-radius:8px;border:none;cursor:pointer" onclick="lookupRefreshCode('${escapeHtml(local.totp_secret)}',this)">🔄 새로고침</button>`:''}</div>
+          <div style="color:#8a95a5">백업 코드</div>
+          <div class="mono" style="color:#a855f7;font-size:13px;letter-spacing:1px">${escapeHtml(local.backup_codes||'—')}${local.backup_codes?cp(local.backup_codes):''}</div>
+          <div style="color:#8a95a5">출처</div><div class="mono" style="font-size:11px;color:#8a95a5">${escapeHtml(local.source_file||'—')}</div>
+        </div>`
+      if(window.FILTERED && FILTERED.length){
+        const fi2 = FILTERED.findIndex(a=>a.email===local.email)
+        if(fi2>=0){ FILTERED.unshift(FILTERED.splice(fi2,1)[0]) }
+        else { FILTERED.unshift(local) }
+        PAGE=1; render()
+      }
+      return
+    }
+    // search-account API로 부분 검색 시도
+    if(email.length>=3){
+      try{
+        const sr=await fetch(authQuery('/api/search-account?q='+encodeURIComponent(email)),{headers:authHeaders()})
+        const sd=await sr.json()
+        if(sd.ok && sd.results && sd.results.length>0){
+          const m=sd.results[0]
+          box.innerHTML=`<div style="background:#1a2a1a;border:1px solid #3ddc84;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#3ddc84">🔍 검색으로 발견 (${escapeHtml(sd.found)}건 중 첫 번째)</div>
+          <div style="display:grid;grid-template-columns:130px 1fr;gap:10px 14px">
+            <div style="color:#8a95a5">이메일</div><div><b style="font-size:15px;cursor:pointer;color:#7dabff" onclick="quickLookup('${escapeHtml(m.email).replace(/'/g,"\\'")}')">${escapeHtml(m.email)}</b>${cp(m.email)}</div>
+            <div style="color:#8a95a5">비밀번호</div><div class="mono" style="color:#3ddc84">${escapeHtml(m.password||'—')}</div>
+            <div style="color:#8a95a5">2FA 시크릿</div><div class="mono">${escapeHtml(m.totp_secret||'—')}</div>
+            <div style="color:#8a95a5">출처</div><div class="mono" style="font-size:11px;color:#8a95a5">${escapeHtml(m.source_file||'—')}</div>
+          </div>
+          ${sd.results.length>1?'<div style="margin-top:8px;font-size:12px;color:#8a95a5">'+sd.results.slice(1,5).map(r=>'<div style="padding:2px 0;cursor:pointer;color:#7dabff" onclick="quickLookup(\''+escapeHtml(r.email).replace(/'/g,"\\'")+'\')">'+escapeHtml(r.email)+'</div>').join('')+'</div>':''}`
+          return
+        }
+      }catch{}
+    }
+    box.innerHTML=`<span style="color:#f47070">❌ ${escapeHtml(email)} 을 마스터에서 찾지 못함</span><div style="color:#8a95a5;font-size:12px;margin-top:6px">이 이메일이 업로드된 엑셀에 없거나, 파서가 인식 못했을 수 있습니다.<br>엑셀 파일에 이 이메일이 있는지 확인해주세요.</div>`
+    return
+  }
+  let code='—'
+  if(j.totp_secret){try{const c=await(await fetch(authQuery('/codes/'+j.totp_secret),{headers:authHeaders()})).json();code=c.code||'—'}catch{}}
+  const yt = j.youtube_url || ''
+  const _je = escapeHtml(j.email)
+  const _jp = escapeHtml(j.password||'—')
+  const _jt = escapeHtml(j.totp_secret||'—')
+  const _jre = escapeHtml(j.recovery_email||'—')
+  const _jsf = escapeHtml(j.source_file||'—')
+  const safeYt = yt && /^https?:\/\//i.test(yt) ? escapeHtml(yt) : ''
+  const btn = j.has_session
+    ? `<button onclick="openIt('${_je}')">🔓 Chrome 열기</button>`
+    : `<button class="no-sess" onclick="login('${_je}')">🔑 로그인 시도</button>`
+  box.innerHTML = `
+    <div style="display:grid;grid-template-columns:130px 1fr;gap:10px 14px">
+      <div style="color:#8a95a5">이메일</div>
+      <div><b style="font-size:15px">${_je}</b> ${accessBadge(j)}${cp(j.email)}</div>
+      <div style="color:#8a95a5">비밀번호</div>
+      <div class="mono" style="color:#3ddc84;font-size:15px">${_jp}${cp(j.password)}${(j.password_alts&&j.password_alts.length)?'<div style="margin-top:6px;font-size:12px;color:#d29922;border:1px solid #d29922;border-radius:4px;padding:4px 8px;background:#2a1a00">⚠ 다른 비밀번호 후보: '+j.password_alts.map(p=>'<span style="color:#ffb469;font-size:13px;font-weight:700">'+escapeHtml(p)+'</span>'+cp(p)).join(' / ')+'</div>':''}</div>
+      <div style="color:#8a95a5">2FA 시크릿</div>
+      <div class="mono"><span id="lookup-sec-api">${_jt}</span>${cp(j.totp_secret)} <button style="background:#2a323c;padding:2px 8px;font-size:11px;margin-left:4px;color:#ffb469" onclick="editSecret('${_je}','lookup-sec-api')">✏️</button></div>
+      <div style="color:#8a95a5">2FA 코드 (지금)</div>
+      <div class="mono" style="color:#7dabff;font-size:22px;font-weight:700;letter-spacing:3px"><span id="lookup-code">${escapeHtml(code)}</span>${j.totp_secret?cp('_','lookup-code'):cp(code!=='—'?code:'')}${j.totp_secret?`<button style="background:#1c2740;padding:10px 18px;font-size:16px;font-weight:700;margin-left:10px;color:#7dabff;border-radius:8px;border:none;cursor:pointer" onclick="lookupRefreshCode('${escapeHtml(j.totp_secret)}',this)">🔄 새로고침</button>`:''}<button style="background:#7c3aed;margin-left:8px" onclick="programLogin('${_je}',this)">🔑 프로그램 로그인</button></div>
+      <div style="color:#8a95a5">백업 코드</div>
+      <div class="mono" style="color:#a855f7;font-size:13px;letter-spacing:1px">${escapeHtml(j.backup_codes||'—')}${j.backup_codes?cp(j.backup_codes):''}</div>
+      <div style="color:#8a95a5">YouTube URL</div>
+      <div class="mono" style="color:#ff8a8a">${safeYt ? `<a href="${safeYt}" target="_blank" style="color:#ff8a8a">${safeYt}</a>${cp(yt)}` : '—'}</div>
+      <div style="color:#8a95a5">복구 이메일</div>
+      <div class="mono">${_jre}${cp(j.recovery_email)}</div>
+      <div style="color:#8a95a5">출처</div><div class="mono" style="font-size:11px;color:#8a95a5">${_jsf}</div>
+      <div style="color:#8a95a5">API</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button style="background:#1c5a2a;color:#3ddc84;font-weight:700;padding:8px 14px;font-size:13px;border:none;border-radius:6px;cursor:pointer" onclick="ytApiConnect('${_je}',this)">📡 API 연결</button><button style="background:#1c2740;color:#7dabff;font-weight:700;padding:8px 14px;font-size:13px;border:none;border-radius:6px;cursor:pointer" onclick="ytChatShot('${_je}','sky82892 텔레 문의',this)">💬 채팅 샷</button><button style="background:#3a1c00;color:#ff9040;font-weight:700;padding:8px 14px;font-size:13px;border:none;border-radius:6px;cursor:pointer" onclick="ytSpanner('${_je}',this)">🔧 스패너</button></div>
+      <div></div><div>${btn}</div>
+    </div>
+    <div id="lookup-next" style="margin-top:14px;border-top:1px solid #22282f;padding-top:10px"></div>`
+  if(window.ALL_ORIGINAL && window.ALL_ORIGINAL.length){
+    const idx = ALL_ORIGINAL.findIndex(a=>a.email===j.email)
+    if(idx>=0){
+      const next = ALL_ORIGINAL.slice(idx+1, idx+51)
+      const nbox = document.getElementById('lookup-next')
+      if(nbox && next.length){
+        nbox.innerHTML = '<div style="color:#8a95a5;font-size:12px;margin-bottom:6px">▼ 다음 순번 ('+(idx+2)+'~'+(idx+1+next.length)+' / '+ALL_ORIGINAL.length+')</div>'
+          + next.map((a,i)=>'<div style="padding:5px 0;border-bottom:1px solid #1a1f26;font-size:12.5px;display:flex;align-items:center;gap:8px">'
+            +'<span style="color:#8a95a5;font-family:monospace;min-width:35px">'+(idx+2+i)+'.</span>'
+            +'<span style="color:#7dabff;cursor:pointer;flex:1" onclick="quickLookup(\''+escapeHtml(a.email).replace(/'/g,"\\'")+'\')">'+escapeHtml(a.email)+'</span>'
+            +'<button style="padding:3px 8px;font-size:11px;background:#7c3aed" onclick="programLogin(\''+escapeHtml(a.email).replace(/'/g,"\\'")+'\',this)">🔑</button>'
+            +'</div>').join('')
+      }
+    }
+  }
+  if(window.FILTERED && FILTERED.length){
+    const fi = FILTERED.findIndex(a=>a.email===j.email)
+    if(fi>=0){
+      const cur = FILTERED.splice(fi, 1)[0]
+      FILTERED.unshift(cur)
+    } else if(window.ALL){
+      const ai = ALL.findIndex(a=>a.email===j.email)
+      if(ai>=0) FILTERED.unshift(ALL[ai])
+    }
+    PAGE = 1
+    render()
+    setTimeout(()=>{
+      var vp2 = document.getElementById('viewport')
+      if(vp2) vp2.scrollTo({top:0})
+      if(vp2) vp2.scrollIntoView({behavior:'smooth',block:'start'})
+    }, 100)
+  }
+}
+var _lookupBtn = document.getElementById('lookup-btn')
+var _lookupInput = document.getElementById('lookup')
+if(_lookupBtn) _lookupBtn.addEventListener('click', lookup)
+if(_lookupInput) _lookupInput.addEventListener('keydown', e=>{if(e.key==='Enter')lookup()})
+;(function(){var ll=localStorage.getItem('gauth_last_lookup');if(ll){document.getElementById('lookup').value=ll;lookup()}})()
+
+async function lookupRefreshCode(secret, btn){
+  const el = document.getElementById('lookup-code')
+  if(!el) return
+  const old = btn.textContent; btn.textContent = '⏳'
+  try{
+    const j = await (await fetch(noCacheQuery('/codes/'+secret),{cache:'no-store',headers:authHeaders()})).json()
+    el.textContent = j.code || '—'
+    /* 새 코드 시각 강조 (0.6s 골드 반짝) */
+    el.style.transition='background-color .3s'; el.style.backgroundColor='rgba(245,200,66,.35)';
+    setTimeout(()=>el.style.backgroundColor='', 700)
+    /* 인접 복사 버튼 리셋 · 이전 '복사됨' 잔재 제거 */
+    const row = btn.closest('div, td, tr, .row') || btn.parentNode
+    row.querySelectorAll('button.cp').forEach(cb => { cb.textContent = '복사' })
+    btn.textContent = '✓ 새코드'; setTimeout(()=>btn.textContent = old, 900)
+  }catch{btn.textContent='❌';setTimeout(()=>btn.textContent=old, 1200)}
+}
+async function editSecret(email, spanId){
+  var el = document.getElementById(spanId); var cur = (el && el.textContent) || ''
+  const ns = prompt('새 TOTP 시크릿 (Base32, 16자 이상):', cur === '—' ? '' : cur)
+  if(!ns) return
+  try{
+    const r = await fetch(authQuery('/api/update-secret'),{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({email,totp_secret:ns})})
+    const j = await r.json()
+    if(j.ok){ alert('저장 완료 (길이:'+j.secret_length+')'); location.reload() }
+    else alert('오류: '+(j.error||'unknown'))
+  }catch(e){ alert('저장 실패: '+e.message) }
+}
+async function tdRefreshCode(idx, secret, btn){
+  const el = document.getElementById('tdcode-'+idx)
+  if(!el) return
+  const old = btn.textContent
+  btn.textContent = '⏳'
+  try{
+    const j = await (await fetch(noCacheQuery('/codes/'+secret),{cache:'no-store',headers:authHeaders()})).json()
+    el.textContent = j.code || '—'
+    /* 새 코드 시각 강조 */
+    el.style.transition='background-color .3s'; el.style.backgroundColor='rgba(245,200,66,.35)';
+    setTimeout(()=>el.style.backgroundColor='', 700)
+    /* 인접 복사 버튼 리셋 */
+    const row = btn.closest('div, td, tr') || btn.parentNode
+    row.querySelectorAll('button.cp').forEach(cb => { cb.textContent = '복사' })
+    btn.textContent = '✓ 새코드'
+    setTimeout(()=>btn.textContent = old, 900)
+  }catch{btn.textContent='❌';setTimeout(()=>btn.textContent=old, 1200)}
+}
+/* YouTube API OAuth 연동 */
+var _ytClientId = '';
+(async function(){ try { const r = await fetch(authQuery('/api/youtube/client-id'),{headers:authHeaders()}); const j = await r.json(); _ytClientId = j.client_id || ''; } catch{} })();
+
+async function ytApiConnect(email, btn) {
+  if (!_ytClientId) { alert('YouTube OAuth Client ID가 서버에 설정되지 않았습니다.\nYOUTUBE_OAUTH_CLIENT_ID 환경변수를 설정하세요.'); return; }
+  const orig = btn.textContent; btn.disabled = true; btn.textContent = '⏳ 연결 중…';
+  const redirectUri = location.origin + '/';
+  const scope = 'https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.force-ssl';
+  var _oauthNonce = Array.from(crypto.getRandomValues(new Uint8Array(16)),function(b){return b.toString(16).padStart(2,'0')}).join('');
+  sessionStorage.setItem('yt_oauth_nonce', _oauthNonce);
+  sessionStorage.setItem('yt_oauth_email', email);
+  const state = encodeURIComponent(JSON.stringify({ email, nonce: _oauthNonce }));
+  const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=' + encodeURIComponent(_ytClientId)
+    + '&redirect_uri=' + encodeURIComponent(redirectUri)
+    + '&response_type=code&scope=' + encodeURIComponent(scope)
+    + '&state=' + state
+    + '&login_hint=' + encodeURIComponent(email)
+    + '&access_type=offline&prompt=consent';
+  const popup = window.open(authUrl, 'ytAuth', 'width=500,height=700');
+  const checkInterval = setInterval(async () => {
+    try {
+      if (!popup || popup.closed) { clearInterval(checkInterval); btn.textContent = orig; btn.disabled = false; return; }
+      const url = popup.location.href;
+      if (url && url.startsWith(redirectUri)) {
+        popup.close(); clearInterval(checkInterval);
+        const urlObj = new URL(url);
+        const code = urlObj.searchParams.get('code');
+        var returnedState = urlObj.searchParams.get('state');
+        try {
+          var stateObj = JSON.parse(decodeURIComponent(returnedState || '{}'));
+          var savedNonce = sessionStorage.getItem('yt_oauth_nonce');
+          if (!stateObj.nonce || stateObj.nonce !== savedNonce) {
+            btn.textContent = '❌ state 불일치'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000); return;
+          }
+          sessionStorage.removeItem('yt_oauth_nonce');
+          sessionStorage.removeItem('yt_oauth_email');
+        } catch(_) { btn.textContent = '❌ state 파싱 실패'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000); return; }
+        if (code) {
+          const r = await fetch(authQuery('/api/youtube/exchange-code'), { method: 'POST', headers: authHeaders({'content-type': 'application/json'}), body: JSON.stringify({ email, code, redirect_uri: redirectUri }) });
+          const j = await r.json();
+          if (j.ok) {
+            btn.textContent = j.has_refresh ? '✅ 영구 연결' : '✅ 연결됨'; btn.style.background = '#0d3222'; btn.style.color = '#3ddc84';
+          } else { btn.textContent = '❌ ' + (j.error || '실패'); }
+          setTimeout(() => { btn.textContent = orig; btn.disabled = false; btn.style.background = ''; btn.style.color = ''; }, 3000);
+        } else { btn.textContent = '❌ 코드 없음'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000); }
+      }
+    } catch { /* cross-origin */ }
+  }, 500);
+}
+
+async function ytChatShot(email, message, btn) {
+  const orig = btn.textContent; btn.disabled = true; btn.textContent = '⏳ 전송 중…';
+  try {
+    const br = await fetch(authQuery('/api/youtube/live-chat-id/' + encodeURIComponent(email)),{headers:authHeaders()}); const bj = await br.json();
+    if (!bj.ok || !bj.broadcasts || !bj.broadcasts.length) { alert('현재 활성 방송이 없습니다.'); btn.textContent = orig; btn.disabled = false; return; }
+    const liveChatId = bj.broadcasts[0].liveChatId;
+    const r = await fetch(authQuery('/api/youtube/chat-message'), { method: 'POST', headers: authHeaders({'content-type': 'application/json'}), body: JSON.stringify({ email, liveChatId, message }) });
+    const j = await r.json();
+    if (j.ok) { btn.textContent = '✅ 전송됨'; btn.style.background = '#0d3222'; }
+    else { btn.textContent = '❌ 실패'; alert('채팅 전송 실패: ' + JSON.stringify(j.data && j.data.error ? j.data.error.message : j)); }
+  } catch (e) { btn.textContent = '❌ 오류'; alert('오류: ' + e.message); }
+  setTimeout(() => { btn.textContent = orig; btn.disabled = false; btn.style.background = ''; }, 2000);
+}
+
+var _spannerInterval = null;
+async function ytSpanner(email, btn) {
+  if (_spannerInterval) { clearInterval(_spannerInterval); _spannerInterval = null; }
+  const orig = btn.textContent; btn.disabled = true; btn.textContent = '⏳ 로딩…';
+  try {
+    const br = await fetch(authQuery('/api/youtube/live-chat-id/' + encodeURIComponent(email)),{headers:authHeaders()}); const bj = await br.json();
+    if (!bj.ok || !bj.broadcasts || !bj.broadcasts.length) { alert('현재 활성 방송이 없습니다.'); btn.textContent = orig; btn.disabled = false; return; }
+    const liveChatId = bj.broadcasts[0].liveChatId;
+    let box = document.getElementById('spanner-box');
+    if (!box) { box = document.createElement('div'); box.id = 'spanner-box'; box.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#0f1318;border:2px solid #ff9040;border-radius:12px;padding:20px;z-index:10000;max-width:400px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.7)'; document.body.appendChild(box); }
+    box.style.display = 'block';
+    async function loadViewers() {
+      const r = await fetch(authQuery('/api/youtube/chat-list/' + encodeURIComponent(email) + '?liveChatId=' + encodeURIComponent(liveChatId)),{headers:authHeaders()});
+      const j = await r.json();
+      if (!j.ok) return;
+      const seen = new Map();
+      for (let i = j.messages.length - 1; i >= 0; i--) {
+        const m = j.messages[i];
+        if (!seen.has(m.channelId)) seen.set(m.channelId, m.displayName);
+      }
+      const viewers = Array.from(seen.entries()).slice(0, 10);
+      box.innerHTML = '<div style="font-size:16px;font-weight:700;color:#ff9040;margin-bottom:12px">🔧 스패너 (최근 채팅 10명) <button onclick="document.getElementById(\'spanner-box\').style.display=\'none\';if(_spannerInterval)clearInterval(_spannerInterval);_spannerInterval=null" style="float:right;background:#2a323c;font-size:14px;padding:6px 12px">✕ 닫기</button></div>'
+        + viewers.map(([chId, name]) => '<div style="display:flex;align-items:center;gap:10px;padding:8px;border-bottom:1px solid #1e242c"><span style="flex:1;font-size:15px;color:#e8ecef">' + _esc(name) + '</span><button style="background:#1c5a2a;color:#3ddc84;padding:8px 16px;font-size:14px;font-weight:700;border:none;border-radius:6px;cursor:pointer" onclick="ytAddMod(\'' + _esc(email) + '\',\'' + _esc(liveChatId) + '\',\'' + _esc(chId) + '\',this)">✅ 스패너</button></div>').join('')
+        + '<div style="color:#8a95a5;font-size:11px;margin-top:8px;text-align:center">3초마다 자동 갱신</div>';
+    }
+    await loadViewers();
+    _spannerInterval = setInterval(loadViewers, 3000);
+    btn.textContent = orig; btn.disabled = false;
+  } catch (e) { alert('오류: ' + e.message); btn.textContent = orig; btn.disabled = false; }
+}
+
+async function ytAddMod(email, liveChatId, channelId, btn) {
+  const orig = btn.textContent; btn.disabled = true; btn.textContent = '⏳';
+  try {
+    const r = await fetch(authQuery('/api/youtube/add-moderator'), { method: 'POST', headers: authHeaders({'content-type': 'application/json'}), body: JSON.stringify({ email, liveChatId, channelId }) });
+    const j = await r.json();
+    if (j.ok) { btn.textContent = '✅ 완료'; btn.style.background = '#0d3222'; }
+    else { btn.textContent = '❌'; alert('스패너 실패: ' + JSON.stringify(j.data && j.data.error ? j.data.error.message : j)); }
+  } catch (e) { btn.textContent = '❌'; alert('오류: ' + e.message); }
+  setTimeout(() => { btn.textContent = orig; btn.disabled = false; btn.style.background = ''; }, 2000);
+}
+
+var _tdOrder = document.getElementById('td-order')
+if(_tdOrder) _tdOrder.addEventListener('change', applyFilter)
+// 페이지네이션으로 전환: 스크롤 렌더 제거
+var _qInput = document.getElementById('q')
+var _filterSelect = document.getElementById('filter')
+if(_qInput) _qInput.addEventListener('input', applyFilter)
+if(_filterSelect) _filterSelect.addEventListener('change', applyFilter)
+var _batchRunBtn = document.getElementById('batch-run')
+if(_batchRunBtn) _batchRunBtn.addEventListener('click', async () => {
+  const total = ALL.length
+  if (!confirm(`전체 ${total}개 중 미로그인만 순서대로 로그인 시도. 계속?`)) return
+  const r = await fetch(authQuery('/api/start'),{method:'POST',headers:authHeaders({'content-type':'application/json'}),body:JSON.stringify({start:0,end:total,concurrency:8,skipLoggedIn:true})})
+  alert('배치 시작: '+JSON.stringify(await r.json()))
+})
+var _batchStopBtn = document.getElementById('batch-stop')
+if(_batchStopBtn) _batchStopBtn.addEventListener('click', async () => {
+  await fetch(authQuery('/api/stop'),{method:'POST',headers:authHeaders()});alert('정지 요청 전송')
+})
+var _exportBtn = document.getElementById('export')
+if(_exportBtn) _exportBtn.addEventListener('click', async () => {
+  const parts = parseInt(document.getElementById('parts').value,10) || 1
+  const filter = document.getElementById('filter').value
+  const r = await fetch(authQuery('/api/export-split'),{method:'POST',headers:authHeaders({'content-type':'application/json'}),body:JSON.stringify({parts,filter})})
+  if(!r.ok){alert('실패');return}
+  const blob = await r.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href=url; a.download=`gauth-split-${parts}.zip`; a.click()
+  setTimeout(()=>URL.revokeObjectURL(url),60000)
+})
+load()
+</script><!-- GCP VM 제어 패널 (하단, 모바일 반응형)
+     ref: MDN CSS Grid https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout
+     ref: MDN CSS @media https://developer.mozilla.org/en-US/docs/Web/CSS/@media -->
+
+
+
+<script>
+</script>
+
+
+<script src="xlsx.core.min.js"></script>
+<script>
+let _deferredPrompt;
+window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();_deferredPrompt=e;document.getElementById('pwa-install-btn').style.display='block'});
+document.getElementById('pwa-install-btn').addEventListener('click',function(){if(!_deferredPrompt)return;_deferredPrompt.prompt();_deferredPrompt.userChoice.then(function(r){if(r.outcome==='accepted'){_deferredPrompt=null;document.getElementById('pwa-install-btn').style.display='none'}}).catch(function(){})});
+window.addEventListener('appinstalled',function(){document.getElementById('pwa-install-btn').style.display='none'});
+document.addEventListener('visibilitychange',function(){if(document.hidden){if(_spannerInterval){clearInterval(_spannerInterval);_spannerInterval=-1}}else{if(_spannerInterval===-1){_spannerInterval=null}}})
+</script>
+<script>
+/* 폴더 전체 스캔 핸들러
+ * MDN requestAnimationFrame: https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame
+ * rAF 로 청크 단위 처리 → 매 프레임마다 UI 업데이트(진행 로그) → 메인스레드 블로킹 없음
+ * DataTransfer.items.add 루프 완전 제거 — window._picked 에 직접 push
+ */
+(function(){
+  var folderInput = document.getElementById('excelFolderFiles');
+  var info = document.getElementById('excelFolderInfo');
+  var logBox = document.getElementById('excelFileList');
+  if(!folderInput) return;
+
+  folderInput.addEventListener('change', function(){
+    var raw = this.files;
+    var total = raw.length;
+
+    /* 즉시 진행 표시 — 브라우저가 파일 목록 로드를 끝낸 직후 */
+    info.innerHTML = '⏳ <b style="color:#9fb3e0">0 / ' + total + ' 스캔 중...</b>';
+    if(logBox) logBox.innerHTML = '<span style="color:#9fb3e0;font-size:11px">📂 전체 ' + total + '개 파일 검사 중...</span>';
+
+    window._picked = window._picked || [];
+
+    /* rAF 기반 청크 처리
+     * ref: https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame
+     * 한 프레임(~16ms)당 CHUNK_SIZE 개씩 처리 → 매 프레임 UI 업데이트 가능 */
+    var CHUNK_SIZE = 2000;
+    var idx = 0;
+    var found = [];
+    var added = 0;
+    var pickedKeys = new Set(window._picked.map(function(f){ return f.name+':'+f.size; }));
+
+    function processChunk(timestamp) {
+      var end = Math.min(idx + CHUNK_SIZE, total);
+      for(var i = idx; i < end; i++){
+        var f = raw[i];
+        /* 엑셀 파일만 필터 */
+        if(!/\.(xlsx|xls|csv)$/i.test(f.name)) continue;
+        found.push(f);
+        /* 중복 체크 (name + size) — O(1) Set */
+        var key = f.name + ':' + f.size;
+        if(!pickedKeys.has(key)){ pickedKeys.add(key); window._picked.push(f); added++; }
+      }
+      idx = end;
+
+      /* 매 청크마다 진행 로그 업데이트 */
+      info.innerHTML = '⏳ <b style="color:#9fb3e0">' + idx + ' / ' + total + '</b> 스캔 중... (엑셀 <b style="color:#3ddc84">' + found.length + '</b>개)';
+      if(logBox) logBox.innerHTML = '<span style="color:#9fb3e0;font-size:11px">'
+        + '📂 ' + idx + '/' + total + ' 검사 · 엑셀 ' + found.length + '개 발견 · 신규 ' + added + '개 추가</span>';
+
+      if(idx < total){
+        /* 다음 프레임에 이어서 처리 — MDN 패턴: callback 내에서 rAF 재호출 */
+        requestAnimationFrame(processChunk);
+        return;
+      }
+
+      /* 완료 */
+      if(!found.length){
+        info.textContent = '❌ 엑셀 파일 없음';
+        if(logBox) logBox.innerHTML = '';
+        return;
+      }
+      info.innerHTML = '✅ <b style="color:#3ddc84">' + found.length + '</b>개 발견 · <b style="color:#3ddc84">' + added + '</b>개 추가';
+      /* renderList 트리거 — 업로드 IIFE 내부 함수 호출용 CustomEvent */
+      document.getElementById('excelFiles').dispatchEvent(new CustomEvent('_folderScanned'));
+    }
+
+    /* 첫 프레임 시작 */
+    requestAnimationFrame(processChunk);
+  });
+})();
+</script></body></html>
+
+
+
