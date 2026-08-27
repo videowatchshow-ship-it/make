@@ -1,0 +1,35 @@
+name: Patch hae account memo
+on:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/workflows/hae-patch-memo.yml']
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 60s
+          script: |
+            EMAIL="dunstontuaiay823@gmail.com"
+            MEMO="(미인증8월28일2시가능)"
+            ACCT_FILE="/var/www/sites/hae/accounts.json"
+
+            sudo node -e "
+              const fs=require('fs');
+              const data=JSON.parse(fs.readFileSync('$ACCT_FILE','utf8'));
+              const accounts=Array.isArray(data)?data:(data.accounts||[]);
+              const idx=accounts.findIndex(a=>(a.email||'').toLowerCase()==='$EMAIL'.toLowerCase());
+              if(idx<0){console.log('NOT FOUND');process.exit(1);}
+              accounts[idx].memo='$MEMO';
+              fs.writeFileSync('$ACCT_FILE',JSON.stringify({accounts},null,2));
+              console.log('memo set:',accounts[idx].memo);
+            "
+            sudo chown www-data:www-data "$ACCT_FILE"
+            sudo systemctl restart hae
+            echo 'done'
