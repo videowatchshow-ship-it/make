@@ -1,0 +1,63 @@
+name: gauth - check actual sites and hae structure
+on:
+  push:
+    paths:
+      - '.github/workflows/gauth-check-sites-and-hae.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check server site list and hae accounts structure
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            echo "=== /var/www/sites 전체 목록 ==="
+            sudo ls /var/www/sites/
+
+            echo "=== hae 사이트 존재 여부 ==="
+            sudo ls /var/www/sites/hae/ 2>/dev/null || echo "hae 없음"
+
+            echo "=== hae accounts.json 샘플 (있으면) ==="
+            sudo python3 -c "
+            import json, os
+            p = '/var/www/sites/hae/accounts.json'
+            if not os.path.exists(p):
+                print('hae accounts.json 없음')
+            else:
+                d = json.loads(open(p).read())
+                accs = d.get('accounts', d) if isinstance(d, dict) else d
+                if accs:
+                    print('필드:', list(accs[0].keys()))
+                    print('샘플:', json.dumps(accs[0], ensure_ascii=False)[:300])
+                else:
+                    print('계정 없음')
+            " 2>/dev/null || true
+
+            echo "=== gauth subsites-pool sample (totp_secret 있나?) ==="
+            sudo python3 -c "
+            import json, os
+            p = '/opt/gauth-full/accounts_subsites.json'
+            if not os.path.exists(p):
+                print('accounts_subsites.json 없음')
+            else:
+                d = json.loads(open(p).read())
+                accs = list(d.values()) if isinstance(d, dict) else d
+                if accs:
+                    print('필드:', list(accs[0].keys()) if isinstance(accs[0], dict) else '비정상')
+                    print('totp_secret 있는 계정:', sum(1 for a in accs if isinstance(a, dict) and a.get('totp_secret')))
+                    print('전체:', len(accs))
+            " 2>/dev/null || true
+
+            echo "=== 각 사이트 accounts.json 필드 샘플 ==="
+            for site in james gain woodong hae; do
+              p="/var/www/sites/$site/accounts.json"
+              if sudo test -f "$p"; then
+                echo "[$site] 필드: $(sudo python3 -c "import json; d=json.loads(open('$p').read()); accs=d.get('accounts',d) if isinstance(d,dict) else d; print(list(accs[0].keys()) if accs else '빈 계정')" 2>/dev/null)"
+              fi
+            done
