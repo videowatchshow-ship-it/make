@@ -1,0 +1,27 @@
+name: gauth - read loginOne BACKUP_CODE handling
+on:
+  push:
+    paths:
+      - '.github/workflows/gauth-read-login-flow.yml'
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read loginOne function and BACKUP_CODE detection
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            echo "=== BACKUP_CODE 상태 설정 위치 ==="
+            sudo grep -n "BACKUP_CODE\|backup_code\|backup code\|'BACKUP'\|\"BACKUP\"" /opt/gauth-full/rebrowser-login.js -i
+
+            echo "=== loginOne 함수 시작 위치 ==="
+            sudo grep -n "function loginOne\|async function loginOne\|loginOne.*=.*async\|loginOne.*async" /opt/gauth-full/rebrowser-login.js
+
+            echo "=== 2FA 코드 입력 로직 (type/fill/input 관련) ==="
+            sudo grep -n "type\|fill\|keyboard\|input.*code\|code.*input\|2fa\|twoFA\|totp" /opt/gauth-full/rebrowser-login.js -i | grep -v "console\|log\|message\|broadcast\|filter\|require\|\/\/" | head -30
