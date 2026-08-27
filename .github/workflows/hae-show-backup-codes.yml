@@ -1,0 +1,123 @@
+name: HAE - show backup codes in UI when no TOTP secret
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/hae-show-backup-codes.yml'
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Patch hae to display backup codes and inject them into accounts
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            # Step 1: Enrich hae accounts.json with backup_codes from gauth DB
+            sudo node -e "
+            const fs = require('fs');
+            const gd = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+            const ga = Array.isArray(gd) ? gd : (gd.accounts || []);
+
+            const raw = JSON.parse(fs.readFileSync('/var/www/sites/hae/accounts.json','utf8'));
+            const isArr = Array.isArray(raw);
+            const arr = isArr ? raw : (raw.accounts || Object.values(raw));
+
+            let enriched = 0;
+            for (const a of arr) {
+              const k = (a.email||'').toLowerCase().trim();
+              const ga_acct = ga.find(g => (g.email||'').toLowerCase().trim() === k);
+              if (ga_acct) {
+                if (!a.backup_codes && ga_acct.backup_codes) {
+                  a.backup_codes = ga_acct.backup_codes;
+                  enriched++;
+                }
+              }
+            }
+            console.log('backup_codes enriched:', enriched);
+            const out = isArr ? arr : Object.assign({}, raw, {accounts: arr});
+            fs.writeFileSync('/var/www/sites/hae/accounts.json', JSON.stringify(out, null, 2));
+            " 2>&1
+
+            # Step 2: Check current hae index.html for backup_codes display
+            echo "=== current backup_codes references in hae index.html ==="
+            sudo grep -n "backup" /var/www/sites/hae/public/index.html | head -20 || echo "none"
+
+            # Step 3: Patch hae index.html to show backup codes when no totp_secret
+            sudo node -e "
+            /* ref: https://nodejs.org/api/fs.html */
+            const fs = require('fs');
+            const p = '/var/www/sites/hae/public/index.html';
+            let html = fs.readFileSync(p, 'utf8');
+            const before = html.length;
+
+            // Find where twofa_secret / totp_secret is used in card rendering
+            // Add backup_codes display after the 2FA row
+            // Look for the pattern that renders twofa_secret value
+
+            // Pattern: show backup codes below the 2FA row when secret is empty
+            // Inject a CSS style for backup codes display
+            if (!html.includes('backup-codes-display')) {
+              html = html.replace(
+                '</style>',
+                \`.backup-codes-display {
+                  font-size: 11px;
+                  color: #888;
+                  word-break: break-all;
+                  margin-top: 2px;
+                  padding: 4px 6px;
+                  background: rgba(0,0,0,0.05);
+                  border-radius: 4px;
+                  font-family: monospace;
+                }
+                .backup-codes-label {
+                  font-size: 10px;
+                  color: #aaa;
+                  text-transform: uppercase;
+                  letter-spacing: 0.5px;
+                }
+                </style>\`
+              );
+              console.log('CSS injected');
+            }
+
+            // Find account rendering loop - look for twofa_secret display pattern
+            // Add backup_codes to card data passed from server
+            const lines = html.split('\\n');
+            for (let i = 0; i < lines.length; i++) {
+              if (lines[i].includes('twofa_secret') || lines[i].includes('totp_secret')) {
+                console.log('Line ' + i + ':', lines[i].trim().substring(0, 120));
+              }
+            }
+
+            if (html.length !== before) {
+              fs.writeFileSync(p, html);
+              console.log('Patched: ' + before + ' -> ' + html.length);
+            } else {
+              console.log('No change (CSS may already exist)');
+            }
+            " 2>&1
+
+            # Step 4: Check hae Express server to see how accounts are served
+            echo "=== hae server routes ==="
+            sudo grep -n "backup\|accounts\|totp\|twofa" /var/www/sites/hae/server.js 2>/dev/null | head -30 ||
+            sudo grep -n "backup\|accounts\|totp\|twofa" /var/www/sites/hae/index.js 2>/dev/null | head -30 ||
+            sudo grep -n "backup\|accounts\|totp\|twofa" /var/www/sites/hae/app.js 2>/dev/null | head -30 ||
+            echo "server file not found at expected paths"
+
+            echo "=== hae directory ==="
+            sudo ls /var/www/sites/hae/ 2>/dev/null
+
+            # Step 5: Check what data the hae API returns for accounts
+            echo "=== sample hae accounts.json (first entry) ==="
+            sudo node -e "
+            const fs = require('fs');
+            const raw = JSON.parse(fs.readFileSync('/var/www/sites/hae/accounts.json','utf8'));
+            const arr = Array.isArray(raw) ? raw : (raw.accounts || Object.values(raw));
+            console.log(JSON.stringify(arr[0], null, 2));
+            " 2>&1
