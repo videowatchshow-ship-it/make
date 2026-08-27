@@ -1,0 +1,45 @@
+name: gauth - retry all backup-code accounts
+on:
+  push:
+    paths:
+      - '.github/workflows/gauth-retry-all-backup.yml'
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Remove all backup-code accounts from failed list and restart
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo python3 -c "
+            import json, os
+            fp = '/opt/gauth-full/failed_accounts.json'
+            ap = '/opt/gauth-full/accounts_normalized.json'
+            if not os.path.exists(fp):
+                print('failed_accounts.json 없음')
+                exit(0)
+            failed = json.loads(open(fp).read())
+            accounts = json.loads(open(ap).read()) if os.path.exists(ap) else []
+            backup_emails = set()
+            for a in accounts:
+                bc = (a.get('backup_codes') or '').strip()
+                if bc:
+                    backup_emails.add(a.get('email', '').strip().lower())
+            removed = []
+            for e in list(failed.keys()):
+                if e.lower() in backup_emails or (failed[e].get('reason') or '').upper() in ('BACKUP_CODE', 'BACKUP_CODE_FAILED'):
+                    removed.append(e)
+                    del failed[e]
+            open(fp, 'w').write(json.dumps(failed, indent=2))
+            print(f'제거된 계정 {len(removed)}개: {removed[:10]}')
+            print(f'남은 failed 계정 수: {len(failed)}')
+            "
+            sudo systemctl restart gauth
+            sleep 3
+            sudo systemctl is-active gauth
