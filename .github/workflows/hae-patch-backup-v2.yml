@@ -1,0 +1,92 @@
+name: HAE - patch v2 fix backup codes display (correct syntax)
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/hae-patch-backup-v2.yml'
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Precise patch for backup codes in hae index.html
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo node -e "
+            /* ref: https://nodejs.org/api/fs.html */
+            const fs = require('fs');
+            const p = '/var/www/sites/hae/public/index.html';
+            let html = fs.readFileSync(p, 'utf8');
+            const before = html.length;
+            let changes = 0;
+
+            // Fix 1: Restore _ts assignment to clean version then replace properly
+            // Remove any previous botched patch of this line
+            // Pattern: var _ts = _esc((backupCodes ? ... : '—')))
+            // Replace with clean version
+            html = html.replace(
+              /var _ts = _esc\([^)]*backup[^)]*\)\)/g,
+              \"var _ts = secret ? _esc(secret) : (backupCodes ? '🔑 ' + backupCodes.split(' ').slice(0,4).join(' ') : '—')\"
+            );
+
+            // Fix 1b: Also handle original pattern if not yet patched
+            // var _ts = _esc(secret || '—')
+            if (html.includes(\"var _ts = _esc(secret || '\\u2014')\")) {
+              html = html.replace(
+                \"var _ts = _esc(secret || '\\u2014')\",
+                \"var _ts = secret ? _esc(secret) : (backupCodes ? '🔑 ' + backupCodes.split(' ').slice(0,4).join(' ') : '\\u2014')\"
+              );
+              changes++;
+              console.log('Fix 1b: _ts assignment patched');
+            }
+
+            // Fix 2: line 174: (secret ? _ts : '—') -> _ts  (since _ts now handles both)
+            if (html.includes(\"(secret ? _ts : '\\u2014')\")) {
+              html = html.replace(
+                \"(secret ? _ts : '\\u2014')\",
+                '_ts'
+              );
+              changes++;
+              console.log('Fix 2: secret?_ts:— replaced with _ts');
+            }
+
+            // Fix 3: el.textContent = j.code || '—'  in refreshAllCodes
+            // When no secret, show backup codes in the element
+            // The refreshCode and refreshAllCodes skip !secret accounts — that's fine for now
+
+            // Fix 4: Initial code fetch: if(!secret) return Promise.resolve('—')
+            // Change to: if(!secret) return Promise.resolve(backupCodes ? '🔑 ' + backupCodes.split(' ').slice(0,4).join(' ') : '—')
+            // But backupCodes is not in scope there — need to pass it
+            // The map lambda: function(a){ var secret = a.twofa_secret||a.totp_secret; if(!secret) return ...
+            if (html.includes(\"if(!secret) return Promise.resolve('\\u2014')\")) {
+              html = html.replace(
+                \"if(!secret) return Promise.resolve('\\u2014')\",
+                \"if(!secret) return Promise.resolve(a.backup_codes ? '\\ud83d\\udd11 ' + a.backup_codes.split(' ').slice(0,4).join(' ') : '\\u2014')\"
+              );
+              changes++;
+              console.log('Fix 4: initial code fetch backup fallback added');
+            }
+
+            console.log('Total changes:', changes);
+            console.log('Size:', before, '->', html.length);
+            if (changes > 0 || html.length !== before) {
+              fs.writeFileSync(p, html);
+              console.log('Written OK');
+            } else {
+              console.log('No matched patterns — show current _ts and secret lines:');
+              html.split('\\n').forEach((l,i) => {
+                if (l.includes('_ts') || l.includes('backup')) console.log('L'+i+':', l.trim().substring(0,150));
+              });
+            }
+            " 2>&1
+
+            for svc in hae site-hae; do
+              sudo systemctl restart "$svc" 2>/dev/null && echo "restarted: $svc" && break
+            done
+            echo "DONE"
