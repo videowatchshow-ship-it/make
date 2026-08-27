@@ -1,0 +1,27 @@
+name: gauth - find loginGoogle and BACKUP_CODE
+on:
+  push:
+    paths:
+      - '.github/workflows/gauth-read-logingoogle.yml'
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Find loginGoogle definition and BACKUP_CODE state
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            echo "=== loginGoogle 정의 위치 ==="
+            sudo grep -rn "function loginGoogle\|loginGoogle.*=.*async\|exports.*loginGoogle\|module.*loginGoogle" /opt/gauth-full/
+
+            echo "=== BACKUP_CODE state 설정 위치 (전체 디렉토리) ==="
+            sudo grep -rn "BACKUP_CODE\|backup_code" /opt/gauth-full/ --include="*.js" | grep -v "node_modules"
+
+            echo "=== /opt/gauth-full 파일 목록 ==="
+            sudo ls /opt/gauth-full/*.js /opt/gauth-full/lib/*.js 2>/dev/null
