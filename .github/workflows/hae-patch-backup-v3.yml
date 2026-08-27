@@ -1,0 +1,63 @@
+name: HAE - patch v3 fix broken _ts JS syntax
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/hae-patch-backup-v3.yml'
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fix broken JS in hae index.html and restore working state
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            echo "=== current lines 155-170 ==="
+            sudo sed -n '155,170p' /var/www/sites/hae/public/index.html
+
+            sudo node -e "
+            const fs = require('fs');
+            const p = '/var/www/sites/hae/public/index.html';
+            let html = fs.readFileSync(p, 'utf8');
+            const before = html.length;
+            let changes = 0;
+
+            // Fix broken _ts line — any variant that has backupCodes but broken split syntax
+            // Replace entire _ts assignment with correct version
+            html = html.replace(
+              /var _ts = [^\n]+backup[^\n]+/g,
+              \"var _ts = secret ? _esc(secret) : (a.backup_codes ? '\\ud83d\\udd11 ' + a.backup_codes.split(' ').slice(0,4).join(' ') : '\\u2014')\"
+            );
+            if (html.length !== before) { changes++; console.log('_ts line fixed'); }
+
+            // Fix if(!secret) return Promise.resolve — show backup codes in code cell
+            const old4a = \"if(!secret) return Promise.resolve('\\u2014')\";
+            const old4b = 'if(!secret) return Promise.resolve(\"\\u2014\")';
+            const new4 = \"if(!secret) return Promise.resolve(a.backup_codes ? '\\ud83d\\udd11 ' + a.backup_codes.split(' ').slice(0,4).join(' ') : '\\u2014')\";
+            if (html.includes(old4a)) { html = html.replace(old4a, new4); changes++; console.log('Fix4a'); }
+            if (html.includes(old4b)) { html = html.replace(old4b, new4); changes++; console.log('Fix4b'); }
+
+            console.log('changes:', changes, 'size:', before, '->', html.length);
+            fs.writeFileSync(p, html);
+            console.log('written');
+            " 2>&1
+
+            echo ""
+            echo "=== verify: lines 155-170 after patch ==="
+            sudo sed -n '155,170p' /var/www/sites/hae/public/index.html
+
+            echo ""
+            echo "=== JS syntax check ==="
+            sudo node --check /var/www/sites/hae/public/index.html 2>&1 || true
+
+            sudo chown www-data:www-data /var/www/sites/hae/public/index.html
+            for svc in hae site-hae; do
+              sudo systemctl restart "$svc" 2>/dev/null && echo "restarted: $svc" && break
+            done
+            echo "DONE"
