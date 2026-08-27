@@ -1,12 +1,64 @@
 /* gauth API routes — Express 모듈
- * ref: https://github.com/expressjs/express/blob/master/lib/router/index.js
- * ref: https://github.com/nodejs/node/blob/main/doc/api/child_process.md#child_processexecfilesyncfile-args-options
- * ref: https://github.com/nodejs/node/blob/main/doc/api/fs.md
- * ref: https://github.com/nodejs/node/blob/main/doc/api/crypto.md */
+ * ref: https://expressjs.com/en/api.html
+ * ref: https://nodejs.org/api/child_process.html#child_processexecfilesyncfile-args-options
+ * ref: https://nodejs.org/api/fs.html
+ * ref: https://nodejs.org/api/crypto.html
+ * ref: https://nodejs.org/api/https.html */
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const https = require('https');
+
+/* Google JWT 서명 검증
+ * ref: https://developers.google.com/identity/gsi/web/guides/verify-google-id-token
+ * ref: https://nodejs.org/api/crypto.html#cryptocreatepublickeykeyobject
+ * ref: https://nodejs.org/api/crypto.html#cryptocreateverifyalgorithm-options */
+const GOOGLE_JWKS_URI = 'https://www.googleapis.com/oauth2/v3/certs';
+let _jwksCache = null;
+let _jwksCacheAt = 0;
+
+function fetchGoogleJwks() {
+  return new Promise(function(resolve, reject) {
+    if (_jwksCache && Date.now() - _jwksCacheAt < 3600000) return resolve(_jwksCache);
+    https.get(GOOGLE_JWKS_URI, function(res) {
+      var data = '';
+      res.on('data', function(chunk) { data += chunk; });
+      res.on('end', function() {
+        try {
+          _jwksCache = JSON.parse(data).keys;
+          _jwksCacheAt = Date.now();
+          resolve(_jwksCache);
+        } catch (e) { reject(e); }
+      });
+    }).on('error', reject);
+  });
+}
+
+function verifyGoogleJwt(credential) {
+  return fetchGoogleJwks().then(function(keys) {
+    var parts = credential.split('.');
+    if (parts.length !== 3) throw new Error('invalid token format');
+    var header = JSON.parse(Buffer.from(parts[0], 'base64url').toString());
+    var payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
+    if (!['https://accounts.google.com', 'accounts.google.com'].includes(payload.iss)) {
+      throw new Error('invalid issuer');
+    }
+    var clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '';
+    if (clientId && payload.aud !== clientId) throw new Error('audience mismatch');
+    if (payload.exp < Math.floor(Date.now() / 1000)) throw new Error('token expired');
+    var jwk = keys.find(function(k) { return k.kid === header.kid; });
+    if (!jwk) throw new Error('matching public key not found');
+    var pubKey = crypto.createPublicKey({ key: jwk, format: 'jwk' });
+    var pem = pubKey.export({ type: 'spki', format: 'pem' });
+    var signedData = parts[0] + '.' + parts[1];
+    var sig = Buffer.from(parts[2], 'base64url');
+    var verify = crypto.createVerify('RSA-SHA256');
+    verify.update(signedData);
+    if (!verify.verify(pem, sig)) throw new Error('signature verification failed');
+    return payload;
+  });
+}
 
 function normalizeEmail(s) {
   s = String(s || '').trim().toLowerCase();
@@ -703,15 +755,11 @@ module.exports = function(app) {
     res.json({ user: { email: u.email, name: u.name, sub: u.sub } });
   });
 
-  app.post('/api/auth/google', (req, res) => {
-    try {
-      const { credential } = req.body || {};
-      if (!credential) return res.status(400).json({ ok: false, error: 'missing credential' });
-      const parts = credential.split('.');
-      if (parts.length !== 3) return res.status(400).json({ ok: false, error: 'invalid token' });
-      const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
-      const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '';
-      if (clientId && payload.aud !== clientId) return res.status(401).json({ ok: false, error: 'audience mismatch' });
+  app.post('/api/auth/google', function(req, res) {
+    const { credential } = req.body || {};
+    if (!credential) return res.status(400).json({ ok: false, error: 'missing credential' });
+    /* ref: https://developers.google.com/identity/gsi/web/guides/verify-google-id-token */
+    verifyGoogleJwt(credential).then(function(payload) {
       if (!payload.sub) return res.status(400).json({ ok: false, error: 'missing sub' });
       const users = readGoogleUsers();
       const existing = users.find(function(u) { return u.sub === payload.sub; });
@@ -720,9 +768,9 @@ module.exports = function(app) {
       writeGoogleUsers(users);
       res.setHeader('Set-Cookie', 'gauth_uid=' + encodeURIComponent(payload.sub) + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=315360000');
       res.json({ ok: true, user: { email: userData.email, name: userData.name, sub: userData.sub } });
-    } catch (e) {
-      res.status(500).json({ ok: false, error: e.message });
-    }
+    }).catch(function(e) {
+      res.status(401).json({ ok: false, error: e.message });
+    });
   });
 
   console.log('[auto_deploy] routes registered: /api/accounts, /api/normalized-accounts, /api/profiles, /api/failed-accounts, /api/deploy, /api/update-secret, /api/lookup/:email, /api/search-account, /api/deploy-status, /api/login-one, /api/youtube/*, /api/fix-mtime, /api/parse-report, /codes/:secret, /api/auth/*');

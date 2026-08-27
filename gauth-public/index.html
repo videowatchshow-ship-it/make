@@ -586,7 +586,8 @@ let ALL=[], ALL_ORIGINAL=[], FILTERED=[], PAGE=1
 let _lookupEmail = null, _loginEmail = null
 const vp = document.getElementById('viewport'), sp = document.getElementById('spacer')
 
-function getApiToken(){return sessionStorage.getItem('gauth_token')||'279c85fff45d91d2bd6f3872c96fa82f87488ea250a7b4a9de34f885a5c5cac1'}
+/* ref: https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage */
+function getApiToken(){return sessionStorage.getItem('gauth_token')||''}
 (function(){var el=document.getElementById('apiToken');if(el){var t=getApiToken();if(t)el.value=t;}})()
 function authHeaders(extra){var h=extra||{};var t=getApiToken();if(t)h['Authorization']='Bearer '+t;return h}
 function authQuery(url){var t=getApiToken();if(!t)return url;return url+(url.indexOf('?')>=0?'&':'?')+'token='+encodeURIComponent(t)}

@@ -1,0 +1,55 @@
+name: HAE - enrich accounts with totp_secret from gauth DB
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/hae-enrich-totp.yml'
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Copy totp_secret from gauth DB into hae accounts.json
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo node -e "
+            /* ref: https://nodejs.org/api/fs.html */
+            const fs = require('fs');
+
+            const gauthPath = '/opt/gauth-full/accounts_normalized.json';
+            const haePath   = '/var/www/sites/hae/accounts.json';
+
+            const gauthRaw = JSON.parse(fs.readFileSync(gauthPath, 'utf8'));
+            const gauthArr = Array.isArray(gauthRaw) ? gauthRaw : (gauthRaw.accounts || []);
+
+            // email -> totp_secret map
+            const totpMap = {};
+            for (const a of gauthArr) {
+              if (a.email && a.totp_secret) {
+                totpMap[a.email.toLowerCase().trim()] = a.totp_secret.trim();
+              }
+            }
+            console.log('gauth totp_secret entries:', Object.keys(totpMap).length);
+
+            const haeRaw = JSON.parse(fs.readFileSync(haePath, 'utf8'));
+            const haeArr = Array.isArray(haeRaw) ? haeRaw : (haeRaw.accounts || []);
+            let enriched = 0;
+            for (const a of haeArr) {
+              const key = (a.email || '').toLowerCase().trim();
+              if (!a.totp_secret && totpMap[key]) {
+                a.totp_secret = totpMap[key];
+                enriched++;
+              }
+            }
+            console.log('hae accounts enriched with totp_secret:', enriched, '/', haeArr.length);
+
+            const out = Array.isArray(haeRaw) ? haeArr : Object.assign({}, haeRaw, { accounts: haeArr });
+            fs.writeFileSync(haePath, JSON.stringify(out, null, 2));
+            console.log('hae accounts.json saved');
+            "

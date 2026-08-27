@@ -52,18 +52,46 @@ nav a.active{color:var(--accent);border-bottom-color:#2b6cff}
 </div>
 <div class="wrap" id="list"></div>
 <script>
-const ACCTS = [
-  {email:"hafsyabdallah34@gmail.com",pw:"Mahfuz67@@6566",rec:"3st.mail.ibrahim@gmail.com",secret:"i5p25qv7hf6dkar2h2fxjvxbt2khweib",yt:"https://www.youtube.com/@hafsatabdallah2022"},
-  {email:"krishnakumarsharma19051984@gmail.com",pw:"75mghcps02y4j",rec:"1at.mail.ibrahim@gmail.com",secret:"rhu7kc7t5jjlabhdjzxq7urprvsu5bv2",yt:"https://www.youtube.com/@KrishnakumarSharma-j9r"},
-  {email:"rajaraja6300891524@gmail.com",pw:"2gl1425nv898k",rec:"2at.ibrahim.it@gmail.com",secret:"bimjih3fsivzrbzuxuclthwbctabdehx",yt:"https://www.youtube.com/@RajaRaja-l3w2h"},
-  {email:"usmanijinjiri1@gmail.com",pw:"Mahfuz67@@6566",rec:"2st.mail.ibrahim@gmail.com",secret:"ktuzwbxut5nvx2zdi2xvx3tqvyqcqgfk",yt:"https://www.youtube.com/@UsmanJinjiri-b3k"},
-  {email:"aminaamm20@gmail.com",pw:"Mahfuz67@@6566",rec:"2at.ibrahim.it@gmail.com",secret:"w4n55essplolc4rarvfff6ov47yqfbsl",yt:"https://www.youtube.com/@aminaumar4805"},
-  {email:"aadhireddy2961@gmail.com",pw:"75mghcps02y4j",rec:"1st.mail.ibrahim@gmail.com",secret:"qggsexpr6gp66or4r5fqxnxbg3xkokjg",yt:"https://www.youtube.com/@AadhiReddy-k7c"},
-  {email:"mdamarul79@gmail.com",pw:"wj53spgmn0z4l",rec:"6st.ibrahim71@gmail.com",secret:"5hntnxvpfiij4j2rmicmgnfsr66rivgd",yt:"https://www.youtube.com/@MdAmarul-z6r"},
-  {email:"baijnathujp79720@gmail.com",pw:"2gl1425nv898k",rec:"3at.ibrahim.it@gmail.com",secret:"ixxfehlykflpsghxhogpsfjnsy5qvwwy",yt:"https://www.youtube.com/@BaijnathKumar-m4b"},
-  {email:"sayedashabibi996@gmail.com",pw:"jl6c425nv898k",rec:"2st.mail.ibrahim@gmail.com",secret:"b5523vt4jahmtoxzqkj752d7dotodgtt",yt:"https://www.youtube.com/@SayedAshabibi"},
-  {email:"shuklamahadev808@gmail.com",pw:"g13ub0jw2eaif",rec:"bd71.mahfuz.dev@gmail.com",secret:"ibynx7o2tu2zq7ho3aziyvo234t3zjsv",yt:"https://www.youtube.com/@MahadevShukla-h9t"}
+/* ref: https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch
+ * ref: https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/sign */
+const EMAILS = [
+  "hafsyabdallah34@gmail.com",
+  "krishnakumarsharma19051984@gmail.com",
+  "rajaraja6300891524@gmail.com",
+  "usmanijinjiri1@gmail.com",
+  "aminaamm20@gmail.com",
+  "aadhireddy2961@gmail.com",
+  "mdamarul79@gmail.com",
+  "baijnathujp79720@gmail.com",
+  "sayedashabibi996@gmail.com",
+  "shuklamahadev808@gmail.com"
 ];
+let ACCTS = [];
+
+async function loadAccts() {
+  const list = document.getElementById('list');
+  list.innerHTML = '<div style="padding:24px;color:var(--sub);text-align:center">로딩 중...</div>';
+  try {
+    const results = await Promise.all(EMAILS.map(async email => {
+      const r = await fetch('/api/lookup/' + encodeURIComponent(email), { cache: 'no-store' });
+      if (!r.ok) return { email, pw: '–', rec: '–', secret: '', yt: '' };
+      const d = await r.json();
+      return {
+        email: d.email || email,
+        pw: d.password || '–',
+        rec: d.recovery_email || '–',
+        secret: d.totp_secret || '',
+        yt: d.youtube_url || ''
+      };
+    }));
+    ACCTS = results;
+    visible = ACCTS.map((_,i) => i);
+    render();
+  } catch (e) {
+    list.innerHTML = '<div style="padding:24px;color:var(--err)">로드 실패: ' + e.message + '</div>';
+  }
+}
+
 async function totp(secret) {
   const base32chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
   const s = secret.toUpperCase().replace(/[^A-Z2-7]/g,'');
@@ -86,12 +114,12 @@ async function totp(secret) {
   const code = ((sig[offset] & 0x7f) << 24 | sig[offset+1] << 16 | sig[offset+2] << 8 | sig[offset+3]) % 1000000;
   return String(code).padStart(6, '0');
 }
-let visible = ACCTS.map((_,i) => i);
+let visible = [];
 function filter() {
   const q = document.getElementById('q').value.toLowerCase();
   visible = ACCTS.map((_,i) => i).filter(i => {
     const a = ACCTS[i];
-    return !q || a.email.toLowerCase().includes(q) || a.pw.toLowerCase().includes(q) || a.yt.toLowerCase().includes(q) || a.rec.toLowerCase().includes(q);
+    return !q || a.email.toLowerCase().includes(q) || a.pw.toLowerCase().includes(q) || (a.yt||'').toLowerCase().includes(q) || (a.rec||'').toLowerCase().includes(q);
   });
   render();
 }
@@ -103,12 +131,12 @@ function render() {
     const a = ACCTS[i];
     const card = document.createElement('div');
     card.className = 'card';
-    const ytName = a.yt.replace('https://www.youtube.com/@','@').replace('https://youtube.com/user/','');
+    const ytName = (a.yt||'').replace('https://www.youtube.com/@','@').replace('https://youtube.com/user/','');
     card.innerHTML = `
 <div class="card-head">
   <span class="card-num">${i+1}</span>
   <span class="card-email">${a.email}</span>
-  <span class="card-yt"><a href="${a.yt}" target="_blank">${ytName}</a></span>
+  <span class="card-yt">${a.yt ? '<a href="'+a.yt+'" target="_blank">'+ytName+'</a>' : ''}</span>
 </div>
 <div class="grid">
   <div class="field">
@@ -126,10 +154,10 @@ function render() {
   <div class="field">
     <div class="f-label">2FA 코드</div>
     <div class="f-val">
-      <span class="totp-code" id="totp-${i}">------</span>
-      <button class="cp" onclick="totp(ACCTS[${i}].secret).then(c=>navigator.clipboard.writeText(c).then(()=>{this.textContent='✓';this.classList.add('done');setTimeout(()=>{this.textContent='복사';this.classList.remove('done')},1500)}))">복사</button>
+      <span class="totp-code" id="totp-${i}">${a.secret ? '------' : '–'}</span>
+      ${a.secret ? '<button class="cp" onclick="totp(ACCTS['+i+'].secret).then(c=>navigator.clipboard.writeText(c).then(()=>{this.textContent=\'✓\';this.classList.add(\'done\');setTimeout(()=>{this.textContent=\'복사\';this.classList.remove(\'done\')},1500)}))">복사</button>' : ''}
     </div>
-    <div class="totp-bar" id="bar-${i}" style="width:100%"></div>
+    ${a.secret ? '<div class="totp-bar" id="bar-'+i+'" style="width:100%"></div>' : ''}
   </div>
 </div>`;
     list.appendChild(card);
@@ -140,14 +168,16 @@ async function updateAll() {
   const rem = 30 - (Math.floor(Date.now()/1000) % 30);
   const pct = (rem / 30 * 100).toFixed(1);
   for (const i of visible) {
+    const a = ACCTS[i];
+    if (!a || !a.secret) continue;
     const el = document.getElementById('totp-'+i);
     const bar = document.getElementById('bar-'+i);
     if (!el) continue;
-    try { el.textContent = await totp(ACCTS[i].secret); } catch(e) { el.textContent = 'ERR'; }
+    try { el.textContent = await totp(a.secret); } catch(e) { el.textContent = 'ERR'; }
     if (bar) bar.style.width = pct + '%';
   }
 }
-render();
+loadAccts();
 setInterval(updateAll, 1000);
 </script>
 </body>

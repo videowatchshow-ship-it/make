@@ -60,7 +60,7 @@
 function getApiToken(){return sessionStorage.getItem('gauth_token')||''}
 function authHeaders(extra){var h=extra||{};var t=getApiToken();if(t)h['Authorization']='Bearer '+t;return h}
 
-var META={gain:{e:'🟣',k:'게인'},woodong:{e:'🚕',k:'우동'},sunbi:{e:'📘',k:'선비'},simmani:{e:'🎬',k:'심마니'},win:{e:'🏆',k:'윈'},aura:{e:'✨',k:'아우라'},bacad:{e:'🎓',k:'바캣'},camstouch:{e:'📷',k:'칠스터치'},james:{e:'👤',k:'제임스'},misskim:{e:'👩',k:'미스김'},naman:{e:'🧑',k:'나만'},romi:{e:'🐾',k:'로미'},second:{e:'2️⃣',k:'세컨드'},soktv:{e:'📺',k:'속TV'},cham:{e:'🐘',k:'참'}};
+var META={gain:{e:'🟣',k:'게인'},woodong:{e:'🚕',k:'우동'},sunbi:{e:'📘',k:'선비'},simmani:{e:'🎬',k:'심마니'},win:{e:'🏆',k:'윈'},aura:{e:'✨',k:'아우라'},bacad:{e:'🎓',k:'바캣'},camstouch:{e:'📷',k:'캄스터치'},james:{e:'👤',k:'제임스'},misskim:{e:'👩',k:'미스김'},naman:{e:'🧑',k:'나만'},romi:{e:'🐾',k:'로미'},second:{e:'2️⃣',k:'세컨드'},soktv:{e:'📺',k:'속TV'},cham:{e:'🐘',k:'참'}};
 var PS=10, pg={}, cache=null;
 function esc(s){var d=document.createElement('div');d.textContent=String(s==null?'':s);return d.innerHTML;}
 function renderPage(site, arr){
