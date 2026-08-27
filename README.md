@@ -109,13 +109,17 @@ return authenticator.generate(secret); // otplib
 
 ### index.html 패치 시 주의사항
 
+- **hae index.html은 CRLF (`\r\n`) 줄바꿈** — 멀티라인 문자열 매칭 시 반드시 `\r\n` 사용:
+  ```js
+  const CRLF = '\r\n';
+  const old = "line1" + CRLF + "    line2";
+  ```
 - 파일 내 em-dash는 **리터럴 `—`** (6문자: `\`, `u`, `2`, `0`, `1`, `4`)로 저장됨
 - node -e에서 `'\\u2014'`로 검색해야 매칭됨 (`'—'` = 실제 em-dash 문자로 변환되어 불일치)
 - 문자열 매칭 실패 시 workflow 내 debug 출력으로 실제 바이트 확인:
   ```js
   const idx = html.indexOf("관련 키워드");
-  console.log('BYTES:', Buffer.from(html.substring(idx, idx+80)).toString('hex'));
-  console.log('TEXT:', JSON.stringify(html.substring(idx, idx+80)));
+  console.log('TEXT:', JSON.stringify(html.substring(idx-80, idx+80)));
   ```
 
 ### 계정별 TOTP 유형
