@@ -1,0 +1,62 @@
+name: HAE - always show refresh button (even when no TOTP secret)
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/hae-patch-refresh-btn.yml'
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Patch hae index.html to always show refresh button
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo node -e "
+            /* ref: https://nodejs.org/api/fs.html */
+            const fs = require('fs');
+            const p = '/var/www/sites/hae/public/index.html';
+            let html = fs.readFileSync(p, 'utf8');
+            const before = html.length;
+
+            // Always show per-account refresh button regardless of secret
+            // OLD: (secret ? '<button ...>🔄 새로고침</button>' : '')
+            // NEW: always show the button; if no secret it just shows —
+            html = html.replace(
+              /\+ \(secret \? ' <button class=\"refresh-btn\" onclick=\"refreshCode\(' \+ idx \+ ',\\\\'' \+ _esc\(secret\) \+ '\\\\',this\)\">🔄 새로고침<\/button>' : ''\)/g,
+              \"+ '<button class=\\\"refresh-btn\\\" onclick=\\\"refreshCode(' + idx + ',\\\\'' + _esc(secret || '') + '\\\\',this)\\\">🔄 새로고침</button>'\"
+            );
+
+            // Also always show copy button for 2FA code (even when —)
+            html = html.replace(
+              /\+ \(secret \? cp\('_', 'tdcode-' \+ idx\) : ''\)/g,
+              \"+ cp('_', 'tdcode-' + idx)\"
+            );
+
+            if (html.length === before) {
+              console.log('Pattern not found exactly - trying alternate replace...');
+              // Check what the actual line looks like
+              const lines = html.split('\n');
+              for (let i = 0; i < lines.length; i++) {
+                if (lines[i].includes('refresh-btn') || lines[i].includes('새로고침')) {
+                  console.log('Line ' + i + ':', lines[i].substring(0, 200));
+                }
+              }
+            } else {
+              fs.writeFileSync(p, html);
+              console.log('Patched: ' + before + ' -> ' + html.length + ' chars');
+            }
+            "
+
+            echo "=== Verify refresh button lines ==="
+            sudo grep -n "새로고침\|refresh-btn" /var/www/sites/hae/public/index.html
+
+            sudo chown www-data:www-data /var/www/sites/hae/public/index.html
+            sudo systemctl restart hae 2>/dev/null || sudo systemctl restart site-hae 2>/dev/null || true
+            echo "DONE"
