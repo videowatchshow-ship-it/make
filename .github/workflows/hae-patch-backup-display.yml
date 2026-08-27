@@ -1,0 +1,115 @@
+name: HAE - patch index.html to show backup codes when no TOTP secret
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/hae-patch-backup-display.yml'
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Show lines around secret rendering and patch backup codes display
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            # Show context around secret rendering lines
+            echo "=== lines 145-165 of hae index.html ==="
+            sudo sed -n '145,165p' /var/www/sites/hae/public/index.html
+
+            echo ""
+            echo "=== lines 210-230 ==="
+            sudo sed -n '210,230p' /var/www/sites/hae/public/index.html
+
+            # Patch: when secret is empty but backup_codes exists, use backup_codes as display
+            sudo node -e "
+            /* ref: https://nodejs.org/api/fs.html */
+            const fs = require('fs');
+            const p = '/var/www/sites/hae/public/index.html';
+            let html = fs.readFileSync(p, 'utf8');
+            const before = html.length;
+
+            // Replace: var secret = a.twofa_secret || a.totp_secret
+            // With: var secret = a.twofa_secret || a.totp_secret (keep)
+            //       var backupCodes = a.backup_codes || ''
+            // And where '—' is shown for missing secret, show backup codes instead
+
+            // Patch 1: after 'var secret = a.twofa_secret || a.totp_secret' add backup codes var
+            html = html.replace(
+              /var secret = a\.twofa_secret \|\| a\.totp_secret\b/g,
+              \"var secret = a.twofa_secret || a.totp_secret; var backupCodes = a.backup_codes || ''\"
+            );
+
+            // Patch 2: where code shows '—' for empty secret in TOTP cell, show backup codes
+            // Look for pattern like: secret ? ... : '—'  or  secret ? ... : '<span>—</span>'
+            // Replace the fallback '—' with backup codes display
+            html = html.replace(
+              /(\?\s*['\"]\s*—\s*['\"]\s*:\s*['\"]\s*—\s*['\"])/g,
+              \"? '—' : '—'\"
+            );
+
+            // Patch 3: In card HTML builder, after TOTP secret display row, add backup codes row
+            // Find pattern where 2FA secret value is set (after twofa_secret check)
+            // Pattern: tdcode-X shows '—' → add below it: if backupCodes show them
+            html = html.replace(
+              /(<span[^>]*id=['\"]\s*tdcode-'\s*\+\s*idx[^>]*>)[^<]*<\/span>/g,
+              (match) => match
+            );
+
+            // More targeted: find where '—' is returned when no secret
+            // Based on line 157: var secret = a.twofa_secret || a.totp_secret || ''
+            // Then the cell shows secret or '—'
+            // Replace: (secret || '—') patterns to show backup codes
+            const bc_replacement = \"(secret ? secret : (backupCodes ? '<span class=\\\"backup-code-hint\\\">🔑 ' + backupCodes.split(' ').slice(0,2).join(' ') + '…</span>' : '—'))\";
+
+            // Find explicit '—' fallback in TOTP display context
+            let changed = false;
+
+            // Pattern: secret || '—' in template literals or string concat
+            const old1 = \"secret || '—'\";
+            if (html.includes(old1)) {
+              html = html.split(old1).join(bc_replacement.replace('(secret ? secret : ', '').replace(')', ''));
+              changed = true;
+              console.log('Patched: secret || —');
+            }
+
+            // Pattern: ? secret : '—'
+            const old2 = \"? secret : '—'\";
+            if (html.includes(old2)) {
+              // Replace with backup code display
+              html = html.split(old2).join(\"? secret : (backupCodes ? '<span class=\\\"backup-code-hint\\\">🔑 ' + backupCodes.split(' ').slice(0,2).join(' ') + '…</span>' : '—')\");
+              changed = true;
+              console.log('Patched: ? secret : —');
+            }
+
+            // Also show all lines containing '—' character
+            const lines = html.split('\\n');
+            for (let i = 0; i < lines.length; i++) {
+              if (lines[i].includes('\\u2014') || lines[i].includes(\"'—'\") || lines[i].includes('\"—\"')) {
+                console.log('Dash line ' + i + ':', lines[i].trim().substring(0, 150));
+              }
+            }
+
+            if (changed || html.length !== before) {
+              fs.writeFileSync(p, html);
+              console.log('Written: ' + before + ' -> ' + html.length);
+            } else {
+              console.log('No pattern matched — showing twofa display lines for manual check');
+            }
+            " 2>&1
+
+            # Also check what server.js line 117 returns exactly
+            echo ""
+            echo "=== server.js lines 110-125 ==="
+            sudo sed -n '110,125p' /var/www/sites/hae/server.js
+
+            # Restart
+            for svc in hae site-hae; do
+              sudo systemctl restart "$svc" 2>/dev/null && echo "restarted: $svc" && break
+            done
+            echo "DONE"
