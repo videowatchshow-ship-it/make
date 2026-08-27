@@ -1,0 +1,43 @@
+name: jump-debug-structure
+
+on:
+  workflow_dispatch:
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH and inspect jump site + gauth DB
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          script: |
+            echo "=== JUMP SITE FILES ==="
+            find /var/www/sites/jump -type f | head -30
+
+            echo ""
+            echo "=== INDEX HTML ==="
+            cat /var/www/sites/jump/index.html 2>/dev/null || cat /var/www/sites/jump/public/index.html 2>/dev/null || echo "No index.html found"
+
+            echo ""
+            echo "=== APP JS (if exists) ==="
+            for f in /var/www/sites/jump/app.js /var/www/sites/jump/public/app.js /var/www/sites/jump/js/app.js; do
+              if [ -f "$f" ]; then echo "--- $f ---"; cat "$f"; fi
+            done
+
+            echo ""
+            echo "=== DATA FILES ==="
+            for f in /var/www/sites/jump/data.json /var/www/sites/jump/public/data.json /var/www/sites/jump/sites.json /var/www/sites/jump/public/sites.json /var/www/sites/jump/menu.json /var/www/sites/jump/public/menu.json; do
+              if [ -f "$f" ]; then echo "--- $f ---"; cat "$f"; fi
+            done
+
+            echo ""
+            echo "=== GAUTH DB LOOKUP: beaugrandkat518@gmail.com ==="
+            cat /opt/gauth-full/accounts_normalized.json | node -e "
+              const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+              const a=Array.isArray(d)?d:(d.accounts||[]);
+              const r=a.find(x=>(x.email||'').toLowerCase()==='beaugrandkat518@gmail.com');
+              console.log(JSON.stringify(r,null,2));
+            "
