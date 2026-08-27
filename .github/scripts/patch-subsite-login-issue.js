@@ -33,13 +33,29 @@ for (const oldM of [...oldHtmlMarkers, htmlMarker]) {
 }
 
 // ---------- server.js ----------
-// Guard: only patch if this is an Express-based server (has `app = express()`)
-// Plain http.createServer() servers cannot use `app.use/patch/get` — crashes with ReferenceError.
-if (!/express\s*\(\s*\)/.test(serverSrc)) {
-  console.log('  [' + SITE + '] server.js is not Express-based — SKIPPING server patch (HTML still patches)');
-} else if (serverSrc.includes(patchMarker)) {
+// Shared account read/write logic (used in both Express and http injection strings)
+function makeAccountsLogic(siteStr) {
+  return [
+    '  var __liFs = require("fs"); var __liPath = require("path");',
+    '  var __liAcct = __liPath.join(__dirname, "accounts.json");',
+    '  var __liData = { accounts: [] };',
+    '  try { __liData = JSON.parse(__liFs.readFileSync(__liAcct, "utf8")); } catch(e) {}',
+    '  var __liArr = Array.isArray(__liData) ? __liData : (__liData.accounts || []);',
+  ].join('\n');
+}
+
+function writeAccounts() {
+  return [
+    '  var __liTmp = __liAcct + ".tmp." + process.pid + "." + Date.now();',
+    '  __liFs.writeFileSync(__liTmp, JSON.stringify(Array.isArray(__liData) ? __liArr : { accounts: __liArr }, null, 2));',
+    '  __liFs.renameSync(__liTmp, __liAcct);',
+  ].join('\n');
+}
+
+if (serverSrc.includes(patchMarker)) {
   console.log('  [' + SITE + '] server.js already patched');
-} else {
+} else if (/express\s*\(\s*\)/.test(serverSrc)) {
+  // ── Express mode ─────────────────────────────────────────────────────────
   const injection = [
     '',
     patchMarker,
@@ -60,73 +76,108 @@ if (!/express\s*\(\s*\)/.test(serverSrc)) {
     '  const hasType = Object.prototype.hasOwnProperty.call(req.body || {}, "type");',
     '  if (hasType && !validTypes.includes(type)) return res.status(400).json({ ok:false, error:"invalid type" });',
     '  if (status !== undefined && !validStatuses.includes(status)) return res.status(400).json({ ok:false, error:"invalid status" });',
-    '  const _fs = require("fs"); const _path = require("path");',
-    '  const ACCT = _path.join(__dirname, "accounts.json");',
-    '  let data = { accounts: [] };',
-    '  try { data = JSON.parse(_fs.readFileSync(ACCT, "utf8")); } catch(e) {}',
-    '  const arr = Array.isArray(data) ? data : (data.accounts || []);',
+    makeAccountsLogic(SITE),
     '  const key = req.params.email.toLowerCase();',
-    '  const acct = arr.find(a => (a.email || "").toLowerCase() === key);',
+    '  const acct = __liArr.find(a => (a.email || "").toLowerCase() === key);',
     '  if (!acct) return res.status(404).json({ ok:false, error:"not found" });',
     '  const now = new Date().toISOString();',
     '  if (hasType && type === null) { delete acct.login_issue; }',
     '  else if (hasType) {',
     '    const prev = acct.login_issue || {};',
-    '    acct.login_issue = {',
-    '      type,',
-    '      note: (note||"").toString().slice(0,200),',
-    '      marked_at: now,',
-    '      status: prev.status || "pending",',
-    '      history: Array.isArray(prev.history) ? prev.history.slice(-19) : []',
-    '    };',
+    '    acct.login_issue = { type, note: (note||"").toString().slice(0,200), marked_at: now, status: prev.status || "pending", history: Array.isArray(prev.history) ? prev.history.slice(-19) : [] };',
     '    acct.login_issue.history.push({ at: now, event: "reported", type, note: acct.login_issue.note, actor: (actor||"subsite").toString().slice(0,40) });',
     '  } else if (status !== undefined && acct.login_issue) {',
-    '    acct.login_issue.status = status;',
-    '    acct.login_issue.status_at = now;',
+    '    acct.login_issue.status = status; acct.login_issue.status_at = now;',
     '    if (!Array.isArray(acct.login_issue.history)) acct.login_issue.history = [];',
     '    acct.login_issue.history.push({ at: now, event: "status", status, actor: (actor||"gauth").toString().slice(0,40) });',
     '    acct.login_issue.history = acct.login_issue.history.slice(-20);',
     '  }',
-    '  const tmp = ACCT + ".tmp." + process.pid + "." + Date.now();',
-    '  _fs.writeFileSync(tmp, JSON.stringify(Array.isArray(data) ? arr : { accounts: arr }, null, 2));',
-    '  _fs.renameSync(tmp, ACCT);',
+    writeAccounts(),
     '  res.json({ ok:true, login_issue: acct.login_issue || null });',
     '});',
     'app.get(' + JSON.stringify(apiPrefix + 'login-issues') + ', (req, res) => {',
-    '  const _fs = require("fs"); const _path = require("path");',
-    '  const ACCT = _path.join(__dirname, "accounts.json");',
-    '  let data = { accounts: [] };',
-    '  try { data = JSON.parse(_fs.readFileSync(ACCT, "utf8")); } catch(e) {}',
-    '  const arr = Array.isArray(data) ? data : (data.accounts || []);',
-    '  const issues = arr.filter(a => a.login_issue && a.login_issue.type).map(a => ({',
-    '    email:a.email, name:a.name||"", channel_title:a.channel_title||"",',
-    '    login_issue:a.login_issue, site: ' + JSON.stringify(SITE),
-    '  }));',
+    makeAccountsLogic(SITE),
+    '  const issues = __liArr.filter(a => a.login_issue && a.login_issue.type).map(a => ({ email:a.email, name:a.name||"", channel_title:a.channel_title||"", login_issue:a.login_issue, site: ' + JSON.stringify(SITE) + ' }));',
     '  res.json({ site: ' + JSON.stringify(SITE) + ', count:issues.length, issues });',
     '});',
     '',
   ].join('\n');
 
   let newServer = serverSrc;
-
-  // Ensure express.json() body-parser is registered.
   if (!/express\.json\s*\(/.test(newServer)) {
-    newServer = newServer.replace(
-      /(const\s+app\s*=\s*express\s*\(\s*\)\s*;?)/,
-      '$1\napp.use(require("express").json());'
-    );
+    newServer = newServer.replace(/(const\s+app\s*=\s*express\s*\(\s*\)\s*;?)/, '$1\napp.use(require("express").json());');
   }
-
-  // Insert before the FIRST app.listen(
   const listenIdx = newServer.search(/app\.listen\s*\(/);
   if (listenIdx > 0) {
     newServer = newServer.slice(0, listenIdx) + injection + '\n' + newServer.slice(listenIdx);
   } else {
     newServer = newServer + '\n' + injection + '\napp.listen(process.env.PORT || 3000, () => console.log("[' + SITE + '] listening"));\n';
   }
-
   fs.writeFileSync(serverPath, newServer);
-  console.log('  [' + SITE + '] server.js patched (+' + (newServer.length - serverSrc.length) + ' bytes)');
+  console.log('  [' + SITE + '] server.js patched (express, +' + (newServer.length - serverSrc.length) + ' bytes)');
+
+} else if (/http\s*\.\s*createServer\s*\(/.test(serverSrc)) {
+  // ── http.createServer mode ────────────────────────────────────────────────
+  // Inject at the top of the request handler function body.
+  // Handles: createServer(function(req,res){  or  createServer((req,res)=>{
+  const csIdx = serverSrc.search(/http\s*\.\s*createServer\s*\(/);
+  const after = serverSrc.slice(csIdx);
+  // find the opening { of the handler
+  const handlerBrace = after.match(/\(\s*(?:function\s*\([^)]*\)|(?:\([^)]*\)|\w+)\s*=>)\s*\{/);
+  if (!handlerBrace) {
+    console.log('  [' + SITE + '] server.js http.createServer pattern not recognizable — SKIPPING');
+  } else {
+    const insertPos = csIdx + handlerBrace.index + handlerBrace[0].length;
+    const patchRe = JSON.stringify('^/api/' + SITE + '/accounts/([^/]+)/login-issue$');
+    const httpInjection = [
+      '',
+      '  ' + patchMarker,
+      '  var __liHandled = false;',
+      '  var __liUrl = req.url ? req.url.split("?")[0] : "/";',
+      '  res.setHeader("Access-Control-Allow-Origin","*");',
+      '  res.setHeader("Access-Control-Allow-Methods","GET,POST,PATCH,DELETE,OPTIONS");',
+      '  res.setHeader("Access-Control-Allow-Headers","Content-Type,Authorization");',
+      '  if (req.method==="OPTIONS"){res.writeHead(204);res.end();__liHandled=true;}',
+      '  if (!__liHandled) {',
+      '    var __liPatchRe = new RegExp(' + patchRe + ');',
+      '    var __liPatchM = (req.method==="PATCH") ? __liPatchRe.exec(__liUrl) : null;',
+      '    if (__liPatchM) {',
+      '      __liHandled = true;',
+      '      var __liEmail = decodeURIComponent(__liPatchM[1]);',
+      '      var __liBody = ""; req.on("data",function(c){__liBody+=c;}); req.on("end",function(){',
+      '        var d; try { d = JSON.parse(__liBody||"{}"); } catch(e){ res.writeHead(400,{"Content-Type":"application/json"}); res.end(\'{"ok":false,"error":"invalid json"}\'); return; }',
+      '        var validTypes=["phone","robot","password","other",null]; var validStatuses=["pending","resolved","hold","unknown"];',
+      '        var hasType=Object.prototype.hasOwnProperty.call(d,"type");',
+      '        if(hasType&&!validTypes.includes(d.type)){res.writeHead(400,{"Content-Type":"application/json"});res.end(\'{"ok":false,"error":"invalid type"}\');return;}',
+      '        if(d.status!==undefined&&!validStatuses.includes(d.status)){res.writeHead(400,{"Content-Type":"application/json"});res.end(\'{"ok":false,"error":"invalid status"}\');return;}',
+      makeAccountsLogic(SITE),
+      '        var acct=__liArr.find(function(a){return (a.email||"").toLowerCase()===__liEmail.toLowerCase();});',
+      '        if(!acct){res.writeHead(404,{"Content-Type":"application/json"});res.end(\'{"ok":false,"error":"not found"}\');return;}',
+      '        var now=new Date().toISOString();',
+      '        if(hasType&&d.type===null){delete acct.login_issue;}',
+      '        else if(hasType){var prev=acct.login_issue||{};acct.login_issue={type:d.type,note:(d.note||"").toString().slice(0,200),marked_at:now,status:prev.status||"pending",history:Array.isArray(prev.history)?prev.history.slice(-19):[]};acct.login_issue.history.push({at:now,event:"reported",type:d.type,note:acct.login_issue.note,actor:(d.actor||"subsite").toString().slice(0,40)});}',
+      '        else if(d.status!==undefined&&acct.login_issue){acct.login_issue.status=d.status;acct.login_issue.status_at=now;if(!Array.isArray(acct.login_issue.history))acct.login_issue.history=[];acct.login_issue.history.push({at:now,event:"status",status:d.status,actor:(d.actor||"gauth").toString().slice(0,40)});acct.login_issue.history=acct.login_issue.history.slice(-20);}',
+      writeAccounts(),
+      '        res.writeHead(200,{"Content-Type":"application/json"});res.end(JSON.stringify({ok:true,login_issue:acct.login_issue||null}));',
+      '      });',
+      '    }',
+      '  }',
+      '  if (!__liHandled && req.method==="GET" && __liUrl==="/api/' + SITE + '/login-issues") {',
+      '    __liHandled = true;',
+      makeAccountsLogic(SITE),
+      '    var issues=__liArr.filter(function(a){return a.login_issue&&a.login_issue.type;}).map(function(a){return{email:a.email,name:a.name||"",channel_title:a.channel_title||"",login_issue:a.login_issue,site:' + JSON.stringify(SITE) + '};});',
+      '    res.writeHead(200,{"Content-Type":"application/json"}); res.end(JSON.stringify({site:' + JSON.stringify(SITE) + ',count:issues.length,issues:issues}));',
+      '  }',
+      '  if (__liHandled) return;',
+      '',
+    ].join('\n');
+
+    const newServer = serverSrc.slice(0, insertPos) + httpInjection + serverSrc.slice(insertPos);
+    fs.writeFileSync(serverPath, newServer);
+    console.log('  [' + SITE + '] server.js patched (http, +' + (newServer.length - serverSrc.length) + ' bytes)');
+  }
+} else {
+  console.log('  [' + SITE + '] server.js: unknown server type — SKIPPING');
 }
 
 // ---------- public/index.html ----------
