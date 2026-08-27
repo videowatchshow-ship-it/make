@@ -27,8 +27,9 @@ jobs:
                     print(f'{site}: accounts.json 없음')
                     continue
                 try:
-                    data = json.loads(open(p).read())
-                    issues = [a for a in data if a.get('login_issue') and a['login_issue'].get('status') not in ('resolved', None)]
+                    raw = json.loads(open(p).read())
+                    accs = list(raw.values()) if isinstance(raw, dict) else raw
+                    issues = [a for a in accs if isinstance(a, dict) and a.get('login_issue') and a['login_issue'].get('status') not in ('resolved', None)]
                     print(f'{site}: {len(issues)}건')
                     total += len(issues)
                 except Exception as e:
