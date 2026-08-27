@@ -1,0 +1,30 @@
+name: gauth - read google.js around line 656
+on:
+  push:
+    paths:
+      - '.github/workflows/gauth-read-google-656.yml'
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read google.js BACKUP_CODE section
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            echo "=== google.js lines 640-700 ==="
+            sudo sed -n '640,700p' /opt/gauth-full/lib/login/google.js
+
+            echo "=== selectors.js BACKUP_CODE ==="
+            sudo grep -n "BACKUP_CODE\|challengetype" /opt/gauth-full/lib/login/selectors.js
+
+            echo "=== rebrowser-login.js line 41 context ==="
+            sudo sed -n '38,45p' /opt/gauth-full/rebrowser-login.js
+
+            echo "=== failed log 파일 ==="
+            sudo ls -la /opt/gauth-full/failed_accounts.json 2>/dev/null && sudo wc -l /opt/gauth-full/failed_accounts.json || echo "no failed log"
