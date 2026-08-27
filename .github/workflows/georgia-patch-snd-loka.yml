@@ -46,18 +46,20 @@ jobs:
                 }
               ];
 
+              let anyNew=false;
               patches.forEach(p=>{
                 const exists=accounts.find(a=>(a.email||'').toLowerCase()===p.email.toLowerCase());
                 if(exists){
-                  console.log('Patching:',p.email);
+                  console.log('Patching (순서 유지):',p.email);
                   Object.assign(exists,p);
                 }else{
-                  console.log('Adding:',p.email);
+                  console.log('Adding new:',p.email);
                   accounts.unshift(p);
+                  anyNew=true;
                 }
               });
 
-              accounts.sort((a,b)=>{const da=a.allocated_date||'';const db=b.allocated_date||'';return da>db?-1:da<db?1:0;});
+              if(anyNew) accounts.sort((a,b)=>{const da=a.allocated_date||'';const db=b.allocated_date||'';return da>db?-1:da<db?1:0;});
               fs.writeFileSync('$ACCT_FILE',JSON.stringify({accounts},null,2));
               console.log('Total accounts:',accounts.length);
             "
