@@ -1,0 +1,56 @@
+name: HAE - diagnose current state (all fields + server totp fn)
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/hae-diagnose-current.yml'
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Full diagnosis
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            echo "=== ALL fields in hae accounts.json (first 3 accounts) ==="
+            sudo node -e "
+            const fs = require('fs');
+            const raw = JSON.parse(fs.readFileSync('/var/www/sites/hae/accounts.json','utf8'));
+            const arr = Array.isArray(raw) ? raw : (raw.accounts || Object.values(raw));
+            for (const a of arr.slice(0,3)) {
+              console.log('EMAIL:', a.email);
+              for (const [k,v] of Object.entries(a)) {
+                console.log(' ', k, '=', v ? String(v).substring(0,40) : '(empty)');
+              }
+              console.log('---');
+            }
+            "
+
+            echo ""
+            echo "=== hae server.js totp() function ==="
+            sudo sed -n '60,100p' /var/www/sites/hae/server.js
+
+            echo ""
+            echo "=== hae index.html key JS lines (120-185) ==="
+            sudo sed -n '120,185p' /var/www/sites/hae/public/index.html
+
+            echo ""
+            echo "=== test /api/hae/accounts response (fields only) ==="
+            curl -s http://localhost:4000/api/hae/accounts 2>/dev/null | node -e "
+            const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+            const accts = d.accounts||d;
+            if (accts[0]) {
+              console.log('First account fields:', Object.keys(accts[0]).join(', '));
+              console.log('twofa_secret:', accts[0].twofa_secret);
+              console.log('totp_secret:', accts[0].totp_secret);
+              console.log('backup_codes:', accts[0].backup_codes);
+            }
+            " 2>/dev/null || echo "port 4000 not responding, try hae port:"
+
+            sudo cat /var/www/sites/hae/server.js | grep -n "listen\|port\|PORT" | head -5
