@@ -1,0 +1,83 @@
+name: Jump - cent add uwknsosnsos7
+on:
+  push:
+    paths:
+      - '.github/workflows/jump-cent-add-uwkn.yml'
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Add account and fix extra column
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo node << 'NODESCRIPT'
+            const fs = require('fs');
+
+            // 1. gauth DB
+            const gd = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+            const ga = Array.isArray(gd) ? gd : (gd.accounts || []);
+            const acct = ga.find(a => (a.email||'').toLowerCase() === 'uwknsosnsos7@gmail.com');
+            if (!acct) { console.error('uwknsosnsos7 not found'); process.exit(1); }
+            console.log('found:', acct.email);
+
+            // 2. cent-data.json update
+            const centPath = '/var/www/sites/jump/public/cent-data.json';
+            let centData = {};
+            try { centData = JSON.parse(fs.readFileSync(centPath,'utf8')); } catch(e) {}
+            if (!centData['2026-08-27']) centData['2026-08-27'] = [];
+            const already = centData['2026-08-27'].some(a => (a.email||'').toLowerCase() === 'uwknsosnsos7@gmail.com');
+            if (!already) {
+              centData['2026-08-27'].push(acct);
+              console.log('uwknsosnsos7 added');
+            }
+            fs.writeFileSync(centPath, JSON.stringify(centData, null, 2));
+
+            // 3. Rewrite the entire cent renderCent script cleanly (no extra column)
+            const htmlPath = '/var/www/sites/jump/public/index.html';
+            let html = fs.readFileSync(htmlPath, 'utf8');
+
+            // Replace the full renderCent function with a clean version
+            const cleanRender = `function renderCent(){
+    var container=document.getElementById('cent-dates');
+    container.innerHTML='';
+    Object.keys(centData).sort().reverse().forEach(function(dateKey){
+      var accounts=centData[dateKey];
+      var label=dateKey.replace(/(\\d{4})-(\\d{2})-(\\d{2})/,function(_,y,m,d){return y+' '+parseInt(m)+'/'+parseInt(d);});
+      var section=document.createElement('div');
+      section.style.cssText='margin-bottom:24px;';
+      section.innerHTML='<h3 style="font-size:1rem;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(128,128,128,.3);">'+label+'</h3>';
+      var table=document.createElement('table');
+      table.style.cssText='width:100%;border-collapse:collapse;font-size:.85rem;';
+      table.innerHTML='<thead><tr style="background:rgba(128,128,128,.15)"><th style="padding:6px 10px;text-align:left;">Email</th><th style="padding:6px 10px;text-align:left;">Password</th><th style="padding:6px 10px;text-align:left;">2FA Backup</th><th style="padding:6px 10px;text-align:left;">YouTube</th></tr></thead>';
+      var tbody=document.createElement('tbody');
+      accounts.forEach(function(a,i){
+        var tr=document.createElement('tr');
+        tr.style.cssText='border-bottom:1px solid rgba(128,128,128,.1);'+(i%2?'background:rgba(128,128,128,.05)':'');
+        var ytLink=a.youtube_url?'<a href="'+a.youtube_url+'" target="_blank" style="color:var(--accent,#4f8ef7);">link</a>':'-';
+        var totp=a.twofa_secret||a.totp_secret||'';
+        var backup=a.backup_codes||'';
+        var twofa=totp?totp:backup?backup:'-';
+        tr.innerHTML='<td style="padding:6px 10px;">'+a.email+'</td>'
+          +'<td style="padding:6px 10px;font-family:monospace;">'+a.password+'</td>'
+          +'<td style="padding:6px 10px;font-size:.8rem;">'+twofa+'</td>'
+          +'<td style="padding:6px 10px;">'+ytLink+'</td>';
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      section.appendChild(table);
+      container.appendChild(section);
+    });
+  }`;
+
+            // Replace the renderCent function body
+            html = html.replace(/function renderCent\(\)\{[\s\S]*?\}(?=\s*window\.showCentView)/, cleanRender);
+            fs.writeFileSync(htmlPath, html);
+            console.log('done, size:', html.length);
+            NODESCRIPT
