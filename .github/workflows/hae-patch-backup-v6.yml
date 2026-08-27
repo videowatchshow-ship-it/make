@@ -1,0 +1,94 @@
+name: HAE - patch v6 renderCards + refreshAllCodes backup->TOTP
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/hae-patch-backup-v6.yml'
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Patch renderCards and refreshAllCodes with backup->TOTP logic
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo node << 'JSEOF'
+            const fs = require('fs');
+            const p = '/var/www/sites/hae/public/index.html';
+            let html = fs.readFileSync(p, 'utf8');
+            const before = html.length;
+            let changes = 0;
+
+            // Patch 2: renderCards — line 159 pattern
+            // Replace: var secret = a.twofa_secret || a.totp_secret; var backupCodes = a.backup_codes || ''
+            // With: var secret = ...\n if(!secret && a.backup_codes) { ... }
+            const p2old = "var secret = a.twofa_secret || a.totp_secret; var backupCodes = a.backup_codes || ''\n    var _em = _esc(a.email)";
+            const p2new = "var secret = a.twofa_secret || a.totp_secret\n    if(!secret && a.backup_codes) { var _bc2 = a.backup_codes.toUpperCase().replace(/[\\s\\-_=]/g,'').replace(/[^A-Z2-7]/g,''); if(_bc2.length>=16) secret=_bc2; }\n    var _em = _esc(a.email)";
+            if (html.includes(p2old)) {
+              html = html.replace(p2old, p2new);
+              changes++;
+              console.log('Patch 2: renderCards updated');
+            } else {
+              console.log('Patch 2 NOT matched - trying regex');
+              const m2 = html.match(/var secret = a\.twofa_secret \|\| a\.totp_secret; var backupCodes = a\.backup_codes \|\| ''\n(\s+)var _em/);
+              if (m2) {
+                const indent = m2[1];
+                html = html.replace(
+                  /var secret = a\.twofa_secret \|\| a\.totp_secret; var backupCodes = a\.backup_codes \|\| ''\n(\s+)var _em/,
+                  "var secret = a.twofa_secret || a.totp_secret\n" + indent + "if(!secret && a.backup_codes) { var _bc2 = a.backup_codes.toUpperCase().replace(/[\\s\\-_=]/g,'').replace(/[^A-Z2-7]/g,''); if(_bc2.length>=16) secret=_bc2; }\n" + indent + "var _em"
+                );
+                changes++;
+                console.log('Patch 2: renderCards updated via regex');
+              } else {
+                const idx = html.indexOf('var _em = _esc(a.email)');
+                if (idx >= 0) console.log('CONTEXT:', JSON.stringify(html.substring(idx-100, idx+50)));
+              }
+            }
+
+            // Patch 3: refreshAllCodes — line 220 pattern
+            // Replace: var secret = a.twofa_secret || a.totp_secret; var backupCodes = a.backup_codes || ''
+            // (second occurrence) followed by \n    if(!secret) continue
+            const p3old = "var secret = a.twofa_secret || a.totp_secret; var backupCodes = a.backup_codes || ''\n    if(!secret) continue";
+            const p3new = "var secret = a.twofa_secret || a.totp_secret\n    if(!secret && a.backup_codes) { var _bcr = a.backup_codes.toUpperCase().replace(/[\\s\\-_=]/g,'').replace(/[^A-Z2-7]/g,''); if(_bcr.length>=16) secret=_bcr; }\n    if(!secret) continue";
+            if (html.includes(p3old)) {
+              html = html.replace(p3old, p3new);
+              changes++;
+              console.log('Patch 3: refreshAllCodes updated');
+            } else {
+              console.log('Patch 3 NOT matched - trying regex');
+              const m3 = html.match(/var secret = a\.twofa_secret \|\| a\.totp_secret; var backupCodes = a\.backup_codes \|\| ''\n(\s+)if\(!secret\) continue/);
+              if (m3) {
+                const indent = m3[1];
+                html = html.replace(
+                  /var secret = a\.twofa_secret \|\| a\.totp_secret; var backupCodes = a\.backup_codes \|\| ''\n(\s+)if\(!secret\) continue/,
+                  "var secret = a.twofa_secret || a.totp_secret\n" + indent + "if(!secret && a.backup_codes) { var _bcr = a.backup_codes.toUpperCase().replace(/[\\s\\-_=]/g,'').replace(/[^A-Z2-7]/g,''); if(_bcr.length>=16) secret=_bcr; }\n" + indent + "if(!secret) continue"
+                );
+                changes++;
+                console.log('Patch 3: refreshAllCodes updated via regex');
+              } else {
+                const idx2 = html.indexOf('if(!secret) continue');
+                if (idx2 >= 0) console.log('CONTEXT3:', JSON.stringify(html.substring(idx2-120, idx2+40)));
+              }
+            }
+
+            console.log('Total changes:', changes, '| size:', before, '->', html.length);
+            if (changes > 0) {
+              fs.writeFileSync(p, html);
+              console.log('written');
+            }
+            JSEOF
+
+            echo "=== verify lines 155-230 ==="
+            sudo sed -n '155,230p' /var/www/sites/hae/public/index.html
+
+            sudo chown www-data:www-data /var/www/sites/hae/public/index.html
+            for svc in hae site-hae; do
+              sudo systemctl restart "$svc" 2>/dev/null && echo "restarted: $svc" && break
+            done
+            echo "DONE"
