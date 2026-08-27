@@ -1,0 +1,79 @@
+name: Georgia - patch sndbadmana + lokamemomayoka full info
+on:
+  push:
+    paths:
+      - '.github/workflows/georgia-patch-snd-loka.yml'
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Patch accounts in georgia
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            ACCT_FILE="/var/www/sites/georgia/accounts.json"
+
+            sudo node -e "
+              const fs=require('fs');
+              let data={};
+              try{data=JSON.parse(fs.readFileSync('$ACCT_FILE','utf8'))}catch(e){}
+              let accounts=Array.isArray(data)?data:(data.accounts||[]);
+
+              const patches=[
+                {
+                  email:'sndbadmana@gmail.com',
+                  password:'TZPHidpcnYdSSQ',
+                  backup_email:'sndbadmana08.05ntc@hotmail.com',
+                  backup_codes:'pakf w5on u7jk rsdw bjaa ssio h4mx hzog',
+                  youtube_url:'https://youtube.com/user/dcavalla/videos',
+                  status:'active',
+                  allocated_date:new Date().toISOString().slice(0,10)
+                },
+                {
+                  email:'lokamemomayoka@gmail.com',
+                  password:'CrZfUlrZXUwlfG',
+                  backup_email:'lokamemomayoka08.05ntc@hotmail.com',
+                  backup_codes:'crmk jdjt 2pqe zc7t dabt oix3 fk6q yiho',
+                  youtube_url:'https://youtube.com/user/lorigulmy/videos',
+                  status:'active',
+                  allocated_date:new Date().toISOString().slice(0,10)
+                }
+              ];
+
+              patches.forEach(p=>{
+                const exists=accounts.find(a=>(a.email||'').toLowerCase()===p.email.toLowerCase());
+                if(exists){
+                  console.log('Patching:',p.email);
+                  Object.assign(exists,p);
+                }else{
+                  console.log('Adding:',p.email);
+                  accounts.unshift(p);
+                }
+              });
+
+              accounts.sort((a,b)=>{const da=a.allocated_date||'';const db=b.allocated_date||'';return da>db?-1:da<db?1:0;});
+              fs.writeFileSync('$ACCT_FILE',JSON.stringify({accounts},null,2));
+              console.log('Total accounts:',accounts.length);
+            "
+
+            sudo systemctl restart georgia 2>/dev/null || echo "(no systemd)"
+            sleep 2
+
+            curl -s --max-time 3 "http://localhost:3036/api/georgia/accounts" | node -e "
+              let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
+                try{
+                  const j=JSON.parse(d);const a=j.accounts||j||[];
+                  console.log('georgia total:',a.length);
+                  ['sndbadmana@gmail.com','lokamemomayoka@gmail.com'].forEach(em=>{
+                    const f=a.find(x=>(x.email||'').toLowerCase()===em.toLowerCase());
+                    console.log(em+':',f?'VERIFIED (pw='+f.password+')':'NOT_FOUND');
+                  });
+                }catch(e){console.log('API error:',e.message)}
+              });
+            "
