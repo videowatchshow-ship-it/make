@@ -63,7 +63,7 @@ cat > /tmp/totp-client-injection.html <<'INJECT_END'
     }catch(e){}
     running=false;
   }
-  function start(){ setTimeout(tick, 1500); setInterval(tick, 5000); }
+  function start(){ setTimeout(tick, 500); setInterval(tick, 1000); }
   if(document.readyState==="loading") document.addEventListener("DOMContentLoaded", start);
   else start();
 })();
