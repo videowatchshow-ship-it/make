@@ -1,0 +1,71 @@
+name: Jump - cent add yesuf + remove Korean tags
+on:
+  push:
+    paths:
+      - '.github/workflows/jump-cent-add-yesuf.yml'
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Update cent-data and fix table
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo node << 'NODESCRIPT'
+            const fs = require('fs');
+
+            // 1. gauth DB
+            const gd = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+            const ga = Array.isArray(gd) ? gd : (gd.accounts || []);
+            const yesuf = ga.find(a => (a.email||'').toLowerCase() === 'yesufmohamnedu331@gmail.com');
+            if (!yesuf) { console.error('yesufmohamnedu331 not found'); process.exit(1); }
+            console.log('found:', yesuf.email);
+
+            // 2. cent-data.json 업데이트
+            const centPath = '/var/www/sites/jump/public/cent-data.json';
+            let centData = {};
+            try { centData = JSON.parse(fs.readFileSync(centPath,'utf8')); } catch(e) {}
+            if (!centData['2026-08-27']) centData['2026-08-27'] = [];
+            const already = centData['2026-08-27'].some(a => (a.email||'').toLowerCase() === 'yesufmohamnedu331@gmail.com');
+            if (!already) {
+              centData['2026-08-27'].push(yesuf);
+              console.log('yesuf added to cent-data.json');
+            } else {
+              console.log('yesuf already in cent-data.json');
+            }
+            fs.writeFileSync(centPath, JSON.stringify(centData, null, 2));
+
+            // 3. index.html - extra(비고) 컬럼 제거, 헤더를 영문으로
+            const htmlPath = '/var/www/sites/jump/public/index.html';
+            let html = fs.readFileSync(htmlPath, 'utf8');
+
+            // Replace Korean table headers with English (no 비고 column)
+            html = html.replace(
+              '<th style="padding:6px 10px;text-align:left;">이메일</th><th style="padding:6px 10px;text-align:left;">비밀번호</th><th style="padding:6px 10px;text-align:left;">2FA 백업코드</th><th style="padding:6px 10px;text-align:left;">유튜브</th><th style="padding:6px 10px;text-align:left;">비고</th>',
+              '<th style="padding:6px 10px;text-align:left;">Email</th><th style="padding:6px 10px;text-align:left;">Password</th><th style="padding:6px 10px;text-align:left;">2FA Backup</th><th style="padding:6px 10px;text-align:left;">YouTube</th>'
+            );
+
+            // Remove extra column from row generation
+            html = html.replace(
+              /var extra=\(a\.extra\|\|\[\]\)\.join\(', '\);/g,
+              ''
+            );
+            html = html.replace(
+              /\+'<td style="padding:6px 10px;">'\.concat\(extra\)\+'<\/td>'/g,
+              ''
+            );
+            // Also remove the extra td if it was concatenated inline
+            html = html.replace(
+              /\+'<td style="padding:6px 10px;">'\+extra\+'<\/td>'/g,
+              ''
+            );
+
+            fs.writeFileSync(htmlPath, html);
+            console.log('index.html updated, size:', html.length);
+            NODESCRIPT
