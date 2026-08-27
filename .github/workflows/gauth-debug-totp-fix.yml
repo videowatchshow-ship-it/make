@@ -1,0 +1,30 @@
+name: gauth - debug totp empty accounts and login script
+on:
+  push:
+    paths:
+      - '.github/workflows/gauth-debug-totp-fix.yml'
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check affected accounts and login script 2FA section
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo node << 'NODESCRIPT'
+            const fs = require('fs');
+            const data = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+            const arr = Array.isArray(data) ? data : (data.accounts || []);
+            const affected = arr.filter(a => !a.totp_secret && a.backup_codes);
+            console.log('totp_secret 없고 backup_codes 있는 계정 수:', affected.length);
+            affected.slice(0,10).forEach(a => console.log(' -', a.email, '|', a.backup_codes.split(' ').slice(0,2).join(' ')+'...'));
+            NODESCRIPT
+
+            echo "=== rebrowser-login.js 2FA 처리 부분 ==="
+            sudo grep -n "totp\|backup_code\|2fa\|twofa\|authenticator\|enterCode\|fillCode\|type.*code\|otp" /opt/gauth-full/rebrowser-login.js -i | head -40
