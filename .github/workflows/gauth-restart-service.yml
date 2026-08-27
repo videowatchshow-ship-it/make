@@ -1,0 +1,31 @@
+name: gauth - restart service
+on:
+  push:
+    paths:
+      - '.github/workflows/gauth-restart-service.yml'
+
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Restart gauth service and verify encoding
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo systemctl restart gauth
+            sleep 2
+            sudo systemctl is-active gauth
+            sudo node << 'NODESCRIPT'
+            const fs = require('fs');
+            const data = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+            const arr = Array.isArray(data) ? data : (data.accounts || []);
+            const samples = arr.filter(a => a.source_file).slice(0,5).map(a => a.source_file);
+            console.log('source_file 샘플:', samples);
+            const mojibake = arr.filter(a => a.source_file && /[\xc0-\xff][\x80-\xbf]/.test(a.source_file)).length;
+            console.log('아직 깨진 source_file 수:', mojibake);
+            NODESCRIPT
