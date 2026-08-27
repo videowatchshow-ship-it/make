@@ -1,0 +1,43 @@
+name: HAE - check all 2FA fields in gauth DB for hae accounts
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/hae-check-all-2fa-fields.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check all 2FA fields for hae accounts in gauth DB
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo node -e "
+            /* ref: https://nodejs.org/api/fs.html */
+            const fs = require('fs');
+            const gd = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+            const ga = Array.isArray(gd) ? gd : (gd.accounts || []);
+
+            const haeRaw = JSON.parse(fs.readFileSync('/var/www/sites/hae/accounts.json','utf8'));
+            const haeArr = Array.isArray(haeRaw) ? haeRaw : (haeRaw.accounts || Object.values(haeRaw));
+
+            console.log('=== hae accounts vs gauth DB (all 2FA fields) ===');
+            for (const ha of haeArr) {
+              const email = (ha.email||'').toLowerCase().trim();
+              const ga_acct = ga.find(a => (a.email||'').toLowerCase().trim() === email);
+              if (!ga_acct) { console.log(email, '-> NOT IN GAUTH'); continue; }
+              const fields_2fa = {};
+              for (const k of Object.keys(ga_acct)) {
+                if (/totp|twofa|2fa|secret|otp|backup/i.test(k)) {
+                  fields_2fa[k] = ga_acct[k] ? String(ga_acct[k]).substring(0,20)+'...' : 'EMPTY';
+                }
+              }
+              console.log(email, '->', Object.keys(fields_2fa).length ? JSON.stringify(fields_2fa) : 'NO 2FA FIELDS AT ALL');
+            }
+            "
