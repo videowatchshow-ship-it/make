@@ -1,0 +1,80 @@
+name: GAUTH - dump ALL fields for wagwiresamuel from all sources
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/gauth-dump-wagwire-all-fields.yml'
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dump all fields wagwiresamuel from gauth
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo node << 'JSEOF'
+            const fs = require('fs');
+            const EMAIL = 'wagwiresamuel@gmail.com';
+
+            // Check accounts_normalized.json - ALL fields
+            const raw = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+            const arr = Array.isArray(raw) ? raw : (raw.accounts || Object.values(raw));
+            const acct = arr.find(a => (a.email||'').toLowerCase().trim() === EMAIL.toLowerCase());
+            if (acct) {
+              console.log('=== accounts_normalized ALL FIELDS ===');
+              for (const [k,v] of Object.entries(acct)) {
+                const val = v ? String(v).substring(0,60) : '(empty)';
+                console.log(k + ': ' + val);
+              }
+            }
+
+            // Check accounts_subsites.json
+            try {
+              const s = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_subsites.json','utf8'));
+              const sarr = Array.isArray(s) ? s : (s.accounts || Object.values(s));
+              const sa = sarr.find(a => (a.email||'').toLowerCase().trim() === EMAIL.toLowerCase());
+              console.log('\n=== accounts_subsites:', sa ? JSON.stringify(sa).substring(0,200) : 'NOT FOUND');
+            } catch(e) { console.log('accounts_subsites.json error:', e.message); }
+
+            // Check hae accounts.json - ALL fields
+            try {
+              const h = JSON.parse(fs.readFileSync('/var/www/sites/hae/accounts.json','utf8'));
+              const harr = Array.isArray(h) ? h : (h.accounts || Object.values(h));
+              const ha = harr.find(a => (a.email||'').toLowerCase().trim() === EMAIL.toLowerCase());
+              if (ha) {
+                console.log('\n=== hae accounts.json ALL FIELDS ===');
+                for (const [k,v] of Object.entries(ha)) {
+                  const val = v ? String(v).substring(0,60) : '(empty)';
+                  console.log(k + ': ' + val);
+                }
+              }
+            } catch(e) { console.log('hae accounts.json error:', e.message); }
+            JSEOF
+
+            echo ""
+            echo "=== gauth API: GET /api/accounts (check what fields are returned) ==="
+            curl -s http://localhost:4000/api/accounts 2>/dev/null | node -e "
+            let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
+              try {
+                const j=JSON.parse(d);
+                const arr=Array.isArray(j)?j:(j.accounts||[]);
+                const a=arr.find(x=>(x.email||'').toLowerCase().includes('wagwire'));
+                if(a){
+                  console.log('FOUND in API response:');
+                  for(const[k,v] of Object.entries(a)){
+                    console.log(' '+k+': '+(v?String(v).substring(0,60):'(empty)'));
+                  }
+                } else { console.log('not found in API, total:', arr.length); }
+              } catch(e){ console.log('parse error'); }
+            });
+            " 2>/dev/null || echo "port 4000 API failed"
+
+            echo ""
+            echo "=== gauth rebrowser-login.js API routes (grep accounts) ==="
+            sudo grep -n "accounts\|twofa\|totp\|2fa\|secret" /opt/gauth-full/rebrowser-login.js | head -30
