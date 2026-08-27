@@ -1,0 +1,24 @@
+name: gauth - read loginOne lines 222-270
+on:
+  push:
+    paths:
+      - '.github/workflows/gauth-read-login-222.yml'
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read loginOne function body
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            echo "=== loginOne 222-270 ==="
+            sudo sed -n '222,270p' /opt/gauth-full/rebrowser-login.js
+
+            echo "=== loginOne 내 return 문들 ==="
+            sudo awk 'NR>=222 && NR<=270' /opt/gauth-full/rebrowser-login.js | grep -n "return\|reason\|BACKUP\|state\|status\|page\|detect\|check"
