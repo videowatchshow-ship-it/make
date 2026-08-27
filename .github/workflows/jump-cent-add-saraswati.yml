@@ -1,0 +1,36 @@
+name: Jump - cent add saraswatikumari10062009
+on:
+  push:
+    paths:
+      - '.github/workflows/jump-cent-add-saraswati.yml'
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Add saraswatikumari10062009
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo node << 'NODESCRIPT'
+            const fs = require('fs');
+            const gd = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+            const ga = Array.isArray(gd) ? gd : (gd.accounts || []);
+            const acct = ga.find(a => (a.email||'').toLowerCase() === 'saraswatikumari10062009@gmail.com');
+            if (!acct) { console.error('saraswatikumari10062009 not found'); process.exit(1); }
+            console.log('found:', acct.email);
+
+            const centPath = '/var/www/sites/jump/public/cent-data.json';
+            let centData = {};
+            try { centData = JSON.parse(fs.readFileSync(centPath,'utf8')); } catch(e) {}
+            if (!centData['2026-08-27']) centData['2026-08-27'] = [];
+            const already = centData['2026-08-27'].some(a => (a.email||'').toLowerCase() === 'saraswatikumari10062009@gmail.com');
+            if (!already) centData['2026-08-27'].push(acct);
+            fs.writeFileSync(centPath, JSON.stringify(centData, null, 2));
+            console.log('total:', centData['2026-08-27'].length);
+            NODESCRIPT
