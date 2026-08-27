@@ -1,0 +1,62 @@
+name: Debug - ismailjm2020 all sites check
+on:
+  push:
+    paths:
+      - '.github/workflows/debug-ismail-all-sites.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check ismailjm2020 across all sites
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo node << 'NODESCRIPT'
+            const fs = require('fs');
+            const email = 'ismailjm2020@gmail.com';
+
+            // cent-data.json 중복 체크
+            const centPath = '/var/www/sites/jump/public/cent-data.json';
+            const centData = JSON.parse(fs.readFileSync(centPath,'utf8'));
+            console.log('=== cent-data.json ===');
+            Object.keys(centData).forEach(date => {
+              const matches = centData[date].filter(a => (a.email||'').toLowerCase() === email);
+              console.log(date + ': count=' + centData[date].length + ', matches=' + matches.length);
+            });
+
+            // 모든 사이트 accounts.json 조사
+            const sites = fs.readdirSync('/var/www/sites').filter(s => {
+              try { return fs.statSync('/var/www/sites/'+s).isDirectory(); } catch(e) { return false; }
+            });
+            console.log('\n=== All sites: ' + sites.join(', ') + ' ===');
+
+            sites.forEach(site => {
+              const candidates = [
+                '/var/www/sites/'+site+'/accounts.json',
+                '/var/www/sites/'+site+'/public/accounts.json',
+                '/var/www/sites/'+site+'/data/accounts.json',
+              ];
+              candidates.forEach(p => {
+                try {
+                  const d = JSON.parse(fs.readFileSync(p,'utf8'));
+                  const arr = Array.isArray(d) ? d : (d.accounts || []);
+                  const found = arr.filter(a => (a.email||'').toLowerCase() === email);
+                  if (found.length) console.log('[FOUND] '+site+' ('+p+'): '+JSON.stringify(found[0].email));
+                  else console.log('[none] '+site+' ('+p+'): not found (total '+arr.length+')');
+                } catch(e) { /* file not found */ }
+              });
+            });
+
+            // gauth DB
+            const gd = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+            const ga = Array.isArray(gd) ? gd : (gd.accounts || []);
+            const gaMatches = ga.filter(a => (a.email||'').toLowerCase() === email);
+            console.log('\n=== gauth DB: ' + gaMatches.length + ' match(es) ===');
+            gaMatches.forEach(a => console.log(JSON.stringify(a)));
+            NODESCRIPT
