@@ -1,0 +1,62 @@
+name: HAE - read xlsx raw columns for wagwiresamuel
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/hae-read-xlsx-columns.yml'
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read raw xlsx columns to find TOTP data
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            # Install xlsx parser if not available
+            cd /opt/gauth-full
+            node -e "require('xlsx')" 2>/dev/null || sudo npm install --no-save xlsx
+
+            sudo node -e "
+            const XLSX = require('xlsx');
+            const fs = require('fs');
+            const path = require('path');
+            const debugDir = '/opt/gauth-full/uploads_debug';
+
+            const files = fs.readdirSync(debugDir).filter(f => f.endsWith('.xlsx') || f.endsWith('.xls'));
+            console.log('xlsx files found:', files);
+
+            for (const fname of files) {
+              const fpath = path.join(debugDir, fname);
+              try {
+                const wb = XLSX.readFile(fpath);
+                for (const sheetName of wb.SheetNames) {
+                  const ws = wb.Sheets[sheetName];
+                  const rows = XLSX.utils.sheet_to_json(ws, {defval: ''});
+                  // Show column headers
+                  if (rows.length > 0) {
+                    console.log('\\n=== ' + fname + ' / ' + sheetName + ' ===');
+                    console.log('COLUMNS:', Object.keys(rows[0]).join(', '));
+                    // Find wagwiresamuel
+                    for (const row of rows) {
+                      const vals = Object.values(row).map(v => String(v).toLowerCase());
+                      if (vals.some(v => v.includes('wagwire') || v.includes('wagwiresamuel'))) {
+                        console.log('FOUND ROW:', JSON.stringify(row));
+                      }
+                    }
+                  }
+                }
+              } catch(e) {
+                console.log(fname + ' ERROR:', e.message);
+              }
+            }
+            " 2>&1
+
+            echo ""
+            echo "=== upload_excels.js TOTP parsing logic ==="
+            sudo grep -n "totp\|twofa\|2fa\|secret\|backup\|otp" /opt/gauth-full/upload_excels.js | head -40
