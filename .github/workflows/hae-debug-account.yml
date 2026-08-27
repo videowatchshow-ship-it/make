@@ -1,0 +1,38 @@
+name: HAE - debug account fields
+on:
+  push:
+    paths:
+      - '.github/workflows/hae-debug-account.yml'
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Dump account fields
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            sudo node -e "
+              const fs=require('fs');
+
+              // gauth DB
+              const gd=JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+              const ga=Array.isArray(gd)?gd:(gd.accounts||[]);
+              const gAcct=ga.find(a=>(a.email||'').toLowerCase()==='wagwiresamuel@gmail.com');
+              console.log('=== GAUTH DB fields ===');
+              if(gAcct) console.log(JSON.stringify(gAcct,null,2));
+              else console.log('NOT FOUND in gauth DB');
+
+              // hae
+              const hd=JSON.parse(fs.readFileSync('/var/www/sites/hae/accounts.json','utf8'));
+              const ha=Array.isArray(hd)?hd:(hd.accounts||[]);
+              const hAcct=ha.find(a=>(a.email||'').toLowerCase()==='wagwiresamuel@gmail.com');
+              console.log('=== HAE accounts.json fields ===');
+              if(hAcct) console.log(JSON.stringify(hAcct,null,2));
+              else console.log('NOT FOUND in hae');
+            "
