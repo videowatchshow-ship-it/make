@@ -1,0 +1,31 @@
+name: gauth - fix backupCodes in map return
+on:
+  push:
+    paths:
+      - '.github/workflows/gauth-fix-backupcodes-map.yml'
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fix map() to pass backupCodes through and restart
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            echo "=== map() return 패치 ==="
+            sudo sed -i "s/return { email, password: (acc\.password || '')\.trim(), twoFA }/return { email, password: (acc.password || '').trim(), twoFA, backupCodes: (acc.backupCodes || '').trim() }/" /opt/gauth-full/rebrowser-login.js
+
+            echo "=== 패치 확인 ==="
+            sudo grep -n "backupCodes\|return.*email.*password.*twoFA" /opt/gauth-full/rebrowser-login.js | head -10
+
+            echo "=== loginOne 에서 account 전달 확인 ==="
+            sudo grep -n "backupCodes\|loginGoogle\|loginOne" /opt/gauth-full/rebrowser-login.js | head -15
+
+            sudo systemctl restart gauth
+            sleep 3
+            sudo systemctl is-active gauth
