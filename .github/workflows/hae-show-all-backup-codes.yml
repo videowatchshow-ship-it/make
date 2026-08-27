@@ -1,0 +1,67 @@
+name: HAE - show all 8 backup code groups properly
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/hae-show-all-backup-codes.yml'
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Show all backup codes in hae UI
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo node << 'JSEOF'
+            const fs = require('fs');
+            const p = '/var/www/sites/hae/public/index.html';
+            let html = fs.readFileSync(p, 'utf8');
+            const before = html.length;
+
+            // Fix _ts: show ALL 8 backup code groups (not just 4)
+            html = html.replace(
+              /var _ts = secret \? _esc\(secret\) : \(a\.backup_codes \? '[^']*' \+ a\.backup_codes\.split\(' '\)\.slice\(0,\d\)\.join\(' '\) : '—'\)/,
+              "var _ts = secret ? _esc(secret) : (a.backup_codes ? a.backup_codes : '—')"
+            );
+
+            // Fix Promise.all backup code display: show all 8 groups
+            html = html.replace(
+              /if\(!secret\) return Promise\.resolve\(a\.backup_codes \? '[^']*' \+ a\.backup_codes\.split\(' '\)\.slice\(0,\d\)\.join\(' '\) : '\\\\u2014'\)/,
+              "if(!secret) return Promise.resolve(a.backup_codes ? a.backup_codes : '\\u2014')"
+            );
+
+            console.log('size:', before, '->', html.length);
+            fs.writeFileSync(p, html);
+            console.log('written');
+            JSEOF
+
+            echo "=== verify _ts and Promise.all lines ==="
+            sudo grep -n "_ts\|Promise.resolve" /var/www/sites/hae/public/index.html | head -10
+
+            sudo chown www-data:www-data /var/www/sites/hae/public/index.html
+            for svc in hae site-hae; do
+              sudo systemctl restart "$svc" 2>/dev/null && echo "restarted: $svc" && break
+            done
+
+            # Also check what misskim has in accounts that hae doesn't
+            echo ""
+            echo "=== misskim sample account (totp_secret check) ==="
+            sudo node -e "
+            const fs = require('fs');
+            const raw = JSON.parse(fs.readFileSync('/var/www/sites/misskim/accounts.json','utf8'));
+            const arr = Array.isArray(raw) ? raw : (raw.accounts || Object.values(raw));
+            const sample = arr[0];
+            if (sample) {
+              console.log('email:', sample.email);
+              console.log('totp_secret:', sample.totp_secret ? sample.totp_secret.substring(0,20)+'...' : '(empty)');
+              console.log('twofa_secret:', sample.twofa_secret ? sample.twofa_secret.substring(0,20)+'...' : '(empty)');
+              console.log('backup_codes:', sample.backup_codes ? sample.backup_codes.substring(0,30)+'...' : '(empty)');
+            }
+            " 2>/dev/null || echo "misskim accounts.json not found or error"
+            echo "DONE"
