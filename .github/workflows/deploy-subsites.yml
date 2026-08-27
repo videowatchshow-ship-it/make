@@ -12,16 +12,27 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: SCP subsites.html
+      - name: SCP subsites.html to tmp
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.GAUTH_HOST }}
           username: ${{ secrets.GAUTH_USER }}
           key: ${{ secrets.GAUTH_SSH_KEY }}
           source: "gauth-public/subsites.html"
-          target: "/var/www/sites/gauth/public/"
-          strip_components: 1
+          target: "/tmp/gauth-subsites-deploy"
+          strip_components: 0
           overwrite: true
+      - name: Install subsites.html with sudo
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 40s
+          script: |
+            sudo cp /tmp/gauth-subsites-deploy/gauth-public/subsites.html /var/www/sites/gauth/public/subsites.html
+            sudo chown www-data:www-data /var/www/sites/gauth/public/subsites.html
+            rm -rf /tmp/gauth-subsites-deploy
       - name: verify
         uses: appleboy/ssh-action@v1.0.3
         with:
