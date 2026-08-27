@@ -1,0 +1,67 @@
+name: HAE - debug 2FA fields
+on:
+  push:
+    paths:
+      - '.github/workflows/hae-debug-2fa-fields.yml'
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dump 2FA fields and server code
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            echo "=== HAE server.js (or app.js) ==="
+            if [ -f /var/www/sites/hae/server.js ]; then
+              cat /var/www/sites/hae/server.js
+            elif [ -f /var/www/sites/hae/app.js ]; then
+              cat /var/www/sites/hae/app.js
+            else
+              echo "Neither server.js nor app.js found; listing dir:"
+              ls /var/www/sites/hae/
+            fi
+
+            sudo node -e "
+              const fs=require('fs');
+
+              // ── gauth DB ──────────────────────────────────────────────
+              const gd=JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+              const ga=Array.isArray(gd)?gd:(gd.accounts||[]);
+
+              const gAcct=ga.find(a=>(a.email||'').toLowerCase()==='akawunuhu1982@gmail.com');
+              console.log('=== GAUTH DB: akawunuhu1982 ===');
+              if(gAcct) console.log(JSON.stringify(gAcct,null,2));
+              else console.log('NOT FOUND in gauth DB');
+
+              // ── hae accounts.json ─────────────────────────────────────
+              const hd=JSON.parse(fs.readFileSync('/var/www/sites/hae/accounts.json','utf8'));
+              const ha=Array.isArray(hd)?hd:(hd.accounts||[]);
+
+              const hAcct=ha.find(a=>(a.email||'').toLowerCase()==='akawunuhu1982@gmail.com');
+              console.log('=== HAE accounts.json: akawunuhu1982 ===');
+              if(hAcct) console.log(JSON.stringify(hAcct,null,2));
+              else console.log('NOT FOUND in hae');
+
+              // ── alexnyangolei in hae ──────────────────────────────────
+              const aAcct=ha.find(a=>(a.email||'').toLowerCase()==='alexnyangolei@gmail.com');
+              console.log('=== HAE accounts.json: alexnyangolei ===');
+              if(aAcct) console.log(JSON.stringify(aAcct,null,2));
+              else {
+                // fallback: find any account that has a 2FA-looking field
+                const with2fa=ha.filter(a=>a.twofa_secret||a.totp_secret||a.backup_codes||a['2fa']||a.otp_secret).slice(0,3);
+                if(with2fa.length){
+                  console.log('alexnyangolei not found; showing first accounts WITH 2FA fields:');
+                  with2fa.forEach(a=>console.log(JSON.stringify(a,null,2)));
+                } else {
+                  console.log('alexnyangolei NOT FOUND and no accounts with recognisable 2FA fields detected');
+                  // print field keys of first account as reference
+                  if(ha.length) console.log('Sample account keys:',Object.keys(ha[0]));
+                }
+              }
+            "
