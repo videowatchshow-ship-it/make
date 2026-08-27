@@ -1,0 +1,61 @@
+name: HAE - patch v5 fix code cell (literal unicode escape)
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/hae-patch-backup-v5.yml'
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fix code cell with correct string match
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo node << 'JSEOF'
+            const fs = require('fs');
+            const p = '/var/www/sites/hae/public/index.html';
+            let html = fs.readFileSync(p, 'utf8');
+            const before = html.length;
+            let changes = 0;
+
+            // File contains literal — (6 chars: backslash u 2 0 1 4)
+            // Match: if(!secret) return Promise.resolve('—')
+            const old_noSecret = "if(!secret) return Promise.resolve('\\u2014')";
+            const new_noSecret = "if(!secret) return Promise.resolve(a.backup_codes ? '\\ud83d\\udd11 ' + a.backup_codes.split(' ').slice(0,4).join(' ') : '\\u2014')";
+
+            if (html.includes(old_noSecret)) {
+              html = html.replace(old_noSecret, new_noSecret);
+              changes++;
+              console.log('Fix: Promise.resolve backup fallback applied');
+            } else {
+              // Debug: show exact bytes around Promise.resolve
+              const idx = html.indexOf("Promise.resolve('");
+              if (idx >= 0) {
+                const slice = html.substring(idx, idx+50);
+                console.log('BYTES:', Buffer.from(slice).toString('hex'));
+                console.log('TEXT:', JSON.stringify(slice));
+              }
+            }
+
+            console.log('changes:', changes, 'size:', before, '->', html.length);
+            if (changes > 0) {
+              fs.writeFileSync(p, html);
+              console.log('written');
+            }
+            JSEOF
+
+            echo "=== verify ==="
+            sudo sed -n '149,153p' /var/www/sites/hae/public/index.html
+
+            sudo chown www-data:www-data /var/www/sites/hae/public/index.html
+            for svc in hae site-hae; do
+              sudo systemctl restart "$svc" 2>/dev/null && echo "restarted: $svc" && break
+            done
+            echo "DONE"
