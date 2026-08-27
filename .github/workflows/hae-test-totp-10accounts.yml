@@ -1,0 +1,119 @@
+name: HAE - test TOTP 10 accounts verification
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/hae-test-totp-10accounts.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Test TOTP codes for 10 accounts
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo node << 'JSEOF'
+            const fs = require('fs');
+            const crypto = require('crypto');
+
+            // hae accounts
+            const raw = JSON.parse(fs.readFileSync('/var/www/sites/hae/accounts.json', 'utf8'));
+            const arr = Array.isArray(raw) ? raw : (raw.accounts || Object.values(raw));
+
+            // gauth logic: same as rebrowser-login.js line 71
+            function sanitizeSecret(s) {
+              return String(s).toUpperCase().replace(/[\s\-_=]/g, '').replace(/[^A-Z2-7]/g, '');
+            }
+
+            function base32Decode(s) {
+              const alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+              let bits = 0, val = 0, out = [];
+              for (const c of s.toUpperCase().replace(/=+$/, '')) {
+                const idx = alpha.indexOf(c);
+                if (idx < 0) continue;
+                val = (val << 5) | idx;
+                bits += 5;
+                if (bits >= 8) { out.push((val >>> (bits - 8)) & 255); bits -= 8; }
+              }
+              return Buffer.from(out);
+            }
+
+            function totp(secret) {
+              const key = base32Decode(secret);
+              const counter = Math.floor(Date.now() / 1000 / 30);
+              const buf = Buffer.alloc(8);
+              let c = counter;
+              for (let i = 7; i >= 0; i--) { buf[i] = c & 0xff; c = Math.floor(c / 256); }
+              const hmac = crypto.createHmac('sha1', key).update(buf).digest();
+              const off = hmac[hmac.length - 1] & 0x0f;
+              const code = ((hmac[off] & 0x7f) << 24 | hmac[off+1] << 16 | hmac[off+2] << 8 | hmac[off+3]) % 1000000;
+              return code.toString().padStart(6, '0');
+            }
+
+            // Also test via HTTP API
+            const http = require('http');
+            function fetchCode(secret) {
+              return new Promise((resolve) => {
+                http.get('http://localhost:3037/codes/' + encodeURIComponent(secret), (res) => {
+                  let d = '';
+                  res.on('data', c => d += c);
+                  res.on('end', () => {
+                    try { resolve(JSON.parse(d)); } catch(e) { resolve({error: d}); }
+                  });
+                }).on('error', e => resolve({error: e.message}));
+              });
+            }
+
+            async function run() {
+              const samples = arr.slice(0, 10);
+              let pass = 0, fail = 0;
+
+              console.log('=== HAE TOTP 10-ACCOUNT TEST ===');
+              console.log('Port: 3037 (hae server)');
+              console.log('');
+
+              for (let i = 0; i < samples.length; i++) {
+                const a = samples[i];
+                let secret = a.twofa_secret || a.totp_secret || '';
+
+                // gauth logic: try backup_codes if no secret
+                if (!secret && a.backup_codes) {
+                  const bc = sanitizeSecret(a.backup_codes);
+                  if (bc.length >= 16) secret = bc;
+                }
+
+                const num = (i + 1).toString().padStart(2, ' ');
+                if (!secret) {
+                  console.log('[' + num + '] SKIP  | ' + a.email + ' | no secret, no valid backup_codes');
+                  continue;
+                }
+
+                // Local TOTP calculation
+                let localCode = '------';
+                try { localCode = totp(secret); } catch(e) { localCode = 'ERR:' + e.message.substring(0, 20); }
+
+                // Server API call
+                const apiRes = await fetchCode(secret);
+                const apiCode = apiRes.code || apiRes.error || 'NO_RESP';
+
+                const match = localCode === apiCode ? '✓ PASS' : '✗ FAIL';
+                if (localCode === apiCode && /^\d{6}$/.test(localCode)) pass++;
+                else fail++;
+
+                const secretType = (a.twofa_secret || a.totp_secret) ? 'totp_secret' : 'backup_codes';
+                const secretPreview = secret.substring(0, 8) + '...';
+                console.log('[' + num + '] ' + match + ' | ' + a.email.substring(0, 30).padEnd(30) + ' | local:' + localCode + ' api:' + apiCode + ' | ' + secretType + '(' + secretPreview + ')');
+              }
+
+              console.log('');
+              console.log('=== RESULT: ' + pass + ' PASS / ' + fail + ' FAIL / ' + samples.length + ' TOTAL ===');
+            }
+
+            run().catch(e => console.error('ERROR:', e));
+            JSEOF
