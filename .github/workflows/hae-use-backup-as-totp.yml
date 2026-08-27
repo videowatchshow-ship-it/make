@@ -1,0 +1,114 @@
+name: HAE - use backup codes as TOTP seed (same as gauth)
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/hae-use-backup-as-totp.yml'
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Patch hae to derive TOTP secret from backup codes (gauth logic)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo node << 'JSEOF'
+            /* ref: https://nodejs.org/api/fs.html */
+            const fs = require('fs');
+            const p = '/var/www/sites/hae/public/index.html';
+            let html = fs.readFileSync(p, 'utf8');
+            const before = html.length;
+            let changes = 0;
+
+            // gauth logic: sanitize backup_codes to extract Base32 chars
+            // secret.toUpperCase().replace(/[\s\-_=]/g,"").replace(/[^A-Z2-7]/g,"")
+            // if length >= 16 → valid TOTP seed
+
+            // Patch Promise.all map: derive secret from backup_codes if totp_secret empty
+            const OLD_PROMISE = "var secret = a.twofa_secret || a.totp_secret; var backupCodes = a.backup_codes || ''\n    if(!secret) return Promise.resolve(a.backup_codes ? '\\ud83d\\udd11 ' + a.backup_codes.split(' ').slice(0,4).join(' ') : '\\u2014')";
+            const NEW_PROMISE = "var secret = a.twofa_secret || a.totp_secret\n    if(!secret && a.backup_codes) { var _bc = a.backup_codes.toUpperCase().replace(/[\\s\\-_=]/g,'').replace(/[^A-Z2-7]/g,''); if(_bc.length>=16) secret=_bc; }\n    if(!secret) return Promise.resolve('\\u2014')";
+
+            if (html.includes(OLD_PROMISE)) {
+              html = html.replace(OLD_PROMISE, NEW_PROMISE);
+              changes++;
+              console.log('Patch 1: Promise.all map updated');
+            } else {
+              console.log('Patch 1 NOT matched — showing current lines:');
+              html.split('\n').forEach((l,i)=>{if(l.includes('backup_codes')||l.includes('Promise.resolve'))console.log('L'+i+':',l.trim().substring(0,120));});
+            }
+
+            // Patch renderCards map: same logic for _ts display
+            const OLD_TS = "var secret = a.twofa_secret || a.totp_secret; var backupCodes = a.backup_codes || ''\n    var _em = _esc(a.email)\n    var _pw = _esc(a.password || '—')\n    var _ts = secret ? _esc(secret) : (a.backup_codes ? a.backup_codes : '—')";
+            const NEW_TS = "var secret = a.twofa_secret || a.totp_secret\n    if(!secret && a.backup_codes) { var _bc2 = a.backup_codes.toUpperCase().replace(/[\\s\\-_=]/g,'').replace(/[^A-Z2-7]/g,''); if(_bc2.length>=16) secret=_bc2; }\n    var _em = _esc(a.email)\n    var _pw = _esc(a.password || '—')\n    var _ts = _esc(secret || (a.backup_codes || '—'))";
+
+            if (html.includes(OLD_TS)) {
+              html = html.replace(OLD_TS, NEW_TS);
+              changes++;
+              console.log('Patch 2: renderCards _ts updated');
+            } else {
+              console.log('Patch 2 NOT matched');
+            }
+
+            // Also patch refreshAllCodes to handle derived secret
+            const OLD_REFRESH = "var secret = a.twofa_secret || a.totp_secret\n    if(!secret) continue";
+            const NEW_REFRESH = "var secret = a.twofa_secret || a.totp_secret\n    if(!secret && a.backup_codes) { var _bcr = a.backup_codes.toUpperCase().replace(/[\\s\\-_=]/g,'').replace(/[^A-Z2-7]/g,''); if(_bcr.length>=16) secret=_bcr; }\n    if(!secret) continue";
+
+            if (html.includes(OLD_REFRESH)) {
+              html = html.replace(OLD_REFRESH, NEW_REFRESH);
+              changes++;
+              console.log('Patch 3: refreshAllCodes updated');
+            }
+
+            console.log('Total changes:', changes, '| size:', before, '->', html.length);
+            fs.writeFileSync(p, html);
+            console.log('written');
+            JSEOF
+
+            echo ""
+            echo "=== verify: backup_codes and secret lines ==="
+            sudo grep -n "backup_codes\|_bc\|totp_secret\|twofa" /var/www/sites/hae/public/index.html | head -20
+
+            sudo chown www-data:www-data /var/www/sites/hae/public/index.html
+            for svc in hae site-hae; do
+              sudo systemctl restart "$svc" 2>/dev/null && echo "restarted: $svc" && break
+            done
+
+            # Test: what TOTP code would wagwiresamuel produce?
+            sudo node -e "
+            const backup = 'mp4q sdm7 xmug p2jd ual4 osgo cbrp bvek';
+            const seed = backup.toUpperCase().replace(/[\s\-_=]/g,'').replace(/[^A-Z2-7]/g,'');
+            console.log('Derived seed:', seed, '(length:', seed.length + ')');
+            console.log('Is valid (>=16):', seed.length >= 16);
+
+            // Compute TOTP manually
+            function base32Decode(s) {
+              const alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+              let bits = 0, val = 0, out = [];
+              for (const c of s.toUpperCase().replace(/=+$/,'')) {
+                val = (val << 5) | alpha.indexOf(c);
+                bits += 5;
+                if (bits >= 8) { out.push((val >>> (bits-8)) & 255); bits -= 8; }
+              }
+              return Buffer.from(out);
+            }
+            function hotp(key, counter, digits=6) {
+              const crypto = require('crypto');
+              const buf = Buffer.alloc(8);
+              for (let i=7;i>=0;i--) { buf[i]=counter&0xff; counter=Math.floor(counter/256); }
+              const hmac = crypto.createHmac('sha1', key).update(buf).digest();
+              const off = hmac[hmac.length-1]&0x0f;
+              const code = ((hmac[off]&0x7f)<<24|hmac[off+1]<<16|hmac[off+2]<<8|hmac[off+3]) % Math.pow(10,digits);
+              return code.toString().padStart(digits,'0');
+            }
+            const key = base32Decode(seed);
+            const counter = Math.floor(Date.now()/1000/30);
+            const code = hotp(key, counter);
+            console.log('Current TOTP code:', code);
+            " 2>&1
+            echo "DONE"
