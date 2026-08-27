@@ -1,0 +1,45 @@
+name: gauth - search okeshsuman
+on:
+  push:
+    paths:
+      - '.github/workflows/gauth-search-okesh.yml'
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Search okeshsuman in all records
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo node << 'NODESCRIPT'
+            const fs = require('fs');
+            const { execSync } = require('child_process');
+
+            // 1. gauth DB partial search
+            const gd = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+            const ga = Array.isArray(gd) ? gd : (gd.accounts || []);
+            const similar = ga.filter(a => (a.email||'').toLowerCase().includes('okesh'));
+            console.log('=== gauth DB (contains okesh): ' + similar.length + ' ===');
+            similar.forEach(a => console.log(JSON.stringify(a.email)));
+
+            // 2. parse_fail.log
+            console.log('\n=== parse_fail.log (okesh) ===');
+            try {
+              const log = fs.readFileSync('/opt/gauth-full/parse_fail.log','utf8');
+              const lines = log.split('\n').filter(l => l.toLowerCase().includes('okesh'));
+              console.log(lines.length ? lines.join('\n') : 'not found');
+            } catch(e) { console.log('log not readable:', e.message); }
+
+            // 3. grep in /opt/gauth-full/ for okesh
+            console.log('\n=== grep /opt/gauth-full/ for okesh ===');
+            try {
+              const r = execSync("grep -ri 'okesh' /opt/gauth-full/ --include='*.json' --include='*.log' --include='*.txt' -l 2>/dev/null || true").toString();
+              console.log(r || 'no files found');
+            } catch(e) { console.log(e.message); }
+            NODESCRIPT
