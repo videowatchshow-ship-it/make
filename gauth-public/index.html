@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>참교육 스트리밍 계정 정보</title>
-<script>var _V='20260827v2';if(!location.search.match('_v='+_V)){location.replace(location.pathname+'?_v='+_V+location.hash);}</script>
+<script>var _V='20260827v3';if(!location.search.match('_v='+_V)){location.replace(location.pathname+'?_v='+_V+location.hash);}</script>
 <link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0a0d12"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%230a0d12' width='100' height='100' rx='20'/><text x='50' y='70' text-anchor='middle' font-size='60'>📺</text></svg>">
 <style>
 *{box-sizing:border-box}
@@ -916,7 +916,7 @@ async function lookup(){
           <div style="color:#8a95a5">출처</div><div class="mono" style="font-size:11px;color:#8a95a5">${escapeHtml(local.source_file||'—')}</div>
         </div>`
       if(window.FILTERED && FILTERED.length){
-        const fi2 = FILTERED.findIndex(a=>a.email===local.email)
+        const fi2 = FILTERED.findIndex(a=>(a.email||'').toLowerCase()===(local.email||'').toLowerCase())
         if(fi2>=0){ FILTERED.unshift(FILTERED.splice(fi2,1)[0]) }
         else { FILTERED.unshift(local) }
         PAGE=1; render()
@@ -979,7 +979,7 @@ async function lookup(){
     </div>
     <div id="lookup-next" style="margin-top:14px;border-top:1px solid #22282f;padding-top:10px"></div>`
   if(window.ALL_ORIGINAL && window.ALL_ORIGINAL.length){
-    const idx = ALL_ORIGINAL.findIndex(a=>a.email===j.email)
+    const idx = ALL_ORIGINAL.findIndex(a=>(a.email||'').toLowerCase()===(j.email||'').toLowerCase())
     if(idx>=0){
       const next = ALL_ORIGINAL.slice(idx+1, idx+51)
       const nbox = document.getElementById('lookup-next')
@@ -994,12 +994,12 @@ async function lookup(){
     }
   }
   if(window.FILTERED && FILTERED.length){
-    const fi = FILTERED.findIndex(a=>a.email===j.email)
+    const fi = FILTERED.findIndex(a=>(a.email||'').toLowerCase()===(j.email||'').toLowerCase())
     if(fi>=0){
       const cur = FILTERED.splice(fi, 1)[0]
       FILTERED.unshift(cur)
     } else if(window.ALL){
-      const ai = ALL.findIndex(a=>a.email===j.email)
+      const ai = ALL.findIndex(a=>(a.email||'').toLowerCase()===(j.email||'').toLowerCase())
       if(ai>=0) FILTERED.unshift(ALL[ai])
     }
     PAGE = 1
