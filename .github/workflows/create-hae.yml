@@ -1,0 +1,128 @@
+name: Create hae (해)
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/gauth-frontend-backend-fixes-cg2icv']
+    paths: ['.github/workflows/create-hae.yml', '.github/scripts/create-hae.sh']
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cloudflare DNS create
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+        run: |
+          [ -z "$CF_TOKEN" ] && exit 0
+          ZONE=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=cent-solution.online&status=active" \
+            -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+            | grep -oP '"id"\s*:\s*"\K[a-f0-9]{32}' | head -1)
+          [ -z "$ZONE" ] && exit 0
+          EXISTS=$(curl -s "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records?name=hae.cent-solution.online" \
+            -H "Authorization: Bearer ${CF_TOKEN}" | grep -oP '"id"\s*:\s*"\K[a-f0-9]{32}' | head -1)
+          [ -n "$EXISTS" ] && { echo "hae DNS exists"; exit 0; }
+          curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records" \
+            -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+            --data '{"type":"CNAME","name":"hae","content":"cent-solution.online","ttl":1,"proxied":true}' \
+            -o /dev/null -w "hae DNS create %{http_code}\n"
+      - uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: ".github/scripts/create-hae.sh"
+          target: "/tmp/hae/"
+          strip_components: 2
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 300s
+          script: |
+            sudo bash /tmp/hae/create-hae.sh
+            rm -rf /tmp/hae
+      - name: Add khaledgull207 account from gauth DB
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 60s
+          script: |
+            EMAIL="khaledgull207@gmail.com"
+            ACCT_FILE="/var/www/sites/hae/accounts.json"
+
+            ACCOUNT_JSON=$(node -e "
+              const fs=require('fs');
+              const d=JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+              const accs=Array.isArray(d)?d:(d.accounts||[]);
+              const t=accs.find(a=>(a.email||'').toLowerCase()==='$EMAIL'.toLowerCase());
+              if(!t){console.log('NOT_FOUND');process.exit(0);}
+              if(!t.status) t.status='active';
+              if(!t.allocated_date) t.allocated_date=new Date().toISOString().slice(0,10);
+              if(t.totp_secret&&!t.twofa_secret) t.twofa_secret=t.totp_secret;
+              console.log(JSON.stringify(t));
+            ")
+
+            if [ "$ACCOUNT_JSON" = "NOT_FOUND" ]; then
+              echo "gauth DB에 없음 — 수동 입력으로 추가"
+              sudo node -e "
+                const fs=require('fs');
+                let data={};
+                try{data=JSON.parse(fs.readFileSync('$ACCT_FILE','utf8'))}catch(e){}
+                let accounts=Array.isArray(data)?data:(data.accounts||[]);
+                const today=new Date().toISOString().slice(0,10);
+                const newAcct={
+                  email:'KhaledGull207@gmail.com',
+                  password:'nvsytwr68',
+                  totp_secret:'',
+                  twofa_secret:'',
+                  backup_codes:'ku5m meq4 xdgf 5nde 3rrt qnqa kt5y kfze',
+                  youtube_url:'https://youtube.com/user/magyaroff/videos',
+                  recovery_email:'',
+                  site:'hae',
+                  status:'active',
+                  allocated_date:today
+                };
+                accounts.unshift(newAcct);
+                fs.writeFileSync('$ACCT_FILE',JSON.stringify({accounts},null,2));
+                console.log('Inserted manually. Total:',accounts.length);
+              "
+            else
+              echo "$ACCOUNT_JSON" > /tmp/hae_account.json
+              sudo node -e "
+                const fs=require('fs');
+                let data={};
+                try{data=JSON.parse(fs.readFileSync('$ACCT_FILE','utf8'))}catch(e){}
+                let accounts=Array.isArray(data)?data:(data.accounts||[]);
+                const newAcct=JSON.parse(fs.readFileSync('/tmp/hae_account.json','utf8'));
+                const exists=accounts.find(a=>(a.email||'').toLowerCase()===(newAcct.email||'').toLowerCase());
+                if(exists){Object.assign(exists,newAcct);console.log('Updated existing');}
+                else{accounts.unshift(newAcct);console.log('Added new');}
+                fs.writeFileSync('$ACCT_FILE',JSON.stringify({accounts},null,2));
+                console.log('Total accounts:',accounts.length);
+              "
+              rm -f /tmp/hae_account.json
+            fi
+
+            sudo chown www-data:www-data "$ACCT_FILE"
+            sudo systemctl restart hae
+            sleep 2
+            sudo systemctl is-active hae && echo "hae OK" || echo "hae FAIL"
+            curl -s --max-time 5 http://localhost:3037/api/hae/accounts | \
+              node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const j=JSON.parse(d);const a=j.accounts||j||[];console.log('API accounts:',a.length);}catch(e){console.log('API error:',e.message)}})"
+      - name: CF purge
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+        run: |
+          [ -z "$CF_TOKEN" ] && exit 0
+          ZONE=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=cent-solution.online&status=active" \
+            -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+            | grep -oP '"id"\s*:\s*"\K[a-f0-9]{32}' | head -1)
+          curl -sS -o /dev/null -w "purge %{http_code}\n" -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${ZONE}/purge_cache" \
+            -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}'
