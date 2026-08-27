@@ -1,0 +1,146 @@
+name: Jump - 센트 제작 메뉴 추가
+on:
+  push:
+    paths:
+      - '.github/workflows/jump-add-cent-menu.yml'
+
+jobs:
+  add-menu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read index.html structure
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo node << 'NODESCRIPT'
+            const fs = require('fs');
+            const path = '/var/www/sites/jump/public/index.html';
+            let html = fs.readFileSync(path, 'utf8');
+
+            // --- 1. 계정 데이터 읽기 ---
+            const gd = JSON.parse(fs.readFileSync('/opt/gauth-full/accounts_normalized.json','utf8'));
+            const ga = Array.isArray(gd) ? gd : (gd.accounts || []);
+            const acct = ga.find(a => (a.email||'').toLowerCase() === 'beaugrandkat518@gmail.com');
+            if (!acct) { console.error('beaugrandkat518 not found in gauth DB'); process.exit(1); }
+
+            // --- 2. cent-data.json 저장 ---
+            const centData = { '2026-08-27': [acct] };
+            fs.writeFileSync('/var/www/sites/jump/public/cent-data.json', JSON.stringify(centData, null, 2));
+            console.log('cent-data.json 저장:', acct.email);
+
+            // --- 3. 이미 패치됐는지 확인 ---
+            if (html.includes('센트 제작')) {
+              console.log('이미 패치됨 — 건너뜀');
+              process.exit(0);
+            }
+
+            // --- 4. nav에 탭 추가 ---
+            const navInsertPatterns = [
+              /(계정 상세[^<]*<\/a>)/,
+              /(accounts\.html[^>]*>[^<]*<\/a>)/,
+            ];
+            let navPatched = false;
+            for (const pat of navInsertPatterns) {
+              if (pat.test(html)) {
+                html = html.replace(pat, '$1\n    <a href="#" id="nav-cent" onclick="showCentView();return false;">🏭 센트 제작</a>');
+                navPatched = true;
+                console.log('nav 패치 성공:', pat.toString().slice(0,40));
+                break;
+              }
+            }
+            if (!navPatched) {
+              if (html.includes('</nav>')) {
+                html = html.replace('</nav>', '    <a href="#" id="nav-cent" onclick="showCentView();return false;">🏭 센트 제작</a>\n</nav>');
+                navPatched = true;
+                console.log('nav 패치 (</nav> fallback)');
+              }
+            }
+            if (!navPatched) {
+              console.error('nav 패치 실패 — nav 구조를 찾을 수 없음');
+            }
+
+            // --- 5. 센트 제작 섹션 HTML ---
+            const centSection = `
+<!-- 센트 제작 뷰 -->
+<div id="cent-view" style="display:none; padding:16px; max-width:900px; margin:0 auto;">
+  <h2 style="margin-bottom:16px; font-size:1.2rem; color:var(--accent,#4f8ef7);">🏭 센트 제작</h2>
+  <div id="cent-dates"></div>
+</div>`;
+
+            if (html.includes('</body>')) {
+              html = html.replace('</body>', centSection + '\n</body>');
+            } else {
+              html += centSection;
+            }
+
+            // --- 6. 스크립트 삽입 ---
+            const centScript = `
+<script>
+(function(){
+  var centData = null;
+  function showCentView(){
+    document.querySelectorAll('section,main,.content,.container').forEach(function(el){
+      el._pd = el.style.display;
+      el.style.display='none';
+    });
+    document.getElementById('cent-view').style.display='block';
+    if(!centData) loadCentData();
+  }
+  function loadCentData(){
+    fetch('/cent-data.json').then(function(r){return r.json();}).then(function(data){
+      centData=data;
+      renderCent();
+    });
+  }
+  function renderCent(){
+    var container=document.getElementById('cent-dates');
+    container.innerHTML='';
+    Object.keys(centData).sort().reverse().forEach(function(dateKey){
+      var accounts=centData[dateKey];
+      var label=dateKey.replace(/(\d{4})-(\d{2})-(\d{2})/,function(_,y,m,d){return y+'년 '+parseInt(m)+'월 '+parseInt(d)+'일';});
+      var section=document.createElement('div');
+      section.style.cssText='margin-bottom:24px;';
+      section.innerHTML='<h3 style="font-size:1rem;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(128,128,128,.3);">📅 '+label+'</h3>';
+      var table=document.createElement('table');
+      table.style.cssText='width:100%;border-collapse:collapse;font-size:.85rem;';
+      table.innerHTML='<thead><tr style="background:rgba(128,128,128,.15)"><th style="padding:6px 10px;text-align:left;">이메일</th><th style="padding:6px 10px;text-align:left;">비밀번호</th><th style="padding:6px 10px;text-align:left;">2FA 백업코드</th><th style="padding:6px 10px;text-align:left;">유튜브</th><th style="padding:6px 10px;text-align:left;">비고</th></tr></thead>';
+      var tbody=document.createElement('tbody');
+      accounts.forEach(function(a,i){
+        var tr=document.createElement('tr');
+        tr.style.cssText='border-bottom:1px solid rgba(128,128,128,.1);'+(i%2?'background:rgba(128,128,128,.05)':'');
+        var ytLink=a.youtube_url?'<a href="'+a.youtube_url+'" target="_blank" style="color:var(--accent,#4f8ef7);">링크</a>':'-';
+        var totp=a.twofa_secret||a.totp_secret||'';
+        var backup=a.backup_codes||'';
+        var twofa=totp?('✅ '+totp):backup?('<span style="font-size:.78rem;">'+backup+'</span>'):'없음';
+        var extra=(a.extra||[]).join(', ');
+        tr.innerHTML='<td style="padding:6px 10px;">'+a.email+'</td>'
+          +'<td style="padding:6px 10px;font-family:monospace;">'+a.password+'</td>'
+          +'<td style="padding:6px 10px;">'+twofa+'</td>'
+          +'<td style="padding:6px 10px;">'+ytLink+'</td>'
+          +'<td style="padding:6px 10px;">'+extra+'</td>';
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      section.appendChild(table);
+      container.appendChild(section);
+    });
+  }
+  window.showCentView=showCentView;
+})();
+<\/script>`;
+
+            if (html.includes('</body>')) {
+              html = html.replace('</body>', centScript + '\n</body>');
+            } else {
+              html += centScript;
+            }
+
+            // --- 7. 저장 ---
+            fs.writeFileSync(path, html);
+            console.log('완료 — index.html 저장:', html.length, 'bytes');
+            NODESCRIPT
