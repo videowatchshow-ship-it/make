@@ -1,0 +1,79 @@
+name: Georgia - add 2 accounts (soliman232a + rajeppppp)
+on:
+  push:
+    paths:
+      - '.github/workflows/georgia-add-2accounts.yml'
+
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Add accounts to georgia
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            ACCT_FILE="/var/www/sites/georgia/accounts.json"
+
+            sudo node -e "
+              const fs=require('fs');
+              let data={};
+              try{data=JSON.parse(fs.readFileSync('$ACCT_FILE','utf8'))}catch(e){}
+              let accounts=Array.isArray(data)?data:(data.accounts||[]);
+
+              const newAccts=[
+                {
+                  email:'soliman232a@gmail.com',
+                  password:'HRCacqBluUCGwX',
+                  backup_email:'soliman232a09.05ntc@hotmail.com',
+                  backup_codes:'txt6 6kre vwpg 47nw rvfu e2ql l5jl r7rb',
+                  youtube_url:'https://youtube.com/user/just4u69/videos',
+                  status:'active',
+                  allocated_date:new Date().toISOString().slice(0,10)
+                },
+                {
+                  email:'rajeppppp@gmail.com',
+                  password:'lemEABzfNxKMJQ',
+                  backup_email:'rajeppppp09.05ntc@hotmail.com',
+                  backup_codes:'hm6w ilfv rf7e qcqa tv7f w4iq s2u5 jvhu',
+                  youtube_url:'https://youtube.com/user/Haileyhixon/videos',
+                  status:'active',
+                  allocated_date:new Date().toISOString().slice(0,10)
+                }
+              ];
+
+              newAccts.forEach(na=>{
+                const exists=accounts.find(a=>(a.email||'').toLowerCase()===na.email.toLowerCase());
+                if(exists){
+                  console.log('Updating:',na.email);
+                  Object.assign(exists,na);
+                }else{
+                  console.log('Adding:',na.email);
+                  accounts.unshift(na);
+                }
+              });
+
+              accounts.sort((a,b)=>{const da=a.allocated_date||'';const db=b.allocated_date||'';return da>db?-1:da<db?1:0;});
+              fs.writeFileSync('$ACCT_FILE',JSON.stringify({accounts},null,2));
+              console.log('Total accounts:',accounts.length);
+            "
+
+            sudo systemctl restart georgia 2>/dev/null || echo "(no systemd)"
+            sleep 2
+
+            curl -s --max-time 3 "http://localhost:3036/api/georgia/accounts" | node -e "
+              let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
+                try{
+                  const j=JSON.parse(d);const a=j.accounts||j||[];
+                  console.log('georgia API total:',a.length);
+                  ['soliman232a@gmail.com','rajeppppp@gmail.com'].forEach(em=>{
+                    const f=a.find(x=>(x.email||'').toLowerCase()===em.toLowerCase());
+                    console.log(em+':',f?'VERIFIED':'NOT_FOUND');
+                  });
+                }catch(e){console.log('API error:',e.message)}
+              });
+            "
