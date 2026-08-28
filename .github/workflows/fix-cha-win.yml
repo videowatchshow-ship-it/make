@@ -1,0 +1,46 @@
+name: Fix cha (restart) + win (find real service and restart)
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Restart cha + find/restart win service
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            echo '=== FIX cha ==='
+            for sv in cha site-cha cha-site; do
+              if sudo systemctl list-units --all 2>/dev/null | grep -q "${sv}.service"; then
+                sudo systemctl restart $sv && echo "restarted $sv" && break
+              fi
+            done
+            sleep 2
+            curl -sf http://localhost:3035/api/cha/accounts -o /dev/null && echo 'cha OK' || echo 'cha still down'
+
+            echo '=== FIX win ==='
+            PID=$(sudo ss -tlnp 'sport = :4001' 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1)
+            echo "PID on 4001: $PID"
+            if [ -n "$PID" ]; then
+              CMD=$(sudo cat /proc/$PID/cmdline 2>/dev/null | tr '\0' ' ')
+              echo "CMD: $CMD"
+              UNIT=$(sudo systemctl status $PID 2>/dev/null | grep -oP '\S+\.service' | head -1)
+              echo "Unit: $UNIT"
+              if [ -n "$UNIT" ]; then
+                sudo systemctl restart $UNIT && echo "restarted $UNIT"
+              else
+                for sv in win site-win win-site bacad bacad2 win-bacad; do
+                  if sudo systemctl list-units --all 2>/dev/null | grep -q "${sv}.service"; then
+                    sudo systemctl restart $sv && echo "restarted $sv" && break
+                  fi
+                done
+              fi
+            fi
+            sleep 2
+            curl -sf http://localhost:4001/api/win/login-issues -o /tmp/wli.json && echo "win login-issues: $(cat /tmp/wli.json)" || echo 'win login-issues still failing'
