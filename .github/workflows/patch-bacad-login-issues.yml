@@ -1,0 +1,117 @@
+name: Patch bacad login-issues + restart
+on:
+  workflow_dispatch:
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Patch bacad/server.js and restart
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            sudo node << 'JSEOF'
+            const fs = require('fs');
+            const cp = require('child_process');
+
+            const BACAD = '/var/www/sites/bacad/server.js';
+            if (!fs.existsSync(BACAD)) {
+              console.log('bacad/server.js not found');
+              process.exit(1);
+            }
+
+            let src = fs.readFileSync(BACAD, 'utf8');
+
+            if (src.includes('LOGIN_ISSUE_PATCH_V3')) {
+              console.log('Already patched');
+              process.exit(0);
+            }
+
+            // Detect site name from server.js
+            const siteMatch = src.match(/\/api\/([\w-]+)\//)
+            const siteName = siteMatch ? siteMatch[1] : 'win';
+            console.log('site name:', siteName);
+
+            // Detect if Express or http
+            const isExpress = /express\s*\(\s*\)/.test(src);
+            console.log('isExpress:', isExpress);
+
+            const patch = `
+  /* LOGIN_ISSUE_PATCH_V3 */
+  const __liFile = '/var/www/sites/bacad/login_issues.json';
+  const __liUrl  = '/api/${siteName}/login-issues';
+  let __liHandled = false;
+`;
+
+            if (isExpress) {
+              // Find app.get or app.listen to insert before
+              const insertBefore = /app\.listen\s*\(/;
+              const m = src.match(insertBefore);
+              if (m) {
+                const idx = src.indexOf(m[0]);
+                const routeCode = `
+app.get('/api/${siteName}/login-issues', (req, res) => {
+  /* LOGIN_ISSUE_UI */
+  try {
+    const data = fs.existsSync(__liFile) ? JSON.parse(fs.readFileSync(__liFile,'utf8')) : [];
+    res.json({ count: data.length, issues: data });
+  } catch(e) { res.json({ count: 0, issues: [] }); }
+});
+
+app.post('/api/${siteName}/login-issues', (req, res) => {
+  /* LOGIN_ISSUE_UI */
+  try {
+    let data = fs.existsSync(__liFile) ? JSON.parse(fs.readFileSync(__liFile,'utf8')) : [];
+    data.push({ time: new Date().toISOString(), ...req.body });
+    if (data.length > 200) data = data.slice(-200);
+    fs.writeFileSync(__liFile, JSON.stringify(data));
+    res.json({ ok: true });
+  } catch(e) { res.json({ ok: false }); }
+});
+
+`;
+                src = src.slice(0, idx) + routeCode + src.slice(idx);
+              }
+            } else {
+              // http.createServer — inject into request handler
+              const handlerMatch = src.match(/(http\.createServer\s*\([^)]*function\s*\(\s*req\s*,\s*res\s*\)\s*\{|http\.createServer\s*\([^)]*\(\s*req\s*,\s*res\s*\)\s*=>\s*\{)/);
+              if (handlerMatch) {
+                const insertAfter = handlerMatch[0];
+                const idx = src.indexOf(insertAfter) + insertAfter.length;
+                const injectCode = `
+  if (!__liHandled && req.method==="GET" && req.url==="${'/api/'+siteName+'/login-issues'}") {
+    __liHandled=true;
+    try {
+      const data = fs.existsSync(__liFile)?JSON.parse(fs.readFileSync(__liFile,'utf8')): [];
+      res.writeHead(200,{'Content-Type':'application/json'});
+      res.end(JSON.stringify({count:data.length,issues:data}));
+    } catch(e){res.writeHead(200,{'Content-Type':'application/json'});res.end('{"count":0,"issues":[]}')};
+    return;
+  }
+  __liHandled=false;
+`;
+                src = src.slice(0, idx) + injectCode + src.slice(idx);
+              }
+            }
+
+            // Prepend patch vars at top
+            src = patch + src;
+
+            // Ensure fs is required
+            if (!src.includes("require('fs')") && !src.includes('require("fs")')) {
+              src = "const fs = require('fs');\n" + src;
+            }
+
+            fs.writeFileSync(BACAD, src);
+            console.log('Patched bacad/server.js');
+            JSEOF
+
+            echo '=== restarting bacad ==='
+            sudo systemctl restart bacad
+            sleep 2
+            curl -sf http://localhost:4001/api/win/login-issues && echo 'win login-issues OK' || echo 'still failing'
