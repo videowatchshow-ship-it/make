@@ -1,0 +1,26 @@
+name: Diag hae subsite-accounts API
+on:
+  workflow_dispatch:
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check subsite-accounts endpoint and hae site
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            echo '=== grep subsite-accounts in gauth server ==='
+            sudo grep -n "subsite-accounts\|subsite\|sites" /opt/gauth-full/rebrowser-login.js | head -30
+
+            echo '=== hae site check ==='
+            ls /var/www/sites/hae/ 2>/dev/null || echo 'no /var/www/sites/hae'
+            ls /var/www/sites/ | grep hae || echo 'hae not in sites'
+
+            echo '=== subsite-accounts API response sample ==='
+            curl -sf http://localhost:4000/api/subsite-accounts 2>/dev/null | sudo node -e "var d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{var j=JSON.parse(d);console.log('sites:',j.sites?j.sites.map(s=>s.site).join(','):'?')}catch(e){console.log('raw:',d.slice(0,200))}})" || echo 'API call failed'
