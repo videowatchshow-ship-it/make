@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Patch bacad login-issues + restart win
+      - name: Check bacad patch + fix win login-issues
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -15,50 +15,60 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 4m
           script: |
+            echo '=== bacad patch check ==='
+            sudo grep -n '__liUrl\|login-issues\|LOGIN_ISSUE' /var/www/sites/bacad/server.js | head -20
+
             sudo node << 'JSEOF'
             const fs = require('fs');
-
             const BACAD = '/var/www/sites/bacad/server.js';
-            if (!fs.existsSync(BACAD)) { console.log('bacad/server.js not found'); process.exit(1); }
-
             let src = fs.readFileSync(BACAD, 'utf8');
-            if (src.includes('LOGIN_ISSUE_PATCH_V3')) { console.log('Already patched'); process.exit(0); }
 
-            const siteMatch = src.match(/\/api\/(win|bacad|[\w-]+)\//);
-            const siteName = siteMatch ? siteMatch[1] : 'win';
-            console.log('site:', siteName);
+            // Check if patched with wrong siteName (bacad instead of win)
+            const hasWinUrl = src.includes('/api/win/login-issues');
+            const hasBacadUrl = src.includes('/api/bacad/login-issues');
+            console.log('has /api/win/login-issues:', hasWinUrl);
+            console.log('has /api/bacad/login-issues:', hasBacadUrl);
 
-            const isExpress = /express\s*\(\s*\)/.test(src);
-            console.log('express:', isExpress);
-
-            const liFile = '/var/www/sites/bacad/login_issues.json';
-
-            const patchVars = `\nconst __liFile='${liFile}';\nconst __liUrl='/api/${siteName}/login-issues';\nlet __liHandled=false;\n/* LOGIN_ISSUE_PATCH_V3 */\n`;
-
-            if (isExpress) {
-              const listenIdx = src.search(/app\.listen\s*\(/);
-              if (listenIdx >= 0) {
-                const route = `\napp.get('/api/${siteName}/login-issues',(req,res)=>{/* LOGIN_ISSUE_UI */try{const d=fs.existsSync(__liFile)?JSON.parse(fs.readFileSync(__liFile,'utf8')):[];res.json({count:d.length,issues:d});}catch(e){res.json({count:0,issues:[]});}});\napp.post('/api/${siteName}/login-issues',(req,res)=>{try{let d=fs.existsSync(__liFile)?JSON.parse(fs.readFileSync(__liFile,'utf8')):[];d.push({time:new Date().toISOString(),...req.body});if(d.length>200)d=d.slice(-200);fs.writeFileSync(__liFile,JSON.stringify(d));res.json({ok:true});}catch(e){res.json({ok:false});}});\n`;
-                src = src.slice(0,listenIdx) + route + src.slice(listenIdx);
-              }
+            if (!hasWinUrl && hasBacadUrl) {
+              console.log('Fixing: replacing bacad url with win url...');
+              src = src.replace(/\/api\/bacad\/login-issues/g, '/api/win/login-issues');
+              fs.writeFileSync(BACAD, src);
+              console.log('Fixed');
+            } else if (hasWinUrl) {
+              console.log('URL already correct');
             } else {
-              const hm = src.match(/(http\.createServer\s*\([^{]*\{)/);
-              if (hm) {
-                const idx = src.indexOf(hm[0]) + hm[0].length;
-                const inject = `\n  if(!__liHandled&&req.method==="GET"&&req.url==="/api/${siteName}/login-issues"){__liHandled=true;try{const d=fs.existsSync(__liFile)?JSON.parse(fs.readFileSync(__liFile,'utf8')):[];res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({count:d.length,issues:d}));}catch(e){res.writeHead(200,{'Content-Type':'application/json'});res.end('{"count":0,"issues": []}');}return;}\n  __liHandled=false;\n`;
-                src = src.slice(0,idx) + inject + src.slice(idx);
+              console.log('No login-issues URL found — injecting fresh');
+              // Remove old LOGIN_ISSUE_PATCH_V3 and re-patch
+              // Strip existing patch
+              src = src.replace(/[\s\S]*\/\* LOGIN_ISSUE_PATCH_V3 \*\/\n/, '');
+
+              const liFile = '/var/www/sites/bacad/login_issues.json';
+              const isExpress = /express\s*\(\s*\)/.test(src);
+              console.log('express:', isExpress);
+
+              const patchVars = `\nconst __liFile='${liFile}';\nconst __liUrl='/api/win/login-issues';\nlet __liHandled=false;\n/* LOGIN_ISSUE_PATCH_V3 */\n`;
+
+              if (isExpress) {
+                const listenIdx = src.search(/app\.listen\s*\(/);
+                if (listenIdx >= 0) {
+                  const route = `\napp.get('/api/win/login-issues',(req,res)=>{/* LOGIN_ISSUE_UI */try{const d=fs.existsSync(__liFile)?JSON.parse(fs.readFileSync(__liFile,'utf8')):[];res.json({count:d.length,issues:d});}catch(e){res.json({count:0,issues:[]});}});\n`;
+                  src = src.slice(0,listenIdx) + route + src.slice(listenIdx);
+                }
+              } else {
+                const hm = src.match(/(http\.createServer\s*\([^{]*\{)/);
+                if (hm) {
+                  const idx = src.indexOf(hm[0]) + hm[0].length;
+                  const inject = `\n  if(!__liHandled&&req.method==="GET"&&req.url==="/api/win/login-issues"){__liHandled=true;try{const d=fs.existsSync(__liFile)?JSON.parse(fs.readFileSync(__liFile,'utf8')):[];res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({count:d.length,issues:d}));}catch(e){res.writeHead(200,{'Content-Type':'application/json'});res.end('{"count":0,"issues":[]}');}return;}\n  __liHandled=false;\n`;
+                  src = src.slice(0,idx) + inject + src.slice(idx);
+                }
               }
+              src = patchVars + src;
+              fs.writeFileSync(BACAD, src);
+              console.log('Re-patched');
             }
-
-            if (!src.includes("require('fs')") && !src.includes('require("fs")')) {
-              src = "const fs = require('fs');\n" + src;
-            }
-            src = patchVars + src;
-
-            fs.writeFileSync(BACAD, src);
-            console.log('Patched OK');
             JSEOF
 
             sudo systemctl restart bacad
             sleep 2
             curl -sf http://localhost:4001/api/win/login-issues && echo 'win login-issues OK' || echo 'win still failing'
+            curl -sf http://localhost:4001/api/bacad/login-issues && echo 'bacad login-issues OK' || true
