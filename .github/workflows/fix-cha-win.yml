@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Restart cha + find/restart win service
+      - name: Diag hae subsite-accounts
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -15,44 +15,12 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 4m
           script: |
-            echo '=== FIX cha ==='
-            for sv in cha site-cha cha-site; do
-              if sudo systemctl list-units --all 2>/dev/null | grep -q "${sv}.service"; then
-                sudo systemctl restart $sv && echo "restarted $sv" && break
-              fi
-            done
-            sleep 2
-            curl -sf http://localhost:3022/api/cha/accounts -o /dev/null && echo 'cha OK' || echo 'cha still down'
+            echo '=== subsite-accounts handler in rebrowser-login.js ==='
+            sudo grep -n "subsite-accounts\|subsite\|SITES\|siteDirs\|accounts\.json\|hae" /opt/gauth-full/rebrowser-login.js | head -40
 
-            echo '=== FIX win ==='
-            PID=$(sudo ss -tlnp 'sport = :4001' 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1)
-            echo "PID on 4001: $PID"
-            if [ -n "$PID" ]; then
-              # Try cgroup to get real unit name
-              UNIT=$(sudo cat /proc/$PID/cgroup 2>/dev/null | grep -oP '(?<=system\.slice/)[^/]+\.service' | head -1)
-              if [ -z "$UNIT" ]; then
-                UNIT=$(sudo systemctl status $PID 2>/dev/null | grep -oP '● \K\S+\.service' | head -1)
-              fi
-              echo "Unit from cgroup: $UNIT"
-              if [ -n "$UNIT" ]; then
-                sudo systemctl restart "$UNIT" && echo "restarted $UNIT"
-              else
-                # Kill and restart via CWD
-                CWD=$(sudo readlink /proc/$PID/cwd 2>/dev/null)
-                echo "CWD: $CWD"
-                sudo kill $PID 2>/dev/null && echo "killed PID $PID"
-                sleep 1
-                if [ -f "$CWD/server.js" ]; then
-                  cd "$CWD"
-                  sudo nohup node server.js >> /tmp/win-server.log 2>&1 &
-                  echo "restarted node $CWD/server.js (PID $!)"
-                fi
-              fi
-            else
-              echo "no process on 4001, starting fresh"
-              cd /var/www/sites/win
-              sudo nohup node server.js >> /tmp/win-server.log 2>&1 &
-              echo "started (PID $!)"
-            fi
-            sleep 3
-            curl -sf http://localhost:4001/api/win/login-issues -o /tmp/wli.json && echo "win login-issues: $(cat /tmp/wli.json)" || echo 'win login-issues still failing'
+            echo '=== hae site check ==='
+            ls /var/www/sites/hae/ 2>/dev/null || echo 'no /var/www/sites/hae'
+            echo "hae accounts count: $(sudo cat /var/www/sites/hae/accounts.json 2>/dev/null | sudo node -e "var d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{var j=JSON.parse(d);console.log(Array.isArray(j)?j.length:Object.keys(j).length)}catch(e){console.log('err')}})")"
+
+            echo '=== /api/subsite-accounts sample ==='
+            curl -sf http://localhost:4000/api/subsite-accounts 2>/dev/null | sudo node -e "var d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{var j=JSON.parse(d);console.log('sites:',j.sites?j.sites.map(s=>s.site).join(', '):JSON.stringify(j).slice(0,300))}catch(e){console.log('parse err:',d.slice(0,200))}})" || echo 'API failed (maybe auth required)'
