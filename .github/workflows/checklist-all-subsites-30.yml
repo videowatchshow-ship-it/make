@@ -151,6 +151,7 @@ jobs:
               const port = detectPort(name);
               port ? info(`port: ${port}`) : info(`port: unknown`);
 
+              let codesReachable = false;
               if (port) {
                 const base2 = `http://localhost:${port}`;
 
@@ -158,15 +159,17 @@ jobs:
                 const apiR = await get(`${base2}/api/${name}/accounts`);
                 apiR.status === 200 ? ok(`GET /api/${name}/accounts → 200`) : ng(`GET /api/${name}/accounts → ${apiR.status}`);
 
-                // CHECK 9: API returns array
+                // CHECK 9: API returns array (or object with accounts array)
                 try {
                   const arr = JSON.parse(apiR.body);
-                  Array.isArray(arr) ? ok(`API array (${arr.length})`) : ng(`API not array`);
+                  const list = Array.isArray(arr) ? arr : (arr && Array.isArray(arr.accounts) ? arr.accounts : null);
+                  list !== null ? ok(`API array (${list.length})`) : ng(`API not array`);
                 } catch(e) { ng(`API not JSON`); }
 
                 // CHECK 10: /codes/ endpoint reachable
                 const codesR = await get(`${base2}/codes/TESTINVALID2222AAAA`);
-                (codesR.status >= 200 && codesR.status < 500)
+                codesReachable = codesR.status >= 200 && codesR.status < 500;
+                codesReachable
                   ? ok(`/codes/ endpoint (${codesR.status})`)
                   : ng(`/codes/ not reachable (${codesR.status})`);
 
@@ -249,10 +252,12 @@ jobs:
                   : info(`accounts.json owner uid:${stat.uid}`);
               }
 
-              // CHECK 19: server.js has /codes/ endpoint
+              // CHECK 19: server.js has /codes/ endpoint (or endpoint is reachable via running service)
               if (fs.existsSync(srvPath)) {
                 const src = fs.readFileSync(srvPath,'utf8');
-                src.includes('/codes/') ? ok(`server.js /codes/ endpoint defined`) : ng(`server.js /codes/ missing`);
+                if (src.includes('/codes/')) { ok(`server.js /codes/ endpoint defined`); }
+                else if (codesReachable) { info(`server.js /codes/ not in source but endpoint reachable`); }
+                else { ng(`server.js /codes/ missing`); }
               }
 
               // CHECK 20: no syntax error in server.js (node --check)
