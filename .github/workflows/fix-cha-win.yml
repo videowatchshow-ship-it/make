@@ -44,14 +44,14 @@ jobs:
                 sleep 1
                 if [ -f "$CWD/server.js" ]; then
                   cd "$CWD"
-                  sudo nohup node server.js >> /var/log/win-server.log 2>&1 &
+                  sudo nohup node server.js >> /tmp/win-server.log 2>&1 &
                   echo "restarted node $CWD/server.js (PID $!)"
                 fi
               fi
             else
               echo "no process on 4001, starting fresh"
               cd /var/www/sites/win
-              sudo nohup node server.js >> /var/log/win-server.log 2>&1 &
+              sudo nohup node server.js >> /tmp/win-server.log 2>&1 &
               echo "started (PID $!)"
             fi
             sleep 3
