@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Diagnose bacad port and test
+      - name: Diagnose bacad + list hae emails
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -15,19 +15,28 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 4m
           script: |
-            echo '=== bacad service port ==='
-            sudo systemctl cat bacad 2>/dev/null | grep -i port
-            sudo grep -E 'listen|PORT' /var/www/sites/bacad/server.js | head -5
-            echo '=== all node ports ==='
-            sudo ss -tlnp | grep node
-            echo '=== bacad PID ==='
-            sudo systemctl show bacad -p MainPID
-            BACAD_PID=$(sudo systemctl show bacad -p MainPID | cut -d= -f2)
+            echo '=== HAE ACCOUNT EMAILS ==='
+            sudo node -e "
+              const fs = require('fs');
+              const f = '/var/www/sites/hae/accounts.json';
+              if (!fs.existsSync(f)) { console.log('hae accounts.json not found'); process.exit(0); }
+              const data = JSON.parse(fs.readFileSync(f,'utf8'));
+              const accounts = Array.isArray(data) ? data : (data.accounts || Object.values(data));
+              console.log('Total hae accounts:', accounts.length);
+              accounts.forEach((a,i) => {
+                const email = a.email || a.id || '(없음)';
+                const name = a.name || a.username || '';
+                console.log((i+1) + '. ' + email + (name ? ' (' + name + ')' : ''));
+              });
+            "
+
+            echo ''
+            echo '=== BACAD PORT DIAG ==='
+            BACAD_PID=$(sudo systemctl show bacad -p MainPID 2>/dev/null | cut -d= -f2)
             echo "bacad PID: $BACAD_PID"
-            sudo ss -tlnp | grep "pid=$BACAD_PID"
-            echo '=== curl test ==='
+            sudo ss -tlnp | grep "pid=$BACAD_PID" || echo 'no port found for bacad PID'
             PORT=$(sudo ss -tlnp | grep "pid=$BACAD_PID" | grep -oP ':\K[0-9]+' | head -1)
             echo "bacad PORT: $PORT"
             if [ -n "$PORT" ]; then
-              curl -v http://localhost:$PORT/api/win/login-issues 2>&1 | tail -20
+              curl -s http://localhost:$PORT/api/win/login-issues | head -c 200
             fi
