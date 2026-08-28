@@ -15,37 +15,44 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 4m
           script: |
-            set -e
-
-            # --- cha: try all service name variants ---
             echo '=== FIX cha ==='
             for sv in cha site-cha cha-site; do
-              if systemctl list-units --all | grep -q "${sv}.service"; then
+              if sudo systemctl list-units --all 2>/dev/null | grep -q "${sv}.service"; then
                 sudo systemctl restart $sv && echo "restarted $sv" && break
               fi
             done
             sleep 2
-            curl -sf http://localhost:3035/api/cha/accounts -o /dev/null && echo 'cha OK' || echo 'cha still down'
+            curl -sf http://localhost:3022/api/cha/accounts -o /dev/null && echo 'cha OK' || echo 'cha still down'
 
-            # --- win: find the process on port 4001 and its service ---
             echo '=== FIX win ==='
-            PID=$(sudo ss -tlnp sport = :4001 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1)
+            PID=$(sudo ss -tlnp 'sport = :4001' 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1)
             echo "PID on 4001: $PID"
             if [ -n "$PID" ]; then
-              CMD=$(sudo cat /proc/$PID/cmdline 2>/dev/null | tr '\0' ' ')
-              echo "CMD: $CMD"
-              UNIT=$(sudo systemctl status $PID 2>/dev/null | grep -oP '\S+\.service' | head -1)
-              echo "Unit: $UNIT"
-              if [ -n "$UNIT" ]; then
-                sudo systemctl restart $UNIT && echo "restarted $UNIT"
-              else
-                echo 'no unit found, trying win service names'
-                for sv in win site-win win-site bacad2 win-bacad; do
-                  if systemctl list-units --all | grep -q "${sv}.service"; then
-                    sudo systemctl restart $sv && echo "restarted $sv" && break
-                  fi
-                done
+              # Try cgroup to get real unit name
+              UNIT=$(sudo cat /proc/$PID/cgroup 2>/dev/null | grep -oP '(?<=system\.slice/)[^/]+\.service' | head -1)
+              if [ -z "$UNIT" ]; then
+                UNIT=$(sudo systemctl status $PID 2>/dev/null | grep -oP '● \K\S+\.service' | head -1)
               fi
+              echo "Unit from cgroup: $UNIT"
+              if [ -n "$UNIT" ]; then
+                sudo systemctl restart "$UNIT" && echo "restarted $UNIT"
+              else
+                # Kill and restart via CWD
+                CWD=$(sudo readlink /proc/$PID/cwd 2>/dev/null)
+                echo "CWD: $CWD"
+                sudo kill $PID 2>/dev/null && echo "killed PID $PID"
+                sleep 1
+                if [ -f "$CWD/server.js" ]; then
+                  cd "$CWD"
+                  sudo nohup node server.js >> /var/log/win-server.log 2>&1 &
+                  echo "restarted node $CWD/server.js (PID $!)"
+                fi
+              fi
+            else
+              echo "no process on 4001, starting fresh"
+              cd /var/www/sites/win
+              sudo nohup node server.js >> /var/log/win-server.log 2>&1 &
+              echo "started (PID $!)"
             fi
-            sleep 2
+            sleep 3
             curl -sf http://localhost:4001/api/win/login-issues -o /tmp/wli.json && echo "win login-issues: $(cat /tmp/wli.json)" || echo 'win login-issues still failing'
