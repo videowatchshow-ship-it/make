@@ -1,0 +1,54 @@
+name: Search account by YouTube URL
+on:
+  workflow_dispatch:
+    inputs:
+      youtube_url:
+        description: 'YouTube channel URL or handle (e.g. @MarvensHouska)'
+        required: true
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Search accounts_normalized.json
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            sudo node << 'JSEOF'
+            const fs = require('fs');
+            const query = '${{ inputs.youtube_url }}'.toLowerCase().trim();
+            const file = '/opt/gauth-full/accounts_normalized.json';
+
+            if (!fs.existsSync(file)) {
+              console.log('ERROR: accounts_normalized.json not found');
+              process.exit(1);
+            }
+
+            const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+            const accounts = Array.isArray(data) ? data : (data.accounts || Object.values(data));
+
+            const results = accounts.filter(a => {
+              return JSON.stringify(a).toLowerCase().includes(query);
+            });
+
+            if (results.length === 0) {
+              console.log('검색 결과 없음: ' + query);
+            } else {
+              console.log(`\n검색어: ${query}`);
+              console.log(`매칭 계정 ${results.length}개:\n`);
+              results.forEach(a => {
+                const email = a.email || a.id || '(이메일 없음)';
+                const youtube = a.youtube || a.youtube_url || a.channel || '';
+                const name = a.name || a.username || '';
+                console.log(`  이메일: ${email}`);
+                if (name) console.log(`  이름:   ${name}`);
+                if (youtube) console.log(`  유튜브: ${youtube}`);
+                console.log('');
+              });
+            }
+            JSEOF
