@@ -7,7 +7,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Diag hae subsite-accounts
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/gauth-frontend-backend-fixes-cg2icv
+      - name: Deploy jump frontend to server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -15,12 +18,39 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 4m
           script: |
-            echo '=== subsite-accounts handler in rebrowser-login.js ==='
-            sudo grep -n "subsite-accounts\|subsite\|SITES\|siteDirs\|accounts\.json\|hae" /opt/gauth-full/rebrowser-login.js | head -40
+            echo '=== jump frontend path ==='
+            ls /var/www/sites/jump/ 2>/dev/null | head -10 || echo 'no /var/www/sites/jump'
+            ls /var/www/jump/ 2>/dev/null | head -10 || echo 'no /var/www/jump'
 
-            echo '=== hae site check ==='
-            ls /var/www/sites/hae/ 2>/dev/null || echo 'no /var/www/sites/hae'
-            echo "hae accounts count: $(sudo cat /var/www/sites/hae/accounts.json 2>/dev/null | sudo node -e "var d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{var j=JSON.parse(d);console.log(Array.isArray(j)?j.length:Object.keys(j).length)}catch(e){console.log('err')}})")"
+      - name: Copy jump files via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          source: "jump/index.html,jump/accounts.html"
+          target: /tmp/jump-deploy/
+          strip_components: 1
 
-            echo '=== /api/subsite-accounts sample ==='
-            curl -sf http://localhost:4000/api/subsite-accounts 2>/dev/null | sudo node -e "var d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{var j=JSON.parse(d);console.log('sites:',j.sites?j.sites.map(s=>s.site).join(', '):JSON.stringify(j).slice(0,300))}catch(e){console.log('parse err:',d.slice(0,200))}})" || echo 'API failed (maybe auth required)'
+      - name: Move files to correct location
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            echo '=== deploying jump files ==='
+            # Find jump public dir
+            JUMP_DIR=""
+            for d in /var/www/sites/jump/public /var/www/sites/jump /var/www/jump/public /var/www/jump; do
+              if [ -d "$d" ]; then JUMP_DIR="$d"; break; fi
+            done
+            echo "Jump dir: $JUMP_DIR"
+            if [ -n "$JUMP_DIR" ]; then
+              sudo cp /tmp/jump-deploy/index.html "$JUMP_DIR/" && echo 'index.html deployed'
+              sudo cp /tmp/jump-deploy/accounts.html "$JUMP_DIR/" && echo 'accounts.html deployed'
+            else
+              echo 'ERROR: jump dir not found'
+            fi
+            rm -rf /tmp/jump-deploy
