@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check bacad patch + fix win login-issues
+      - name: Diagnose bacad port and test
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GAUTH_HOST }}
@@ -15,60 +15,19 @@ jobs:
           key: ${{ secrets.GAUTH_SSH_KEY }}
           command_timeout: 4m
           script: |
-            echo '=== bacad patch check ==='
-            sudo grep -n '__liUrl\|login-issues\|LOGIN_ISSUE' /var/www/sites/bacad/server.js | head -20
-
-            sudo node << 'JSEOF'
-            const fs = require('fs');
-            const BACAD = '/var/www/sites/bacad/server.js';
-            let src = fs.readFileSync(BACAD, 'utf8');
-
-            // Check if patched with wrong siteName (bacad instead of win)
-            const hasWinUrl = src.includes('/api/win/login-issues');
-            const hasBacadUrl = src.includes('/api/bacad/login-issues');
-            console.log('has /api/win/login-issues:', hasWinUrl);
-            console.log('has /api/bacad/login-issues:', hasBacadUrl);
-
-            if (!hasWinUrl && hasBacadUrl) {
-              console.log('Fixing: replacing bacad url with win url...');
-              src = src.replace(/\/api\/bacad\/login-issues/g, '/api/win/login-issues');
-              fs.writeFileSync(BACAD, src);
-              console.log('Fixed');
-            } else if (hasWinUrl) {
-              console.log('URL already correct');
-            } else {
-              console.log('No login-issues URL found — injecting fresh');
-              // Remove old LOGIN_ISSUE_PATCH_V3 and re-patch
-              // Strip existing patch
-              src = src.replace(/[\s\S]*\/\* LOGIN_ISSUE_PATCH_V3 \*\/\n/, '');
-
-              const liFile = '/var/www/sites/bacad/login_issues.json';
-              const isExpress = /express\s*\(\s*\)/.test(src);
-              console.log('express:', isExpress);
-
-              const patchVars = `\nconst __liFile='${liFile}';\nconst __liUrl='/api/win/login-issues';\nlet __liHandled=false;\n/* LOGIN_ISSUE_PATCH_V3 */\n`;
-
-              if (isExpress) {
-                const listenIdx = src.search(/app\.listen\s*\(/);
-                if (listenIdx >= 0) {
-                  const route = `\napp.get('/api/win/login-issues',(req,res)=>{/* LOGIN_ISSUE_UI */try{const d=fs.existsSync(__liFile)?JSON.parse(fs.readFileSync(__liFile,'utf8')):[];res.json({count:d.length,issues:d});}catch(e){res.json({count:0,issues:[]});}});\n`;
-                  src = src.slice(0,listenIdx) + route + src.slice(listenIdx);
-                }
-              } else {
-                const hm = src.match(/(http\.createServer\s*\([^{]*\{)/);
-                if (hm) {
-                  const idx = src.indexOf(hm[0]) + hm[0].length;
-                  const inject = `\n  if(!__liHandled&&req.method==="GET"&&req.url==="/api/win/login-issues"){__liHandled=true;try{const d=fs.existsSync(__liFile)?JSON.parse(fs.readFileSync(__liFile,'utf8')):[];res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({count:d.length,issues:d}));}catch(e){res.writeHead(200,{'Content-Type':'application/json'});res.end('{"count":0,"issues":[]}');}return;}\n  __liHandled=false;\n`;
-                  src = src.slice(0,idx) + inject + src.slice(idx);
-                }
-              }
-              src = patchVars + src;
-              fs.writeFileSync(BACAD, src);
-              console.log('Re-patched');
-            }
-            JSEOF
-
-            sudo systemctl restart bacad
-            sleep 2
-            curl -sf http://localhost:4001/api/win/login-issues && echo 'win login-issues OK' || echo 'win still failing'
-            curl -sf http://localhost:4001/api/bacad/login-issues && echo 'bacad login-issues OK' || true
+            echo '=== bacad service port ==='
+            sudo systemctl cat bacad 2>/dev/null | grep -i port
+            sudo grep -E 'listen|PORT' /var/www/sites/bacad/server.js | head -5
+            echo '=== all node ports ==='
+            sudo ss -tlnp | grep node
+            echo '=== bacad PID ==='
+            sudo systemctl show bacad -p MainPID
+            BACAD_PID=$(sudo systemctl show bacad -p MainPID | cut -d= -f2)
+            echo "bacad PID: $BACAD_PID"
+            sudo ss -tlnp | grep "pid=$BACAD_PID"
+            echo '=== curl test ==='
+            PORT=$(sudo ss -tlnp | grep "pid=$BACAD_PID" | grep -oP ':\K[0-9]+' | head -1)
+            echo "bacad PORT: $PORT"
+            if [ -n "$PORT" ]; then
+              curl -v http://localhost:$PORT/api/win/login-issues 2>&1 | tail -20
+            fi
