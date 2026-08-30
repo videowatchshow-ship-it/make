@@ -1,0 +1,114 @@
+name: gauth 서버 재시작
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/chamgyo-casino-docs-deploy-qweddg]
+    paths:
+      - '.github/workflows/restart-gauth-server.yml'
+
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: GCP 인증
+        id: gcp_auth
+        continue-on-error: true
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: gcloud 설치
+        if: steps.gcp_auth.outcome == 'success'
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: GCP 인스턴스 목록 (gauth 찾기)
+        if: steps.gcp_auth.outcome == 'success'
+        id: find_instance
+        run: |
+          echo "=== 모든 프로젝트 인스턴스 탐색 ==="
+          gcloud compute instances list --project=quantum-bonus-455522-b4 \
+            --format="table(name,zone,status,networkInterfaces[0].accessConfigs[0].natIP)" 2>/dev/null || true
+          echo ""
+          echo "=== gucci/gauth 이름 패턴 검색 ==="
+          INST=$(gcloud compute instances list --project=quantum-bonus-455522-b4 \
+            --filter="name~'gauth|gucci|yanolza'" \
+            --format="value(name,zone)" 2>/dev/null | head -1)
+          echo "found=$INST"
+          if [ -n "$INST" ]; then
+            NAME=$(echo "$INST" | awk '{print $1}')
+            ZONE=$(echo "$INST" | awk '{print $2}')
+            echo "instance_name=$NAME" >> "$GITHUB_OUTPUT"
+            echo "instance_zone=$ZONE" >> "$GITHUB_OUTPUT"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: gauth 인스턴스 reset (GCP VM이면)
+        if: steps.find_instance.outputs.found == 'true'
+        run: |
+          NAME="${{ steps.find_instance.outputs.instance_name }}"
+          ZONE="${{ steps.find_instance.outputs.instance_zone }}"
+          echo "Resetting $NAME in $ZONE ..."
+          gcloud compute instances reset "$NAME" \
+            --project=quantum-bonus-455522-b4 \
+            --zone="$ZONE" \
+            --quiet
+          echo "Reset 완료. 30초 대기..."
+          sleep 30
+          gcloud compute instances describe "$NAME" \
+            --project=quantum-bonus-455522-b4 \
+            --zone="$ZONE" \
+            --format="value(status)"
+
+      - name: my-site-1 경유 → gauth SSH 재시작 (GCP 인스턴스 없을 때 대안)
+        if: steps.find_instance.outputs.found != 'true' && steps.gcp_auth.outcome == 'success'
+        run: |
+          echo "=== my-site-1 경유 gauth 재시작 시도 ==="
+          gcloud compute ssh videowatch_show@my-site-1 \
+            --zone=asia-northeast1-a \
+            --project=quantum-bonus-455522-b4 \
+            --ssh-flag="-o StrictHostKeyChecking=no" \
+            --command="
+          echo '--- my-site-1 에서 gauth 서버로 ping ---'
+          ping -c2 gauth.cent-solution.online 2>/dev/null || true
+          echo '--- SSH 시도 ---'
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 gauth 'sudo systemctl restart gauth && echo RESTARTED' 2>&1 || \
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 gucci-yanolza 'sudo systemctl restart gauth && echo RESTARTED' 2>&1 || \
+          echo 'SSH to gauth from my-site-1 failed'
+          " 2>&1 || true
+
+      - name: 직접 SSH 재시작 (raw key)
+        if: always()
+        env:
+          GAUTH_HOST: ${{ secrets.GAUTH_HOST }}
+          GAUTH_USER: ${{ secrets.GAUTH_USER }}
+          GAUTH_SSH_KEY: ${{ secrets.GAUTH_SSH_KEY }}
+        run: |
+          if [ -z "${GAUTH_SSH_KEY:-}" ] || [ -z "${GAUTH_HOST:-}" ]; then
+            echo "GAUTH 시크릿 없음 — 건너뜀"
+            exit 0
+          fi
+          install -m 600 /dev/null /tmp/id_gauth
+          printf '%s\n' "$GAUTH_SSH_KEY" > /tmp/id_gauth
+          echo "=== 포트 22 시도 ==="
+          ssh -v -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o BatchMode=yes \
+            -i /tmp/id_gauth "${GAUTH_USER}@${GAUTH_HOST}" \
+            'sudo systemctl restart gauth && echo RESTARTED' 2>&1 | tail -20 || true
+          echo "=== 포트 2222 시도 ==="
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p 2222 -o BatchMode=yes \
+            -i /tmp/id_gauth "${GAUTH_USER}@${GAUTH_HOST}" \
+            'sudo systemctl restart gauth && echo RESTARTED' 2>&1 | tail -10 || true
+
+      - name: gauth HTTP 복구 확인
+        if: always()
+        run: |
+          sleep 15
+          echo "=== gauth 복구 여부 ==="
+          HTTP=$(curl -s -o /tmp/gauth_resp.txt -w "%{http_code}" \
+            https://gauth.cent-solution.online/ \
+            --connect-timeout 10 --max-time 20)
+          echo "HTTP $HTTP"
+          head -c 200 /tmp/gauth_resp.txt || true
