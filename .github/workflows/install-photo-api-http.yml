@@ -22,7 +22,7 @@ jobs:
           GAUTH_API_TOKEN: ${{ secrets.GAUTH_API_TOKEN }}
         run: |
           BRANCH="claude/chamgyo-casino-docs-deploy-qweddg"
-          HTTP=$(curl -sf -o /tmp/resp.txt -w "%{http_code}" \
+          HTTP=$(curl -s -o /tmp/resp.txt -w "%{http_code}" \
             -X POST https://gauth.cent-solution.online/api/deploy \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${GAUTH_API_TOKEN}" \
@@ -30,6 +30,7 @@ jobs:
             --connect-timeout 15 --max-time 180)
           echo "HTTP $HTTP"
           cat /tmp/resp.txt || true
+          echo ""
           if [ "$HTTP" = "200" ]; then
             echo "ok=true" >> "$GITHUB_OUTPUT"
           else
@@ -48,13 +49,14 @@ jobs:
           GAUTH_API_TOKEN: ${{ secrets.GAUTH_API_TOKEN }}
         run: |
           sleep 5
-          HTTP=$(curl -sf -o /tmp/resp2.txt -w "%{http_code}" \
+          HTTP=$(curl -s -o /tmp/resp2.txt -w "%{http_code}" \
             -X POST https://gauth.cent-solution.online/api/photo-install \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${GAUTH_API_TOKEN}" \
             --connect-timeout 15 --max-time 120)
           echo "HTTP $HTTP"
           cat /tmp/resp2.txt || true
+          echo ""
           [ "$HTTP" = "200" ] || exit 1
 
       - name: 동작 확인
