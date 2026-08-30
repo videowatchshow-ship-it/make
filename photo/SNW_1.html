@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>출목표 싱지뉴</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;background:#0d0d0d;color:#eee;font-family:'Malgun Gothic',sans-serif;overflow-x:hidden}
+.room-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#1a1a1a;border-bottom:1px solid #2a2a2a;font-size:14px}
+#bgl-room{color:#ffd54f;font-weight:bold;font-size:15px}
+.road-wrap{overflow-x:auto;overflow-y:hidden;padding:8px 6px;-webkit-overflow-scrolling:touch}
+.bgl-table{border-collapse:collapse;table-layout:fixed}
+.bgl-table td{width:30px;height:30px;border:1px solid #222;padding:2px;vertical-align:middle;text-align:center}
+.bgl-p,.bgl-b{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative}
+.bgl-p{background:#1a237e;border:2px solid #5c6bc0}
+.bgl-b{background:#7f0000;border:2px solid #e53935}
+.bgl-p i.pp{position:absolute;width:8px;height:8px;border-radius:50%;top:0;right:0;background:#ef5350;border:1px solid #fff}
+.bgl-b i.bp{position:absolute;width:8px;height:8px;border-radius:50%;top:0;right:0;background:#5c6bc0;border:1px solid #fff}
+.bgl-p i.bp{position:absolute;width:8px;height:8px;border-radius:50%;bottom:0;left:0;background:#5c6bc0;border:1px solid #fff}
+.bgl-b i.pp{position:absolute;width:8px;height:8px;border-radius:50%;bottom:0;left:0;background:#ef5350;border:1px solid #fff}
+.bgl-p s,.bgl-b s{position:absolute;bottom:-7px;right:-3px;text-decoration:none;font-size:8px;color:#4caf50;font-weight:bold;line-height:1}
+</style>
+</head>
+<body>
+<div class="room-bar">
+  <span>🎲</span>
+  <span id="bgl-room">연결중…</span>
+</div>
+<div class="road-wrap">
+  <div class="bgl-road"></div>
+</div>
+<script src="bgl.js"></script>
+</body>
+</html>

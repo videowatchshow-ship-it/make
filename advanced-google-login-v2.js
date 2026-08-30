@@ -334,7 +334,7 @@ async function advancedGoogleLogin(account, options = {}) {
     console.log(`${c.cyan}   🔐 로그인 시도: ${account.email}${c.reset}`);
     console.log(`${c.cyan}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${c.reset}\n`);
 
-    const profilePath = path.join(__dirname, 'profiles', account.email.replace(/[^a-z0-9]/gi, '_'));
+    const profilePath = path.join(process.env.GAUTH_PROFILES_DIR || path.join(__dirname, 'profiles'), account.email.replace(/[^a-z0-9]/gi, '_'));
     let browser, page;
 
     /* Chrome 경로: 서버(Ubuntu/Debian) 기준 설치 경로
@@ -345,8 +345,11 @@ async function advancedGoogleLogin(account, options = {}) {
         '/usr/bin/google-chrome',
         '/usr/bin/chromium-browser',
         '/usr/bin/chromium',
-        '/snap/bin/chromium'
-    ];
+        '/snap/bin/chromium',
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+        process.env.LOCALAPPDATA ? `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe` : ''
+    ].filter(Boolean);
     let foundChrome = executablePath;
     if (!foundChrome) {
         for (const p of chromePaths) {
