@@ -1,30 +1,19 @@
-/* bgl.js — 바카라 출목표 엔진 v1 (GitHub Pages rebuild) */
+/* bgl.js — 바카라 출목표 엔진 v2 */
 ;(function () {
   'use strict';
 
-  /* ── 설정 ──────────────────────────────────────────────────── */
-  const API = 'https://gauth.cent-solution.online/photo';
+  const API     = 'https://gauth.cent-solution.online/photo';
   const POLL_MS = 3000;
-  const ROWS = 6;
+  const ROWS    = 6;
 
-  /* ── URL 파라미터 ─────────────────────────────────────────── */
   const urlCh = new URLSearchParams(location.search).get('ch') || 'cent';
   window.__ch = urlCh;
 
-  /* ── 상태 ──────────────────────────────────────────────────── */
   let currentRoomId = null;
-  let pollTimer = null;
 
-  /* ══════════════════════════════════════════════════════════
-     출목표 알고리즘 (Big Road)
-     nums 원소 형식: "<P|B|T><bp:0|1><pp:0|1>"
-     예) "B10" = Banker, 뱅커페어, 플레이어페어없음
-  ══════════════════════════════════════════════════════════ */
   function buildBigRoad(nums) {
-    const grid = [];       // grid[col] = [{ type, bp, pp, ties }, ...]
-    let col = -1;
-    let row = 0;
-    let lastType = null;
+    const grid = [];
+    let col = -1, row = 0, lastType = null;
 
     for (const n of nums) {
       if (!n || n.length < 3) continue;
@@ -33,16 +22,14 @@
       const pp   = n[2] === '1';
 
       if (type === 'T') {
-        /* 타이: 직전 셀에 마킹 */
         if (col >= 0 && grid[col].length > 0) {
-          const lastCell = grid[col][grid[col].length - 1];
-          lastCell.ties = (lastCell.ties || 0) + 1;
+          const last = grid[col][grid[col].length - 1];
+          if (last) last.ties = (last.ties || 0) + 1;
         }
         continue;
       }
 
       if (type !== lastType || col < 0) {
-        /* 새 열 */
         col++;
         grid[col] = [];
         row = 0;
@@ -50,10 +37,9 @@
       } else {
         row++;
         if (row >= ROWS) {
-          /* 6행 초과 → 오른쪽으로 꺾기 */
           col++;
           grid[col] = [];
-          row = 0;
+          row = ROWS - 1;
         }
       }
 
@@ -64,7 +50,6 @@
     return grid;
   }
 
-  /* ── 렌더링 ────────────────────────────────────────────────── */
   function renderBigRoad(grid, container) {
     const minCols = Math.max(grid.length + 4, 20);
     let html = '<table class="bgl-table"><tbody>';
@@ -75,8 +60,10 @@
         const cell = grid[c] && grid[c][r];
         if (cell) {
           const cls  = cell.type === 'P' ? 'bgl-p' : 'bgl-b';
-          const pair = (cell.bp ? '<i class="bp"></i>' : '') + (cell.pp ? '<i class="pp"></i>' : '');
-          const tie  = cell.ties > 0 ? `<s>${cell.ties > 1 ? cell.ties : ''}</s>` : '';
+          const pair = (cell.bp ? '<i class="bp"></i>' : '')
+                     + (cell.pp ? '<i class="pp"></i>' : '');
+          const tie  = cell.ties > 0
+            ? `<s>${cell.ties > 1 ? cell.ties : ''}</s>` : '';
           html += `<td><div class="${cls}">${pair}${tie}</div></td>`;
         } else {
           html += '<td></td>';
@@ -89,11 +76,12 @@
     container.innerHTML = html;
   }
 
-  /* ── 방 데이터 로드 & 렌더 ──────────────────────────────────── */
   async function loadRoom(roomId) {
     try {
-      const r = await fetch(`${API}/data/room_${roomId}.json?_=${Date.now()}`,
-                            { cache: 'no-store' });
+      const r = await fetch(
+        `${API}/data/room_${roomId}.json?_=${Date.now()}`,
+        { cache: 'no-store' }
+      );
       if (!r.ok) return;
       const data = await r.json();
       const nums = data.nums || [];
@@ -110,11 +98,12 @@
     } catch (_) {}
   }
 
-  /* ── 선택방 폴링 ────────────────────────────────────────────── */
   async function pollRoom() {
     try {
-      const r = await fetch(`${API}/api_selected_room.php?ch=${urlCh}&_=${Date.now()}`,
-                            { cache: 'no-store' });
+      const r = await fetch(
+        `${API}/api_selected_room.php?ch=${urlCh}&_=${Date.now()}`,
+        { cache: 'no-store' }
+      );
       if (!r.ok) return;
       const data = await r.json();
       const rid  = data.room_id;
@@ -125,7 +114,6 @@
     } catch (_) {}
   }
 
-  /* ── 퍼어카운트 이미지 로더 (__perAccountImages) ─────────────── */
   function loadPerAccountImages() {
     fetch(`${API}/api_img_ver.php?ch=${urlCh}&_=${Date.now()}`, { cache: 'no-store' })
       .then(r => r.ok ? r.json() : {})
@@ -142,11 +130,13 @@
       .catch(() => {});
   }
 
-  /* ── 시작 ──────────────────────────────────────────────────── */
   function start() {
-    loadPerAccountImages();
-    pollRoom();
-    pollTimer = setInterval(pollRoom, POLL_MS);
+    const hasRoad = document.querySelector('.bgl-road');
+    if (hasRoad) {
+      loadPerAccountImages();
+      pollRoom();
+      setInterval(pollRoom, POLL_MS);
+    }
   }
 
   if (document.readyState === 'loading') {
@@ -155,5 +145,5 @@
     start();
   }
 
-  window.BGL = { start, buildBigRoad, renderBigRoad };
+  window.BGL = { buildBigRoad, renderBigRoad };
 })();
