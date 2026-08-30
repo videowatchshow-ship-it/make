@@ -22,10 +22,10 @@ function normalizeEmail(s) {
   return s;
 }
 
-const DATA_DIR = '/opt/gauth-full';
+const DATA_DIR = process.env.GAUTH_DATA_DIR || '/opt/gauth-full';
 const DATA_FILE = path.join(DATA_DIR, 'accounts_normalized.json');
-const PROFILES_DIR = path.join(DATA_DIR, 'profiles');
-const FRONTEND_DIR = '/var/www/sites/gauth/public';
+const PROFILES_DIR = process.env.GAUTH_PROFILES_DIR || path.join(DATA_DIR, 'profiles');
+const FRONTEND_DIR = process.env.GAUTH_FRONTEND_DIR || '/var/www/sites/gauth/public';
 
 /* OWASP: timing-safe 비교 — HMAC으로 고정 길이 변환하여 길이 누출 방지
  * ref: https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html
