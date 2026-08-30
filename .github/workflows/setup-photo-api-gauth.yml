@@ -106,8 +106,9 @@ jobs:
                       const nums = keys.map(k => {
                         const r = j.data[k];
                         const type = r.result === 2 ? 'P' : r.result === 3 ? 'T' : 'B';
-                        const bp = (r.ext === 1 || r.ext === 3) ? '1' : '0';
-                        const pp = (r.ext === 2 || r.ext === 3) ? '1' : '0';
+                        const ext = r.ext || 0;
+                        const bp = (ext & 1) ? '1' : '0';
+                        const pp = (ext & 2) ? '1' : '0';
                         return `${type}${bp}${pp}`;
                       });
                       resolve({ id: `xtd_${apiId}`, label, apiId, nums, kind: XTD_KIND[String(label)] || '', ver: Date.now(), server_time: new Date().toISOString(), source: 'xtd6688' });
