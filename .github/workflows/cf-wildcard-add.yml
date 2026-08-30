@@ -1,0 +1,68 @@
+name: CF 와일드카드 DNS 추가
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/add-cf-wildcard-dns]
+    paths: ['.github/workflows/cf-wildcard-add.yml']
+
+jobs:
+  add_dns:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: GCP 인증
+        id: gcp_auth
+        continue-on-error: true
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: CF 와일드카드 A 레코드 추가
+        if: always()
+        env:
+          GAUTH_HOST: ${{ secrets.GAUTH_HOST }}
+          GAUTH_USER: ${{ secrets.GAUTH_USER }}
+          GAUTH_SSH_KEY: ${{ secrets.GAUTH_SSH_KEY }}
+        run: |
+          if [ -z "${GAUTH_SSH_KEY:-}" ] || [ -z "${GAUTH_HOST:-}" ]; then
+            echo "ERROR: GAUTH secrets 없음"
+            exit 1
+          fi
+          install -m 600 /dev/null /tmp/id_gauth
+          printf '%s\n' "$GAUTH_SSH_KEY" > /tmp/id_gauth
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=20 -o BatchMode=yes \
+            -i /tmp/id_gauth "${GAUTH_USER}@${GAUTH_HOST}" bash << 'ENDSSH'
+          CF_TOKEN=$(sudo grep -oP 'dns_cloudflare_api_token\s*=\s*\K\S+' /root/.secrets/cloudflare.ini 2>/dev/null)
+          [ -z "$CF_TOKEN" ] && echo "ERROR: CF token 없음" && exit 1
+          echo "Token OK: ${CF_TOKEN:0:10}..."
+          ZONE_ID=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=xn--9d0bw2fjtyymch7de9d.info" \
+            -H "Authorization: Bearer $CF_TOKEN" | python3 -c "
+import sys,json; d=json.load(sys.stdin)
+print((d.get('result') or [{}])[0].get('id',''))
+")
+          echo "Zone ID: $ZONE_ID"
+          [ -z "$ZONE_ID" ] && echo "Zone 없음" && exit 1
+          EXISTING=$(curl -s "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=A&name=*.xn--9d0bw2fjtyymch7de9d.info" \
+            -H "Authorization: Bearer $CF_TOKEN" | python3 -c "
+import sys,json; d=json.load(sys.stdin)
+print((d.get('result') or [{}])[0].get('id',''))
+")
+          if [ -n "$EXISTING" ]; then
+            echo "기존 레코드 $EXISTING 업데이트"
+            RESULT=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$EXISTING" \
+              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+              -d '{"type":"A","name":"*","content":"34.104.233.35","ttl":1,"proxied":true}')
+          else
+            echo "와일드카드 A 레코드 생성"
+            RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
+              -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+              -d '{"type":"A","name":"*","content":"34.104.233.35","ttl":1,"proxied":true}')
+          fi
+          echo "$RESULT" | python3 -c "
+import sys,json; d=json.load(sys.stdin)
+if d.get('success'):
+    r=d['result']; print('SUCCESS:', r.get('name'), '->', r.get('content'), 'proxied='+str(r.get('proxied')))
+else:
+    print('FAIL:', json.dumps(d.get('errors'))); sys.exit(1)
+"
+          ENDSSH
