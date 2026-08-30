@@ -766,5 +766,143 @@ module.exports = function(app) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
-  console.log('[auto_deploy] routes registered: /api/accounts, /api/normalized-accounts, /api/profiles, /api/failed-accounts, /api/deploy, /api/update-secret, /api/lookup/:email, /api/search-account, /api/deploy-status, /api/login-one, /api/youtube/*, /api/fix-mtime, /api/parse-report, /codes/:secret');
+  /* photo API 설치 — xtd6688 크롤러 + Express + PM2 + nginx */
+  app.post('/api/photo-install', authMiddleware, async (req, res) => {
+    try {
+      const { execSync } = require('child_process');
+      const DIR = '/opt/gauth-photo';
+      const DATA = DIR + '/data';
+      const SEL  = DIR + '/sel';
+
+      execSync(`sudo mkdir -p ${DATA} ${SEL}`, { timeout: 10000 });
+
+      /* api.js */
+      fs.writeFileSync('/tmp/gauth-photo-api.js', `'use strict';
+const express = require('express');
+const fss     = require('fs');
+const path    = require('path');
+const app     = express();
+const DATA    = '${DATA}';
+const SEL     = '${SEL}';
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+app.use(express.json());
+app.get('/photo/api_selected_room.php', (req, res) => {
+  const ch = req.query.ch || 'cent';
+  const f  = path.join(SEL, 'sel_' + ch + '.json');
+  const d  = path.join(SEL, 'sel_cent.json');
+  try { res.json(JSON.parse(fss.readFileSync(fss.existsSync(f) ? f : d, 'utf8'))); }
+  catch (_) { res.json({ room_id: 10 }); }
+});
+app.get('/photo/api_img_ver.php', (req, res) => { res.json({}); });
+app.get('/photo/data/:file', (req, res) => {
+  const f = path.join(DATA, req.params.file.replace(/[^a-z0-9_.\\-]/gi,''));
+  if (!fss.existsSync(f)) return res.status(404).json({ error: 'not found' });
+  res.json(JSON.parse(fss.readFileSync(f, 'utf8')));
+});
+app.post('/photo/api_select_room.php', express.json(), (req, res) => {
+  const ch = req.query.ch || req.body.ch || 'cent';
+  const rid = parseInt(req.body.room_id || req.query.room_id || 10);
+  const f = path.join(SEL, 'sel_' + ch + '.json');
+  fss.writeFileSync(f, JSON.stringify({ room_id: rid }));
+  res.json({ ok: true });
+});
+app.listen(4002, '127.0.0.1', () => console.log('photo-api :4002'));
+`);
+      execSync(`sudo cp /tmp/gauth-photo-api.js ${DIR}/api.js`, { timeout: 5000 });
+
+      /* crawler.js */
+      fs.writeFileSync('/tmp/gauth-photo-crawler.js', `'use strict';
+const https = require('https');
+const fss   = require('fs');
+const path  = require('path');
+const DATA  = '${DATA}';
+const TABLES = JSON.parse(fss.readFileSync('${DIR}/tables.json', 'utf8'));
+const XTD_MAP  = TABLES.xtd_map;
+const XTD_KIND = TABLES.xtd_kind;
+const XTD      = TABLES.xtd;
+function fetchRoom(label) {
+  return new Promise(resolve => {
+    const apiId = XTD_MAP[String(label)] || label;
+    const url = 'https://api.xtd6688.com/api/diantou/table/getData/gameType/3/tableId/' + apiId + '/xue/null';
+    const opts = { headers: { Origin: 'https://gs.xtd6688.com', Referer: 'https://gs.xtd6688.com/luzhu/zh/pc.html', 'User-Agent': 'Mozilla/5.0' } };
+    https.get(url, opts, res => {
+      let raw = '';
+      res.on('data', d => raw += d);
+      res.on('end', () => {
+        try {
+          const j = JSON.parse(raw);
+          if (j.code !== 1 || !j.data) return resolve(null);
+          const keys = Object.keys(j.data).sort((a, b) => parseInt(a.slice(1)) - parseInt(b.slice(1)));
+          const nums = keys.map(k => {
+            const r = j.data[k];
+            const type = r.result === 2 ? 'P' : r.result === 3 ? 'T' : 'B';
+            const ext  = r.ext || 0;
+            const bp   = (ext & 1) ? '1' : '0';
+            const pp   = (ext & 2) ? '1' : '0';
+            return type + bp + pp;
+          });
+          resolve({ id: 'xtd_' + apiId, label, apiId, nums, kind: XTD_KIND[String(label)] || '', ver: Date.now(), server_time: new Date().toISOString(), source: 'xtd6688' });
+        } catch (_) { resolve(null); }
+      });
+    }).on('error', () => resolve(null));
+  });
+}
+async function crawlAll() {
+  for (const label of XTD) {
+    const data = await fetchRoom(label);
+    if (data) fss.writeFileSync(path.join(DATA, 'room_' + label + '.json'), JSON.stringify(data));
+    await new Promise(r => setTimeout(r, 300));
+  }
+  console.log('crawl done', new Date().toISOString());
+}
+crawlAll().then(() => setInterval(crawlAll, 60000));
+`);
+      execSync(`sudo cp /tmp/gauth-photo-crawler.js ${DIR}/crawler.js`, { timeout: 5000 });
+
+      /* tables.json */
+      const tables = { xtd: [10,11,12,15,16,17,18,19,20,21,22,23,25,26,27,55,66,77,88,99], xtd_map: {'10':10,'11':11,'12':12,'15':15,'16':16,'17':87,'18':18,'19':89,'20':20,'21':21,'22':22,'23':23,'25':25,'26':26,'27':27,'55':31,'66':32,'77':33,'88':34,'99':35}, xtd_kind: {'10':'21점','16':'용호'} };
+      fs.writeFileSync('/tmp/gauth-tables.json', JSON.stringify(tables));
+      execSync(`sudo cp /tmp/gauth-tables.json ${DIR}/tables.json`, { timeout: 5000 });
+
+      /* sel 기본값 */
+      const chs = ['cent','otuki','tak','jay','gain','01','02','03','04','05','06','07','08','09','10','11','12','13','14','15','16','17','18','19','20'];
+      for (const ch of chs) {
+        const f = `${SEL}/sel_${ch}.json`;
+        try { if (!fss.existsSync(f)) execSync(`sudo sh -c 'echo {"room_id":10} > ${f}'`, { timeout: 5000 }); } catch (_) {}
+      }
+
+      /* package.json + npm install */
+      fs.writeFileSync('/tmp/gauth-photo-pkg.json', JSON.stringify({ name: 'gauth-photo', version: '1.0.0' }));
+      execSync(`sudo cp /tmp/gauth-photo-pkg.json ${DIR}/package.json`, { timeout: 5000 });
+      execSync(`sudo npm install --prefix ${DIR} express`, { timeout: 60000 });
+
+      /* PM2 */
+      execSync(`sudo pm2 delete gauth-photo 2>/dev/null || true`, { timeout: 10000, shell: true });
+      execSync(`sudo pm2 delete gauth-photo-crawler 2>/dev/null || true`, { timeout: 10000, shell: true });
+      execSync(`sudo pm2 start ${DIR}/api.js --name gauth-photo`, { timeout: 15000 });
+      execSync(`sudo pm2 start ${DIR}/crawler.js --name gauth-photo-crawler`, { timeout: 15000 });
+      execSync(`sudo pm2 save`, { timeout: 10000 });
+
+      /* nginx */
+      const nginxConf = `location /photo/ {\n  proxy_pass http://127.0.0.1:4002;\n  proxy_set_header Host $host;\n  add_header Access-Control-Allow-Origin *;\n}\n`;
+      fs.writeFileSync('/tmp/photo-api.conf', nginxConf);
+      execSync(`sudo cp /tmp/photo-api.conf /etc/nginx/conf.d/photo-api.conf`, { timeout: 5000 });
+      try { execSync(`sudo nginx -t && sudo systemctl reload nginx`, { timeout: 15000 }); } catch (_) {}
+
+      const pm2List = execSync(`sudo pm2 list 2>&1 | grep gauth-photo || echo 'none'`, { timeout: 10000, shell: true }).toString().trim();
+      const testApi = execSync(`curl -sf http://localhost:4002/photo/api_selected_room.php?ch=cent 2>&1 || echo 'no-response'`, { timeout: 10000, shell: true }).toString().trim();
+      res.json({ ok: true, pm2: pm2List, api_test: testApi });
+    } catch (e) {
+      console.error('[photo-install] error:', e.message);
+      res.status(500).json({ ok: false, error: e.message.slice(0, 500) });
+    }
+  });
+
+  console.log('[auto_deploy] routes registered: /api/accounts, /api/normalized-accounts, /api/profiles, /api/failed-accounts, /api/deploy, /api/update-secret, /api/lookup/:email, /api/search-account, /api/deploy-status, /api/login-one, /api/youtube/*, /api/fix-mtime, /api/parse-report, /codes/:secret, /api/photo-install');
 };
