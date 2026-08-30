@@ -1,0 +1,168 @@
+name: gauth 서버에 photo 데이터 API 설치
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: gauth 서버에 photo API 설치 (xtd6688 크롤러 + CORS API)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 8m
+          script: |
+            set -euo pipefail
+            DIR="/opt/gauth-photo"
+            sudo mkdir -p "$DIR/data" "$DIR/sel"
+
+            echo "===== [1] photo API 서버 작성 ====="
+            sudo tee "$DIR/api.js" > /dev/null << 'NODE'
+            'use strict';
+            const express = require('express');
+            const fs      = require('fs');
+            const path    = require('path');
+
+            const app  = express();
+            const DATA = path.join(__dirname, 'data');
+            const SEL  = path.join(__dirname, 'sel');
+
+            app.use((req, res, next) => {
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+              res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+              if (req.method === 'OPTIONS') return res.sendStatus(204);
+              next();
+            });
+            app.use(express.json());
+            app.use(express.urlencoded({ extended: true }));
+
+            app.get('/photo/api_selected_room.php', (req, res) => {
+              const ch  = req.query.ch || 'cent';
+              const f   = path.join(SEL, `sel_${ch}.json`);
+              const def = path.join(SEL, 'sel_cent.json');
+              try {
+                const data = JSON.parse(fs.readFileSync(fs.existsSync(f) ? f : def, 'utf8'));
+                res.json(data);
+              } catch (_) { res.json({ room_id: 10 }); }
+            });
+
+            app.post('/photo/write_select_room.php', (req, res) => {
+              const ch      = req.body.ch || 'cent';
+              const room_id = parseInt(req.body.room_id, 10);
+              if (!room_id) return res.json({ ok: false });
+              fs.writeFileSync(path.join(SEL, `sel_${ch}.json`), JSON.stringify({ room_id }));
+              res.json({ ok: true });
+            });
+
+            app.get('/photo/data/room_:label.json', (req, res) => {
+              const f = path.join(DATA, `room_${req.params.label}.json`);
+              if (!fs.existsSync(f)) return res.status(404).json({ error: 'not found' });
+              res.setHeader('Cache-Control', 'no-store');
+              res.json(JSON.parse(fs.readFileSync(f, 'utf8')));
+            });
+
+            app.get('/photo/data/tables.json', (_req, res) => {
+              const f = path.join(DATA, '../tables.json');
+              if (!fs.existsSync(f)) return res.status(404).json({});
+              res.json(JSON.parse(fs.readFileSync(f, 'utf8')));
+            });
+
+            app.get('/photo/api_img_ver.php', (_req, res) => { res.json({}); });
+
+            app.listen(4002, () => console.log('photo-api :4002'));
+            NODE
+
+            echo "===== [2] xtd6688 크롤러 작성 ====="
+            sudo tee "$DIR/crawler.js" > /dev/null << 'CRAWL'
+            'use strict';
+            const https = require('https');
+            const fs    = require('fs');
+            const path  = require('path');
+
+            const DATA   = path.join(__dirname, 'data');
+            const TABLES = JSON.parse(fs.readFileSync(path.join(__dirname, 'tables.json'), 'utf8'));
+            const XTD_MAP  = TABLES.xtd_map;
+            const XTD_KIND = TABLES.xtd_kind;
+            const XTD      = TABLES.xtd;
+
+            function fetchRoom(label) {
+              return new Promise((resolve) => {
+                const apiId = XTD_MAP[String(label)] || label;
+                const url = `https://api.xtd6688.com/api/diantou/table/getData/gameType/3/tableId/${apiId}/xue/null`;
+                const opts = { headers: { 'Origin': 'https://gs.xtd6688.com', 'Referer': 'https://gs.xtd6688.com/luzhu/zh/pc.html', 'User-Agent': 'Mozilla/5.0' } };
+                https.get(url, opts, (res) => {
+                  let raw = '';
+                  res.on('data', d => raw += d);
+                  res.on('end', () => {
+                    try {
+                      const j = JSON.parse(raw);
+                      if (j.code !== 1 || !j.data) return resolve(null);
+                      const keys = Object.keys(j.data).sort((a, b) => parseInt(a.slice(1)) - parseInt(b.slice(1)));
+                      const nums = keys.map(k => {
+                        const r = j.data[k];
+                        const type = r.result === 2 ? 'P' : r.result === 3 ? 'T' : 'B';
+                        const bp = (r.ext === 1 || r.ext === 3) ? '1' : '0';
+                        const pp = (r.ext === 2 || r.ext === 3) ? '1' : '0';
+                        return `${type}${bp}${pp}`;
+                      });
+                      resolve({ id: `xtd_${apiId}`, label, apiId, nums, kind: XTD_KIND[String(label)] || '', ver: Date.now(), server_time: new Date().toISOString(), source: 'xtd6688' });
+                    } catch (_) { resolve(null); }
+                  });
+                }).on('error', () => resolve(null));
+              });
+            }
+
+            async function crawlAll() {
+              for (const label of XTD) {
+                const data = await fetchRoom(label);
+                if (data) { fs.writeFileSync(path.join(DATA, `room_${label}.json`), JSON.stringify(data)); }
+                await new Promise(r => setTimeout(r, 300));
+              }
+              console.log('크롤 완료', new Date().toISOString());
+            }
+
+            crawlAll().then(() => setInterval(crawlAll, 60000));
+            CRAWL
+
+            echo "===== [3] tables.json ====="
+            echo '{"xtd":[10,11,12,15,16,17,18,19,20,21,22,23,25,26,27,55,66,77,88,99],"xtd_map":{"10":10,"11":11,"12":12,"15":15,"16":16,"17":87,"18":18,"19":89,"20":20,"21":21,"22":22,"23":23,"25":25,"26":26,"27":27,"55":31,"66":32,"77":33,"88":34,"99":35},"xtd_kind":{"10":"21점","16":"용호"}}' | sudo tee "$DIR/tables.json" > /dev/null
+
+            echo "===== [4] 기본 sel 파일 ====="
+            for CH in cent otuki tak jay gain 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20; do
+              F="$DIR/sel/sel_${CH}.json"
+              [ ! -f "$F" ] && echo '{"room_id":10}' | sudo tee "$F" > /dev/null
+            done
+
+            echo "===== [5] npm express ====="
+            echo '{"name":"gauth-photo","version":"1.0.0"}' | sudo tee "$DIR/package.json" > /dev/null
+            sudo npm install --prefix "$DIR" express 2>&1 | tail -2
+
+            echo "===== [6] PM2 등록 ====="
+            sudo pm2 delete gauth-photo 2>/dev/null || true
+            sudo pm2 delete gauth-photo-crawler 2>/dev/null || true
+            sudo pm2 start "$DIR/api.js" --name gauth-photo
+            sudo pm2 start "$DIR/crawler.js" --name gauth-photo-crawler
+            sudo pm2 save
+
+            echo "===== [7] nginx /photo 프록시 추가 ====="
+            sudo tee /etc/nginx/conf.d/photo-api.conf > /dev/null << 'NGINX'
+            location /photo/ {
+              proxy_pass http://127.0.0.1:4002;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              add_header Access-Control-Allow-Origin *;
+            }
+            NGINX
+            sudo nginx -t && sudo systemctl reload nginx || echo 'nginx reload 실패 (무시)'
+
+            sleep 2
+            echo "===== 결과 ====="
+            sudo pm2 list | grep gauth-photo
+            curl -s http://localhost:4002/photo/api_selected_room.php?ch=cent
+            echo ""
+            echo "완료: https://gauth.cent-solution.online/photo/api_selected_room.php?ch=cent"
