@@ -1,6 +1,9 @@
 name: Add Cloudflare wildcard DNS
 on:
   workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths: [ .github/workflows/add-cf-wildcard-dns.yml ]
 
 jobs:
   dns:
@@ -22,7 +25,6 @@ jobs:
             fi
             echo "Token found: ${CF_TOKEN:0:10}..."
 
-            # Get zone list
             echo "=== Zones ==="
             curl -s -X GET "https://api.cloudflare.com/client/v4/zones?per_page=50" \
               -H "Authorization: Bearer $CF_TOKEN" \
@@ -36,7 +38,6 @@ for z in d['result']:
     print(z['id'], z['name'])
 "
 
-            # Get zone ID for the domain
             ZONE_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=xn--9d0bw2fjtyymch7de9d.info" \
               -H "Authorization: Bearer $CF_TOKEN" \
               -H "Content-Type: application/json" | python3 -c "
@@ -54,7 +55,6 @@ else:
               exit 1
             fi
 
-            # Check if wildcard record already exists
             EXISTING=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=A&name=*.xn--9d0bw2fjtyymch7de9d.info" \
               -H "Authorization: Bearer $CF_TOKEN" \
               -H "Content-Type: application/json" | python3 -c "
@@ -67,7 +67,7 @@ else:
 ")
 
             if [ -n "$EXISTING" ]; then
-              echo "Wildcard record already exists: $EXISTING — updating"
+              echo "Wildcard record already exists: $EXISTING — updating"
               RESULT=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$EXISTING" \
                 -H "Authorization: Bearer $CF_TOKEN" \
                 -H "Content-Type: application/json" \
