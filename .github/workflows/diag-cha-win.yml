@@ -1,0 +1,36 @@
+name: Diagnose cha port + win bacad service
+on:
+  workflow_dispatch:
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Diagnose
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            echo '=== cha service status ==='
+            sudo systemctl status cha 2>&1 | head -20
+            echo '=== cha ExecStart ==='
+            sudo systemctl cat cha 2>/dev/null | grep -i execstart
+            echo '=== cha listening ports ==='
+            sudo ss -tlnp | grep node | head -10
+            echo '=== cha server.js port ==='
+            grep -E 'listen|PORT' /var/www/sites/cha/server.js 2>/dev/null | head -5
+
+            echo '=== win bacad service ==='
+            sudo systemctl cat bacad 2>/dev/null | grep -E 'ExecStart|WorkingDirectory'
+            echo '=== bacad server.js path ==='
+            sudo systemctl show bacad -p ExecStart 2>/dev/null
+            echo '=== win login-issues grep ==='
+            grep -n 'login-issues\|login_issues\|LOGIN_ISSUE' /var/www/sites/win/server.js 2>/dev/null | head -10
+            echo '=== bacad actual script ==='
+            BACAD_JS=$(sudo systemctl cat bacad 2>/dev/null | grep ExecStart | grep -oP '/[^ ]+\.js')
+            echo "bacad js: $BACAD_JS"
+            grep -n 'login-issues\|LOGIN_ISSUE' $BACAD_JS 2>/dev/null | head -10

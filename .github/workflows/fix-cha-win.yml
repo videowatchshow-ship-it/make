@@ -1,0 +1,80 @@
+name: Fix cha (restart) + win (find real service and restart)
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Find 4001 process cwd and patch
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 4m
+          script: |
+            echo '=== 4001 process cwd ==='
+            PID=$(sudo ss -tlnp 'sport = :4001' 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1)
+            echo "PID on 4001: $PID"
+            CWD=$(sudo readlink /proc/$PID/cwd 2>/dev/null)
+            echo "CWD: $CWD"
+            echo "server.js: $CWD/server.js"
+            sudo grep -n 'login-issues\|LOGIN_ISSUE' $CWD/server.js 2>/dev/null | head -10
+
+            echo '=== patch + restart if needed ==='
+            sudo node << 'JSEOF'
+            const fs = require('fs');
+            const cp = require('child_process');
+
+            const pid4001 = parseInt(cp.execSync("sudo ss -tlnp 'sport = :4001' 2>/dev/null | grep -oP 'pid=\\K[0-9]+' | head -1").toString().trim());
+            if (!pid4001) { console.log('no PID on 4001'); process.exit(0); }
+            const cwd = cp.execSync(`readlink /proc/${pid4001}/cwd`).toString().trim();
+            console.log('cwd:', cwd);
+
+            const srvPath = cwd + '/server.js';
+            if (!fs.existsSync(srvPath)) { console.log('no server.js in', cwd); process.exit(0); }
+
+            let src = fs.readFileSync(srvPath, 'utf8');
+            if (src.includes('LOGIN_ISSUE_PATCH_V3')) {
+              console.log('Already patched');
+              // Verify URL is correct
+              const hasWinUrl = src.includes('/api/win/login-issues');
+              console.log('has /api/win/login-issues:', hasWinUrl);
+              process.exit(0);
+            }
+
+            // Patch it
+            const isExpress = /express\s*\(\s*\)/.test(src);
+            const liFile = cwd + '/login_issues.json';
+            const patchVars = `\nconst __liFile='${liFile}';\nlet __liHandled=false;\n/* LOGIN_ISSUE_PATCH_V3 */\n`;
+
+            if (isExpress) {
+              const listenIdx = src.search(/app\.listen\s*\(/);
+              if (listenIdx >= 0) {
+                const route = `\napp.get('/api/win/login-issues',(req,res)=>{/* LOGIN_ISSUE_UI */try{const d=fs.existsSync(__liFile)?JSON.parse(fs.readFileSync(__liFile,'utf8')):[];res.json({count:d.length,issues:d});}catch(e){res.json({count:0,issues:[]});}});\n`;
+                src = src.slice(0,listenIdx) + route + src.slice(listenIdx);
+              }
+            } else {
+              const hm = src.match(/(http\.createServer\s*\([^{]*\{)/);
+              if (hm) {
+                const idx = src.indexOf(hm[0]) + hm[0].length;
+                const inject = `\n  if(!__liHandled&&req.method==="GET"&&req.url==="/api/win/login-issues"){__liHandled=true;try{const d=fs.existsSync(__liFile)?JSON.parse(fs.readFileSync(__liFile,'utf8')):[];res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({count:d.length,issues:d}));}catch(e){res.writeHead(200);res.end('{"count":0,"issues":[]}');}return;}\n  __liHandled=false;\n`;
+                src = src.slice(0,idx) + inject + src.slice(idx);
+              }
+            }
+            if (!src.includes("require('fs')") && !src.includes('require("fs")')) src = "const fs = require('fs');\n" + src;
+            src = patchVars + src;
+            fs.writeFileSync(srvPath, src);
+            console.log('Patched', srvPath);
+            JSEOF
+
+            echo '=== restart win service ==='
+            for sv in win site-win win-site; do
+              if sudo systemctl list-units --all 2>/dev/null | grep -q "${sv}.service"; then
+                sudo systemctl restart $sv && echo "restarted $sv" && break
+              fi
+            done
+            sleep 2
+            curl -sf http://localhost:4001/api/win/login-issues && echo 'win OK' || echo 'win still failing'

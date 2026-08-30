@@ -1,0 +1,20 @@
+{
+  "name": "gauth-local",
+  "version": "1.0.0",
+  "description": "gauth 로컬 서버",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "busboy": "^1.6.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "multer": "^1.4.5-lts.1",
+    "otplib": "^12.0.1",
+    "puppeteer": "^25.0.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "xlsx": "^0.18.5"
+  }
+}
