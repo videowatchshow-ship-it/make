@@ -66,6 +66,12 @@ jobs:
               res.json(JSON.parse(fs.readFileSync(f, 'utf8')));
             });
 
+            app.get('/photo/data/tables.json', (_req, res) => {
+              const f = path.join(DATA, '../tables.json');
+              if (!fs.existsSync(f)) return res.status(404).json({});
+              res.json(JSON.parse(fs.readFileSync(f, 'utf8')));
+            });
+
             app.get('/photo/api_img_ver.php', (_req, res) => { res.json({}); });
 
             app.listen(4002, () => console.log('photo-api :4002'));
@@ -127,7 +133,7 @@ jobs:
             echo '{"xtd":[10,11,12,15,16,17,18,19,20,21,22,23,25,26,27,55,66,77,88,99],"xtd_map":{"10":10,"11":11,"12":12,"15":15,"16":16,"17":87,"18":18,"19":89,"20":20,"21":21,"22":22,"23":23,"25":25,"26":26,"27":27,"55":31,"66":32,"77":33,"88":34,"99":35},"xtd_kind":{"10":"21점","16":"용호"}}' | sudo tee "$DIR/tables.json" > /dev/null
 
             echo "===== [4] 기본 sel 파일 ====="
-            for CH in aass0707 cent otuki tak jay gain abc01 abc02 abc03 abc04 abc05 abc06 abc07; do
+            for CH in cent otuki tak jay gain 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20; do
               F="$DIR/sel/sel_${CH}.json"
               [ ! -f "$F" ] && echo '{"room_id":10}' | sudo tee "$F" > /dev/null
             done
