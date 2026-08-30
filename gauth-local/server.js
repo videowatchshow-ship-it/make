@@ -2,6 +2,10 @@
 const path = require('path');
 const fs = require('fs');
 
+// gauth/ 폴더 모듈들이 gauth-local/node_modules 에서 패키지를 찾도록 경로 추가
+process.env.NODE_PATH = path.join(__dirname, 'node_modules');
+require('module').Module._initPaths();
+
 // 경로 설정 (다른 모듈 require 전에 반드시 먼저 실행)
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, 'data');
