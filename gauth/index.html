@@ -599,6 +599,7 @@ updateUploadStatus();
     <option value="all">전체</option>
     <option value="today">🟢 오늘 접속만</option>
     <option value="2fa">2FA 있음</option>
+    <option value="no2fa">2FA 없음</option>
     <option value="never">미접속만</option>
     <option value="locked">잠김만 (폰/패스키/기기)</option>
   </select>
@@ -700,6 +701,7 @@ function applyFilter(){
     if (q && !(a.email||'').toLowerCase().includes(q)) return false
     if (f==='today' && !(a.session_mtime && a.session_mtime>=kstTodayMidnightMs())) return false
     if (f==='2fa' && !a.totp_secret) return false
+    if (f==='no2fa' && a.totp_secret && a.totp_secret.trim()) return false
     if (f==='never' && a.session_mtime) return false
     const LOCK = ['PHONE_REQUIRED','PASSKEY_REQUIRED','DEVICE_PROMPT','SECURITY_KEY','BACKUP_CODE','REJECTED']
     if (f==='locked' && !LOCK.includes(a.lock_reason)) return false
