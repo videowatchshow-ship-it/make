@@ -285,10 +285,13 @@ refreshAccStats();
 </script>
 
 <style>#excelUpProg::-webkit-progress-bar{background:#1a1f26;border-radius:10px}#excelUpProg::-webkit-progress-value{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px;transition:width .2s}#excelUpProg::-moz-progress-bar{background:linear-gradient(90deg,#3ddc84,#2b6cff);border-radius:10px}#excelUpProg{-webkit-appearance:none;appearance:none;border:none;border-radius:10px;background:#1a1f26}</style><div id="excelUpBox" style="display:block;margin:16px 20px;padding:16px;background:#161a20;border:1px solid #2a323c;border-radius:8px">
-  <h3 style="margin:0 0 10px 0;color:#3ddc84;font-size:14px">📤 엑셀 일괄 업로드 (한번에 여러 파일)</h3>
-  <input type="file" id="excelFiles" multiple accept=".xlsx,.xls,.csv" style="color:#e8ecef;font-size:13px">
+  <h3 style="margin:0 0 10px 0;color:#3ddc84;font-size:14px">📤 엑셀 일괄 업로드 (파일 또는 폴더 전체)</h3>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <label style="cursor:pointer;padding:5px 12px;background:#1a2d1a;border:1px solid #3ddc84;border-radius:4px;color:#3ddc84;font-size:13px">📄 파일 선택<input type="file" id="excelFiles" multiple accept=".xlsx,.xls,.csv" style="display:none"></label>
+    <label style="cursor:pointer;padding:5px 12px;background:#1a2d1a;border:1px solid #5599ff;border-radius:4px;color:#5599ff;font-size:13px">📁 폴더 선택<input type="file" id="excelFolder" webkitdirectory multiple style="display:none"></label>
+    <button id="excelUpBtn">▶ 업로드 &amp; 취합</button>
+  </div>
   <div id="excelFileList" style="margin-top:8px;font-size:12px;color:#9fb3e0;font-family:monospace"></div>
-  <button id="excelUpBtn" style="margin-left:10px">▶ 업로드 &amp; 취합</button>
   <div id="excelUpProgWrap" style="margin-top:10px;display:none"><progress id="excelUpProg" value="0" max="100" style="width:100%;height:20px"></progress><div id="excelUpProgTxt" style="margin-top:4px;font-size:12px;color:#3ddc84;text-align:right;font-family:monospace">0%</div></div><div id="excelUpResult" style="margin-top:12px;font-size:12.5px;color:#c9d2dc;font-family:'SF Mono',monospace;white-space:pre-wrap"></div>
 </div>
 <script>
@@ -315,6 +318,7 @@ function accessBadge(a){
 (function(){
   var btn = document.getElementById('excelUpBtn');
   var fi = document.getElementById('excelFiles');
+  var fld = document.getElementById('excelFolder');
   var out = document.getElementById('excelUpResult');
   if(!btn||!fi||!out) return;
   /* ref: MDN HTMLInputElement change event https://developer.mozilla.org/en-US/docs/Web/API/HTMLInputElement/change_event */
@@ -322,6 +326,17 @@ function accessBadge(a){
   /* ref: MDN File.name, File.size https://developer.mozilla.org/en-US/docs/Web/API/File */
   /* MDN: FileList는 change마다 replace. 누적 위해 DataTransfer 사용 https://developer.mozilla.org/en-US/docs/Web/API/DataTransfer */
   window._picked = window._picked || [];
+  function addFiles(fileList){
+    var exts = ['.xlsx','.xls','.csv'];
+    for(var i=0;i<fileList.length;i++){
+      var f = fileList[i];
+      var ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
+      if(!exts.includes(ext)) continue;
+      var dup = window._picked.some(function(x){ return x.name===f.name && x.size===f.size; });
+      if(!dup) window._picked.push(f);
+    }
+    renderList();
+  }
   function renderList(){
     var list = document.getElementById('excelFileList');
     if(!list) return;
@@ -329,17 +344,10 @@ function accessBadge(a){
     var arr = window._picked.map(function(f,i){ return (i+1)+'. '+_esc(f.name)+' ('+Math.round(f.size/1024)+'KB)'; });
     list.innerHTML = '📎 <b>' + window._picked.length + '개 선택됨:</b> <button id="_clearFiles" style="padding:2px 8px;font-size:11px">🗑 초기화</button><br>' + arr.join('<br>');
     var cb = document.getElementById('_clearFiles');
-    if(cb) cb.onclick = function(){ window._picked=[]; try{fi.value='';}catch(_){} renderList(); };
+    if(cb) cb.onclick = function(){ window._picked=[]; try{fi.value='';}catch(_){} try{if(fld)fld.value='';}catch(_){} renderList(); };
   }
-  fi.addEventListener('change', function(){
-    /* 새 선택된 파일을 누적 (같은 이름 중복은 이름+size로 dedup) */
-    for(var i=0;i<fi.files.length;i++){
-      var f = fi.files[i];
-      var dup = window._picked.some(function(x){ return x.name===f.name && x.size===f.size; });
-      if(!dup) window._picked.push(f);
-    }
-    renderList();
-  });
+  fi.addEventListener('change', function(){ addFiles(fi.files); });
+  if(fld) fld.addEventListener('change', function(){ addFiles(fld.files); });
   btn.addEventListener('click', function(){
     if(!window._picked.length){ out.textContent = '⚠️ 파일 선택 먼저'; return; }
     btn.disabled = true;
@@ -1078,26 +1086,27 @@ async function ytApiConnect(email, btn) {
   if (!_ytClientId) { alert('YouTube OAuth Client ID가 서버에 설정되지 않았습니다.\nYOUTUBE_OAUTH_CLIENT_ID 환경변수를 설정하세요.'); return; }
   const orig = btn.textContent; btn.disabled = true; btn.textContent = '⏳ 연결 중…';
   const redirectUri = location.origin + '/';
-  const scope = 'https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube.force-ssl';
+  const scope = 'https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.force-ssl';
   var _oauthNonce = Array.from(crypto.getRandomValues(new Uint8Array(16)),function(b){return b.toString(16).padStart(2,'0')}).join('');
   sessionStorage.setItem('yt_oauth_nonce', _oauthNonce);
+  sessionStorage.setItem('yt_oauth_email', email);
   const state = encodeURIComponent(JSON.stringify({ email, nonce: _oauthNonce }));
   const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=' + encodeURIComponent(_ytClientId)
     + '&redirect_uri=' + encodeURIComponent(redirectUri)
-    + '&response_type=token&scope=' + encodeURIComponent(scope)
+    + '&response_type=code&scope=' + encodeURIComponent(scope)
     + '&state=' + state
     + '&login_hint=' + encodeURIComponent(email)
-    + '&prompt=consent';
+    + '&access_type=offline&prompt=consent';
   const popup = window.open(authUrl, 'ytAuth', 'width=500,height=700');
   const checkInterval = setInterval(async () => {
     try {
       if (!popup || popup.closed) { clearInterval(checkInterval); btn.textContent = orig; btn.disabled = false; return; }
       const url = popup.location.href;
       if (url && url.startsWith(redirectUri)) {
-        const hash = popup.location.hash.substring(1);
         popup.close(); clearInterval(checkInterval);
-        const params = new URLSearchParams(hash);
-        var returnedState = params.get('state');
+        const urlObj = new URL(url);
+        const code = urlObj.searchParams.get('code');
+        var returnedState = urlObj.searchParams.get('state');
         try {
           var stateObj = JSON.parse(decodeURIComponent(returnedState || '{}'));
           var savedNonce = sessionStorage.getItem('yt_oauth_nonce');
@@ -1105,16 +1114,18 @@ async function ytApiConnect(email, btn) {
             btn.textContent = '❌ state 불일치'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000); return;
           }
           sessionStorage.removeItem('yt_oauth_nonce');
+          sessionStorage.removeItem('yt_oauth_email');
         } catch(_) { btn.textContent = '❌ state 파싱 실패'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000); return; }
-        const token = params.get('access_token');
-        const expiresIn = parseInt(params.get('expires_in') || '3600');
-        if (token) {
-          await fetch(authQuery('/api/youtube/save-token'), { method: 'POST', headers: authHeaders({'content-type': 'application/json'}), body: JSON.stringify({ email, access_token: token, expires_at: Date.now() + expiresIn * 1000 }) });
-          btn.textContent = '✅ 연결됨'; btn.style.background = '#0d3222'; btn.style.color = '#3ddc84';
-          setTimeout(() => { btn.textContent = orig; btn.disabled = false; btn.style.background = ''; btn.style.color = ''; }, 2000);
-        } else { btn.textContent = '❌ 실패'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000); }
+        if (code) {
+          const r = await fetch(authQuery('/api/youtube/exchange-code'), { method: 'POST', headers: authHeaders({'content-type': 'application/json'}), body: JSON.stringify({ email, code, redirect_uri: redirectUri }) });
+          const j = await r.json();
+          if (j.ok) {
+            btn.textContent = j.has_refresh ? '✅ 영구 연결' : '✅ 연결됨'; btn.style.background = '#0d3222'; btn.style.color = '#3ddc84';
+          } else { btn.textContent = '❌ ' + (j.error || '실패'); }
+          setTimeout(() => { btn.textContent = orig; btn.disabled = false; btn.style.background = ''; btn.style.color = ''; }, 3000);
+        } else { btn.textContent = '❌ 코드 없음'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000); }
       }
-    } catch { /* cross-origin — 아직 리다이렉트 전 */ }
+    } catch { /* cross-origin */ }
   }, 500);
 }
 

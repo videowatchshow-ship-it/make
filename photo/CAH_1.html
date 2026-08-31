@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>출목표 세로</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;background:#111;color:#eee;font-family:'Malgun Gothic',sans-serif;overflow-x:hidden}
+.kakao_banner{width:100%;text-align:center;background:#000;line-height:0}
+.kakao_banner img{max-width:100%;height:auto}
+.room-bar{display:flex;align-items:center;gap:8px;padding:6px 10px;background:#1e1e1e;border-bottom:1px solid #333;font-size:13px}
+#bgl-room{color:#ffd54f;font-weight:bold}
+.road-wrap{overflow-x:auto;overflow-y:hidden;padding:6px 4px;-webkit-overflow-scrolling:touch}
+.bgl-table{border-collapse:collapse;table-layout:fixed}
+.bgl-table td{width:28px;height:28px;border:1px solid #2a2a2a;padding:1px;vertical-align:middle;text-align:center}
+.bgl-p,.bgl-b{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;position:relative;flex-shrink:0}
+.bgl-p{background:#1565c0;border:2px solid #42a5f5}
+.bgl-b{background:#b71c1c;border:2px solid #ef5350}
+.bgl-p i.pp,.bgl-b i.bp{position:absolute;width:7px;height:7px;border-radius:50%;top:1px;right:1px}
+.bgl-p i.pp{background:#ef5350;border:1px solid #fff}
+.bgl-b i.bp{background:#42a5f5;border:1px solid #fff}
+.bgl-p i.bp{position:absolute;width:7px;height:7px;border-radius:50%;bottom:1px;left:1px;background:#42a5f5;border:1px solid #fff}
+.bgl-b i.pp{position:absolute;width:7px;height:7px;border-radius:50%;bottom:1px;left:1px;background:#ef5350;border:1px solid #fff}
+.bgl-p s,.bgl-b s{position:absolute;bottom:-6px;right:-2px;text-decoration:none;font-size:8px;color:#66bb6a;font-weight:bold;line-height:1}
+</style>
+</head>
+<body>
+<div class="kakao_banner">
+  <img src="images/Live_height_kakao.gif" alt="">
+</div>
+<div class="room-bar">
+  <span>방:</span>
+  <span id="bgl-room">연결중…</span>
+</div>
+<div class="road-wrap">
+  <div class="bgl-road"></div>
+</div>
+<script src="bgl.js"></script>
+</body>
+</html>
