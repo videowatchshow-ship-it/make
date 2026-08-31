@@ -766,5 +766,66 @@ module.exports = function(app) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
-  console.log('[auto_deploy] routes registered: /api/accounts, /api/normalized-accounts, /api/profiles, /api/failed-accounts, /api/deploy, /api/update-secret, /api/lookup/:email, /api/search-account, /api/deploy-status, /api/login-one, /api/youtube/*, /api/fix-mtime, /api/parse-report, /codes/:secret');
+  // 배치 실행 상태
+  let _batchRunning = false;
+  let _batchStop = false;
+
+  app.post('/api/start', authMiddleware, async (req, res) => {
+    if (_batchRunning) return res.json({ ok: false, reason: 'already_running' });
+    const { start = 0, end, concurrency = 4, skipLoggedIn = true } = req.body || {};
+    _batchRunning = true;
+    _batchStop = false;
+
+    const accounts = safeReadJSON(DATA_FILE);
+    const slice = accounts.slice(start, end != null ? end : accounts.length);
+    const targets = skipLoggedIn ? slice.filter(a => !a.logged_in) : slice;
+
+    res.json({ ok: true, total: targets.length, concurrency });
+
+    let loginModule;
+    try { loginModule = require(path.join(__dirname, 'advanced-google-login-v2.js')); }
+    catch (e) { _batchRunning = false; return; }
+
+    const queue = targets.slice();
+    let active = 0;
+
+    async function runOne(account) {
+      if (_batchStop) return;
+      try {
+        await loginModule.advancedGoogleLogin(
+          { email: account.email, password: account.password, twoFA: account.totp_secret || '' },
+          { headless: true }
+        );
+        const all = safeReadJSON(DATA_FILE);
+        const idx = all.findIndex(a => normalizeEmail(a.email) === normalizeEmail(account.email));
+        if (idx >= 0) { all[idx].logged_in = true; all[idx].login_at = Date.now(); }
+        const tmp = DATA_FILE + '.tmp.' + process.pid + '.' + Date.now();
+        fs.writeFileSync(tmp, JSON.stringify(all, null, 2));
+        fs.renameSync(tmp, DATA_FILE);
+      } catch (_) {}
+    }
+
+    async function worker() {
+      while (queue.length > 0 && !_batchStop) {
+        const account = queue.shift();
+        if (!account) break;
+        await runOne(account);
+      }
+      active--;
+      if (active === 0) _batchRunning = false;
+    }
+
+    for (let i = 0; i < Math.min(concurrency, targets.length); i++) {
+      active++;
+      worker();
+    }
+  });
+
+  app.post('/api/stop', authMiddleware, (req, res) => {
+    _batchStop = true;
+    _batchRunning = false;
+    res.json({ ok: true, stopped: true });
+  });
+
+  console.log('[auto_deploy] routes registered: /api/accounts, /api/normalized-accounts, /api/profiles, /api/failed-accounts, /api/deploy, /api/update-secret, /api/lookup/:email, /api/search-account, /api/deploy-status, /api/login-one, /api/start, /api/stop, /api/youtube/*, /api/fix-mtime, /api/parse-report, /codes/:secret');
 };
