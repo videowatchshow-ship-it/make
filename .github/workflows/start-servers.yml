@@ -46,15 +46,10 @@ jobs:
         if: always()
         continue-on-error: true
         run: |
-          $venvPip = "E:\CVAmp_5000\venv\Scripts\pip.exe"
-          $venvPy  = "E:\CVAmp_5000\venv\Scripts\python.exe"
-          if (Test-Path $venvPip) {
-            Write-Host "Installing flask+psutil into venv..."
-            & $venvPip install flask psutil --quiet 2>&1 | Write-Host
-            Write-Host "pip exit=$LASTEXITCODE"
-          }
+          $target = "E:\py_packages"
+          New-Item -Force -ItemType Directory $target | Out-Null
           $candidates = @(
-            $venvPy,
+            "E:\CVAmp_5000\venv\Scripts\python.exe",
             "G:\Program Files\Python313\python.exe",
             "F:\python313\python.exe",
             "F:\Python313\python.exe",
@@ -66,30 +61,28 @@ jobs:
           )
           $found = $null
           foreach ($p in $candidates) {
-            if (Test-Path $p) {
-              & $p -c "import flask,psutil" 2>&1 | Out-Null
-              Write-Host "Testing $p : exit=$LASTEXITCODE"
-              if ($LASTEXITCODE -eq 0) {
-                Write-Host "Found working python: $p"
-                $found = $p
-                break
-              }
-            }
+            if (Test-Path $p) { $found = $p; break }
           }
-          if (-not $found) {
-            Write-Host "FATAL: no python with flask+psutil found"
-            $found = $venvPy
-          }
+          if (-not $found) { $found = "C:\Python313\python.exe" }
+          Write-Host "Using python: $found"
+          Write-Host "Installing flask+psutil to $target..."
+          & $found -m pip install flask psutil --target $target --quiet 2>&1
+          Write-Host "pip exit=$LASTEXITCODE"
+          $env:PYTHONPATH = $target
+          & $found -c "import flask,psutil; print('OK')" 2>&1
+          Write-Host "import test exit=$LASTEXITCODE"
           echo "PYTHON_EXE=$found" >> $env:GITHUB_ENV
+          echo "PYTHONPATH=$target" >> $env:GITHUB_ENV
 
       - name: Start CVAmp_5000
         if: always()
         continue-on-error: true
         run: |
           $py = if ($env:PYTHON_EXE) { $env:PYTHON_EXE } else { "C:\Python313\python.exe" }
-          Write-Host "Starting CVAmp_5000 with $py"
+          $pp = if ($env:PYTHONPATH) { $env:PYTHONPATH } else { "E:\py_packages" }
+          Write-Host "Starting CVAmp_5000 with $py PYTHONPATH=$pp"
           New-Item -Force -ItemType Directory C:\temp | Out-Null
-          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_5000" -RedirectStandardError "C:\temp\5000_err.log" -WindowStyle Hidden
+          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_5000" -RedirectStandardError "C:\temp\5000_err.log" -WindowStyle Hidden -Environment @{PYTHONPATH=$pp}
           Start-Sleep -Seconds 3
           if (Test-Path C:\temp\5000_err.log) { Write-Host "5000 STDERR:"; Get-Content C:\temp\5000_err.log }
 
@@ -98,21 +91,24 @@ jobs:
         continue-on-error: true
         run: |
           $py = if ($env:PYTHON_EXE) { $env:PYTHON_EXE } else { "C:\Python313\python.exe" }
-          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6001" -WindowStyle Hidden
+          $pp = if ($env:PYTHONPATH) { $env:PYTHONPATH } else { "E:\py_packages" }
+          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6001" -WindowStyle Hidden -Environment @{PYTHONPATH=$pp}
 
       - name: Start CVAmp_6002
         if: always()
         continue-on-error: true
         run: |
           $py = if ($env:PYTHON_EXE) { $env:PYTHON_EXE } else { "C:\Python313\python.exe" }
-          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6002" -WindowStyle Hidden
+          $pp = if ($env:PYTHONPATH) { $env:PYTHONPATH } else { "E:\py_packages" }
+          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6002" -WindowStyle Hidden -Environment @{PYTHONPATH=$pp}
 
       - name: Start CVAmp_6003
         if: always()
         continue-on-error: true
         run: |
           $py = if ($env:PYTHON_EXE) { $env:PYTHON_EXE } else { "C:\Python313\python.exe" }
-          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6003" -WindowStyle Hidden
+          $pp = if ($env:PYTHONPATH) { $env:PYTHONPATH } else { "E:\py_packages" }
+          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6003" -WindowStyle Hidden -Environment @{PYTHONPATH=$pp}
 
       - name: Wait for servers
         if: always()
