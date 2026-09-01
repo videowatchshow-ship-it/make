@@ -1,0 +1,64 @@
+name: gauth port 4000 항상 켜기
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/10 * * * *'
+
+jobs:
+  ensure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: SSH - gauth 서비스 항상 실행 보장
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            set -e
+
+            SVC=/etc/systemd/system/gauth.service
+            CHANGED=0
+
+            # Restart=always 설정
+            if grep -q '^\[Service\]' "$SVC" 2>/dev/null; then
+              if ! grep -q 'Restart=always' "$SVC" 2>/dev/null; then
+                sudo sed -i '/^\[Service\]/a Restart=always\nRestartSec=5' "$SVC"
+                CHANGED=1
+                echo "Restart=always added"
+              else
+                echo "Restart=always already set"
+              fi
+            fi
+
+            if [ "$CHANGED" = "1" ]; then
+              sudo systemctl daemon-reload
+            fi
+
+            # 부팅 시 자동 시작 활성화
+            sudo systemctl enable gauth 2>/dev/null || true
+
+            # 현재 상태 확인 후 필요하면 시작
+            STATUS=$(sudo systemctl is-active gauth 2>/dev/null || echo "inactive")
+            echo "Current status: $STATUS"
+
+            if [ "$STATUS" != "active" ]; then
+              echo "Service not running — starting..."
+              sudo systemctl start gauth
+              sleep 4
+            fi
+
+            # Health check
+            for i in 1 2 3; do
+              HTTP=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4000/api/accounts 2>/dev/null || echo "000")
+              echo "Health check $i: HTTP $HTTP"
+              if [ "$HTTP" = "200" ]; then
+                echo "PORT 4000 OK"
+                break
+              fi
+              sleep 3
+            done
+
+            sudo systemctl status gauth --no-pager -l 2>/dev/null | tail -5

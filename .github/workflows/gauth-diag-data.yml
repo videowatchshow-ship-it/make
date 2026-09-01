@@ -1,0 +1,71 @@
+name: gauth 계정 데이터 진단
+on:
+  workflow_dispatch:
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: SSH 진단
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            echo "=== gauth 서비스 상태 ==="
+            sudo systemctl is-active gauth || true
+            sudo systemctl status gauth --no-pager -l 2>/dev/null | tail -15
+
+            echo ""
+            echo "=== port 4000 응답 ==="
+            curl -s -o /tmp/acc.txt -w "HTTP %{http_code}" http://localhost:4000/api/accounts 2>/dev/null || echo "연결 실패"
+            python3 -c "
+            import json, sys
+            try:
+                d = json.load(open('/tmp/acc.txt'))
+                if isinstance(d, list):
+                    print('accounts:', len(d))
+                else:
+                    print('total:', d.get('total', '?'), 'source:', d.get('source', '?'))
+            except Exception as e:
+                print('parse error:', e)
+                print(open('/tmp/acc.txt').read()[:200])
+            " 2>/dev/null || true
+
+            echo ""
+            echo "=== accounts_normalized.json ==="
+            F=/opt/gauth-full/accounts_normalized.json
+            if [ -f "$F" ]; then
+              SIZE=$(wc -c < "$F")
+              echo "크기: ${SIZE} bytes"
+              python3 -c "
+            import json
+            d = json.load(open('$F'))
+            if isinstance(d, list):
+                print('계정 수:', len(d))
+                if d:
+                    print('첫번째:', d[0].get('email','?'))
+                    print('마지막:', d[-1].get('email','?'))
+            else:
+                print(d)
+            " 2>/dev/null || echo "(빈 파일 또는 파싱 불가)"
+            else
+              echo "파일 없음"
+            fi
+
+            echo ""
+            echo "=== uploads 폴더 ==="
+            ls -la /opt/gauth-full/uploads/ 2>/dev/null | head -20 || echo "폴더 없음"
+
+            echo ""
+            echo "=== /api/normalized-accounts ==="
+            curl -s http://localhost:4000/api/normalized-accounts 2>/dev/null | python3 -c "
+            import json, sys
+            d = json.load(sys.stdin)
+            s = d.get('summary', {})
+            print('total:', s.get('total', '?'))
+            print('files:', s.get('files_scanned', '?'))
+            " 2>/dev/null || echo "응답 없음"
