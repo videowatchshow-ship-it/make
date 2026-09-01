@@ -89,6 +89,17 @@ jobs:
         continue-on-error: true
         run: Start-Sleep -Seconds 8
 
+      - name: Check ports listening
+        if: always()
+        shell: powershell
+        continue-on-error: true
+        run: |
+          Start-Sleep -Seconds 5
+          Write-Host "=== Listening ports ==="
+          netstat -an | Select-String "LISTENING" | Select-String ":5000|:6001|:6002|:6003"
+          Write-Host "=== Python processes ==="
+          Get-Process python -ErrorAction SilentlyContinue | Format-Table Id,CPU,WorkingSet
+
       - name: Call /api/start on all servers
         if: always()
         shell: powershell
