@@ -16,44 +16,51 @@ jobs:
       run:
         shell: powershell -ExecutionPolicy Bypass -File "{0}"
     steps:
-      - name: Find working python (before killing anything)
+      - name: Find working python (search disk for one with psutil)
         if: always()
         continue-on-error: true
         run: |
-          # The already-running python processes prove a python with flask+psutil exists.
-          # Grab its ExecutablePath BEFORE we kill them.
-          $running = Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |
-            Where-Object { $_.ExecutablePath } |
-            Select-Object -ExpandProperty ExecutablePath -Unique
-          Write-Host "Running python executables:"
-          $running | ForEach-Object { Write-Host "  $_" }
+          $ErrorActionPreference = 'SilentlyContinue'
 
-          $candidates = @()
-          $candidates += $running
-          $candidates += @(
-            "E:\CVAmp_5000\venv\Scripts\python.exe",
-            "E:\CVAmp_6001\venv\Scripts\python.exe",
-            "C:\Python313\python.exe",
-            "C:\Python312\python.exe",
-            "C:\Python311\python.exe"
-          )
+          # 1) Try to read the command line of already-running python procs (they have all deps).
+          $fromRunning = @()
+          try {
+            $fromRunning = Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
+              ForEach-Object { $_.ExecutablePath; ($_.CommandLine -split '"')[1] } |
+              Where-Object { $_ -and ($_ -like '*python*.exe') }
+          } catch {}
+
+          # 2) Search likely install roots for every python.exe on disk.
+          $roots = @("E:\", "C:\Python313", "C:\Python312", "C:\Python311",
+                     "C:\Program Files", "C:\Program Files (x86)",
+                     "C:\Users", "D:\", "F:\", "G:\")
+          $disk = @()
+          foreach ($r in $roots) {
+            if (Test-Path $r) {
+              $disk += Get-ChildItem -Path $r -Filter python.exe -Recurse -Depth 5 -File 2>$null |
+                       Select-Object -ExpandProperty FullName
+            }
+          }
+
+          $candidates = @($fromRunning + $disk) | Where-Object { $_ } | Select-Object -Unique
+          Write-Host "=== python.exe candidates found ==="
+          $candidates | ForEach-Object { Write-Host "  $_" }
 
           $found = $null
           foreach ($p in $candidates) {
-            if ($p -and (Test-Path $p)) {
-              & $p -c "import flask, psutil" 2>$null
+            if (Test-Path $p) {
+              $ok = & $p -c "import flask, psutil; print('OK')" 2>&1
               if ($LASTEXITCODE -eq 0) {
-                Write-Host "WORKING python (flask+psutil): $p"
-                $found = $p
-                break
+                Write-Host "WORKING (flask+psutil): $p"
+                if (-not $found) { $found = $p }
               } else {
-                Write-Host "no flask/psutil: $p"
+                Write-Host "missing deps: $p"
               }
             }
           }
           if (-not $found) {
-            Write-Host "WARNING: no python with flask+psutil found; falling back to first running python"
-            if ($running) { $found = @($running)[0] } else { $found = "C:\Python313\python.exe" }
+            Write-Host "FATAL: no python with flask+psutil on disk. Using C:\Python313 (will fail)."
+            $found = "C:\Python313\python.exe"
           }
           Write-Host "SELECTED python: $found"
           echo "PYTHON_EXE=$found" >> $env:GITHUB_ENV
