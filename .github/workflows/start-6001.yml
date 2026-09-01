@@ -1,0 +1,81 @@
+name: Start CVAmp 6001
+
+on:
+  workflow_dispatch:
+
+jobs:
+  start:
+    runs-on: self-hosted
+    timeout-minutes: 10
+    steps:
+      - name: Check 5000 status
+        shell: powershell -ExecutionPolicy Bypass -File "{0}"
+        run: |
+          $l = Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue
+          if ($l) {
+            try {
+              $r = Invoke-WebRequest -Uri "http://localhost:5000/" -UseBasicParsing -TimeoutSec 8
+              Write-Host "5000: LISTENING, HTTP $($r.StatusCode)"
+            } catch { Write-Host "5000: LISTENING but HTTP error: $($_.Exception.Message)" }
+          } else { Write-Host "5000: NOT LISTENING" }
+
+      - name: Restart CVAmp 6001 with a python that has playwright
+        shell: powershell -ExecutionPolicy Bypass -File "{0}"
+        run: |
+          $ErrorActionPreference = 'Continue'
+
+          $dir = "E:\CVAmp_6001"
+          if (-not (Test-Path $dir)) { Write-Host "NO DIR $dir"; exit 1 }
+
+          # 1) playwright 있는 python 실행파일 탐색
+          $candidates = @()
+          Get-ChildItem -Path "C:\Python*","C:\Program Files\Python*","C:\Program Files (x86)\Python*" -Filter python.exe -Recurse -ErrorAction SilentlyContinue | ForEach-Object { $candidates += $_.FullName }
+          Get-ChildItem -Path "C:\Users" -Filter python.exe -Recurse -ErrorAction SilentlyContinue -Depth 6 | ForEach-Object { $candidates += $_.FullName }
+          Get-ChildItem -Path "E:\" -Filter python.exe -Recurse -ErrorAction SilentlyContinue -Depth 4 | ForEach-Object { $candidates += $_.FullName }
+          $candidates = $candidates | Sort-Object -Unique
+
+          $py = $null
+          foreach ($c in $candidates) {
+            & $c -c "import playwright" 2>$null
+            if ($LASTEXITCODE -eq 0) { $py = $c; Write-Host "playwright OK -> $c"; break }
+            else { Write-Host "no playwright: $c" }
+          }
+          if (-not $py) { Write-Host "NO PYTHON WITH PLAYWRIGHT FOUND"; exit 1 }
+
+          # 2) 6001 점유 프로세스 종료
+          $conns = Get-NetTCPConnection -LocalPort 6001 -State Listen -ErrorAction SilentlyContinue
+          foreach ($conn in $conns) {
+            try { Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue; Write-Host "killed pid $($conn.OwningProcess)" } catch {}
+          }
+          Start-Sleep -Seconds 2
+
+          # 3) app 파일 확인
+          $app = $null
+          foreach ($f in @("app.py","main.py","server.py","run.py")) {
+            if (Test-Path (Join-Path $dir $f)) { $app = $f; break }
+          }
+          if (-not $app) { Write-Host "NO APP FILE in $dir"; Get-ChildItem $dir | Select-Object -First 20 | ForEach-Object { Write-Host " $($_.Name)" }; exit 1 }
+          Write-Host "app file: $app"
+
+          # 4) 백그라운드 기동
+          $out = Join-Path $dir "server_6001.out.log"
+          $err = Join-Path $dir "server_6001.err.log"
+          $proc = Start-Process -FilePath $py -ArgumentList $app -WorkingDirectory $dir -RedirectStandardOutput $out -RedirectStandardError $err -PassThru -WindowStyle Hidden
+          Write-Host "started pid $($proc.Id)"
+
+          # 5) 최대 40초 대기하며 리슨 확인
+          $ok = $false
+          for ($i=0; $i -lt 20; $i++) {
+            Start-Sleep -Seconds 2
+            $l = Get-NetTCPConnection -LocalPort 6001 -State Listen -ErrorAction SilentlyContinue
+            if ($l) { $ok = $true; break }
+            if ($proc.HasExited) { Write-Host "process exited early code=$($proc.ExitCode)"; break }
+          }
+
+          Write-Host "=========== STDERR tail ==========="
+          if (Test-Path $err) { Get-Content $err -Tail 30 | ForEach-Object { Write-Host $_ } }
+          Write-Host "=========== STDOUT tail ==========="
+          if (Test-Path $out) { Get-Content $out -Tail 15 | ForEach-Object { Write-Host $_ } }
+
+          if ($ok) { Write-Host "RESULT: 6001 LISTENING OK" }
+          else { Write-Host "RESULT: 6001 NOT LISTENING"; exit 1 }
