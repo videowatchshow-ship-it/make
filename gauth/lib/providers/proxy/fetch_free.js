@@ -52,7 +52,7 @@ function fetchURL(url) {
 function parseProxyList(text) {
   return text.split('\n')
     .map(line => line.trim())
-    .filter(line => /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d{2,5}$/.test(line))
+    .filter(line => /^\d{1,3}(?:\.\d{1,3}){3}:\d{2,5}$/.test(line))
     .map(line => {
       const [host, port] = line.split(':')
       return { host, port: parseInt(port), server: `socks5://${host}:${port}` }
