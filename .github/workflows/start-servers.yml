@@ -1,0 +1,77 @@
+name: Start CVAmp Servers
+
+on:
+  workflow_dispatch:
+    inputs:
+      youtube_url:
+        description: 'YouTube URL'
+        required: false
+        default: ''
+
+jobs:
+  start:
+    runs-on: self-hosted
+    timeout-minutes: 10
+    steps:
+      - name: Stop existing python processes
+        shell: powershell
+        run: |
+          Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force
+          Start-Sleep -Seconds 2
+
+      - name: Fix CVAmp_6003 IndentationError
+        shell: powershell
+        run: |
+          $path = "E:\CVAmp_6003\app.py"
+          $lines = Get-Content $path
+          $out = [System.Collections.Generic.List[string]]::new()
+          $skip = 0
+          foreach ($line in $lines) {
+            if ($skip -gt 0) { $skip--; continue }
+            if ($line.TrimStart() -eq "try:") {
+              $skip = 5
+              continue
+            }
+            $out.Add($line)
+          }
+          [System.IO.File]::WriteAllLines($path, $out, [System.Text.UTF8Encoding]::new($false))
+          Write-Host "Fixed: $path"
+
+      - name: Start CVAmp_5000
+        shell: powershell
+        run: |
+          Start-Process python -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_5000" -WindowStyle Hidden
+
+      - name: Start CVAmp_6001
+        shell: powershell
+        run: |
+          Start-Process python -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6001" -WindowStyle Hidden
+
+      - name: Start CVAmp_6002
+        shell: powershell
+        run: |
+          Start-Process python -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6002" -WindowStyle Hidden
+
+      - name: Start CVAmp_6003
+        shell: powershell
+        run: |
+          Start-Process python -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6003" -WindowStyle Hidden
+
+      - name: Wait for servers
+        shell: powershell
+        run: Start-Sleep -Seconds 8
+
+      - name: Call /api/start on all servers
+        shell: powershell
+        run: |
+          $url = "${{ github.event.inputs.youtube_url }}"
+          $ports = @(5000, 6001, 6002, 6003)
+          foreach ($port in $ports) {
+            try {
+              $body = "{`"url`":`"$url`"}"
+              Invoke-RestMethod -Uri "http://localhost:$port/api/start" -Method POST -Body $body -ContentType "application/json" -TimeoutSec 10
+              Write-Host "Started port $port"
+            } catch {
+              Write-Host "Port $port: $_"
+            }
+          }
