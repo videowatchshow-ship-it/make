@@ -21,49 +21,63 @@ jobs:
           Start-Sleep -Seconds 2
 
       - name: Fix CVAmp_6003 IndentationError
+        if: always()
         shell: powershell
+        continue-on-error: true
         run: |
           $path = "E:\CVAmp_6003\app.py"
-          $lines = Get-Content $path
-          $out = [System.Collections.Generic.List[string]]::new()
-          $skip = 0
-          foreach ($line in $lines) {
-            if ($skip -gt 0) { $skip--; continue }
-            if ($line.TrimStart() -eq "try:") {
-              $skip = 5
-              continue
+          if (Test-Path $path) {
+            $lines = Get-Content $path
+            $out = [System.Collections.Generic.List[string]]::new()
+            $skip = 0
+            foreach ($line in $lines) {
+              if ($skip -gt 0) { $skip--; continue }
+              if ($line.TrimStart() -eq "try:") { $skip = 5; continue }
+              $out.Add($line)
             }
-            $out.Add($line)
+            [System.IO.File]::WriteAllLines($path, $out, [System.Text.UTF8Encoding]::new($false))
+            Write-Host "Fixed: $path"
+          } else {
+            Write-Host "File not found: $path"
           }
-          [System.IO.File]::WriteAllLines($path, $out, [System.Text.UTF8Encoding]::new($false))
-          Write-Host "Fixed: $path"
 
       - name: Start CVAmp_5000
+        if: always()
         shell: powershell
+        continue-on-error: true
         run: |
           Start-Process python -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_5000" -WindowStyle Hidden
 
       - name: Start CVAmp_6001
+        if: always()
         shell: powershell
+        continue-on-error: true
         run: |
           Start-Process python -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6001" -WindowStyle Hidden
 
       - name: Start CVAmp_6002
+        if: always()
         shell: powershell
+        continue-on-error: true
         run: |
           Start-Process python -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6002" -WindowStyle Hidden
 
       - name: Start CVAmp_6003
+        if: always()
         shell: powershell
+        continue-on-error: true
         run: |
           Start-Process python -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6003" -WindowStyle Hidden
 
       - name: Wait for servers
+        if: always()
         shell: powershell
         run: Start-Sleep -Seconds 8
 
       - name: Call /api/start on all servers
+        if: always()
         shell: powershell
+        continue-on-error: true
         run: |
           $url = "${{ github.event.inputs.youtube_url }}"
           $ports = @(5000, 6001, 6002, 6003)
