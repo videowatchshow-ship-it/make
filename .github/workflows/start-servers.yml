@@ -72,6 +72,7 @@ jobs:
       - name: Wait for servers
         if: always()
         shell: powershell
+        continue-on-error: true
         run: Start-Sleep -Seconds 8
 
       - name: Call /api/start on all servers
