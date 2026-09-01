@@ -87,8 +87,67 @@ jobs:
           }
 
           if (-not $found) {
-            Write-Host "FATAL: could not assemble flask+psutil. psutilPythons=$($withPsutil.Count) flaskDirs=$($flaskDirs.Count)"
-            $found = "C:\Python313\python.exe"
+            Write-Host "No importable python. Assembling packages from disk FILES into E:\py_packages ..."
+            $tgt = "E:\py_packages"
+            New-Item -Force -ItemType Directory $tgt | Out-Null
+
+            # C:\Python313 is py3.13; we need a psutil C-extension built for cp313.
+            # Search every site-packages on disk for the actual package folders.
+            $pdirs = @("E:\","C:\","D:\","F:\","G:\")
+            $siteRoots = @()
+            foreach ($r in $pdirs) {
+              if (Test-Path $r) {
+                $siteRoots += Get-ChildItem -Path $r -Directory -Filter "site-packages" -Recurse -Depth 6 2>$null |
+                              Select-Object -ExpandProperty FullName
+              }
+            }
+            $siteRoots = $siteRoots | Select-Object -Unique
+            Write-Host "site-packages dirs found: $($siteRoots.Count)"
+
+            # Find a cp313 psutil (matches C:\Python313 ABI).
+            $psSrc = $null
+            foreach ($sp in $siteRoots) {
+              $pyd = Get-ChildItem -Path (Join-Path $sp "psutil") -Filter "_psutil_windows*cp313*.pyd" -ErrorAction SilentlyContinue | Select-Object -First 1
+              if ($pyd) { $psSrc = $sp; Write-Host "psutil(cp313) at: $sp"; break }
+            }
+            # Fallback: any psutil folder (may still work if pure enough / same ver).
+            if (-not $psSrc) {
+              foreach ($sp in $siteRoots) {
+                if (Test-Path (Join-Path $sp "psutil\__init__.py")) { $psSrc = $sp; Write-Host "psutil(any) at: $sp"; break }
+              }
+            }
+            # Find a flask (pure-python) + its deps.
+            $flSrc = $null
+            foreach ($sp in $siteRoots) {
+              if (Test-Path (Join-Path $sp "flask\__init__.py")) { $flSrc = $sp; Write-Host "flask at: $sp"; break }
+            }
+
+            $deps = @("psutil","flask","werkzeug","jinja2","click","markupsafe","itsdangerous","blinker")
+            foreach ($d in $deps) {
+              $src = $null
+              if ($d -eq "psutil" -and $psSrc) { $src = $psSrc }
+              elseif ($flSrc -and (Test-Path (Join-Path $flSrc $d))) { $src = $flSrc }
+              else {
+                foreach ($sp in $siteRoots) { if (Test-Path (Join-Path $sp $d)) { $src = $sp; break } }
+              }
+              if ($src -and (Test-Path (Join-Path $src $d))) {
+                Copy-Item -Recurse -Force (Join-Path $src $d) (Join-Path $tgt $d) -ErrorAction SilentlyContinue
+                Write-Host "copied $d from $src"
+              } else {
+                Write-Host "MISSING on disk: $d"
+              }
+            }
+
+            $env:PYTHONPATH = $tgt
+            & "C:\Python313\python.exe" -c "import flask, psutil; print('ASSEMBLED OK', psutil.__version__)" 2>&1 | ForEach-Object { Write-Host $_ }
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "ASSEMBLE SUCCESS"
+              $found = "C:\Python313\python.exe"
+              echo "PYTHONPATH=$tgt" >> $env:GITHUB_ENV
+            } else {
+              Write-Host "FATAL: assemble failed (packages not on disk or ABI mismatch)."
+              $found = "C:\Python313\python.exe"
+            }
           }
           Write-Host "SELECTED python: $found"
           echo "PYTHON_EXE=$found" >> $env:GITHUB_ENV
