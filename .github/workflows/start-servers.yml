@@ -12,149 +12,43 @@ jobs:
   start:
     runs-on: self-hosted
     timeout-minutes: 10
-    defaults:
-      run:
-        shell: powershell -ExecutionPolicy Bypass -File "{0}"
     steps:
-      - name: Find working python (search disk for one with psutil)
+      - name: Checkout repo (brings vendored wheels)
+        uses: actions/checkout@v4
+
+      - name: Install flask+psutil OFFLINE from vendored wheels
         if: always()
         continue-on-error: true
+        shell: powershell -ExecutionPolicy Bypass -File "{0}"
         run: |
-          $ErrorActionPreference = 'SilentlyContinue'
+          $ErrorActionPreference = 'Continue'
+          $py  = "C:\Python313\python.exe"
+          $tgt = "E:\py_packages"
+          $wheels = Join-Path $env:GITHUB_WORKSPACE "wheels"
+          New-Item -Force -ItemType Directory $tgt | Out-Null
+          Write-Host "wheels dir: $wheels"
+          Get-ChildItem $wheels -Filter *.whl | ForEach-Object { Write-Host "  $($_.Name)" }
 
-          # 1) Try to read the command line of already-running python procs (they have all deps).
-          $fromRunning = @()
-          try {
-            $fromRunning = Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
-              ForEach-Object { $_.ExecutablePath; ($_.CommandLine -split '"')[1] } |
-              Where-Object { $_ -and ($_ -like '*python*.exe') }
-          } catch {}
+          Write-Host "--- offline pip install (no internet needed) ---"
+          & $py -m pip install --no-index --find-links "$wheels" --target "$tgt" flask psutil --upgrade 2>&1 | ForEach-Object { Write-Host $_ }
+          Write-Host "pip exit=$LASTEXITCODE"
 
-          # 2) Search likely install roots for every python.exe on disk.
-          $roots = @("E:\", "C:\Python313", "C:\Python312", "C:\Python311",
-                     "C:\Program Files", "C:\Program Files (x86)",
-                     "C:\Users", "D:\", "F:\", "G:\")
-          $disk = @()
-          foreach ($r in $roots) {
-            if (Test-Path $r) {
-              $disk += Get-ChildItem -Path $r -Filter python.exe -Recurse -Depth 5 -File 2>$null |
-                       Select-Object -ExpandProperty FullName
-            }
+          $env:PYTHONPATH = $tgt
+          & $py -c "import flask, psutil; print('IMPORT OK psutil', psutil.__version__, 'flask', flask.__version__)" 2>&1 | ForEach-Object { Write-Host $_ }
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "OFFLINE INSTALL SUCCESS"
+            echo "PYTHON_EXE=$py"     >> $env:GITHUB_ENV
+            echo "PYTHONPATH=$tgt"    >> $env:GITHUB_ENV
+          } else {
+            Write-Host "FATAL: offline install/import failed"
+            echo "PYTHON_EXE=$py"     >> $env:GITHUB_ENV
+            echo "PYTHONPATH=$tgt"    >> $env:GITHUB_ENV
           }
-
-          $candidates = @($fromRunning + $disk) | Where-Object { $_ } | Select-Object -Unique
-          Write-Host "=== python.exe candidates found ==="
-          $candidates | ForEach-Object { Write-Host "  $_" }
-
-          # Test flask and psutil SEPARATELY for each python.
-          # psutil is a C-extension (version-locked); flask is pure-python (portable via PYTHONPATH).
-          $withBoth = $null
-          $withPsutil = @()   # pythons that can import psutil
-          $flaskDirs = @()    # site-packages dirs that contain flask (from pythons that have flask)
-          foreach ($p in $candidates) {
-            if (-not (Test-Path $p)) { continue }
-            & $p -c "import psutil" 2>$null; $ps = ($LASTEXITCODE -eq 0)
-            & $p -c "import flask"  2>$null; $fl = ($LASTEXITCODE -eq 0)
-            Write-Host ("psutil={0} flask={1}  {2}" -f $ps, $fl, $p)
-            if ($ps -and $fl -and -not $withBoth) { $withBoth = $p }
-            if ($ps) { $withPsutil += $p }
-            if ($fl) {
-              $d = & $p -c "import os,flask; print(os.path.dirname(os.path.dirname(flask.__file__)))" 2>$null
-              if ($d -and (Test-Path $d)) { $flaskDirs += $d }
-            }
-          }
-
-          $found = $null
-          if ($withBoth) {
-            Write-Host "FOUND python with BOTH: $withBoth"
-            $found = $withBoth
-          }
-          elseif ($withPsutil.Count -gt 0 -and $flaskDirs.Count -gt 0) {
-            # Combine: python that has psutil + flask supplied via PYTHONPATH from another install.
-            foreach ($pp in $withPsutil) {
-              foreach ($fd in ($flaskDirs | Select-Object -Unique)) {
-                $env:PYTHONPATH = $fd
-                & $pp -c "import flask, psutil; print('COMBINE OK')" 2>$null
-                if ($LASTEXITCODE -eq 0) {
-                  Write-Host "COMBINE WORKS: python=$pp  flaskFrom=$fd"
-                  $found = $pp
-                  echo "PYTHONPATH=$fd" >> $env:GITHUB_ENV
-                  break
-                }
-              }
-              if ($found) { break }
-            }
-          }
-
-          if (-not $found) {
-            Write-Host "No importable python. Assembling packages from disk FILES into E:\py_packages ..."
-            $tgt = "E:\py_packages"
-            New-Item -Force -ItemType Directory $tgt | Out-Null
-
-            # C:\Python313 is py3.13; we need a psutil C-extension built for cp313.
-            # Search every site-packages on disk for the actual package folders.
-            $pdirs = @("E:\","C:\","D:\","F:\","G:\")
-            $siteRoots = @()
-            foreach ($r in $pdirs) {
-              if (Test-Path $r) {
-                $siteRoots += Get-ChildItem -Path $r -Directory -Filter "site-packages" -Recurse -Depth 6 2>$null |
-                              Select-Object -ExpandProperty FullName
-              }
-            }
-            $siteRoots = $siteRoots | Select-Object -Unique
-            Write-Host "site-packages dirs found: $($siteRoots.Count)"
-
-            # Find a cp313 psutil (matches C:\Python313 ABI).
-            $psSrc = $null
-            foreach ($sp in $siteRoots) {
-              $pyd = Get-ChildItem -Path (Join-Path $sp "psutil") -Filter "_psutil_windows*cp313*.pyd" -ErrorAction SilentlyContinue | Select-Object -First 1
-              if ($pyd) { $psSrc = $sp; Write-Host "psutil(cp313) at: $sp"; break }
-            }
-            # Fallback: any psutil folder (may still work if pure enough / same ver).
-            if (-not $psSrc) {
-              foreach ($sp in $siteRoots) {
-                if (Test-Path (Join-Path $sp "psutil\__init__.py")) { $psSrc = $sp; Write-Host "psutil(any) at: $sp"; break }
-              }
-            }
-            # Find a flask (pure-python) + its deps.
-            $flSrc = $null
-            foreach ($sp in $siteRoots) {
-              if (Test-Path (Join-Path $sp "flask\__init__.py")) { $flSrc = $sp; Write-Host "flask at: $sp"; break }
-            }
-
-            $deps = @("psutil","flask","werkzeug","jinja2","click","markupsafe","itsdangerous","blinker")
-            foreach ($d in $deps) {
-              $src = $null
-              if ($d -eq "psutil" -and $psSrc) { $src = $psSrc }
-              elseif ($flSrc -and (Test-Path (Join-Path $flSrc $d))) { $src = $flSrc }
-              else {
-                foreach ($sp in $siteRoots) { if (Test-Path (Join-Path $sp $d)) { $src = $sp; break } }
-              }
-              if ($src -and (Test-Path (Join-Path $src $d))) {
-                Copy-Item -Recurse -Force (Join-Path $src $d) (Join-Path $tgt $d) -ErrorAction SilentlyContinue
-                Write-Host "copied $d from $src"
-              } else {
-                Write-Host "MISSING on disk: $d"
-              }
-            }
-
-            $env:PYTHONPATH = $tgt
-            & "C:\Python313\python.exe" -c "import flask, psutil; print('ASSEMBLED OK', psutil.__version__)" 2>&1 | ForEach-Object { Write-Host $_ }
-            if ($LASTEXITCODE -eq 0) {
-              Write-Host "ASSEMBLE SUCCESS"
-              $found = "C:\Python313\python.exe"
-              echo "PYTHONPATH=$tgt" >> $env:GITHUB_ENV
-            } else {
-              Write-Host "FATAL: assemble failed (packages not on disk or ABI mismatch)."
-              $found = "C:\Python313\python.exe"
-            }
-          }
-          Write-Host "SELECTED python: $found"
-          echo "PYTHON_EXE=$found" >> $env:GITHUB_ENV
 
       - name: Stop existing python processes
         if: always()
         continue-on-error: true
+        shell: powershell -ExecutionPolicy Bypass -File "{0}"
         run: |
           Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
           Start-Sleep -Seconds 2
@@ -162,6 +56,7 @@ jobs:
       - name: Fix CVAmp_6003 IndentationError
         if: always()
         continue-on-error: true
+        shell: powershell -ExecutionPolicy Bypass -File "{0}"
         run: |
           $path = "E:\CVAmp_6003\app.py"
           if (Test-Path $path) {
@@ -182,9 +77,10 @@ jobs:
       - name: Start CVAmp_5000
         if: always()
         continue-on-error: true
+        shell: powershell -ExecutionPolicy Bypass -File "{0}"
         run: |
           $py = if ($env:PYTHON_EXE) { $env:PYTHON_EXE } else { "C:\Python313\python.exe" }
-          Write-Host "Starting CVAmp_5000 with $py"
+          Write-Host "Starting CVAmp_5000 with $py PYTHONPATH=$env:PYTHONPATH"
           New-Item -Force -ItemType Directory C:\temp | Out-Null
           Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_5000" -RedirectStandardError "C:\temp\5000_err.log" -WindowStyle Hidden
           Start-Sleep -Seconds 3
@@ -193,6 +89,7 @@ jobs:
       - name: Start CVAmp_6001
         if: always()
         continue-on-error: true
+        shell: powershell -ExecutionPolicy Bypass -File "{0}"
         run: |
           $py = if ($env:PYTHON_EXE) { $env:PYTHON_EXE } else { "C:\Python313\python.exe" }
           Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6001" -RedirectStandardError "C:\temp\6001_err.log" -WindowStyle Hidden
@@ -200,6 +97,7 @@ jobs:
       - name: Start CVAmp_6002
         if: always()
         continue-on-error: true
+        shell: powershell -ExecutionPolicy Bypass -File "{0}"
         run: |
           $py = if ($env:PYTHON_EXE) { $env:PYTHON_EXE } else { "C:\Python313\python.exe" }
           Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6002" -RedirectStandardError "C:\temp\6002_err.log" -WindowStyle Hidden
@@ -207,6 +105,7 @@ jobs:
       - name: Start CVAmp_6003
         if: always()
         continue-on-error: true
+        shell: powershell -ExecutionPolicy Bypass -File "{0}"
         run: |
           $py = if ($env:PYTHON_EXE) { $env:PYTHON_EXE } else { "C:\Python313\python.exe" }
           Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6003" -RedirectStandardError "C:\temp\6003_err.log" -WindowStyle Hidden
@@ -214,18 +113,20 @@ jobs:
       - name: Wait for servers
         if: always()
         continue-on-error: true
+        shell: powershell -ExecutionPolicy Bypass -File "{0}"
         run: Start-Sleep -Seconds 10
 
       - name: Check ports listening
         if: always()
         continue-on-error: true
+        shell: powershell -ExecutionPolicy Bypass -File "{0}"
         run: |
           Write-Host "=== Listening ports ==="
           netstat -an | Select-String "LISTENING" | Select-String ":5000|:6001|:6002|:6003"
           Write-Host "=== Python processes ==="
           Get-Process python -ErrorAction SilentlyContinue | Format-Table Id,CPU,WorkingSet
           Write-Host "=== STDERR logs ==="
-          foreach ($p in @("6001","6002","6003")) {
+          foreach ($p in @("5000","6001","6002","6003")) {
             $log = "C:\temp\${p}_err.log"
             if (Test-Path $log) {
               $c = Get-Content $log -Raw
@@ -236,13 +137,14 @@ jobs:
       - name: Call /api/start on all servers
         if: always()
         continue-on-error: true
+        shell: powershell -ExecutionPolicy Bypass -File "{0}"
         run: |
           $url = "${{ github.event.inputs.youtube_url }}"
           $ports = @(5000, 6001, 6002, 6003)
           foreach ($port in $ports) {
             try {
               $body = "{`"url`":`"$url`"}"
-              Invoke-RestMethod -Uri "http://localhost:$port/api/start" -Method POST -Body $body -ContentType "application/json" -TimeoutSec 10
+              Invoke-RestMethod -Uri "http://localhost:$port/api/start" -Method POST -Body $body -ContentType "application/json" -TimeoutSec 15
               Write-Host "Started port $port"
             } catch {
               Write-Host "Port ${port} failed"
