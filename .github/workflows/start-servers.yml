@@ -82,8 +82,7 @@ jobs:
           $pp = if ($env:PYTHONPATH) { $env:PYTHONPATH } else { "E:\py_packages" }
           Write-Host "Starting CVAmp_5000 with $py PYTHONPATH=$pp"
           New-Item -Force -ItemType Directory C:\temp | Out-Null
-          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_5000" -RedirectStandardError "C:\temp\5000_err.log" -WindowStyle Hidden -Environment @{PYTHONPATH=$pp}
-          Start-Sleep -Seconds 3
+          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_5000" -RedirectStandardError "C:\temp\5000_err.log" -WindowStyle Hidden          Start-Sleep -Seconds 3
           if (Test-Path C:\temp\5000_err.log) { Write-Host "5000 STDERR:"; Get-Content C:\temp\5000_err.log }
 
       - name: Start CVAmp_6001
@@ -92,24 +91,21 @@ jobs:
         run: |
           $py = if ($env:PYTHON_EXE) { $env:PYTHON_EXE } else { "C:\Python313\python.exe" }
           $pp = if ($env:PYTHONPATH) { $env:PYTHONPATH } else { "E:\py_packages" }
-          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6001" -WindowStyle Hidden -Environment @{PYTHONPATH=$pp}
-
+          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6001" -WindowStyle Hidden
       - name: Start CVAmp_6002
         if: always()
         continue-on-error: true
         run: |
           $py = if ($env:PYTHON_EXE) { $env:PYTHON_EXE } else { "C:\Python313\python.exe" }
           $pp = if ($env:PYTHONPATH) { $env:PYTHONPATH } else { "E:\py_packages" }
-          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6002" -WindowStyle Hidden -Environment @{PYTHONPATH=$pp}
-
+          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6002" -WindowStyle Hidden
       - name: Start CVAmp_6003
         if: always()
         continue-on-error: true
         run: |
           $py = if ($env:PYTHON_EXE) { $env:PYTHON_EXE } else { "C:\Python313\python.exe" }
           $pp = if ($env:PYTHONPATH) { $env:PYTHONPATH } else { "E:\py_packages" }
-          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6003" -WindowStyle Hidden -Environment @{PYTHONPATH=$pp}
-
+          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6003" -WindowStyle Hidden
       - name: Wait for servers
         if: always()
         continue-on-error: true
