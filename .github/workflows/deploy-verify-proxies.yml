@@ -1,48 +1,48 @@
 name: Deploy and run proxy verifier
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/deploy-verify-proxies.yml'
-      - 'gauth/lib/providers/proxy/**'
+  schedule:
+    - cron: '0 */1 * * *'
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: write
+    runs-on: self-hosted
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install socks
-        run: npm install socks
+      - name: Install socks if needed
+        shell: powershell
+        run: |
+          if (!(Test-Path "node_modules/socks")) {
+            npm install socks
+          }
 
       - name: Run proxy verifier
+        shell: powershell
         run: |
           cd gauth/lib/providers/proxy
           node verify_proxies.js
 
-      - name: Show results
+      - name: Copy proxy_pool.json to CVAmp servers
+        shell: powershell
         run: |
-          node -e "
-            var d = JSON.parse(require('fs').readFileSync('gauth/proxy_pool.json','utf8'));
-            console.log('updated_at:', d.updated_at);
-            console.log('total:', d.total);
-            console.log('verified:', d.verified);
-            console.log('target:', d.target);
-            (d.proxies||[]).slice(0,5).forEach(function(p){ console.log(' ', p.server); });
-          "
+          $src = Join-Path $env:GITHUB_WORKSPACE "gauth\proxy_pool.json"
+          $ports = @(5000, 6001, 6002, 6003)
+          foreach ($port in $ports) {
+            $dir = "E:\CVAmp_$port"
+            if (Test-Path $dir) {
+              Copy-Item $src "$dir\proxy_pool.json" -Force
+              Write-Host "Copied to $dir"
+            }
+          }
 
-      - name: Commit proxy_pool.json
+      - name: Show results
+        shell: powershell
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add gauth/proxy_pool.json
-          git diff --cached --quiet || git commit -m "chore: update proxy_pool.json [skip ci]"
-          git push
+          $d = Get-Content "gauth\proxy_pool.json" | ConvertFrom-Json
+          Write-Host "updated_at: $($d.updated_at)"
+          Write-Host "total: $($d.total)"
+          Write-Host "verified: $($d.verified)"
+          Write-Host "target: $($d.target)"
+          $d.proxies | Select-Object -First 5 | ForEach-Object { Write-Host " $($_.server)" }
