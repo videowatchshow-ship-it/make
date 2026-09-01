@@ -1,0 +1,39 @@
+name: GitHub Pages — photo 뷰어 배포
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'photo/**'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: .nojekyll
+        run: touch photo/.nojekyll
+      - uses: actions/configure-pages@v4
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: photo/
+      - id: deployment
+        uses: actions/deploy-pages@v4
+      - name: URL 출력
+        run: |
+          echo "세로  : ${{ steps.deployment.outputs.page_url }}CAH_1.html?ch=<계정>"
+          echo "가로  : ${{ steps.deployment.outputs.page_url }}CAW_1.html?ch=<계정>"
+          echo "싱지뉴: ${{ steps.deployment.outputs.page_url }}SNW_1.html?ch=<계정>"

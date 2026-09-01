@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>출목표 룸 선택</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;min-height:100%;background:#0a0a0a;color:#eee;font-family:'Malgun Gothic',sans-serif}
+
+.top-bar{padding:10px 12px;background:#111;border-bottom:1px solid #222;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.top-bar h1{font-size:14px;color:#ffd54f;font-weight:bold;white-space:nowrap}
+.url-btns{display:flex;gap:6px;flex-wrap:wrap}
+.url-btn{padding:5px 11px;border-radius:4px;font-size:12px;font-weight:bold;text-decoration:none;border:1px solid;cursor:pointer;white-space:nowrap}
+.url-btn.cah{background:#1a237e22;border-color:#5c6bc0;color:#9fa8da}
+.url-btn.caw{background:#1b5e2022;border-color:#43a047;color:#a5d6a7}
+.url-btn.snw{background:#4a148c22;border-color:#ab47bc;color:#ce93d8}
+.url-btn:hover{opacity:.8}
+
+.status-bar{padding:6px 12px;background:#181818;font-size:12px;color:#888;border-bottom:1px solid #1e1e1e}
+#cur-label{color:#ffd54f;font-weight:bold}
+
+.room-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;padding:10px}
+
+.room-card{background:#141414;border:2px solid #2a2a2a;border-radius:6px;padding:6px;cursor:pointer;transition:border-color .15s}
+.room-card:hover{border-color:#555}
+.room-card.selected{border-color:#ffd54f !important;background:#1a1800}
+.room-card .room-name{font-size:11px;color:#aaa;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center}
+.room-card.selected .room-name{color:#ffd54f}
+.sel-mark{font-size:10px;color:#ffd54f;display:none}
+.room-card.selected .sel-mark{display:inline}
+.mini-road{overflow:hidden;max-width:100%;line-height:0}
+
+.m-tbl{border-collapse:collapse;table-layout:fixed}
+.m-tbl td{width:13px;height:13px;border:1px solid #1e1e1e;padding:0;vertical-align:middle;text-align:center}
+.m-p,.m-b{width:11px;height:11px;border-radius:50%;display:inline-block;position:relative}
+.m-p{background:#1565c0;border:1px solid #42a5f5}
+.m-b{background:#b71c1c;border:1px solid #ef5350}
+.m-p .mp,.m-b .bp-dot{position:absolute;width:4px;height:4px;border-radius:50%;top:0;right:0;background:#ef5350}
+.m-b .bp-dot{background:#42a5f5}
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <h1>출목표</h1>
+  <div class="url-btns" id="url-btns">
+    <a class="url-btn cah" id="btn-cah" target="_blank">세로형</a>
+    <a class="url-btn caw" id="btn-caw" target="_blank">가로형</a>
+    <a class="url-btn snw" id="btn-snw" target="_blank">싱지뉴</a>
+  </div>
+</div>
+
+<div class="status-bar">선택 중: <span id="cur-label">-</span></div>
+
+<div class="room-grid" id="room-grid"></div>
+
+<script src="bgl.js"></script>
+<script>
+(function(){
+  'use strict';
+  const API   = 'https://gauth.cent-solution.online/photo';
+  const ROWS  = 6;
+  const ch    = new URLSearchParams(location.search).get('ch') || 'cent';
+  const BASE  = location.origin + location.pathname.replace('select.html','');
+
+  document.getElementById('btn-cah').href = BASE + 'CAH_1.html?ch=' + ch;
+  document.getElementById('btn-caw').href = BASE + 'CAW_1.html?ch=' + ch;
+  document.getElementById('btn-snw').href = BASE + 'SNW_1.html?ch=' + ch;
+
+  let tables   = null;
+  let selRoomId= null;
+
+  function miniRoad(nums){
+    const bld = window.BGL && window.BGL.buildBigRoad;
+    const grid = bld ? bld(nums) : buildMini(nums);
+    const cols  = Math.min(grid.length + 2, 12);
+    let h = '<table class="m-tbl"><tbody>';
+    for(let r=0;r<ROWS;r++){
+      h += '<tr>';
+      for(let c=0;c<cols;c++){
+        const cell = grid[c] && grid[c][r];
+        if(cell){
+          const cls = cell.type==='P'?'m-p':'m-b';
+          const dot = cell.bp?'<span class="bp-dot"></span>':(cell.pp?'<span class="mp"></span>':'');
+          h += `<td><div class="${cls}">${dot}</div></td>`;
+        } else {
+          h += '<td></td>';
+        }
+      }
+      h += '</tr>';
+    }
+    return h + '</tbody></table>';
+  }
+
+  function buildMini(nums){
+    const grid=[]; let col=-1,row=0,last=null;
+    for(const n of (nums||[])){
+      if(!n||n.length<3)continue;
+      const t=n[0],bp=n[1]==='1',pp=n[2]==='1';
+      if(t==='T'){if(col>=0&&grid[col].length>0)grid[col][grid[col].length-1].ties=(grid[col][grid[col].length-1].ties||0)+1;continue;}
+      if(t!==last||col<0){col++;grid[col]=[];row=0;last=t;}
+      else{row++;if(row>=ROWS){col++;grid[col]=[];row=0;}}
+      while(grid[col].length<row)grid[col].push(null);
+      grid[col][row]={type:t,bp,pp,ties:0};
+    }
+    return grid;
+  }
+
+  async function selectRoom(roomId, label){
+    selRoomId = roomId;
+    updateSelected();
+    try{
+      await fetch(`${API}/write_select_room.php`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ch, room_id: roomId})
+      });
+    }catch(_){}
+    document.getElementById('cur-label').textContent = label || roomId;
+  }
+
+  function updateSelected(){
+    document.querySelectorAll('.room-card').forEach(c=>{
+      c.classList.toggle('selected', c.dataset.roomId === String(selRoomId));
+    });
+  }
+
+  async function pollSelected(){
+    try{
+      const r = await fetch(`${API}/api_selected_room.php?ch=${ch}&_=${Date.now()}`,{cache:'no-store'});
+      if(!r.ok)return;
+      const d = await r.json();
+      if(d.room_id && d.room_id !== selRoomId){
+        selRoomId = d.room_id;
+        updateSelected();
+        const card = document.querySelector(`.room-card[data-room-id="${selRoomId}"]`);
+        if(card) document.getElementById('cur-label').textContent = card.dataset.label || selRoomId;
+      }
+    }catch(_){}
+  }
+
+  async function buildCard(roomId, label){
+    const card = document.createElement('div');
+    card.className = 'room-card';
+    card.dataset.roomId = String(roomId);
+    card.dataset.label  = label;
+    card.innerHTML = `<div class="room-name"><span>${label}</span><span class="sel-mark">✔</span></div><div class="mini-road">로딩중…</div>`;
+    card.addEventListener('click', ()=> selectRoom(roomId, label));
+
+    const miniEl = card.querySelector('.mini-road');
+    try{
+      const r = await fetch(`${API}/data/room_${roomId}.json?_=${Date.now()}`,{cache:'no-store'});
+      if(r.ok){
+        const d = await r.json();
+        miniEl.innerHTML = miniRoad(d.nums||[]);
+      } else {
+        miniEl.innerHTML = '<span style="font-size:10px;color:#555">데이터 없음</span>';
+      }
+    }catch(_){
+      miniEl.innerHTML = '<span style="font-size:10px;color:#555">오류</span>';
+    }
+    return card;
+  }
+
+  async function init(){
+    try{
+      const r = await fetch(`${API}/data/tables.json?_=${Date.now()}`,{cache:'no-store'});
+      tables = r.ok ? await r.json() : null;
+    }catch(_){}
+
+    if(!tables){
+      document.getElementById('room-grid').innerHTML = '<p style="padding:20px;color:#555">룸 정보를 불러올 수 없습니다.</p>';
+      return;
+    }
+
+    await pollSelected();
+
+    const grid = document.getElementById('room-grid');
+    grid.innerHTML = '';
+
+    const xtdIds  = tables.xtd  || [];
+    const xtdMap  = tables.xtd_map  || {};
+    const xtdKind = tables.xtd_kind || {};
+
+    const promises = xtdIds.map(id => {
+      const kind  = xtdKind[String(id)] || '';
+      const label = `방 ${id}${kind?' ('+kind+')':''}`;
+      return buildCard(id, label).then(card => grid.appendChild(card));
+    });
+
+    await Promise.all(promises);
+    updateSelected();
+
+    setInterval(pollSelected, 3000);
+    setInterval(()=>{
+      document.querySelectorAll('.room-card').forEach(async card=>{
+        const roomId = card.dataset.roomId;
+        const miniEl = card.querySelector('.mini-road');
+        try{
+          const r = await fetch(`${API}/data/room_${roomId}.json?_=${Date.now()}`,{cache:'no-store'});
+          if(r.ok){const d=await r.json();miniEl.innerHTML=miniRoad(d.nums||[]);}
+        }catch(_){}
+      });
+    }, 30000);
+  }
+
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>

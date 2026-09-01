@@ -1,0 +1,35 @@
+name: Inspect accounts.html
+on:
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read accounts.html from server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            echo "=== accounts.html location ==="
+            sudo find /var/www/sites/gauth -name "accounts.html" -type f 2>/dev/null
+            echo ""
+
+            echo "=== accounts.html content ==="
+            sudo cat /var/www/sites/gauth/public/accounts.html 2>/dev/null || echo "NOT FOUND in public/"
+            echo ""
+
+            echo "=== Related server routes (login/accounts) ==="
+            sudo grep -n "login\|accounts\|oauth\|signup\|register" /opt/gauth-full/rebrowser-login.js 2>/dev/null | head -40
+            echo ""
+
+            echo "=== OAuth/Google API related ==="
+            sudo grep -rn "googleapis\|oauth\|client_id\|youtube" /var/www/sites/gauth/public/ 2>/dev/null | head -30
+            echo ""
+
+            echo "=== login-results API ==="
+            sudo grep -n "login-result\|login_result\|loginResult" /opt/gauth-full/rebrowser-login.js 2>/dev/null | head -20
