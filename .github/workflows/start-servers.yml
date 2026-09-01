@@ -46,49 +46,49 @@ jobs:
           Write-Host "=== python.exe candidates found ==="
           $candidates | ForEach-Object { Write-Host "  $_" }
 
-          $found = $null
+          # Test flask and psutil SEPARATELY for each python.
+          # psutil is a C-extension (version-locked); flask is pure-python (portable via PYTHONPATH).
+          $withBoth = $null
+          $withPsutil = @()   # pythons that can import psutil
+          $flaskDirs = @()    # site-packages dirs that contain flask (from pythons that have flask)
           foreach ($p in $candidates) {
-            if (Test-Path $p) {
-              $ok = & $p -c "import flask, psutil; print('OK')" 2>&1
-              if ($LASTEXITCODE -eq 0) {
-                Write-Host "WORKING (flask+psutil): $p"
-                if (-not $found) { $found = $p }
-              } else {
-                Write-Host "missing deps: $p"
-              }
+            if (-not (Test-Path $p)) { continue }
+            & $p -c "import psutil" 2>$null; $ps = ($LASTEXITCODE -eq 0)
+            & $p -c "import flask"  2>$null; $fl = ($LASTEXITCODE -eq 0)
+            Write-Host ("psutil={0} flask={1}  {2}" -f $ps, $fl, $p)
+            if ($ps -and $fl -and -not $withBoth) { $withBoth = $p }
+            if ($ps) { $withPsutil += $p }
+            if ($fl) {
+              $d = & $p -c "import os,flask; print(os.path.dirname(os.path.dirname(flask.__file__)))" 2>$null
+              if ($d -and (Test-Path $d)) { $flaskDirs += $d }
             }
           }
+
+          $found = $null
+          if ($withBoth) {
+            Write-Host "FOUND python with BOTH: $withBoth"
+            $found = $withBoth
+          }
+          elseif ($withPsutil.Count -gt 0 -and $flaskDirs.Count -gt 0) {
+            # Combine: python that has psutil + flask supplied via PYTHONPATH from another install.
+            foreach ($pp in $withPsutil) {
+              foreach ($fd in ($flaskDirs | Select-Object -Unique)) {
+                $env:PYTHONPATH = $fd
+                & $pp -c "import flask, psutil; print('COMBINE OK')" 2>$null
+                if ($LASTEXITCODE -eq 0) {
+                  Write-Host "COMBINE WORKS: python=$pp  flaskFrom=$fd"
+                  $found = $pp
+                  echo "PYTHONPATH=$fd" >> $env:GITHUB_ENV
+                  break
+                }
+              }
+              if ($found) { break }
+            }
+          }
+
           if (-not $found) {
-            Write-Host "No python with deps on disk. Attempting to install into C:\Python313..."
-            $py = "C:\Python313\python.exe"
-            $tgt = "E:\py_packages"
-            New-Item -Force -ItemType Directory $tgt | Out-Null
-
-            Write-Host "--- pip --version ---"
-            & $py -m pip --version 2>&1 | ForEach-Object { Write-Host $_ }
-            Write-Host "pip exit=$LASTEXITCODE"
-
-            if ($LASTEXITCODE -ne 0) {
-              Write-Host "--- ensurepip ---"
-              & $py -m ensurepip --upgrade 2>&1 | ForEach-Object { Write-Host $_ }
-              Write-Host "ensurepip exit=$LASTEXITCODE"
-            }
-
-            Write-Host "--- pip install flask psutil --target $tgt (FULL OUTPUT) ---"
-            & $py -m pip install --target $tgt flask psutil --no-warn-script-location 2>&1 | ForEach-Object { Write-Host $_ }
-            Write-Host "install exit=$LASTEXITCODE"
-
-            $env:PYTHONPATH = $tgt
-            Write-Host "--- verify import with PYTHONPATH=$tgt ---"
-            & $py -c "import flask, psutil; print('IMPORT OK', psutil.__version__)" 2>&1 | ForEach-Object { Write-Host $_ }
-            if ($LASTEXITCODE -eq 0) {
-              Write-Host "INSTALL SUCCESS -> using $py with PYTHONPATH=$tgt"
-              $found = $py
-              echo "PYTHONPATH=$tgt" >> $env:GITHUB_ENV
-            } else {
-              Write-Host "FATAL: install failed. Using C:\Python313 (will fail import)."
-              $found = $py
-            }
+            Write-Host "FATAL: could not assemble flask+psutil. psutilPythons=$($withPsutil.Count) flaskDirs=$($flaskDirs.Count)"
+            $found = "C:\Python313\python.exe"
           }
           Write-Host "SELECTED python: $found"
           echo "PYTHON_EXE=$found" >> $env:GITHUB_ENV
