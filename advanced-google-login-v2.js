@@ -24,6 +24,40 @@ const path = require('path');
 // ✅ 공식 Stealth 플러그인 사용
 puppeteer.use(StealthPlugin());
 
+// 전역 브라우저 인스턴스 추적 (좀비 프로세스 방지)
+const _activeBrowsers = new Set();
+
+async function _cleanupAllBrowsers() {
+    const browsers = [..._activeBrowsers];
+    _activeBrowsers.clear();
+    await Promise.allSettled(browsers.map(b => b.close()));
+}
+
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    process.on(sig, async () => {
+        await _cleanupAllBrowsers();
+        process.exit(0);
+    });
+}
+
+process.on('uncaughtException', async (err) => {
+    console.error('uncaughtException:', err.message);
+    await _cleanupAllBrowsers();
+    process.exit(1);
+});
+
+process.on('unhandledRejection', async (reason) => {
+    console.error('unhandledRejection:', reason);
+    await _cleanupAllBrowsers();
+    process.exit(1);
+});
+
+async function _closeBrowser(browser) {
+    if (!browser) return;
+    _activeBrowsers.delete(browser);
+    try { await browser.close(); } catch (_) {}
+}
+
 // 색상
 const c = {
     reset: '\x1b[0m',
@@ -384,6 +418,7 @@ async function advancedGoogleLogin(account, options = {}) {
         }
 
         browser = await puppeteer.launch(launchOpts);
+        _activeBrowsers.add(browser);
 
         page = (await browser.pages())[0] || await browser.newPage();
 
@@ -467,7 +502,7 @@ async function advancedGoogleLogin(account, options = {}) {
             if (state.state === 'CAPTCHA') {
                 console.log(`${c.red}✗ reCAPTCHA 미해결${c.reset}\n`);
                 saveFailedLogin(account, LoginResult.FAIL_CAPTCHA, 'reCAPTCHA 미해결');
-                await browser.close();
+                await _closeBrowser(browser);
                 return { success: false, result: LoginResult.FAIL_CAPTCHA };
             }
         }
@@ -477,7 +512,7 @@ async function advancedGoogleLogin(account, options = {}) {
             console.log(`${c.red}✗ 전화번호 인증 필요 - 로그인 불가${c.reset}\n`);
             await page.screenshot({ path: path.join(FAILED_LOGS_DIR, `${sanitizeEmail(account.email)}_phone.png`) });
             saveFailedLogin(account, LoginResult.FAIL_PHONE_VERIFICATION, '전화번호 인증 필요', `${sanitizeEmail(account.email)}_phone.png`);
-            await browser.close();
+            await _closeBrowser(browser);
             return { success: false, result: LoginResult.FAIL_PHONE_VERIFICATION };
         }
 
@@ -523,7 +558,7 @@ async function advancedGoogleLogin(account, options = {}) {
             console.log(`${c.red}✗ 패스키/기기승인 필요 — 자동화 불가${c.reset}\n`);
             await page.screenshot({ path: path.join(FAILED_LOGS_DIR, `${sanitizeEmail(account.email)}_passkey.png`) }).catch(() => {});
             saveFailedLogin(account, 'PASSKEY_REQUIRED', '패스키 또는 기기승인 필요');
-            await browser.close();
+            await _closeBrowser(browser);
             return { success: false, result: 'PASSKEY_REQUIRED' };
         }
 
@@ -540,7 +575,7 @@ async function advancedGoogleLogin(account, options = {}) {
             if (!totpCode) {
                 console.log(`${c.red}✗ TOTP 코드 생성 실패${c.reset}\n`);
                 saveFailedLogin(account, LoginResult.FAIL_WRONG_2FA, 'TOTP 생성 실패');
-                await browser.close();
+                await _closeBrowser(browser);
                 return { success: false, result: LoginResult.FAIL_WRONG_2FA };
             }
 
@@ -564,7 +599,7 @@ async function advancedGoogleLogin(account, options = {}) {
         } else if (twoFASelector && !account.twoFA) {
             console.log(`${c.red}✗ 2FA 필요하지만 시크릿 키 없음${c.reset}\n`);
             saveFailedLogin(account, LoginResult.FAIL_WRONG_2FA, '2FA 시크릿 키 없음');
-            await browser.close();
+            await _closeBrowser(browser);
             return { success: false, result: LoginResult.FAIL_WRONG_2FA };
         }
 
@@ -615,7 +650,7 @@ async function advancedGoogleLogin(account, options = {}) {
             console.log(`${c.red}✗ 로그인 실패 (알 수 없는 상태)${c.reset}\n`);
             await page.screenshot({ path: path.join(FAILED_LOGS_DIR, `${sanitizeEmail(account.email)}_unknown.png`) });
             saveFailedLogin(account, LoginResult.FAIL_UNKNOWN, `URL: ${currentUrl}`, `${sanitizeEmail(account.email)}_unknown.png`);
-            await browser.close();
+            await _closeBrowser(browser);
             return { success: false, result: LoginResult.FAIL_UNKNOWN };
         }
 
@@ -629,7 +664,7 @@ async function advancedGoogleLogin(account, options = {}) {
         const errResult = error.message && error.message.includes('timeout') ? LoginResult.FAIL_TIMEOUT : LoginResult.UNKNOWN_ERROR;
         saveFailedLogin(account, errResult, error.message, `${sanitizeEmail(account.email)}_error.png`);
         
-        if (browser) await browser.close();
+        if (browser) await _closeBrowser(browser);
         
         return { success: false, result: LoginResult.FAIL_TIMEOUT, error: error.message };
     }
@@ -657,7 +692,7 @@ async function loginMultipleWithTracking(accounts, options = {}) {
 
         if (result.success) {
             results.success.push({ email: account.email, result: result.result });
-            if (result.browser) try { await result.browser.close(); } catch (_) {}
+            if (result.browser) await _closeBrowser(result.browser);
         } else {
             results.failed.push({ email: account.email, result: result.result, error: result.error });
         }
