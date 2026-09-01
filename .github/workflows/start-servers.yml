@@ -53,27 +53,6 @@ jobs:
           Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
           Start-Sleep -Seconds 2
 
-      - name: Fix CVAmp_6003 IndentationError
-        if: always()
-        continue-on-error: true
-        shell: powershell -ExecutionPolicy Bypass -File "{0}"
-        run: |
-          $path = "E:\CVAmp_6003\app.py"
-          if (Test-Path $path) {
-            $lines = Get-Content $path
-            $out = [System.Collections.Generic.List[string]]::new()
-            $skip = 0
-            foreach ($line in $lines) {
-              if ($skip -gt 0) { $skip--; continue }
-              if ($line.TrimStart() -eq "try:") { $skip = 5; continue }
-              $out.Add($line)
-            }
-            [System.IO.File]::WriteAllLines($path, $out, [System.Text.UTF8Encoding]::new($false))
-            Write-Host "Fixed: $path"
-          } else {
-            Write-Host "File not found: $path"
-          }
-
       - name: Start CVAmp_5000
         if: always()
         continue-on-error: true
