@@ -34,9 +34,13 @@ jobs:
         id: cf_ip
         env:
           CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
-          CF_ZONE:  ${{ secrets.CLOUDFLARE_ZONE_ID }}
         run: |
           # ref: https://developers.cloudflare.com/api/resources/dns/subresources/records/methods/list/
+          # Zone ID 자동 조회
+          CF_ZONE=$(curl -fsSL \
+            "https://api.cloudflare.com/client/v4/zones?name=cent-solution.online" \
+            -H "Authorization: Bearer ${CF_TOKEN}" | python3 -c "import sys,json; r=json.load(sys.stdin)['result']; print(r[0]['id'] if r else '')" 2>/dev/null)
+          echo "Zone ID: $CF_ZONE"
           RECORDS=$(curl -fsSL \
             "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?type=A&name=gauth.cent-solution.online" \
             -H "Authorization: Bearer ${CF_TOKEN}")
