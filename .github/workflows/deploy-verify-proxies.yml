@@ -6,94 +6,43 @@ on:
     paths:
       - '.github/workflows/deploy-verify-proxies.yml'
       - 'gauth/lib/providers/proxy/**'
-      - 'gauth/auto_deploy.js'
 
 jobs:
-  deploy:
+  verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: write
     steps:
-      - name: Try HTTP API (fast path)
-        id: api
-        continue-on-error: true
-        env:
-          GAUTH_API_TOKEN: ${{ secrets.GAUTH_API_TOKEN }}
-        run: |
-          HTTP=$(curl -s -o /tmp/resp.txt -w "%{http_code}" \
-            -X POST https://gauth.cent-solution.online/api/deploy \
-            -H "Authorization: Bearer ${GAUTH_API_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d '{"branch":"main"}' \
-            --connect-timeout 10 --max-time 60)
-          echo "HTTP $HTTP"
-          cat /tmp/resp.txt || true
-          [ "$HTTP" = "200" ] && echo "ok=true" >> "$GITHUB_OUTPUT" || echo "ok=false" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
 
-      - name: Get real origin IP from Cloudflare DNS
-        if: steps.api.outputs.ok != 'true'
-        id: cf_ip
-        env:
-          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
-        run: |
-          # ref: https://developers.cloudflare.com/api/resources/dns/subresources/records/methods/list/
-          # Zone ID 자동 조회
-          CF_ZONE=$(curl -fsSL \
-            "https://api.cloudflare.com/client/v4/zones?name=cent-solution.online" \
-            -H "Authorization: Bearer ${CF_TOKEN}" | python3 -c "import sys,json; r=json.load(sys.stdin)['result']; print(r[0]['id'] if r else '')" 2>/dev/null)
-          echo "Zone ID: $CF_ZONE"
-          RECORDS=$(curl -fsSL \
-            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?type=A&name=gauth.cent-solution.online" \
-            -H "Authorization: Bearer ${CF_TOKEN}")
-          echo "$RECORDS"
-          IP=$(echo "$RECORDS" | python3 -c "import sys,json; r=json.load(sys.stdin)['result']; print(r[0]['content'] if r else '')" 2>/dev/null)
-          echo "origin_ip=$IP" >> "$GITHUB_OUTPUT"
-          echo "Gauth origin IP: $IP"
-
-      - name: SSH deploy using real origin IP
-        if: steps.api.outputs.ok != 'true' && steps.cf_ip.outputs.origin_ip != ''
-        uses: appleboy/ssh-action@v1.0.3
+      - uses: actions/setup-node@v4
         with:
-          host: ${{ steps.cf_ip.outputs.origin_ip }}
-          username: ${{ secrets.GAUTH_USER }}
-          key: ${{ secrets.GAUTH_SSH_KEY }}
-          command_timeout: 10m
-          script: |
-            set -e
-            cd /opt/gauth-full
-            mkdir -p lib/providers/proxy
+          node-version: '20'
 
-            BASE="https://raw.githubusercontent.com/videowatchshow-ship-it/make/main/gauth/lib/providers/proxy"
-            curl -fsSL "$BASE/verify_proxies.js" -o lib/providers/proxy/verify_proxies.js
-            curl -fsSL "$BASE/fetch_free.js"     -o lib/providers/proxy/fetch_free.js
+      - name: Install socks
+        run: npm install socks
 
-            if ! node -e "require('socks')" 2>/dev/null; then
-              npm install socks --save 2>&1 | tail -3
-            else
-              echo "socks: $(node -e "console.log(require('socks/package.json').version)")"
-            fi
-
-            echo "=== verify_proxies.js 실행 ==="
-            node lib/providers/proxy/verify_proxies.js
-
-            echo ""
-            echo "=== proxy_pool.json 결과 ==="
-            node -e "
-              var d = JSON.parse(require('fs').readFileSync('proxy_pool.json','utf8'));
-              console.log('updated_at:', d.updated_at);
-              console.log('total:', d.total);
-              console.log('verified:', d.verified);
-              console.log('target:', d.target);
-              (d.proxies||[]).slice(0,5).forEach(function(p){ console.log(' ', p.server); });
-            "
-
-      - name: Run verify via API (if deploy succeeded via API)
-        if: steps.api.outputs.ok == 'true'
-        env:
-          GAUTH_API_TOKEN: ${{ secrets.GAUTH_API_TOKEN }}
+      - name: Run proxy verifier
         run: |
-          curl -fsSL -X POST https://gauth.cent-solution.online/api/run-verify-proxies \
-            -H "Authorization: Bearer ${GAUTH_API_TOKEN}"
-          echo "Verifier started. Waiting 90s..."
-          sleep 90
-          curl -fsSL https://gauth.cent-solution.online/api/proxy-pool-status \
-            -H "Authorization: Bearer ${GAUTH_API_TOKEN}"
+          cd gauth/lib/providers/proxy
+          node verify_proxies.js
+
+      - name: Show results
+        run: |
+          node -e "
+            var d = JSON.parse(require('fs').readFileSync('gauth/proxy_pool.json','utf8'));
+            console.log('updated_at:', d.updated_at);
+            console.log('total:', d.total);
+            console.log('verified:', d.verified);
+            console.log('target:', d.target);
+            (d.proxies||[]).slice(0,5).forEach(function(p){ console.log(' ', p.server); });
+          "
+
+      - name: Commit proxy_pool.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add gauth/proxy_pool.json
+          git diff --cached --quiet || git commit -m "chore: update proxy_pool.json [skip ci]"
+          git push
