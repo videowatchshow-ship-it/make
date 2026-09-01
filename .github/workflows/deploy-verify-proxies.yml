@@ -15,24 +15,34 @@ jobs:
           GIT_CONFIG_NOSYSTEM: "1"
 
       - name: Install socks if needed
-        shell: powershell
+        shell: powershell -ExecutionPolicy Bypass -File "{0}"
         run: |
-          if (!(Test-Path "node_modules/socks")) {
-            npm install socks
+          $ErrorActionPreference = 'Continue'
+          $npmCmds = @("npm", "C:\Program Files\nodejs\npm.cmd", "C:\nodejs\npm.cmd")
+          $npm = $null
+          foreach ($cmd in $npmCmds) {
+            try { & $cmd --version 2>$null | Out-Null; $npm = $cmd; break } catch {}
+          }
+          if (-not $npm) { Write-Host "npm not found, skip"; exit 0 }
+          $ok = node -e "require('socks')" 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Installing socks..."
+            & $npm install socks --prefix . 2>&1 | ForEach-Object { Write-Host $_ }
+          } else {
+            Write-Host "socks already available"
           }
 
       - name: Run proxy verifier
-        shell: powershell
+        shell: powershell -ExecutionPolicy Bypass -File "{0}"
         run: |
-          cd gauth/lib/providers/proxy
+          Set-Location "gauth/lib/providers/proxy"
           node verify_proxies.js
 
       - name: Copy proxy_pool.json to CVAmp servers
-        shell: powershell
+        shell: powershell -ExecutionPolicy Bypass -File "{0}"
         run: |
           $src = Join-Path $env:GITHUB_WORKSPACE "gauth\proxy_pool.json"
-          $ports = @(5000, 6001, 6002, 6003)
-          foreach ($port in $ports) {
+          foreach ($port in @(5000, 6001)) {
             $dir = "E:\CVAmp_$port"
             if (Test-Path $dir) {
               Copy-Item $src "$dir\proxy_pool.json" -Force
