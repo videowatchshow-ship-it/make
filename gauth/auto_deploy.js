@@ -196,12 +196,16 @@ module.exports = function(app) {
         { src: 'gauth/sw.js', dst: path.join(FRONTEND_DIR, 'sw.js') },
         { src: 'advanced-google-login-v2.js', dst: path.join(DATA_DIR, 'advanced-google-login-v2.js') },
         { src: 'package.json', dst: path.join(DATA_DIR, 'package.json') },
+        { src: 'gauth/lib/providers/proxy/verify_proxies.js', dst: path.join(DATA_DIR, 'lib/providers/proxy/verify_proxies.js') },
+        { src: 'gauth/lib/providers/proxy/fetch_free.js', dst: path.join(DATA_DIR, 'lib/providers/proxy/fetch_free.js') },
+        { src: 'gauth/lib/providers/proxy/index.js', dst: path.join(DATA_DIR, 'lib/providers/proxy/index.js') },
       ];
 
       const deployed = [];
       for (const m of fileMappings) {
         const srcPath = path.join(repoDir, m.src);
         if (fs.existsSync(srcPath)) {
+          fs.mkdirSync(path.dirname(m.dst), { recursive: true });
           fs.copyFileSync(srcPath, m.dst);
           deployed.push(path.basename(m.dst));
         }
@@ -275,6 +279,33 @@ module.exports = function(app) {
       console.error('[deploy] error:', e.message);
       res.status(500).json({ ok: false, error: 'deploy failed' });
     }
+  });
+
+  app.get('/api/proxy-pool-status', authMiddleware, (req, res) => {
+    try {
+      const poolPath = path.join(DATA_DIR, 'proxy_pool.json');
+      if (!fs.existsSync(poolPath)) return res.json({ ok: false, error: 'proxy_pool.json not found' });
+      const d = JSON.parse(fs.readFileSync(poolPath, 'utf8'));
+      res.json({ ok: true, updated_at: d.updated_at, total: d.total, verified: d.verified, target: d.target,
+        sample: (d.proxies || []).slice(0, 5).map(p => p.server) });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+
+  app.post('/api/run-verify-proxies', authMiddleware, (req, res) => {
+    const verifierPath = path.join(DATA_DIR, 'lib/providers/proxy/verify_proxies.js');
+    if (!fs.existsSync(verifierPath)) {
+      return res.status(404).json({ ok: false, error: 'verify_proxies.js not found — run /api/deploy first' });
+    }
+    res.json({ ok: true, message: 'proxy verification started' });
+    const { execFile } = require('child_process');
+    const outLog = path.join(DATA_DIR, 'proxy_verify.log');
+    const out = fs.openSync(outLog, 'w');
+    /* ref: https://nodejs.org/api/child_process.html#child_processexecfilefile-args-options-callback */
+    execFile(process.execPath, [verifierPath], { cwd: DATA_DIR, timeout: 180000 }, (err, stdout, stderr) => {
+      fs.closeSync(out);
+      if (err) console.error('[run-verify-proxies] error:', err.message);
+      else console.log('[run-verify-proxies] done');
+    });
   });
 
   app.post('/api/update-secret', authMiddleware, (req, res) => {
