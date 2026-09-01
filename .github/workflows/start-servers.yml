@@ -16,7 +16,50 @@ jobs:
       run:
         shell: powershell -ExecutionPolicy Bypass -File "{0}"
     steps:
+      - name: Find working python (before killing anything)
+        if: always()
+        continue-on-error: true
+        run: |
+          # The already-running python processes prove a python with flask+psutil exists.
+          # Grab its ExecutablePath BEFORE we kill them.
+          $running = Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |
+            Where-Object { $_.ExecutablePath } |
+            Select-Object -ExpandProperty ExecutablePath -Unique
+          Write-Host "Running python executables:"
+          $running | ForEach-Object { Write-Host "  $_" }
+
+          $candidates = @()
+          $candidates += $running
+          $candidates += @(
+            "E:\CVAmp_5000\venv\Scripts\python.exe",
+            "E:\CVAmp_6001\venv\Scripts\python.exe",
+            "C:\Python313\python.exe",
+            "C:\Python312\python.exe",
+            "C:\Python311\python.exe"
+          )
+
+          $found = $null
+          foreach ($p in $candidates) {
+            if ($p -and (Test-Path $p)) {
+              & $p -c "import flask, psutil" 2>$null
+              if ($LASTEXITCODE -eq 0) {
+                Write-Host "WORKING python (flask+psutil): $p"
+                $found = $p
+                break
+              } else {
+                Write-Host "no flask/psutil: $p"
+              }
+            }
+          }
+          if (-not $found) {
+            Write-Host "WARNING: no python with flask+psutil found; falling back to first running python"
+            if ($running) { $found = @($running)[0] } else { $found = "C:\Python313\python.exe" }
+          }
+          Write-Host "SELECTED python: $found"
+          echo "PYTHON_EXE=$found" >> $env:GITHUB_ENV
+
       - name: Stop existing python processes
+        if: always()
         continue-on-error: true
         run: |
           Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
@@ -42,47 +85,15 @@ jobs:
             Write-Host "File not found: $path"
           }
 
-      - name: Install packages and find python
-        if: always()
-        continue-on-error: true
-        run: |
-          $target = "E:\py_packages"
-          New-Item -Force -ItemType Directory $target | Out-Null
-          $candidates = @(
-            "E:\CVAmp_5000\venv\Scripts\python.exe",
-            "G:\Program Files\Python313\python.exe",
-            "F:\python313\python.exe",
-            "F:\Python313\python.exe",
-            "C:\Program Files\Python313\python.exe",
-            "C:\Python312\python.exe",
-            "F:\Python312\python.exe",
-            "E:\Python314\python.exe",
-            "C:\Python313\python.exe"
-          )
-          $found = $null
-          foreach ($p in $candidates) {
-            if (Test-Path $p) { $found = $p; break }
-          }
-          if (-not $found) { $found = "C:\Python313\python.exe" }
-          Write-Host "Using python: $found"
-          Write-Host "Installing flask+psutil to $target..."
-          & $found -m pip install flask psutil --target $target --quiet 2>&1
-          Write-Host "pip exit=$LASTEXITCODE"
-          $env:PYTHONPATH = $target
-          & $found -c "import flask,psutil; print('OK')" 2>&1
-          Write-Host "import test exit=$LASTEXITCODE"
-          echo "PYTHON_EXE=$found" >> $env:GITHUB_ENV
-          echo "PYTHONPATH=$target" >> $env:GITHUB_ENV
-
       - name: Start CVAmp_5000
         if: always()
         continue-on-error: true
         run: |
           $py = if ($env:PYTHON_EXE) { $env:PYTHON_EXE } else { "C:\Python313\python.exe" }
-          $pp = if ($env:PYTHONPATH) { $env:PYTHONPATH } else { "E:\py_packages" }
-          Write-Host "Starting CVAmp_5000 with $py PYTHONPATH=$pp"
+          Write-Host "Starting CVAmp_5000 with $py"
           New-Item -Force -ItemType Directory C:\temp | Out-Null
-          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_5000" -RedirectStandardError "C:\temp\5000_err.log" -WindowStyle Hidden          Start-Sleep -Seconds 3
+          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_5000" -RedirectStandardError "C:\temp\5000_err.log" -WindowStyle Hidden
+          Start-Sleep -Seconds 3
           if (Test-Path C:\temp\5000_err.log) { Write-Host "5000 STDERR:"; Get-Content C:\temp\5000_err.log }
 
       - name: Start CVAmp_6001
@@ -90,22 +101,22 @@ jobs:
         continue-on-error: true
         run: |
           $py = if ($env:PYTHON_EXE) { $env:PYTHON_EXE } else { "C:\Python313\python.exe" }
-          $pp = if ($env:PYTHONPATH) { $env:PYTHONPATH } else { "E:\py_packages" }
-          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6001" -WindowStyle Hidden
+          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6001" -RedirectStandardError "C:\temp\6001_err.log" -WindowStyle Hidden
+
       - name: Start CVAmp_6002
         if: always()
         continue-on-error: true
         run: |
           $py = if ($env:PYTHON_EXE) { $env:PYTHON_EXE } else { "C:\Python313\python.exe" }
-          $pp = if ($env:PYTHONPATH) { $env:PYTHONPATH } else { "E:\py_packages" }
-          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6002" -WindowStyle Hidden
+          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6002" -RedirectStandardError "C:\temp\6002_err.log" -WindowStyle Hidden
+
       - name: Start CVAmp_6003
         if: always()
         continue-on-error: true
         run: |
           $py = if ($env:PYTHON_EXE) { $env:PYTHON_EXE } else { "C:\Python313\python.exe" }
-          $pp = if ($env:PYTHONPATH) { $env:PYTHONPATH } else { "E:\py_packages" }
-          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6003" -WindowStyle Hidden
+          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6003" -RedirectStandardError "C:\temp\6003_err.log" -WindowStyle Hidden
+
       - name: Wait for servers
         if: always()
         continue-on-error: true
@@ -119,6 +130,14 @@ jobs:
           netstat -an | Select-String "LISTENING" | Select-String ":5000|:6001|:6002|:6003"
           Write-Host "=== Python processes ==="
           Get-Process python -ErrorAction SilentlyContinue | Format-Table Id,CPU,WorkingSet
+          Write-Host "=== STDERR logs ==="
+          foreach ($p in @("6001","6002","6003")) {
+            $log = "C:\temp\${p}_err.log"
+            if (Test-Path $log) {
+              $c = Get-Content $log -Raw
+              if ($c) { Write-Host "--- $p STDERR ---"; Write-Host $c }
+            }
+          }
 
       - name: Call /api/start on all servers
         if: always()
