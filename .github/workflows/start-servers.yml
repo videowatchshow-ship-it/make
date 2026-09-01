@@ -41,16 +41,26 @@ jobs:
             Write-Host "File not found: $path"
           }
 
+      - name: Diagnose CVAmp_5000 startup
+        if: always()
+        shell: powershell
+        continue-on-error: true
+        run: |
+          cd E:\CVAmp_5000
+          $p = Start-Process python -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_5000" -RedirectStandardOutput "C:\temp\5000_out.log" -RedirectStandardError "C:\temp\5000_err.log" -PassThru -WindowStyle Hidden
+          Start-Sleep -Seconds 5
+          Write-Host "=== STDOUT ==="
+          if (Test-Path C:\temp\5000_out.log) { Get-Content C:\temp\5000_out.log }
+          Write-Host "=== STDERR ==="
+          if (Test-Path C:\temp\5000_err.log) { Get-Content C:\temp\5000_err.log }
+          Write-Host "=== Process alive: $(-not $p.HasExited) ==="
+
       - name: Start CVAmp_5000
         if: always()
         shell: powershell
         continue-on-error: true
         run: |
-          $log = "C:\temp\cvamp_5000.log"
-          New-Item -Force -ItemType Directory C:\temp | Out-Null
-          Start-Process python -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_5000" -RedirectStandardError $log -WindowStyle Hidden
-          Start-Sleep -Seconds 3
-          if (Test-Path $log) { Get-Content $log | Write-Host }
+          Start-Process python -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_5000" -WindowStyle Hidden
 
       - name: Start CVAmp_6001
         if: always()
