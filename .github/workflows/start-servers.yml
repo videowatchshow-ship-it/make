@@ -15,8 +15,9 @@ jobs:
     steps:
       - name: Stop existing python processes
         shell: powershell
+        continue-on-error: true
         run: |
-          Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force
+          Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
           Start-Sleep -Seconds 2
 
       - name: Fix CVAmp_6003 IndentationError
