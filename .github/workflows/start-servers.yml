@@ -64,12 +64,28 @@ jobs:
           if (Test-Path C:\temp\5000_out.log) { Write-Host "STDOUT:"; Get-Content C:\temp\5000_out.log }
           if (Test-Path C:\temp\5000_err.log) { Write-Host "STDERR:"; Get-Content C:\temp\5000_err.log }
 
+      - name: Install dependencies for all servers
+        if: always()
+        continue-on-error: true
+        run: |
+          $py = "C:\Python313\python.exe"
+          foreach ($dir in @("E:\CVAmp_5000","E:\CVAmp_6001","E:\CVAmp_6002","E:\CVAmp_6003")) {
+            $req = "$dir\requirements.txt"
+            if (Test-Path $req) {
+              Write-Host "Installing $req"
+              & $py -m pip install -r $req --quiet 2>&1 | Write-Host
+            } else {
+              Write-Host "No requirements.txt in $dir, installing flask only"
+              & $py -m pip install flask --quiet 2>&1 | Write-Host
+            }
+          }
+
       - name: Start CVAmp_5000
         if: always()
         continue-on-error: true
         run: |
           $venv = "E:\CVAmp_5000\venv\Scripts\python.exe"
-          $py = if (Test-Path $venv) { $venv } else { "python" }
+          $py = if (Test-Path $venv) { $venv } else { "C:\Python313\python.exe" }
           Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_5000" -WindowStyle Hidden
 
       - name: Start CVAmp_6001
@@ -77,7 +93,7 @@ jobs:
         continue-on-error: true
         run: |
           $venv = "E:\CVAmp_6001\venv\Scripts\python.exe"
-          $py = if (Test-Path $venv) { $venv } else { "python" }
+          $py = if (Test-Path $venv) { $venv } else { "C:\Python313\python.exe" }
           Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6001" -WindowStyle Hidden
 
       - name: Start CVAmp_6002
@@ -85,7 +101,7 @@ jobs:
         continue-on-error: true
         run: |
           $venv = "E:\CVAmp_6002\venv\Scripts\python.exe"
-          $py = if (Test-Path $venv) { $venv } else { "python" }
+          $py = if (Test-Path $venv) { $venv } else { "C:\Python313\python.exe" }
           Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6002" -WindowStyle Hidden
 
       - name: Start CVAmp_6003
@@ -93,7 +109,7 @@ jobs:
         continue-on-error: true
         run: |
           $venv = "E:\CVAmp_6003\venv\Scripts\python.exe"
-          $py = if (Test-Path $venv) { $venv } else { "python" }
+          $py = if (Test-Path $venv) { $venv } else { "C:\Python313\python.exe" }
           Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6003" -WindowStyle Hidden
 
       - name: Wait for servers
