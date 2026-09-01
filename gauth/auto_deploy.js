@@ -155,6 +155,45 @@ function fixSourceMtimes() {
 }
 fixSourceMtimes();
 
+function autoRestoreFromUploads() {
+  try {
+    const existing = safeReadJSON(DATA_FILE);
+    if (existing.length > 0) return;
+    const uploadsDir = path.join(DATA_DIR, 'uploads');
+    if (!fs.existsSync(uploadsDir)) return;
+    const files = fs.readdirSync(uploadsDir).filter(f => /\.(xlsx|xls|csv)$/i.test(f));
+    if (!files.length) {
+      console.log('[auto_deploy] autoRestore: uploads/ 파일 없음, 복구 불가');
+      return;
+    }
+    console.log('[auto_deploy] autoRestore: accounts 0 — uploads/ 에서 재파싱 시작 (' + files.length + '개)');
+    let parser;
+    try { parser = require(path.join(DATA_DIR, 'upload_excels.js')); } catch (e) {
+      console.error('[auto_deploy] autoRestore: upload_excels.js 로드 실패:', e.message); return;
+    }
+    const fullPaths = files.map(f => path.join(uploadsDir, f));
+    const { accounts } = parser.parseMultipleFiles(fullPaths);
+    if (!accounts || !accounts.length) {
+      console.log('[auto_deploy] autoRestore: 파싱 결과 0건'); return;
+    }
+    const seen = new Set();
+    const merged = [];
+    for (const a of accounts) {
+      const key = (a.email || '').toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(a);
+    }
+    const tmp = DATA_FILE + '.tmp.' + process.pid + '.' + Date.now();
+    fs.writeFileSync(tmp, JSON.stringify(merged, null, 2));
+    fs.renameSync(tmp, DATA_FILE);
+    console.log('[auto_deploy] autoRestore: ' + merged.length + '개 계정 복구 완료');
+  } catch (e) {
+    console.error('[auto_deploy] autoRestore error:', e.message);
+  }
+}
+autoRestoreFromUploads();
+
 module.exports = function(app) {
   function safePath(base, name) {
     const resolved = path.resolve(base, name);
