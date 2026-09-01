@@ -1,5 +1,11 @@
 name: Start CVAmp Servers
 
+# NOTE: This runner (NT AUTHORITY\NETWORK SERVICE via C:\Python313) cannot itself
+# run the CVAmp servers — they need playwright + a browser that only exist in the
+# operator's own Python environment. So this workflow does NOT spawn servers.
+# It is a dispatcher: it calls /api/start on whichever CVAmp servers are already
+# running (started by the operator on the PC), forwarding the YouTube URL.
+
 on:
   workflow_dispatch:
     inputs:
@@ -11,110 +17,16 @@ on:
 jobs:
   start:
     runs-on: self-hosted
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
-      - name: Checkout repo (brings vendored wheels)
-        uses: actions/checkout@v4
-
-      - name: Install flask+psutil OFFLINE from vendored wheels
-        if: always()
+      - name: Check which servers are listening
         continue-on-error: true
         shell: powershell -ExecutionPolicy Bypass -File "{0}"
         run: |
-          $ErrorActionPreference = 'Continue'
-          $py  = "C:\Python313\python.exe"
-          $tgt = "E:\py_packages"
-          $wheels = Join-Path $env:GITHUB_WORKSPACE "wheels"
-          New-Item -Force -ItemType Directory $tgt | Out-Null
-          Write-Host "wheels dir: $wheels"
-          Get-ChildItem $wheels -Filter *.whl | ForEach-Object { Write-Host "  $($_.Name)" }
-
-          Write-Host "--- offline pip install (no internet needed) ---"
-          & $py -m pip install --no-index --find-links "$wheels" --target "$tgt" flask psutil --upgrade 2>&1 | ForEach-Object { Write-Host $_ }
-          Write-Host "pip exit=$LASTEXITCODE"
-
-          $env:PYTHONPATH = $tgt
-          & $py -c "import flask, psutil; print('IMPORT OK psutil', psutil.__version__, 'flask', flask.__version__)" 2>&1 | ForEach-Object { Write-Host $_ }
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host "OFFLINE INSTALL SUCCESS"
-            echo "PYTHON_EXE=$py"     >> $env:GITHUB_ENV
-            echo "PYTHONPATH=$tgt"    >> $env:GITHUB_ENV
-          } else {
-            Write-Host "FATAL: offline install/import failed"
-            echo "PYTHON_EXE=$py"     >> $env:GITHUB_ENV
-            echo "PYTHONPATH=$tgt"    >> $env:GITHUB_ENV
-          }
-
-      - name: Stop existing python processes
-        if: always()
-        continue-on-error: true
-        shell: powershell -ExecutionPolicy Bypass -File "{0}"
-        run: |
-          Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-          Start-Sleep -Seconds 2
-
-      - name: Start CVAmp_5000
-        if: always()
-        continue-on-error: true
-        shell: powershell -ExecutionPolicy Bypass -File "{0}"
-        run: |
-          $py = if ($env:PYTHON_EXE) { $env:PYTHON_EXE } else { "C:\Python313\python.exe" }
-          Write-Host "Starting CVAmp_5000 with $py PYTHONPATH=$env:PYTHONPATH"
-          New-Item -Force -ItemType Directory C:\temp | Out-Null
-          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_5000" -RedirectStandardError "C:\temp\5000_err.log" -WindowStyle Hidden
-          Start-Sleep -Seconds 3
-          if (Test-Path C:\temp\5000_err.log) { Write-Host "5000 STDERR:"; Get-Content C:\temp\5000_err.log }
-
-      - name: Start CVAmp_6001
-        if: always()
-        continue-on-error: true
-        shell: powershell -ExecutionPolicy Bypass -File "{0}"
-        run: |
-          $py = if ($env:PYTHON_EXE) { $env:PYTHON_EXE } else { "C:\Python313\python.exe" }
-          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6001" -RedirectStandardError "C:\temp\6001_err.log" -WindowStyle Hidden
-
-      - name: Start CVAmp_6002
-        if: always()
-        continue-on-error: true
-        shell: powershell -ExecutionPolicy Bypass -File "{0}"
-        run: |
-          $py = if ($env:PYTHON_EXE) { $env:PYTHON_EXE } else { "C:\Python313\python.exe" }
-          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6002" -RedirectStandardError "C:\temp\6002_err.log" -WindowStyle Hidden
-
-      - name: Start CVAmp_6003
-        if: always()
-        continue-on-error: true
-        shell: powershell -ExecutionPolicy Bypass -File "{0}"
-        run: |
-          $py = if ($env:PYTHON_EXE) { $env:PYTHON_EXE } else { "C:\Python313\python.exe" }
-          Start-Process $py -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_6003" -RedirectStandardError "C:\temp\6003_err.log" -WindowStyle Hidden
-
-      - name: Wait for servers
-        if: always()
-        continue-on-error: true
-        shell: powershell -ExecutionPolicy Bypass -File "{0}"
-        run: Start-Sleep -Seconds 10
-
-      - name: Check ports listening
-        if: always()
-        continue-on-error: true
-        shell: powershell -ExecutionPolicy Bypass -File "{0}"
-        run: |
-          Write-Host "=== Listening ports ==="
+          Write-Host "=== Listening CVAmp ports ==="
           netstat -an | Select-String "LISTENING" | Select-String ":5000|:6001|:6002|:6003"
-          Write-Host "=== Python processes ==="
-          Get-Process python -ErrorAction SilentlyContinue | Format-Table Id,CPU,WorkingSet
-          Write-Host "=== STDERR logs ==="
-          foreach ($p in @("5000","6001","6002","6003")) {
-            $log = "C:\temp\${p}_err.log"
-            if (Test-Path $log) {
-              $c = Get-Content $log -Raw
-              if ($c) { Write-Host "--- $p STDERR ---"; Write-Host $c }
-            }
-          }
 
-      - name: Call /api/start on all servers
-        if: always()
+      - name: Call /api/start on all running servers
         continue-on-error: true
         shell: powershell -ExecutionPolicy Bypass -File "{0}"
         run: |
@@ -123,9 +35,13 @@ jobs:
           foreach ($port in $ports) {
             try {
               $body = "{`"url`":`"$url`"}"
-              Invoke-RestMethod -Uri "http://localhost:$port/api/start" -Method POST -Body $body -ContentType "application/json" -TimeoutSec 15
-              Write-Host "Started port $port"
+              $r = Invoke-RestMethod -Uri "http://localhost:$port/api/start" -Method POST -Body $body -ContentType "application/json" -TimeoutSec 15
+              Write-Host "port $port -> started ($r)"
             } catch {
-              Write-Host "Port ${port} failed"
+              Write-Host "port $port -> not running (server must be started on the PC first)"
             }
           }
+
+      - name: Done
+        shell: powershell -ExecutionPolicy Bypass -File "{0}"
+        run: Write-Host "dispatch complete"
