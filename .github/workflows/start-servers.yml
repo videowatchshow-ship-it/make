@@ -12,9 +12,11 @@ jobs:
   start:
     runs-on: self-hosted
     timeout-minutes: 10
+    defaults:
+      run:
+        shell: powershell -ExecutionPolicy Bypass -File "{0}"
     steps:
       - name: Stop existing python processes
-        shell: powershell
         continue-on-error: true
         run: |
           Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
@@ -22,7 +24,6 @@ jobs:
 
       - name: Fix CVAmp_6003 IndentationError
         if: always()
-        shell: powershell
         continue-on-error: true
         run: |
           $path = "E:\CVAmp_6003\app.py"
@@ -43,7 +44,6 @@ jobs:
 
       - name: Diagnose environment
         if: always()
-        shell: powershell
         continue-on-error: true
         run: |
           Write-Host "=== whoami ===" ; whoami
@@ -52,7 +52,6 @@ jobs:
           Write-Host "=== CVAmp_5000 exists ===" ; Test-Path "E:\CVAmp_5000\app.py"
           Write-Host "=== E: drive ===" ; Get-PSDrive E -ErrorAction SilentlyContinue
           Write-Host "=== PATH ===" ; $env:PATH
-          # Try to run python directly and capture error
           New-Item -Force -ItemType Directory C:\temp | Out-Null
           $venv = "E:\CVAmp_5000\venv\Scripts\python.exe"
           $py = if (Test-Path $venv) { $venv } else { (Get-Command python -ErrorAction SilentlyContinue).Source }
@@ -67,7 +66,6 @@ jobs:
 
       - name: Start CVAmp_5000
         if: always()
-        shell: powershell
         continue-on-error: true
         run: |
           $venv = "E:\CVAmp_5000\venv\Scripts\python.exe"
@@ -76,7 +74,6 @@ jobs:
 
       - name: Start CVAmp_6001
         if: always()
-        shell: powershell
         continue-on-error: true
         run: |
           $venv = "E:\CVAmp_6001\venv\Scripts\python.exe"
@@ -85,7 +82,6 @@ jobs:
 
       - name: Start CVAmp_6002
         if: always()
-        shell: powershell
         continue-on-error: true
         run: |
           $venv = "E:\CVAmp_6002\venv\Scripts\python.exe"
@@ -94,7 +90,6 @@ jobs:
 
       - name: Start CVAmp_6003
         if: always()
-        shell: powershell
         continue-on-error: true
         run: |
           $venv = "E:\CVAmp_6003\venv\Scripts\python.exe"
@@ -103,16 +98,13 @@ jobs:
 
       - name: Wait for servers
         if: always()
-        shell: powershell
         continue-on-error: true
-        run: Start-Sleep -Seconds 8
+        run: Start-Sleep -Seconds 10
 
       - name: Check ports listening
         if: always()
-        shell: powershell
         continue-on-error: true
         run: |
-          Start-Sleep -Seconds 5
           Write-Host "=== Listening ports ==="
           netstat -an | Select-String "LISTENING" | Select-String ":5000|:6001|:6002|:6003"
           Write-Host "=== Python processes ==="
@@ -120,7 +112,6 @@ jobs:
 
       - name: Call /api/start on all servers
         if: always()
-        shell: powershell
         continue-on-error: true
         run: |
           $url = "${{ github.event.inputs.youtube_url }}"
