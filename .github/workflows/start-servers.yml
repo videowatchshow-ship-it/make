@@ -42,39 +42,40 @@ jobs:
             Write-Host "File not found: $path"
           }
 
-      - name: Find python with flask
+      - name: Install packages and find python
         if: always()
+        continue-on-error: true
         run: |
+          $ErrorActionPreference = 'SilentlyContinue'
           $candidates = @(
             "E:\CVAmp_5000\venv\Scripts\python.exe",
+            "G:\Program Files\Python313\python.exe",
             "F:\python313\python.exe",
             "F:\Python313\python.exe",
             "C:\Program Files\Python313\python.exe",
             "C:\Python312\python.exe",
-            "C:\Python313\python.exe",
             "F:\Python312\python.exe",
-            "E:\Python314\python.exe"
+            "E:\Python314\python.exe",
+            "C:\Python313\python.exe"
           )
           $found = $null
           foreach ($p in $candidates) {
             if (Test-Path $p) {
-              $r = & $p -c "import flask" 2>&1
+              $out = & $p -c "import flask,psutil" 2>&1
+              Write-Host "Testing $p : exit=$LASTEXITCODE"
               if ($LASTEXITCODE -eq 0) {
-                Write-Host "Flask found in: $p"
+                Write-Host "Found working python: $p"
                 $found = $p
                 break
-              } else {
-                Write-Host "No flask in: $p"
               }
             }
           }
           if (-not $found) {
-            Write-Host "Installing flask into C:\Python313"
-            & "C:\Python313\python.exe" -m ensurepip 2>&1 | Write-Host
-            & "C:\Python313\python.exe" -m pip install flask 2>&1 | Write-Host
+            Write-Host "No python with flask+psutil found. Installing into C:\Python313..."
+            & "C:\Python313\python.exe" -m pip install flask psutil 2>&1
             $found = "C:\Python313\python.exe"
+            Write-Host "Installed. Using: $found"
           }
-          Write-Host "PYTHON_EXE=$found"
           echo "PYTHON_EXE=$found" >> $env:GITHUB_ENV
 
       - name: Start CVAmp_5000
