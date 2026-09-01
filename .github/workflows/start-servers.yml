@@ -46,9 +46,15 @@ jobs:
         if: always()
         continue-on-error: true
         run: |
-          $ErrorActionPreference = 'SilentlyContinue'
+          $venvPip = "E:\CVAmp_5000\venv\Scripts\pip.exe"
+          $venvPy  = "E:\CVAmp_5000\venv\Scripts\python.exe"
+          if (Test-Path $venvPip) {
+            Write-Host "Installing flask+psutil into venv..."
+            & $venvPip install flask psutil --quiet 2>&1 | Write-Host
+            Write-Host "pip exit=$LASTEXITCODE"
+          }
           $candidates = @(
-            "E:\CVAmp_5000\venv\Scripts\python.exe",
+            $venvPy,
             "G:\Program Files\Python313\python.exe",
             "F:\python313\python.exe",
             "F:\Python313\python.exe",
@@ -61,7 +67,7 @@ jobs:
           $found = $null
           foreach ($p in $candidates) {
             if (Test-Path $p) {
-              $out = & $p -c "import flask,psutil" 2>&1
+              & $p -c "import flask,psutil" 2>&1 | Out-Null
               Write-Host "Testing $p : exit=$LASTEXITCODE"
               if ($LASTEXITCODE -eq 0) {
                 Write-Host "Found working python: $p"
@@ -71,10 +77,8 @@ jobs:
             }
           }
           if (-not $found) {
-            Write-Host "No python with flask+psutil found. Installing into C:\Python313..."
-            & "C:\Python313\python.exe" -m pip install flask psutil 2>&1
-            $found = "C:\Python313\python.exe"
-            Write-Host "Installed. Using: $found"
+            Write-Host "FATAL: no python with flask+psutil found"
+            $found = $venvPy
           }
           echo "PYTHON_EXE=$found" >> $env:GITHUB_ENV
 
