@@ -1,0 +1,141 @@
+name: Cloudflare Tunnel 설치 (chamgyo 서버 → photo 무도메인 배포)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: 1) CF 계정 ID 조회 + 터널 생성 + DNS CNAME 등록
+        id: cf_setup
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE:  ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          set -euo pipefail
+
+          # ── 계정 ID 조회
+          ACCOUNT_ID=$(curl -sf "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}" \
+            -H "Authorization: Bearer ${CF_TOKEN}" | jq -r '.result.account.id')
+          ZONE_NAME=$(curl -sf "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}" \
+            -H "Authorization: Bearer ${CF_TOKEN}" | jq -r '.result.name')
+          echo "account_id=${ACCOUNT_ID}" >> "$GITHUB_OUTPUT"
+          echo "zone_name=${ZONE_NAME}" >> "$GITHUB_OUTPUT"
+          echo "Zone: $ZONE_NAME  Account: $ACCOUNT_ID"
+
+          # ── 기존 터널 있으면 삭제 후 재생성
+          OLD=$(curl -sf "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/cfd_tunnel?name=chamgyo-photo&is_deleted=false" \
+            -H "Authorization: Bearer ${CF_TOKEN}" | jq -r '.result[0].id // empty')
+          if [ -n "$OLD" ]; then
+            echo "기존 터널 삭제: $OLD"
+            curl -sf -X DELETE \
+              "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/cfd_tunnel/${OLD}" \
+              -H "Authorization: Bearer ${CF_TOKEN}" > /dev/null
+          fi
+
+          # ── 새 터널 생성
+          TUNNEL_SECRET=$(openssl rand -base64 32)
+          RESP=$(curl -sf -X POST \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/cfd_tunnel" \
+            -H "Authorization: Bearer ${CF_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"name\":\"chamgyo-photo\",\"tunnel_secret\":\"${TUNNEL_SECRET}\"}")
+          TUNNEL_ID=$(echo "$RESP" | jq -r '.result.id')
+          echo "tunnel_id=${TUNNEL_ID}" >> "$GITHUB_OUTPUT"
+          echo "tunnel_secret=${TUNNEL_SECRET}" >> "$GITHUB_OUTPUT"
+          echo "account_id=${ACCOUNT_ID}" >> "$GITHUB_OUTPUT"
+          echo "터널 생성: $TUNNEL_ID"
+
+          # ── DNS CNAME 등록 (photo.<zone>)
+          # 기존 레코드 삭제 후 재등록
+          OLD_REC=$(curl -sf \
+            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?type=CNAME&name=photo.${ZONE_NAME}" \
+            -H "Authorization: Bearer ${CF_TOKEN}" | jq -r '.result[0].id // empty')
+          if [ -n "$OLD_REC" ]; then
+            curl -sf -X DELETE \
+              "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records/${OLD_REC}" \
+              -H "Authorization: Bearer ${CF_TOKEN}" > /dev/null
+          fi
+          curl -sf -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records" \
+            -H "Authorization: Bearer ${CF_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"type\":\"CNAME\",\"name\":\"photo\",\"content\":\"${TUNNEL_ID}.cfargotunnel.com\",\"proxied\":true,\"ttl\":1}" \
+            | jq -r '.result | "DNS 등록: \(.name) → \(.content)"'
+
+      - name: 2) chamgyo 서버에 cloudflared 설치 + 서비스 등록
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          TUNNEL_ID:     ${{ steps.cf_setup.outputs.tunnel_id }}
+          TUNNEL_SECRET: ${{ steps.cf_setup.outputs.tunnel_secret }}
+          ACCOUNT_ID:    ${{ steps.cf_setup.outputs.account_id }}
+        with:
+          host:            ${{ secrets.GAUTH_HOST }}
+          username:        ${{ secrets.GAUTH_USER }}
+          key:             ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 10m
+          envs:            TUNNEL_ID,TUNNEL_SECRET,ACCOUNT_ID
+          script: |
+            /snap/bin/gcloud compute ssh videowatch_show@my-site-1 \
+              --zone=asia-northeast1-a \
+              --project=quantum-bonus-455522-b4 \
+              --ssh-flag="-o StrictHostKeyChecking=no" \
+              --quiet \
+              --command="bash -s" << REMOTE
+            set -euo pipefail
+            export TUNNEL_ID="${TUNNEL_ID}"
+            export TUNNEL_SECRET="${TUNNEL_SECRET}"
+            export ACCOUNT_ID="${ACCOUNT_ID}"
+
+            echo "===== [1] cloudflared 설치 ====="
+            if ! command -v cloudflared &>/dev/null; then
+              curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloudflare-main.gpg
+              echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared jammy main' \
+                | sudo tee /etc/apt/sources.list.d/cloudflared.list
+              sudo apt-get update -qq && sudo apt-get install -y -qq cloudflared
+            fi
+            cloudflared --version
+
+            echo "===== [2] 터널 credentials 파일 작성 ====="
+            sudo mkdir -p /etc/cloudflared
+            printf '{\n  "AccountTag":   "%s",\n  "TunnelID":     "%s",\n  "TunnelName":   "chamgyo-photo",\n  "TunnelSecret": "%s"\n}\n' \
+              "${ACCOUNT_ID}" "${TUNNEL_ID}" "${TUNNEL_SECRET}" \
+              | sudo tee /etc/cloudflared/chamgyo-photo.json > /dev/null
+
+            echo "===== [3] cloudflared config 작성 ====="
+            printf 'tunnel: %s\ncredentials-file: /etc/cloudflared/chamgyo-photo.json\ningress:\n  - service: http://localhost:80\n' \
+              "${TUNNEL_ID}" \
+              | sudo tee /etc/cloudflared/config.yml > /dev/null
+
+            echo "===== [4] systemd 서비스 등록 ====="
+            sudo cloudflared service install 2>/dev/null || true
+            sudo systemctl daemon-reload
+            sudo systemctl enable cloudflared
+            sudo systemctl restart cloudflared
+            sleep 3
+            sudo systemctl status cloudflared --no-pager | tail -8
+
+            echo "===== 완료 ====="
+            echo "터널 ID: ${TUNNEL_ID}"
+            REMOTE
+
+      - name: 3) 결과 리포트
+        env:
+          TUNNEL_ID:  ${{ steps.cf_setup.outputs.tunnel_id }}
+          ZONE_NAME:  ${{ steps.cf_setup.outputs.zone_name }}
+        run: |
+          echo ""
+          echo "=========================================="
+          echo "  Cloudflare Tunnel 배포 완료"
+          echo "=========================================="
+          echo ""
+          echo "  터널 ID : $TUNNEL_ID"
+          echo "  URL     : https://photo.${ZONE_NAME}/photo/"
+          echo ""
+          echo "  뷰어 URL 예시:"
+          echo "    세로  : https://photo.${ZONE_NAME}/photo/CAH_1.html?ch=<계정>"
+          echo "    가로  : https://photo.${ZONE_NAME}/photo/CAW_1.html?ch=<계정>"
+          echo "    싱지뉴: https://photo.${ZONE_NAME}/photo/SNW_1.html?ch=<계정>"
+          echo ""

@@ -1,0 +1,90 @@
+name: Audit cent-solution subdomains
+on:
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Audit subdomains via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          command_timeout: 5m
+          script: |
+            echo "========================================="
+            echo "=== APACHE VHOSTS (cent-solution.online) ==="
+            echo "========================================="
+            sudo apache2ctl -S 2>/dev/null | grep cent-solution || echo "none"
+            echo ""
+
+            echo "========================================="
+            echo "=== JUMP SITE INSPECTION ==="
+            echo "========================================="
+            echo "--- /var/www/sites/jump/ contents ---"
+            ls -la /var/www/sites/jump/ 2>/dev/null || echo "DIR NOT FOUND"
+            echo ""
+            echo "--- jump Apache vhost config ---"
+            sudo grep -rl "jump" /etc/apache2/sites-enabled/ 2>/dev/null | while read f; do
+              echo "=== $f ==="
+              sudo cat "$f"
+            done
+            echo ""
+            echo "--- jump server.js ---"
+            cat /var/www/sites/jump/server.js 2>/dev/null || echo "NO server.js"
+            echo ""
+            echo "--- jump index.html (first 50 lines) ---"
+            head -50 /var/www/sites/jump/index.html 2>/dev/null || head -50 /var/www/sites/jump/public/index.html 2>/dev/null || echo "NO index.html"
+            echo ""
+
+            echo "========================================="
+            echo "=== GAUTH SITE INSPECTION ==="
+            echo "========================================="
+            echo "--- gauth Apache vhost config ---"
+            sudo grep -rl "gauth\.cent" /etc/apache2/sites-enabled/ 2>/dev/null | while read f; do
+              echo "=== $f ==="
+              sudo cat "$f"
+            done
+            echo ""
+
+            echo "========================================="
+            echo "=== ALL CENT-SOLUTION SUBDOMAINS ==="
+            echo "========================================="
+            echo "From Apache configs:"
+            sudo grep -rh "ServerName\|ServerAlias" /etc/apache2/sites-enabled/ 2>/dev/null | grep cent-solution | sort -u
+            echo ""
+
+            echo "========================================="
+            echo "=== SITE-BY-SITE COMPARISON ==="
+            echo "========================================="
+            for dir in /var/www/sites/*/; do
+              name=$(basename "$dir")
+              has_server="NO"
+              has_accounts="NO"
+              has_index="NO"
+              port=""
+              acct_count=""
+              systemd_status=""
+
+              [ -f "$dir/server.js" ] && has_server="YES" && port=$(grep -oP 'listen\(\s*\K\d+' "$dir/server.js" 2>/dev/null | head -1)
+              [ -f "$dir/accounts.json" ] && has_accounts="YES" && acct_count=$(node -e "try{const d=JSON.parse(require('fs').readFileSync('${dir}accounts.json','utf8'));const a=Array.isArray(d)?d:(d.accounts||[]);console.log(a.length)}catch(e){console.log('ERR')}" 2>/dev/null)
+              [ -f "$dir/public/accounts.json" ] && has_accounts="YES(public)" && acct_count=$(node -e "try{const d=JSON.parse(require('fs').readFileSync('${dir}public/accounts.json','utf8'));const a=Array.isArray(d)?d:(d.accounts||[]);console.log(a.length)}catch(e){console.log('ERR')}" 2>/dev/null)
+              [ -f "$dir/index.html" ] || [ -f "$dir/public/index.html" ] && has_index="YES"
+
+              systemd_status=$(systemctl is-active "$name" 2>/dev/null || echo "none")
+
+              echo "$name | server=$has_server port=$port | accounts=$has_accounts($acct_count) | index=$has_index | systemd=$systemd_status"
+            done
+            echo ""
+
+            echo "========================================="
+            echo "=== JUMP vs GAUTH SUBDOMAIN MAPPING ==="
+            echo "========================================="
+            echo "Checking if jump.cent-solution.online has matching sub-sites..."
+            sudo grep -rh "ServerName\|ServerAlias" /etc/apache2/sites-enabled/ 2>/dev/null | grep -oP '[a-z0-9-]+\.cent-solution\.online' | sort -u | while read domain; do
+              sub=$(echo "$domain" | sed 's/\.cent-solution\.online//')
+              echo "  $domain"
+            done

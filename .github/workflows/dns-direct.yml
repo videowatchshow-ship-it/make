@@ -1,0 +1,51 @@
+name: DNS Direct
+on:
+  push:
+    branches: [ main ]
+    paths: [ '.github/workflows/dns-direct.yml' ]
+
+jobs:
+  dns:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add CF wildcard via API
+        run: |
+          CF_TOKEN="${{ secrets.CF_API_TOKEN }}"
+          ZONE_ID="7e5faed2d3d4d6da7aceb4ddde81a62b"
+          if [ -z "$CF_TOKEN" ]; then
+            echo "ERROR: CF_API_TOKEN secret not set"
+            exit 1
+          fi
+          EXISTING=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=A&name=*.xn--9d0bw2fjtyymch7de9d.info" \
+            -H "Authorization: Bearer $CF_TOKEN" \
+            -H "Content-Type: application/json" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+if d.get('result'):
+    print(d['result'][0]['id'])
+else:
+    print('')
+")
+          if [ -n "$EXISTING" ]; then
+            echo "Record exists: $EXISTING — updating"
+            RESULT=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$EXISTING" \
+              -H "Authorization: Bearer $CF_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data '{"type":"A","name":"*","content":"34.104.233.35","ttl":1,"proxied":true}')
+          else
+            echo "Creating wildcard A record"
+            RESULT=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
+              -H "Authorization: Bearer $CF_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data '{"type":"A","name":"*","content":"34.104.233.35","ttl":1,"proxied":true}')
+          fi
+          echo "$RESULT" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+if d.get('success'):
+    r=d['result']
+    print('SUCCESS:', r.get('name'), '->', r.get('content'), 'proxied='+str(r.get('proxied')))
+else:
+    print('FAIL:', d.get('errors'))
+    sys.exit(1)
+"

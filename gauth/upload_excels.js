@@ -25,6 +25,10 @@ const XLSX = require('xlsx');
 const fs = require('fs');
 const path = require('path');
 
+const _DATA_DIR = process.env.GAUTH_DATA_DIR || '/opt/gauth-full';
+const _DATA_FILE = path.join(_DATA_DIR, 'accounts_normalized.json');
+const _UPLOADS_DIR = path.join(_DATA_DIR, 'uploads');
+
 // ── helpers ──
 
 function normalizeTotp(s) {
@@ -918,7 +922,7 @@ function mountRoutes(app) {
         }
         await withFileLock(() => {
           try {
-            const dataFile = '/opt/gauth-full/accounts_normalized.json';
+            const dataFile = _DATA_FILE;
             let existing = [];
             try {
               const raw = fs.readFileSync(dataFile, 'utf8');
@@ -1016,7 +1020,7 @@ function mountRoutes(app) {
 
     await withFileLock(() => {
       try {
-        const dataFile = '/opt/gauth-full/accounts_normalized.json';
+        const dataFile = _DATA_FILE;
         let existing = [];
         try {
           const raw = fs.readFileSync(dataFile, 'utf8');
@@ -1119,7 +1123,7 @@ function mountRoutes(app) {
     }
     await withFileLock(() => {
       try {
-        const dataFile = '/opt/gauth-full/accounts_normalized.json';
+        const dataFile = _DATA_FILE;
         let existing = [];
         try {
           const raw = fs.readFileSync(dataFile, 'utf8');

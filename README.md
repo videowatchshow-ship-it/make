@@ -41,23 +41,36 @@ Express :4000 (rebrowser-login.js)
 - 데이터 원본: `/opt/gauth-full/accounts_normalized.json`
 - 모든 하위 사이트는 gauth DB에서 계정을 가져감
 
-#### 하위 사이트 (서브사이트, 7개)
+#### 하위 사이트 (서브사이트, 14개)
 
 gauth에서 계정을 받아 독립 운영. 각 사이트는 자체 `server.js` + `accounts.json` + 프론트엔드 보유.
 
-| 사이트 | 포트 | 서버 경로 | accounts.json 형식 | systemd 서비스 |
-|--------|------|-----------|-------------------|---------------|
-| gain.cent-solution.online | 3021 | `/var/www/sites/gain` | `{accounts: [...]}` | `gain` |
-| sunbi.cent-solution.online | 3013 | `/var/www/sites/sunbi` | `{accounts: [...]}` | `sunbi` |
-| woodong.cent-solution.online | 3012 | `/var/www/sites/woodong` | `{accounts: [...]}` | `woodong` |
-| win.cent-solution.online | 4001 | `/var/www/sites/win` | `{accounts: [...]}` | `win` |
-| simmani.cent-solution.online | 3011 | `/var/www/sites/simmani` | `{accounts: [...]}` | `simmani` |
-| romi.cent-solution.online | 3019 | `/var/www/sites/romi` | `{accounts: [...]}` | `romi` |
-| soktv.cent-solution.online | 3017 | `/var/www/sites/soktv` | `{accounts: [...]}` | `soktv` |
+| 사이트 | 포트 | 서버 경로 | 계정 수 | systemd 서비스 |
+|--------|------|-----------|---------|---------------|
+| gain.cent-solution.online | 3021 | `/var/www/sites/gain` | 10 | `gain` |
+| sunbi.cent-solution.online | 3013 | `/var/www/sites/sunbi` | 10 | `sunbi` |
+| woodong.cent-solution.online | 3012 | `/var/www/sites/woodong` | 5 | `woodong` |
+| win.cent-solution.online | 4001 | `/var/www/sites/win` | 5 | `win` |
+| simmani.cent-solution.online | 3011 | `/var/www/sites/simmani` | 12 | `simmani` |
+| romi.cent-solution.online | 3019 | `/var/www/sites/romi` | 7 | `romi` |
+| soktv.cent-solution.online | 3017 | `/var/www/sites/soktv` | 6 | `soktv` |
+| aura.cent-solution.online | — | `/var/www/sites/aura` | 5 | `aura` |
+| bacad.cent-solution.online | — | `/var/www/sites/bacad` | 6 | `bacad` |
+| camstouch.cent-solution.online | — | `/var/www/sites/camstouch` | 7 | `camstouch` |
+| cham.cent-solution.online | — | `/var/www/sites/cham` | 4 | `cham` |
+| james.cent-solution.online | — | `/var/www/sites/james` | 6 | `james` |
+| misskim.cent-solution.online | — | `/var/www/sites/misskim` | 6 | `misskim` |
+| naman.cent-solution.online | — | `/var/www/sites/naman` | 5 | `naman` |
 
-#### 기타 사이트 (계정 관리 대상 아님)
+#### 기타 사이트 (백엔드 없음)
 
-admin, aura, bacad, camstouch, cent-tools, gauth01, gucci, james, misskim, naman
+| 사이트 | 상태 |
+|--------|------|
+| jump.cent-solution.online | 읽기 전용 미러 (accounts.html → gauth API 실시간 fetch) |
+| admin.cent-solution.online | 관리 도구 |
+| cent-tools.cent-solution.online | 유틸리티 |
+| gauth01.cent-solution.online | gauth 미러/테스트 |
+| bot.cent-solution.online | Apache vhost만 존재 |
 
 #### 서브사이트 계정 데이터 구조
 
@@ -101,6 +114,8 @@ make/
 │   └── lib/                    # 모듈화된 라이브러리
 ├── advanced-google-login-v2.js # Puppeteer 로그인 엔진 (레거시)
 ├── package.json
+├── jump/
+│   └── accounts.html              # 읽기 전용 미러 (gauth API 실시간 fetch)
 ├── .github/workflows/
 │   ├── deploy-gauth.yml            # gauth CI/CD 배포
 │   ├── add-account-all-sites.yml   # 전체 서브사이트 계정 추가
@@ -576,9 +591,114 @@ otpauth:// URL 지원:
 | XSS 방지 | https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html |
 | 명령어 인젝션 방지 | https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html |
 
+## YouTube Data API v3 연동 (OAuth2 + 영구 토큰)
+
+### 공식 문서 출처
+
+| 항목 | URL |
+|------|-----|
+| Discovery Document | `https://www.googleapis.com/discovery/v1/apis/youtube/v3/rest` |
+| API baseUrl | `https://youtube.googleapis.com/` (Discovery Document `baseUrl` 필드) |
+| OAuth2 token endpoint | `https://oauth2.googleapis.com/token` |
+| OAuth2 인증 URL | `https://accounts.google.com/o/oauth2/v2/auth` |
+
+### OAuth2 Authorization Code Flow (영구 토큰)
+
+```
+1. 프론트엔드: accounts.google.com/o/oauth2/v2/auth 로 리다이렉트
+   - response_type=code (Authorization Code Flow)
+   - access_type=offline (refresh_token 발급)
+   - prompt=consent (매번 동의 → refresh_token 보장)
+   - scope: youtube.readonly + youtube.force-ssl
+
+2. 사용자 동의 후 → redirect_uri?code=AUTH_CODE
+
+3. 백엔드: oauth2.googleapis.com/token 에 code 교환
+   → access_token (1시간) + refresh_token (영구)
+
+4. 토큰 저장: /opt/gauth-full/youtube_tokens.json
+   { "email@gmail.com": {
+       "access_token": "ya29...",
+       "refresh_token": "1//...",
+       "expires_at": 1692345678000,
+       "saved_at": 1692342078000
+   }}
+
+5. API 호출 전 getValidToken() 으로 자동 갱신
+   - expires_at - 60초 전이면 refresh_token으로 갱신
+   - refresh_token은 Google이 revoke하지 않는 한 영구 유지
+```
+
+### OAuth 스코프
+
+| 스코프 | 용도 | 공식 URI |
+|--------|------|----------|
+| youtube.readonly | 채널·방송 조회 (읽기) | `https://www.googleapis.com/auth/youtube.readonly` |
+| youtube.force-ssl | 채팅 전송·스패너 (쓰기) | `https://www.googleapis.com/auth/youtube.force-ssl` |
+
+### API 할당량 (YouTube Data API v3)
+
+**일일 한도: 10,000 units**
+
+| 메서드 | 경로 | quota cost/호출 | 사용 part | 최적화 |
+|--------|------|----------------|-----------|--------|
+| channels.list | GET /youtube/v3/channels | 1 unit (list) | snippet,statistics | ~~status,contentDetails~~ 제거 |
+| liveBroadcasts.list | GET /youtube/v3/liveBroadcasts | 1 unit (list) | snippet,status | maxResults=10 |
+| liveChat/messages.list | GET /youtube/v3/liveChat/messages | 1 unit (list) | snippet,authorDetails | maxResults=50 (~~200~~) |
+| liveChat/messages.insert | POST /youtube/v3/liveChat/messages | 50 units (insert) | snippet | 채팅 전송 |
+| liveChat/moderators.insert | POST /youtube/v3/liveChat/moderators | 50 units (insert) | snippet | 스패너 부여 |
+
+**절약 원칙:**
+- `part` 파라미터: 필요한 것만 (불필요한 part 1개 = quota 추가 소모)
+- `maxResults`: 필요 최소한으로 (50 이하)
+- `/api/youtube/all-status`: API 호출 없음 (로컬 JSON 읽기만)
+- 토큰 갱신: `oauth2.googleapis.com/token` (YouTube quota 미소모)
+
+### 백엔드 API 라우트 (`auto_deploy.js`)
+
+| 메서드 | 경로 | YouTube API 호출 | quota | 설명 |
+|--------|------|-----------------|-------|------|
+| GET | `/api/youtube/client-id` | 없음 | 0 | OAuth Client ID 반환 |
+| POST | `/api/youtube/exchange-code` | oauth2 token exchange | 0 | 인증 코드 → 토큰 교환 |
+| POST | `/api/youtube/save-token` | 없음 | 0 | 토큰 수동 저장 |
+| GET | `/api/youtube/token-status/:email` | 없음 | 0 | 토큰 상태 확인 |
+| GET | `/api/youtube/all-status` | 없음 | 0 | 전체 토큰 상태 |
+| GET | `/api/youtube/channel-info/:email` | channels.list | 1 | 채널 정보 |
+| GET | `/api/youtube/stream-status/:email` | liveBroadcasts.list | 1 | 방송 상태 |
+| GET | `/api/youtube/live-chat-id/:email` | liveBroadcasts.list | 1 | 채팅 ID 조회 |
+| GET | `/api/youtube/chat-list/:email` | liveChat/messages.list | 1 | 채팅 목록 |
+| POST | `/api/youtube/chat-message` | liveChat/messages.insert | 50 | 채팅 전송 |
+| POST | `/api/youtube/add-moderator` | liveChat/moderators.insert | 50 | 스패너 부여 |
+
+### 환경변수 (서버 필요)
+
+| 변수 | 용도 |
+|------|------|
+| `YOUTUBE_OAUTH_CLIENT_ID` | Google Cloud Console OAuth 2.0 Client ID |
+| `YOUTUBE_OAUTH_CLIENT_SECRET` | OAuth 2.0 Client Secret |
+
+### gauth vs jump — accounts.html
+
+| 기능 | gauth.cent-solution.online | jump.cent-solution.online |
+|------|---------------------------|--------------------------|
+| 계정 목록 조회 | ✅ | ✅ (gauth API에서 실시간 fetch) |
+| 비밀번호/2FA 복사 | ✅ | ✅ |
+| TOTP 코드 생성 | ✅ | ✅ |
+| 계정 검색 | ✅ | ✅ |
+| 엑셀 업로드 | ✅ | ❌ |
+| TOTP 시크릿 편집 | ✅ | ❌ |
+| Puppeteer 로그인 | ✅ | ❌ |
+| YouTube API 연결 | ✅ | ❌ |
+| 채팅 전송/스패너 | ✅ | ❌ |
+| 배치 로그인 | ✅ | ❌ |
+| 자동 새로고침 | 수동 | 30초 자동 폴링 |
+
+---
+
 ## 제약사항
 
 - Google 보안 챌린지 (패스키/기기인증/전화인증) 자동화 불가
 - CAPTCHA 발생 시 120초 수동 대기 필요
 - headed 모드 전용 (headless 감지됨)
 - Xvfb 가상 디스플레이 필수 (서버에 모니터 없음)
+- YouTube Data API 일일 할당량 10,000 units 제한
