@@ -46,7 +46,11 @@ jobs:
         shell: powershell
         continue-on-error: true
         run: |
-          Start-Process python -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_5000" -WindowStyle Hidden
+          $log = "C:\temp\cvamp_5000.log"
+          New-Item -Force -ItemType Directory C:\temp | Out-Null
+          Start-Process python -ArgumentList "app.py" -WorkingDirectory "E:\CVAmp_5000" -RedirectStandardError $log -WindowStyle Hidden
+          Start-Sleep -Seconds 3
+          if (Test-Path $log) { Get-Content $log | Write-Host }
 
       - name: Start CVAmp_6001
         if: always()
