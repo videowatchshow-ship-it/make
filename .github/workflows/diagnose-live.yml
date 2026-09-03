@@ -15,77 +15,81 @@ jobs:
       - name: Install sshpass
         run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
 
-      - name: Check VPS files
+      - name: Check all VPS files
         run: |
           export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
           SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
           BASE="/var/www/sites/chamgyo/public"
 
-          echo "===== bgl.js first 5 lines ====="
-          $SSH "head -5 $BASE/photo/bgl.js"
+          echo "===== CAH_1.html FULL ====="
+          $SSH "cat $BASE/photo/CAH_1.html"
 
           echo ""
-          echo "===== bgl.js SHA + size ====="
-          $SSH "sha256sum $BASE/photo/bgl.js; wc -c $BASE/photo/bgl.js"
+          echo "===== bgl.js FULL ====="
+          $SSH "cat $BASE/photo/bgl.js"
 
           echo ""
           echo "===== room_1.json ====="
           $SSH "cat $BASE/photo/data/room_1.json"
 
           echo ""
-          echo "===== symlinks check ====="
-          $SSH "ls -la $BASE/photo/data/ $BASE/photo2/data $BASE/photo3/data 2>&1 || true"
+          echo "===== images directory ====="
+          $SSH "ls -la $BASE/photo/images/ 2>/dev/null || echo 'NO IMAGES DIR'"
 
           echo ""
-          echo "===== index.html ====="
-          $SSH "cat $BASE/photo/index.html"
+          echo "===== data directory ====="
+          $SSH "ls -la $BASE/photo/data/ 2>/dev/null || echo 'NO DATA DIR'"
+
+          echo ""
+          echo "===== all files in photo ====="
+          $SSH "ls -la $BASE/photo/"
 
           echo ""
           echo "===== login.html ====="
           $SSH "cat $BASE/photo/login.html"
 
           echo ""
-          echo "===== select.html first 50 lines ====="
-          $SSH "head -50 $BASE/photo/select.html"
+          echo "===== index.html ====="
+          $SSH "cat $BASE/photo/index.html"
 
           echo ""
-          echo "===== CAH_1.html ====="
-          $SSH "cat $BASE/photo/CAH_1.html"
+          echo "===== select.html ====="
+          $SSH "cat $BASE/photo/select.html 2>/dev/null || echo 'NO select.html'"
 
           echo ""
-          echo "===== Apache/nginx config for photo ====="
-          $SSH "grep -r 'chamgyo\|photo' /etc/apache2/sites-enabled/ 2>/dev/null | head -20 || true"
-          $SSH "grep -r 'chamgyo\|photo' /etc/nginx/sites-enabled/ 2>/dev/null | head -20 || true"
+          echo "===== CAW_1.html ====="
+          $SSH "cat $BASE/photo/CAW_1.html 2>/dev/null || echo 'NO CAW_1.html'"
+
+          echo ""
+          echo "===== SNW_1.html ====="
+          $SSH "cat $BASE/photo/SNW_1.html 2>/dev/null || echo 'NO SNW_1.html'"
 
       - name: External access test
         run: |
           DOMAIN="xn--9d0bw2fjtyymch7de9d.info"
 
-          echo "===== /photo/ (follow redirects) ====="
-          curl -sS -L -o /tmp/photo_index.html -w "final URL: %{url_effective}\nHTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/" --max-time 10
-          echo "--- content ---"
-          cat /tmp/photo_index.html
-
-          echo ""
-          echo "===== /photo/CAH_1.html?ch=01 ====="
-          curl -sS -o /tmp/cah1.html -w "HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/CAH_1.html?ch=01" --max-time 10
-          echo "--- content ---"
-          cat /tmp/cah1.html
-
-          echo ""
-          echo "===== /photo/bgl.js ====="
-          curl -sS -o /tmp/bgl_live.js -w "HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/bgl.js?t=$(date +%s)" --max-time 10
-          echo "--- first 10 lines ---"
-          head -10 /tmp/bgl_live.js
-          echo "--- grep css classes ---"
-          grep -c 'bgl-p\|bgl-b' /tmp/bgl_live.js && echo "OK" || echo "MISSING"
-
-          echo ""
-          echo "===== /photo/data/room_1.json ====="
-          curl -sS -o /tmp/room_live.json -w "HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/data/room_1.json?t=$(date +%s)" --max-time 10
-          cat /tmp/room_live.json
+          echo "===== /photo/ ====="
+          curl -sS -o /tmp/idx.html -w "HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/" --max-time 10
+          cat /tmp/idx.html
 
           echo ""
           echo "===== /photo/login.html ====="
-          curl -sS -o /tmp/login.html -w "HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/login.html" --max-time 10
-          cat /tmp/login.html
+          curl -sS -w "HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/login.html" --max-time 10
+
+          echo ""
+          echo "===== /photo/CAH_1.html?ch=01 ====="
+          curl -sS -w "HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/CAH_1.html?ch=01" --max-time 10
+
+          echo ""
+          echo "===== /photo/bgl.js ====="
+          curl -sS -o /tmp/bgl.js -w "HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/bgl.js?t=$(date +%s)" --max-time 10
+          head -3 /tmp/bgl.js
+          grep -c 'gauth' /tmp/bgl.js && echo "GAUTH PRESENT" || echo "GAUTH REMOVED"
+
+          echo ""
+          echo "===== /photo/data/room_1.json ====="
+          curl -sS -w "HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/data/room_1.json?t=$(date +%s)" --max-time 10
+
+          echo ""
+          echo "===== /photo/images/Live_height_kakao.gif ====="
+          curl -sS -o /dev/null -w "HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/images/Live_height_kakao.gif" --max-time 10
