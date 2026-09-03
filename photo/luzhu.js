@@ -15,8 +15,8 @@
   function special(letter, suf) {
     if (!suf) return '';
     var k = letter + suf;
-    if (k === 'B62') return '6²'; if (k === 'B63') return '6³'; if (k === 'B6') return '6';
-    if (k === 'B7') return '7'; if (k === 'P8') return '8';
+    if (k === 'B62') return '2장6'; if (k === 'B63') return '3장6'; if (k === 'B6') return '식스';   // 幸运六 (2장/3장)
+    if (k === 'B7') return '용7'; if (k === 'P8') return '용8';                                        // 龙七 / 熊八
     return '';
   }
   function toOrg(nums) {
@@ -139,7 +139,7 @@
       var s = sp && sp[i] && sp[i][j] && sp[i][j] !== NO ? sp[i][j] : '';
       h += "<div class='content' style='left:" + (step * i) + "px;top:" + (step * j) + "px;width:" + step + "px;height:" + step + "px'>" +
            ((SJ || path === 'zhuzi') ? vec(path, v) : "<img src='luzhu_img/" + path + "/" + v + ".png'>") +   // 珠子는 항상 글자 없는 원
-           (s ? "<span class='sp sp" + s.charAt(0) + "'>" + s + "</span>" : '') + "</div>";
+           (s ? "<span class='sp sp" + s.slice(-1) + "'>" + s + "</span>" : '') + "</div>";
     }
     return h;
   }
