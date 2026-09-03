@@ -1,0 +1,121 @@
+name: fix-login-select
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-login-select.yml'
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VPS_IP: "187.53.133.145"
+      VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+
+      - name: Read current login.html and select.html
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          BASE="/var/www/sites/chamgyo/public"
+
+          echo "===== login.html ====="
+          $SSH "cat $BASE/photo/login.html"
+
+          echo ""
+          echo "===== select.html ====="
+          $SSH "cat $BASE/photo/select.html"
+
+          echo ""
+          echo "===== Check data files for select ====="
+          $SSH "ls -la $BASE/photo/data/ 2>/dev/null"
+          $SSH "cat $BASE/photo/data/tables.json 2>/dev/null || echo 'no tables.json'"
+
+      - name: Fix login.html redirect to select.html
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          BASE="/var/www/sites/chamgyo/public"
+
+          echo "===== Fix login.html in all 3 folders ====="
+          for dir in photo photo2 photo3; do
+            echo "--- $dir ---"
+            $SSH "if [ -f $BASE/$dir/login.html ]; then
+              sed -i 's|CAH_1\.html|select.html|g' $BASE/$dir/login.html
+              echo 'Patched login.html'
+              grep -n 'select\|CAH_1\|location\|redirect\|href' $BASE/$dir/login.html | head -10
+            else
+              echo 'no login.html'
+            fi"
+          done
+
+      - name: Create tables.json for select.html
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          BASE="/var/www/sites/chamgyo/public"
+
+          echo "===== Check if tables.json exists ====="
+          $SSH "cat $BASE/photo/data/tables.json 2>/dev/null" && echo "EXISTS" || echo "MISSING"
+
+          echo ""
+          echo "===== Create tables.json if missing ====="
+          $SSH "if [ ! -f $BASE/photo/data/tables.json ]; then
+            cat > $BASE/photo/data/tables.json << 'TJEOF'
+          {\"tables\":[{\"id\":1,\"name\":\"1\",\"status\":\"open\"},{\"id\":2,\"name\":\"2\",\"status\":\"open\"},{\"id\":3,\"name\":\"3\",\"status\":\"open\"},{\"id\":4,\"name\":\"4\",\"status\":\"open\"},{\"id\":5,\"name\":\"5\",\"status\":\"open\"},{\"id\":6,\"name\":\"6\",\"status\":\"open\"},{\"id\":7,\"name\":\"7\",\"status\":\"open\"},{\"id\":8,\"name\":\"8\",\"status\":\"open\"},{\"id\":9,\"name\":\"9\",\"status\":\"open\"},{\"id\":10,\"name\":\"10\",\"status\":\"open\"}]}
+TJEOF
+            chown www-data:www-data $BASE/photo/data/tables.json
+            echo 'Created tables.json'
+          else
+            echo 'tables.json already exists'
+          fi"
+
+      - name: Fix select.html to work locally
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          BASE="/var/www/sites/chamgyo/public"
+
+          echo "===== Check select.html for remaining issues ====="
+          $SSH "grep -n 'gauth\|cent-solution\|api_selected_room\|write_select_room' $BASE/photo/select.html | head -20"
+
+          echo ""
+          echo "===== Fix select.html API references ====="
+          for dir in photo photo2 photo3; do
+            echo "--- $dir ---"
+            $SSH "if [ -f $BASE/$dir/select.html ]; then
+              sed -i \"s|const API = .*|const API = '.'|g\" $BASE/$dir/select.html
+              echo 'Fixed API const'
+            fi"
+          done
+
+          echo ""
+          echo "===== Verify select.html ====="
+          $SSH "grep -n 'API\|gauth\|fetch\|tables' $BASE/photo/select.html | head -20"
+
+      - name: Purge CF cache
+        run: |
+          curl -sS -X POST \
+            "https://api.cloudflare.com/client/v4/zones/7e5faed2d3d4d6da7aceb4ddde81a62b/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"purge_everything":true}' | python3 -c "import sys,json;d=json.load(sys.stdin);print('CF Purge:', 'OK' if d.get('success') else d)"
+
+      - name: Verify
+        run: |
+          sleep 5
+          DOMAIN="xn--9d0bw2fjtyymch7de9d.info"
+
+          echo "===== login.html ====="
+          curl -sS "https://$DOMAIN/photo/login.html" --max-time 10 | grep -o 'select\.html\|CAH_1\.html' | head -5
+
+          echo "===== select.html ====="
+          curl -sS -o /dev/null -w "select.html: HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/select.html" --max-time 10
+
+          echo "===== tables.json ====="
+          curl -sS -o /dev/null -w "tables.json: HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/data/tables.json" --max-time 10
+
+          echo "===== gauth check ====="
+          curl -sS "https://$DOMAIN/photo/select.html" --max-time 10 | grep -c 'gauth' && echo "GAUTH STILL PRESENT" || echo "GAUTH CLEAN"
