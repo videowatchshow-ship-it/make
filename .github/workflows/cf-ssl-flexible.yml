@@ -1,0 +1,42 @@
+name: cf-ssl-flexible
+
+on:
+  push:
+    paths:
+      - '.github/workflows/cf-ssl-flexible.yml'
+
+jobs:
+  set-ssl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set Cloudflare SSL to Flexible
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          ZONE_ID: 7e5faed2d3d4d6da7aceb4ddde81a62b
+        run: |
+          echo "== Current SSL setting =="
+          curl -sS -H "Authorization: Bearer $CF_TOKEN" \
+            "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/settings/ssl" \
+            | jq '.result'
+
+          echo "== Set SSL to flexible =="
+          curl -sS -X PATCH \
+            -H "Authorization: Bearer $CF_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"value":"flexible"}' \
+            "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/settings/ssl" \
+            | jq '{success: .success, value: .result.value}'
+
+          echo "== Also ensure Always Use HTTPS is on =="
+          curl -sS -X PATCH \
+            -H "Authorization: Bearer $CF_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"value":"on"}' \
+            "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/settings/always_use_https" \
+            | jq '{success: .success, value: .result.value}'
+
+          echo "== Verify =="
+          sleep 3
+          curl -sS -H "Authorization: Bearer $CF_TOKEN" \
+            "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/settings/ssl" \
+            | jq '.result.value'
