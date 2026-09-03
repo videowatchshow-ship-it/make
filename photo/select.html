@@ -17,6 +17,13 @@ html,body{width:100%;min-height:100%;background:#0a0a0a;color:#eee;font-family:'
 .url-btn.snw{background:#4a148c22;border-color:#ab47bc;color:#ce93d8}
 .url-btn.out{background:#222;border-color:#444;color:#aaa;margin-left:auto}
 .url-btn:hover{opacity:.8}
+.url-panel{padding:8px 12px;background:#0f0f0f;border-bottom:1px solid #1e1e1e;display:flex;flex-direction:column;gap:6px}
+.url-row{display:flex;align-items:center;gap:6px}
+.url-lbl{font-size:12px;font-weight:bold;width:78px;flex:none;padding:4px 6px;border-radius:4px;border:1px solid;text-align:center}
+.url-lbl.cah{border-color:#5c6bc0;color:#9fa8da}.url-lbl.caw{border-color:#43a047;color:#a5d6a7}.url-lbl.snw{border-color:#ab47bc;color:#ce93d8}
+.url-txt{flex:1;min-width:0;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:4px;color:#ddd;font-size:12px;padding:6px 8px;font-family:monospace}
+.copy{flex:none;padding:6px 12px;background:#ffd54f;border:none;border-radius:4px;color:#000;font-size:12px;font-weight:bold;cursor:pointer}
+.copy.ok{background:#66bb6a;color:#fff}
 .venue-tabs{display:flex;gap:4px;padding:8px 10px 0;border-bottom:1px solid #1e1e1e;background:#0f0f0f;overflow-x:auto}
 .venue-tab{padding:9px 18px;font-size:14px;font-weight:bold;color:#888;background:#161616;border:1px solid #262626;border-bottom:none;border-radius:6px 6px 0 0;cursor:pointer;white-space:nowrap}
 .venue-tab .cnt{font-size:11px;color:#666;margin-left:4px}
@@ -53,6 +60,11 @@ html,body{width:100%;min-height:100%;background:#0a0a0a;color:#eee;font-family:'
     <a class="url-btn out" href="login.html">로그아웃</a>
   </div>
 </div>
+<div class="url-panel">
+  <div class="url-row"><span class="url-lbl cah">세로</span><input class="url-txt" id="url-cah" readonly><button class="copy" data-for="url-cah">복사</button></div>
+  <div class="url-row"><span class="url-lbl caw">가로</span><input class="url-txt" id="url-caw" readonly><button class="copy" data-for="url-caw">복사</button></div>
+  <div class="url-row"><span class="url-lbl snw">뉴싱지 세로</span><input class="url-txt" id="url-snw" readonly><button class="copy" data-for="url-snw">복사</button></div>
+</div>
 <div class="venue-tabs" id="venue-tabs"></div>
 <div class="status-bar">계정 <b id="cur-ch">-</b> · 선택 중: <span id="cur-label">-</span></div>
 <div class="room-grid" id="room-grid"></div>
@@ -68,6 +80,17 @@ html,body{width:100%;min-height:100%;background:#0a0a0a;color:#eee;font-family:'
   document.getElementById('btn-cah').href = BASE + 'CAH_1.html?ch=' + ch;
   document.getElementById('btn-caw').href = BASE + 'CAW_1.html?ch=' + ch;
   document.getElementById('btn-snw').href = BASE + 'SNW_1.html?ch=' + ch;
+  const ABS = location.origin + BASE;
+  document.getElementById('url-cah').value = ABS + 'CAH_1.html?ch=' + ch;
+  document.getElementById('url-caw').value = ABS + 'CAW_1.html?ch=' + ch;
+  document.getElementById('url-snw').value = ABS + 'SNW_1.html?ch=' + ch;
+  document.querySelectorAll('.copy').forEach(b => b.addEventListener('click', async () => {
+    const inp = document.getElementById(b.dataset.for);
+    try { await navigator.clipboard.writeText(inp.value); }
+    catch(_) { inp.select(); document.execCommand('copy'); }
+    b.textContent = '완료'; b.classList.add('ok');
+    setTimeout(() => { b.textContent = '복사'; b.classList.remove('ok'); }, 1200);
+  }));
 
   let tables = null, selRoomId = null, curVenue = null;
   const cache = {};

@@ -1,0 +1,52 @@
+name: probe-526h
+on:
+  push:
+    paths:
+      - '.github/workflows/probe-526h.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: 526h hosts from fcj6 bundle (possible other venue)
+        run: |
+          set +e
+          UA="Mozilla/5.0"
+          for U in "https://1.526h.com/" "https://3.api.526h.com/" "https://3.api.526h.com/api/pub/get_room?room_id=1" "https://3.api.526h.com/api/pub/get_newly_issue?room_id=1"; do
+            echo "=== $U"; curl -sS -o /tmp/x -w "HTTP %{http_code} size %{size_download} final %{url_effective}\n" --max-time 12 -A "$UA" -L "$U"; head -c 600 /tmp/x | tr '\n' ' '; echo
+          done
+          echo "=== bundle context for 526h"
+          curl -sS --max-time 30 -A "$UA" -o m.js "https://fcj6.oqogyf.com/assets/main/index.js"
+          python3 - <<'PY'
+          s=open('m.js',encoding='utf-8',errors='replace').read()
+          for k in ['526h','agencies/to_login','apibaseURL"','getConfig("']:
+              i=0;n=0
+              while n<4:
+                  i=s.find(k,i)
+                  if i<0: break
+                  print(f'\n== {k} @{i}\n'+s[max(0,i-250):i+350]); i+=len(k); n+=1
+          PY
+      - name: get_room enumeration on 3.api.526h.com
+        run: |
+          python3 - <<'PY'
+          import json, urllib.request, concurrent.futures
+          H={'User-Agent':'Mozilla/5.0','Origin':'https://1.526h.com','Referer':'https://1.526h.com/'}
+          def probe(rid):
+              try:
+                  req=urllib.request.Request(f'https://3.api.526h.com/api/pub/get_room?room_id={rid}',headers=H)
+                  d=json.loads(urllib.request.urlopen(req,timeout=8).read())
+                  if isinstance(d,dict) and d.get('room_name') is not None: return rid,d.get('room_name'),d.get('game_id')
+              except Exception: pass
+              return None
+          found=[]
+          with concurrent.futures.ThreadPoolExecutor(24) as ex:
+              for r in ex.map(probe, range(1,400)):
+                  if r: found.append(r); print('ROOM',r)
+          print('COUNT',len(found))
+          if found:
+              rid=found[0][0]
+              req=urllib.request.Request(f'https://3.api.526h.com/api/pub/get_newly_issue?room_id={rid}',headers=H)
+              try: print('newly_issue', urllib.request.urlopen(req,timeout=8).read()[:400])
+              except Exception as e: print('newly_issue err', e)
+          PY
