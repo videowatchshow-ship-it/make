@@ -10,47 +10,23 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+      ZONE_ID: "7e5faed2d3d4d6da7aceb4ddde81a62b"
+      NEW_IP: "187.53.133.145"
     steps:
-      - name: Find zone ID for domain
-        id: zone
-        run: |
-          if [ -z "$CF_TOKEN" ]; then
-            echo "CLOUDFLARE_TOKEN secret not set"
-            exit 1
-          fi
-          echo "== List all zones =="
-          ZONES=$(curl -sS -H "Authorization: Bearer $CF_TOKEN" \
-            "https://api.cloudflare.com/client/v4/zones?per_page=50")
-          echo "$ZONES" | jq '.result[] | {id, name, status}'
-          
-          ZONE_ID=$(echo "$ZONES" | jq -r '.result[] | select(.name | test("xn--9d0bw2fjtyymch7de9d")) | .id')
-          if [ -z "$ZONE_ID" ]; then
-            echo "Zone not found by punycode, trying all zones:"
-            echo "$ZONES" | jq -r '.result[] | "\(.name) -> \(.id)"'
-            exit 1
-          fi
-          echo "Found zone ID: $ZONE_ID"
-          echo "zone_id=$ZONE_ID" >> $GITHUB_OUTPUT
-
       - name: List current DNS records
         run: |
-          ZONE_ID="${{ steps.zone.outputs.zone_id }}"
           echo "== Current DNS records =="
           curl -sS -H "Authorization: Bearer $CF_TOKEN" \
             "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?per_page=100" \
             | jq '.result[] | {id, name, type, content, proxied}'
 
-      - name: Update root A record to new VPS
+      - name: Update A records to new VPS IP
         run: |
-          ZONE_ID="${{ steps.zone.outputs.zone_id }}"
-          NEW_IP="187.53.133.145"
-          
-          echo "== Finding A records for root =="
+          echo "== Fetching A records =="
           RECORDS=$(curl -sS -H "Authorization: Bearer $CF_TOKEN" \
-            "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=A")
+            "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=A&per_page=100")
           echo "$RECORDS" | jq '.result[] | {id, name, content, proxied}'
-          
-          # Update each A record to point to new VPS
+
           for RECORD_ID in $(echo "$RECORDS" | jq -r '.result[] | select(.type=="A") | .id'); do
             RECORD_NAME=$(echo "$RECORDS" | jq -r ".result[] | select(.id==\"$RECORD_ID\") | .name")
             echo "Updating $RECORD_NAME ($RECORD_ID) -> $NEW_IP"
@@ -58,12 +34,16 @@ jobs:
               -H "Authorization: Bearer $CF_TOKEN" \
               -H "Content-Type: application/json" \
               "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$RECORD_ID" \
-              -d "{\"content\":\"$NEW_IP\",\"proxied\":true}" | jq '{success, result: {name: .result.name, content: .result.content, proxied: .result.proxied}}'
+              -d "{\"content\":\"$NEW_IP\",\"proxied\":true}" \
+              | jq '{success, result: {name: .result.name, content: .result.content, proxied: .result.proxied}}'
           done
 
-      - name: Verify DNS update
+      - name: Verify DNS
         run: |
-          echo "== Verify dig =="
           sleep 5
+          echo "== Verify A records =="
+          curl -sS -H "Authorization: Bearer $CF_TOKEN" \
+            "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=A&per_page=100" \
+            | jq '.result[] | {name, content, proxied}'
+          echo "== dig check =="
           dig +short xn--9d0bw2fjtyymch7de9d.info A
-          echo "== Done =="
