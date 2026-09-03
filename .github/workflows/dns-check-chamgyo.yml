@@ -1,0 +1,48 @@
+name: dns-check-chamgyo
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/dns-check-chamgyo.yml']
+
+jobs:
+  check-dns:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check current DNS for domain
+        run: |
+          DOMAIN="xn--9d0bw2fjtyymch7de9d.info"
+          echo "== A records =="
+          dig +short $DOMAIN A || nslookup $DOMAIN
+          echo "== NS records =="
+          dig +short $DOMAIN NS
+          echo "== CNAME =="
+          dig +short $DOMAIN CNAME
+          echo "== Full dig =="
+          dig $DOMAIN ANY +noall +answer
+          echo "== Subdomain photo =="
+          dig +short photo.$DOMAIN A
+          dig +short photo.$DOMAIN CNAME
+          echo "== WHOIS nameservers =="
+          whois $DOMAIN 2>/dev/null | grep -i 'name server' || true
+
+      - name: Check Cloudflare DNS zone
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          if [ -z "$CF_TOKEN" ] || [ -z "$CF_ZONE" ]; then
+            echo "Cloudflare secrets not set, skipping"
+            exit 0
+          fi
+          echo "== Cloudflare DNS records =="
+          curl -sS -H "Authorization: Bearer $CF_TOKEN" \
+            "https://api.cloudflare.com/client/v4/zones/$CF_ZONE/dns_records?per_page=100" \
+            | jq '.result[] | {name, type, content, proxied}'
+
+      - name: Test VPS connectivity
+        run: |
+          echo "== HTTP check on VPS =="
+          curl -sS -o /dev/null -w 'HTTP %{http_code}\n' http://187.53.133.145/ || true
+          echo "== VPS reverse DNS =="
+          dig +short -x 187.53.133.145 || true
