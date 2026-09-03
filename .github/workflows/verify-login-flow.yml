@@ -1,0 +1,70 @@
+name: verify-login-flow
+on:
+  push:
+    paths:
+      - '.github/workflows/verify-login-flow.yml'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      VPS_IP: "187.53.133.145"
+      VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
+      CF_ZONE: "7e5faed2d3d4d6da7aceb4ddde81a62b"
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+
+      - name: Re-purge CF cache
+        run: |
+          curl -sS -X POST \
+            "https://api.cloudflare.com/client/v4/zones/$CF_ZONE/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"purge_everything":true}' | jq .
+
+      - name: Check VPS files
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          BASE="/var/www/sites/chamgyo/public"
+
+          echo "===== login.html content ====="
+          $SSH "cat $BASE/photo/login.html"
+
+          echo ""
+          echo "===== CAH_1.html exists? ====="
+          $SSH "ls -la $BASE/photo/CAH_1.html $BASE/photo2/CAH_1.html $BASE/photo3/CAH_1.html 2>&1"
+
+          echo ""
+          echo "===== All files in /photo/ ====="
+          $SSH "ls -la $BASE/photo/"
+
+          echo ""
+          echo "===== index.html (redirect) ====="
+          $SSH "cat $BASE/photo/index.html"
+
+          echo ""
+          echo "===== Nginx config ====="
+          $SSH "cat /etc/nginx/sites-enabled/* 2>/dev/null | head -40"
+
+      - name: Verify live with headers
+        run: |
+          sleep 5
+          DOMAIN="xn--9d0bw2fjtyymch7de9d.info"
+
+          echo "===== /photo/ response ====="
+          curl -sS -D- "https://$DOMAIN/photo/" | head -20
+
+          echo ""
+          echo "===== /photo/login.html full headers ====="
+          curl -sS -D- -o /tmp/login.html "https://$DOMAIN/photo/login.html"
+          cat /tmp/login.html
+
+          echo ""
+          echo "===== /photo/CAH_1.html check ====="
+          curl -sS -D- -o /dev/null -w "HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/CAH_1.html?ch=01"
+
+          echo ""
+          echo "===== SHA256 ====="
+          sha256sum /tmp/login.html
