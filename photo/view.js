@@ -7,7 +7,8 @@
    - 포추나(fd_)   → 원본 페이지 임베드 */
 ;(function () {
   'use strict';
-  const BASE = location.pathname.replace(/[^\/]*$/, '');
+  // 루트 별칭(/CAW_1.php 등)으로 열려도 <base href="/photo/"> 기준으로 API·데이터 경로 계산
+  const BASE = new URL(document.baseURI).pathname.replace(/[^\/]*$/, '');
   const q = new URLSearchParams(location.search);
   const acc = q.get('ch') || '01';
   const XTD_MAP = {"10":10,"11":11,"12":12,"15":15,"16":16,"17":87,"18":18,"19":89,"20":20,"21":21,"22":22,"23":23,"25":25,"26":26,"27":27,"55":31,"66":32,"77":33,"88":34,"99":35};

@@ -41,7 +41,7 @@ a{text-decoration:none;color:white}
 <div id="adminView" hidden>
 <nav class="navbar">
   <ul class="navbar_menu">
-    <li><a id="nav-home" href="select.html" target="_blank" title="홈페이지"><i class="bi bi-house-door-fill"></i></a></li>
+    <li><a id="nav-home" href="select.html" title="출목표 선택 하기">[ 출목표 선택 하기 ]</a></li>
     <li><a href="#" class="active">[ GAME ]</a></li>
     <li><a id="nav-url" href="select.html">[ URL ]</a></li>
     <li><a href="#" id="logout" title="로그아웃"><i class="bi bi-box-arrow-right"></i></a></li>
@@ -173,7 +173,7 @@ a{text-decoration:none;color:white}
       const img = $(id);
       if (s[k]) { img.src = BASE + s[k]; img.hidden = false; } else img.hidden = true;
     }
-    $('#nav-home').href = BASE + 'CAH_1.html?ch=' + ch;
+    $('#nav-home').href = BASE + 'select.html?ch=' + ch;
     $('#nav-url').href = BASE + 'select.html?ch=' + ch;
   }
 

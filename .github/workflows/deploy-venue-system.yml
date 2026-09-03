@@ -141,3 +141,8 @@ jobs:
             printf "%s → " "$k"; curl -sS -o /tmp/r -w "HTTP %{http_code} " "$D/data/room_$k.json"; python3 -c "import json;d=json.load(open('/tmp/r'));print('nums',len(d.get('nums',[])),d.get('server_time'))" 2>/dev/null || echo
           done
           echo "--- select.html venues ---"; curl -sS "$D/select.html" | grep -c 'venue-tab'
+          echo "--- root alias pages: <base href> + assets the browser will actually request ---"
+          R="https://xn--9d0bw2fjtyymch7de9d.info"
+          for p in CAW_1.php CAH_1.php CAH_2.php; do printf "%-10s HTTP %s base=%s\n" "$p" "$(curl -sS -o /tmp/o -w '%{http_code}' "$R/$p")" "$(grep -o '<base[^>]*>' /tmp/o)"; done
+          for a in photo/view.js photo/bgl.js photo/luzhu.html photo/luzhu.js photo/images/nextPB_A4.png photo/images/h_side_banner.png photo/images/Live_height_banner_scj.gif photo/include/live_style.css "photo/api_settings.php?ch=01" photo/luzhu_img/zhuzi/1.png photo/luzhu_img/dalu/1.png; do
+            printf "%-45s HTTP %s size %s\n" "$a" "$(curl -sS -o /tmp/o -w '%{http_code}' "$R/$a")" "$(stat -c%s /tmp/o)"; done

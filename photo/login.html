@@ -43,7 +43,7 @@ button:hover{background:#ffe57f}
       if(!d.ok){ err.textContent = d.error || '로그인 실패'; return; }
       if(d.role === 'master'){
         sessionStorage.setItem('adminAuth', JSON.stringify({id: uid, pw: pw, role: 'master'}));
-        location.href = base + 'admin.html?ch=01';          // 마스터 → 그림장 정보 수정 (원본 write.php)
+        location.href = base + 'select.html?ch=01';         // 마스터 → 가장 먼저 출목표 선택 하기 (그림장 설정은 상단 메뉴)
       } else {
         location.href = base + 'select.html?ch=' + uid;     // 일반 계정 → 테이블 선택
       }
