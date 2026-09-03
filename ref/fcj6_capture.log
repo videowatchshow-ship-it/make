@@ -1,0 +1,475 @@
+[console] 9/3/2026 23:26:51 [INFO] NodePlayer.js init with v1.3.3-wasm 
+[console] The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+[console] [.WebGL-0x197401043100]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+SAVED 3122 application/json https://fcj6.oqogyf.com/assets/internal/config.json
+SAVED 1034316 application/json https://fcj6.oqogyf.com/assets/internal/import/0b/0b2bbb7a0.json
+SAVED 45144 application/json https://fcj6.oqogyf.com/assets/resources/config.json
+SAVED 15445 application/json https://fcj6.oqogyf.com/assets/main/config.json
+[console] [.WebGL-0x197401043100]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[console] [.WebGL-0x197401043100]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[console] [.WebGL-0x197401043100]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)
+SAVED 2768024 application/json https://fcj6.oqogyf.com/assets/main/import/03/030b1a1c2.json
+SAVED 3728 application/json https://fcj6.oqogyf.com/assets/resources/import/07/078eba5f0.json
+SAVED 7435 application/json https://fcj6.oqogyf.com/assets/resources/import/0e/0e5057d7f.json
+SAVED 1177 image/png https://fcj6.oqogyf.com/assets/main/native/9f/9fd900dd-221b-4f89-8f2c-fba34243c835.png
+SAVED 116066 image/png https://fcj6.oqogyf.com/assets/main/native/d0/d032ac98-05e1-4090-88bb-eb640dcb5fc1@b47c0@e9a6d.png
+SAVED 99071 image/png https://fcj6.oqogyf.com/assets/main/native/d0/d032ac98-05e1-4090-88bb-eb640dcb5fc1@b47c0@40c10.png
+SAVED 103826 image/png https://fcj6.oqogyf.com/assets/main/native/d0/d032ac98-05e1-4090-88bb-eb640dcb5fc1@b47c0@8fd34.png
+SAVED 117874 image/png https://fcj6.oqogyf.com/assets/main/native/d0/d032ac98-05e1-4090-88bb-eb640dcb5fc1@b47c0@74afd.png
+SAVED 35222 image/png https://fcj6.oqogyf.com/assets/main/native/d0/d032ac98-05e1-4090-88bb-eb640dcb5fc1@b47c0@7d38f.png
+SAVED 48101 image/png https://fcj6.oqogyf.com/assets/main/native/6f/6f01cf7f-81bf-4a7e-bd5d-0afc19696480@b47c0@e9a6d.png
+SAVED 117218 image/png https://fcj6.oqogyf.com/assets/main/native/d0/d032ac98-05e1-4090-88bb-eb640dcb5fc1@b47c0@bb97f.png
+SAVED 54213 image/png https://fcj6.oqogyf.com/assets/main/native/6f/6f01cf7f-81bf-4a7e-bd5d-0afc19696480@b47c0@40c10.png
+SAVED 57592 image/png https://fcj6.oqogyf.com/assets/main/native/6f/6f01cf7f-81bf-4a7e-bd5d-0afc19696480@b47c0@8fd34.png
+SAVED 54380 image/png https://fcj6.oqogyf.com/assets/main/native/6f/6f01cf7f-81bf-4a7e-bd5d-0afc19696480@b47c0@74afd.png
+SAVED 6102 image/png https://fcj6.oqogyf.com/assets/main/native/6f/6f01cf7f-81bf-4a7e-bd5d-0afc19696480@b47c0@7d38f.png
+SAVED 60699 image/png https://fcj6.oqogyf.com/assets/main/native/6f/6f01cf7f-81bf-4a7e-bd5d-0afc19696480@b47c0@bb97f.png
+SAVED 1140 image/png https://fcj6.oqogyf.com/assets/main/native/24/24a704da-2867-446d-8d1a-5e920c75e09d.png
+SAVED 6758 application/json https://fcj6.oqogyf.com/assets/resources/import/09/093e77d17.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/7d/7d8f9b89-4fd1-4c9f-a3ab-38ec7cded7ca.json
+SAVED 78 application/json https://fcj6.oqogyf.com/assets/resources/import/13/138f42fa4.json
+SAVED 82 image/png https://fcj6.oqogyf.com/assets/resources/native/7d/7d8f9b89-4fd1-4c9f-a3ab-38ec7cded7ca.png
+SAVED 2397120 image/png https://fcj6.oqogyf.com/assets/resources/native/13/138f42fa4.png
+[console] LoadScene db://assets/scenes/LoadScene.scene: 2357.912841796875 ms
+SAVED 2797 application/json https://fcj6.oqogyf.com/assets/resources/import/0a/0aa68d672.json
+SAVED 540 application/json https://fcj6.oqogyf.com/assets/resources/import/ef/effdfc6a-5d47-4408-802d-ce6bdc3e554b@f9941.json
+SAVED 557 application/json https://fcj6.oqogyf.com/assets/resources/import/9d/9d6b4a92-ff65-48cf-99dc-78a57f8ef352@f9941.json
+SAVED 547 application/json https://fcj6.oqogyf.com/assets/resources/import/be/bea457fb-124d-4afc-8ee8-901e7fd1146f@f9941.json
+SAVED 564 application/json https://fcj6.oqogyf.com/assets/resources/import/cc/cc761c07-b058-41b1-8c12-eaba5cc075c6@f9941.json
+SAVED 564 application/json https://fcj6.oqogyf.com/assets/resources/import/68/687b3872-147f-4acc-98dc-3bd7027d0804@f9941.json
+SAVED 572 application/json https://fcj6.oqogyf.com/assets/resources/import/64/64dfa263-c04e-4467-a9ad-8ca1475bd012@f9941.json
+SAVED 572 application/json https://fcj6.oqogyf.com/assets/resources/import/c5/c5761883-23b2-483f-af7e-76a1ff59566b@f9941.json
+SAVED 727 application/json https://fcj6.oqogyf.com/assets/resources/import/3d/3da3fe9b-9c72-4c88-8cc8-0e0e4cd2f025@f9941.json
+SAVED 608 application/json https://fcj6.oqogyf.com/assets/resources/import/88/8822b0cb-7918-4704-9f8d-c865ae4a175e@f9941.json
+SAVED 579 application/json https://fcj6.oqogyf.com/assets/resources/import/39/39eac373-dea9-4a46-8d94-6be3dc550f34@f9941.json
+SAVED 569 application/json https://fcj6.oqogyf.com/assets/resources/import/de/de6b252a-b9a1-4b41-8ba7-8962312cfdb0@f9941.json
+SAVED 551 application/json https://fcj6.oqogyf.com/assets/resources/import/58/5819d683-47da-4760-b7ff-ba013cdb17e8@f9941.json
+SAVED 550 application/json https://fcj6.oqogyf.com/assets/resources/import/85/855e4849-8bd6-454d-b707-1e11465a03fc@f9941.json
+SAVED 660 application/json https://fcj6.oqogyf.com/assets/resources/import/dd/ddec0068-6d26-48b6-a16b-2c4ae9fc0646@f9941.json
+SAVED 549 application/json https://fcj6.oqogyf.com/assets/resources/import/a4/a4856362-6b51-4a2a-b00e-d8e7468cb7cd@f9941.json
+SAVED 563 application/json https://fcj6.oqogyf.com/assets/resources/import/88/885c3543-e5af-48de-b11c-78a50153d132@f9941.json
+SAVED 577 application/json https://fcj6.oqogyf.com/assets/resources/import/91/919d7bc0-4118-449f-87f2-f9e16879cfcd@f9941.json
+SAVED 578 application/json https://fcj6.oqogyf.com/assets/resources/import/f6/f6a21555-c0b0-47c6-b733-f891d00d218c@f9941.json
+SAVED 1532 application/octet-stream https://fcj6.oqogyf.com/assets/main/import/f9/f9bdd610-6c24-4c45-8cc8-46cfe4a04c5f.cconb
+SAVED 535 application/json https://fcj6.oqogyf.com/assets/resources/import/67/67793e1b-6343-4f9e-a8e4-8008aff97c1f@f9941.json
+SAVED 2497 application/json https://fcj6.oqogyf.com/assets/resources/import/0d/0d8571e91.json
+SAVED 3576 application/json https://fcj6.oqogyf.com/assets/resources/import/08/085d70f51.json
+SAVED 1785 application/json https://fcj6.oqogyf.com/assets/resources/import/a6/a6a029ed-c75f-4d0d-a692-172e0c35c958.json
+SAVED 1764 application/json https://fcj6.oqogyf.com/assets/resources/import/ef/ef126f66-10c2-4bc3-bfac-0b7c8e28187a.json
+SAVED 1750 application/json https://fcj6.oqogyf.com/assets/resources/import/c7/c7d47576-6b76-44de-8b58-fa5357ba33ec.json
+SAVED 3229 application/json https://fcj6.oqogyf.com/assets/resources/import/e1/e13b39d7-fb6c-4fc2-8f0f-3b40c97cb4b2.json
+SAVED 2898 application/json https://fcj6.oqogyf.com/assets/resources/import/08/085cc810-a0e5-4805-bef5-eb079e7d409c.json
+SAVED 591 application/json https://fcj6.oqogyf.com/assets/resources/import/16/162ec994-347f-4c8b-b42b-896eea513695@f9941.json
+SAVED 1747 application/json https://fcj6.oqogyf.com/assets/resources/import/11/112380d8-0b6a-4f67-83f7-00e3d06e946f.json
+SAVED 14874 application/json https://fcj6.oqogyf.com/assets/resources/import/06/0663ab0ad.json
+SAVED 574 application/json https://fcj6.oqogyf.com/assets/resources/import/ad/ad5bbdb2-42bb-4f29-b93f-9504b09c7c7e@f9941.json
+SAVED 570 application/json https://fcj6.oqogyf.com/assets/resources/import/f4/f4f80e69-c7a9-4581-a542-5d02334db5a0@f9941.json
+SAVED 584 application/json https://fcj6.oqogyf.com/assets/resources/import/67/67d0578f-cc0c-4b3a-a50c-483e98e1022f@f9941.json
+SAVED 1050 application/octet-stream https://fcj6.oqogyf.com/assets/main/import/a6/a663ddcc-08db-443a-b572-e61eca6a17b0.cconb
+SAVED 1050 application/octet-stream https://fcj6.oqogyf.com/assets/main/import/a0/a0deea3f-c8cd-48e6-b7dd-6aaada817786.cconb
+SAVED 579 application/json https://fcj6.oqogyf.com/assets/resources/import/0e/0e14e83a-a7af-4b0f-85b3-939847a4abf3@f9941.json
+SAVED 586 application/json https://fcj6.oqogyf.com/assets/resources/import/b7/b76dff3b-1de2-4b5b-a156-da91b0cb8aee@f9941.json
+SAVED 565 application/json https://fcj6.oqogyf.com/assets/resources/import/da/daf69f68-1b69-4241-9e90-1e4c7156dfdf@f9941.json
+SAVED 2735 application/json https://fcj6.oqogyf.com/assets/resources/import/59/59eb5ba1-3262-4199-84c5-18e18764214e.json
+SAVED 80382 application/json https://fcj6.oqogyf.com/assets/resources/import/0b/0bae7389d.json
+SAVED 595 application/json https://fcj6.oqogyf.com/assets/resources/import/95/9514223e-7451-470b-9533-3b11e2647154@f9941.json
+SAVED 603 application/json https://fcj6.oqogyf.com/assets/resources/import/d1/d180e912-20f0-43dc-a447-9929cb4eaa23@f9941.json
+SAVED 1042 application/octet-stream https://fcj6.oqogyf.com/assets/main/import/ae/ae5482b8-b871-4d1e-bdb2-6e723ae66b92.cconb
+SAVED 9023 application/json https://fcj6.oqogyf.com/assets/resources/import/0d/0db638909.json
+SAVED 549 application/json https://fcj6.oqogyf.com/assets/resources/import/8f/8f800349-a255-4aab-82c4-25bfbc932a15@f9941.json
+SAVED 6085 application/json https://fcj6.oqogyf.com/assets/resources/import/05/059bb58b3.json
+SAVED 578 application/json https://fcj6.oqogyf.com/assets/resources/import/6d/6d2c48a1-ecd2-4a50-a709-e5a8773e356e@f9941.json
+SAVED 9071 application/json https://fcj6.oqogyf.com/assets/resources/import/0e/0ebba1a07.json
+SAVED 615 application/json https://fcj6.oqogyf.com/assets/resources/import/3d/3d69f296-21ec-4230-a805-31d7e8e7aecd@f9941.json
+SAVED 574 application/json https://fcj6.oqogyf.com/assets/resources/import/91/912f460c-67a1-400a-a1bc-262b571382e5@f9941.json
+SAVED 1864 application/json https://fcj6.oqogyf.com/assets/resources/import/f1/f13c84e1-ffb6-468f-9145-de0604c8cd37.json
+SAVED 7183 application/json https://fcj6.oqogyf.com/assets/resources/import/01/013b6ddb2.json
+SAVED 551 application/json https://fcj6.oqogyf.com/assets/resources/import/af/af8bcb73-0dbc-4ae0-8d0e-ee7348e10690@f9941.json
+SAVED 580 application/json https://fcj6.oqogyf.com/assets/resources/import/ac/acc347eb-3f90-4b6a-a27b-364c4fdc9ace@f9941.json
+SAVED 577 application/json https://fcj6.oqogyf.com/assets/resources/import/a5/a5076ce6-ad47-47a0-ba40-2529ac0f95bd@f9941.json
+SAVED 8402 application/json https://fcj6.oqogyf.com/assets/resources/import/0e/0e452debe.json
+SAVED 3228 application/octet-stream https://fcj6.oqogyf.com/assets/resources/import/ab/ab65b038-3699-4351-b865-69022bb6a2e2.cconb
+SAVED 3949 application/json https://fcj6.oqogyf.com/assets/resources/import/02/024435ea0.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/16/16f33eff-7fc0-4414-a311-0c37325ff41c.json
+SAVED 2558 image/png https://fcj6.oqogyf.com/assets/main/native/4a/4ade403d-2056-4c4d-842e-8013066ed888.png
+SAVED 2829 image/png https://fcj6.oqogyf.com/assets/main/native/ea/ea5dd919-91c2-437a-a5d2-a9721f8d56b8.png
+SAVED 2635 image/png https://fcj6.oqogyf.com/assets/main/native/0e/0ec1caf8-da94-4100-b62a-1fc66f92af46.png
+SAVED 2686 image/png https://fcj6.oqogyf.com/assets/main/native/e8/e8c32a9f-d3f5-45a2-aff4-47fef78c2ce8.png
+SAVED 2791 image/png https://fcj6.oqogyf.com/assets/main/native/dd/ddfc8b57-3e7d-4cec-9e52-8eac09e5ecf4.png
+SAVED 2624 image/png https://fcj6.oqogyf.com/assets/main/native/e1/e1a30620-37c9-48f2-8aa1-a2fb7a945e68.png
+SAVED 2540 image/png https://fcj6.oqogyf.com/assets/main/native/71/713e2056-4cd7-4267-991b-953e76c237f2.png
+SAVED 2590 image/png https://fcj6.oqogyf.com/assets/main/native/8d/8d92c98b-9d89-476c-b519-18148316daa3.png
+SAVED 2850 image/png https://fcj6.oqogyf.com/assets/main/native/09/095d3e07-92b6-440d-b008-fa792f647237.png
+SAVED 2686 image/png https://fcj6.oqogyf.com/assets/main/native/d0/d00eb6c9-a7e3-436d-9df4-b2b5ab0ef3cb.png
+SAVED 2631 image/png https://fcj6.oqogyf.com/assets/main/native/d3/d3f4b0f0-0492-4263-a36a-71463aeffd81.png
+SAVED 2509 image/png https://fcj6.oqogyf.com/assets/main/native/99/99017331-a3ca-4345-826b-7a952886ab63.png
+SAVED 2445 image/png https://fcj6.oqogyf.com/assets/main/native/73/73d689f8-0d19-4282-9051-42de344a33bd.png
+SAVED 2534 image/png https://fcj6.oqogyf.com/assets/main/native/02/02792a8b-e555-45da-909b-78adb1b6a830.png
+SAVED 2783 image/png https://fcj6.oqogyf.com/assets/main/native/a5/a58b8898-69e4-4b67-8c32-42f816611b49.png
+SAVED 2645 image/png https://fcj6.oqogyf.com/assets/main/native/9d/9de97b35-0241-4e92-9b32-487b7190543f.png
+SAVED 2373 image/png https://fcj6.oqogyf.com/assets/main/native/d2/d20451d9-ab18-4ddc-8494-34a4c78600b8.png
+SAVED 2568 image/png https://fcj6.oqogyf.com/assets/main/native/d9/d992c70c-486e-49a9-9a8b-b4fca904cc96.png
+SAVED 2650 image/png https://fcj6.oqogyf.com/assets/main/native/18/1809db88-ba0e-48f1-b387-86c63549e1cb.png
+SAVED 2539 image/png https://fcj6.oqogyf.com/assets/resources/native/16/16f33eff-7fc0-4414-a311-0c37325ff41c.png
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/9d/9d6b4a92-ff65-48cf-99dc-78a57f8ef352.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/be/bea457fb-124d-4afc-8ee8-901e7fd1146f.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/64/64dfa263-c04e-4467-a9ad-8ca1475bd012.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/cc/cc761c07-b058-41b1-8c12-eaba5cc075c6.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/68/687b3872-147f-4acc-98dc-3bd7027d0804.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/c5/c5761883-23b2-483f-af7e-76a1ff59566b.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/de/de6b252a-b9a1-4b41-8ba7-8962312cfdb0.json
+SAVED 1943 image/png https://fcj6.oqogyf.com/assets/main/native/f9/f9ef8ddc-12bc-4859-944a-cafd1880705e.png
+SAVED 1047 image/png https://fcj6.oqogyf.com/assets/main/native/af/afc47931-f066-46b0-90be-9fe61f213428.png
+SAVED 43839 image/jpeg https://fcj6.oqogyf.com/assets/main/native/b1/b1513814-ee8d-4087-8f81-1af2bcb1f6f8.jpg
+SAVED 41634 image/png https://fcj6.oqogyf.com/assets/main/native/65/652499f0-c3d4-44c4-8d62-be40b758b7f2.png
+SAVED 30329 image/png https://fcj6.oqogyf.com/assets/main/native/57/576c21f6-2f11-4b8b-8368-85d0b771bf6b.png
+SAVED 82419 image/jpeg https://fcj6.oqogyf.com/assets/main/native/45/457d60f3-c930-4c81-bcaa-33dddb2d97e5.jpg
+SAVED 14681 image/png https://fcj6.oqogyf.com/assets/main/native/78/78af1ddb-d905-45af-a4bb-2c7a986f7c0b.png
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/3d/3da3fe9b-9c72-4c88-8cc8-0e0e4cd2f025.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/88/8822b0cb-7918-4704-9f8d-c865ae4a175e.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/39/39eac373-dea9-4a46-8d94-6be3dc550f34.json
+SAVED 1160 image/webp https://fcj6.oqogyf.com/assets/resources/native/be/bea457fb-124d-4afc-8ee8-901e7fd1146f.webp
+SAVED 7736 image/png https://fcj6.oqogyf.com/assets/resources/native/64/64dfa263-c04e-4467-a9ad-8ca1475bd012.png
+SAVED 15664 image/webp https://fcj6.oqogyf.com/assets/resources/native/cc/cc761c07-b058-41b1-8c12-eaba5cc075c6.webp
+SAVED 16728 image/webp https://fcj6.oqogyf.com/assets/resources/native/68/687b3872-147f-4acc-98dc-3bd7027d0804.webp
+SAVED 7492 image/png https://fcj6.oqogyf.com/assets/resources/native/c5/c5761883-23b2-483f-af7e-76a1ff59566b.png
+SAVED 310469 image/png https://fcj6.oqogyf.com/assets/resources/native/9d/9d6b4a92-ff65-48cf-99dc-78a57f8ef352.png
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/58/5819d683-47da-4760-b7ff-ba013cdb17e8.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/dd/ddec0068-6d26-48b6-a16b-2c4ae9fc0646.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/85/855e4849-8bd6-454d-b707-1e11465a03fc.json
+SAVED 118021 image/png https://fcj6.oqogyf.com/assets/resources/native/3d/3da3fe9b-9c72-4c88-8cc8-0e0e4cd2f025.png
+SAVED 4288 image/webp https://fcj6.oqogyf.com/assets/resources/native/88/8822b0cb-7918-4704-9f8d-c865ae4a175e.webp
+SAVED 4690 image/webp https://fcj6.oqogyf.com/assets/resources/native/39/39eac373-dea9-4a46-8d94-6be3dc550f34.webp
+SAVED 240 image/webp https://fcj6.oqogyf.com/assets/resources/native/58/5819d683-47da-4760-b7ff-ba013cdb17e8.webp
+SAVED 8182 image/webp https://fcj6.oqogyf.com/assets/resources/native/dd/ddec0068-6d26-48b6-a16b-2c4ae9fc0646.webp
+SAVED 3724 image/webp https://fcj6.oqogyf.com/assets/resources/native/85/855e4849-8bd6-454d-b707-1e11465a03fc.webp
+SAVED 1238713 image/png https://fcj6.oqogyf.com/assets/resources/native/de/de6b252a-b9a1-4b41-8ba7-8962312cfdb0.png
+SAVED 22223 image/png https://fcj6.oqogyf.com/assets/main/native/b9/b9945ad1-4ec9-4fd5-8973-4e510e695a2b.png
+SAVED 1633 image/png https://fcj6.oqogyf.com/assets/main/native/57/57520716-48c8-4a19-8acf-41c9f8777fb0.png
+SAVED 25852 image/png https://fcj6.oqogyf.com/assets/main/native/9c/9cd97178-0cff-486e-b6a9-10edcf323bca.png
+SAVED 31996 image/png https://fcj6.oqogyf.com/assets/main/native/3c/3c54801e-57a0-4969-a716-7dfe86dd14d5.png
+SAVED 388 image/webp https://fcj6.oqogyf.com/assets/main/native/da/daa338fc-2c10-43a6-929b-e265e192c63b.webp
+SAVED 502 image/png https://fcj6.oqogyf.com/assets/main/native/9b/9bcfd290-1bbf-4107-bc37-8cfa93ca6d46.png
+SAVED 33807 image/png https://fcj6.oqogyf.com/assets/main/native/5b/5b2f3037-2e8b-486c-b7ed-d6834064420f.png
+SAVED 31946 image/png https://fcj6.oqogyf.com/assets/main/native/3b/3ba16dee-12c7-453d-9496-04434186a506.png
+SAVED 2506 image/png https://fcj6.oqogyf.com/assets/main/native/01/01a85007-77d6-4208-bc74-cfe42d024ff7.png
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/a4/a4856362-6b51-4a2a-b00e-d8e7468cb7cd.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/88/885c3543-e5af-48de-b11c-78a50153d132.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/91/919d7bc0-4118-449f-87f2-f9e16879cfcd.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/f6/f6a21555-c0b0-47c6-b733-f891d00d218c.json
+SAVED 4890 image/webp https://fcj6.oqogyf.com/assets/resources/native/88/885c3543-e5af-48de-b11c-78a50153d132.webp
+SAVED 242 image/webp https://fcj6.oqogyf.com/assets/resources/native/a4/a4856362-6b51-4a2a-b00e-d8e7468cb7cd.webp
+SAVED 80986 image/webp https://fcj6.oqogyf.com/assets/resources/native/91/919d7bc0-4118-449f-87f2-f9e16879cfcd.webp
+SAVED 8777 image/png https://fcj6.oqogyf.com/assets/main/native/d7/d7368721-fdfd-4a30-ac5c-152af6afc5bb.png
+SAVED 3416 image/webp https://fcj6.oqogyf.com/assets/main/native/82/8229b7d6-fefc-4161-9388-e8dbad28eea8.webp
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/16/162ec994-347f-4c8b-b42b-896eea513695.json
+SAVED 78 application/json https://fcj6.oqogyf.com/assets/resources/import/16/1663ab0ad.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/ad/ad5bbdb2-42bb-4f29-b93f-9504b09c7c7e.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/f4/f4f80e69-c7a9-4581-a542-5d02334db5a0.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/67/67d0578f-cc0c-4b3a-a50c-483e98e1022f.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/67/67793e1b-6343-4f9e-a8e4-8008aff97c1f.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/30/3066a730-32b4-49ca-84dd-afac11eebbab.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/45/45ce56d9-2bc1-46c8-9462-ec9ec98afe8a.json
+SAVED 5483 image/png https://fcj6.oqogyf.com/assets/main/native/55/557b7529-8f58-4319-864d-d4b8e214b1fd.png
+SAVED 2560 image/png https://fcj6.oqogyf.com/assets/main/native/24/24df9ad0-91e2-4428-b015-b7396035bcca.png
+SAVED 1619892 image/webp https://fcj6.oqogyf.com/assets/resources/native/f6/f6a21555-c0b0-47c6-b733-f891d00d218c.webp
+SAVED 506 image/webp https://fcj6.oqogyf.com/assets/resources/native/16/162ec994-347f-4c8b-b42b-896eea513695.webp
+SAVED 6395 image/png https://fcj6.oqogyf.com/assets/resources/native/f4/f4f80e69-c7a9-4581-a542-5d02334db5a0.png
+SAVED 3712 image/png https://fcj6.oqogyf.com/assets/resources/native/67/67d0578f-cc0c-4b3a-a50c-483e98e1022f.png
+SAVED 747 image/png https://fcj6.oqogyf.com/assets/resources/native/67/67793e1b-6343-4f9e-a8e4-8008aff97c1f.png
+SAVED 846 image/png https://fcj6.oqogyf.com/assets/resources/native/30/3066a730-32b4-49ca-84dd-afac11eebbab.png
+SAVED 1186 image/png https://fcj6.oqogyf.com/assets/resources/native/45/45ce56d9-2bc1-46c8-9462-ec9ec98afe8a.png
+SAVED 441159 image/png https://fcj6.oqogyf.com/assets/resources/native/ad/ad5bbdb2-42bb-4f29-b93f-9504b09c7c7e.png
+SAVED 790227 image/png https://fcj6.oqogyf.com/assets/resources/native/16/1663ab0ad.png
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/0e/0e14e83a-a7af-4b0f-85b3-939847a4abf3.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/da/daf69f68-1b69-4241-9e90-1e4c7156dfdf.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/b7/b76dff3b-1de2-4b5b-a156-da91b0cb8aee.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/37/37584520-b988-4427-9113-31a3bab26643.json
+SAVED 1378 image/webp https://fcj6.oqogyf.com/assets/resources/native/0e/0e14e83a-a7af-4b0f-85b3-939847a4abf3.webp
+SAVED 2720 image/webp https://fcj6.oqogyf.com/assets/resources/native/b7/b76dff3b-1de2-4b5b-a156-da91b0cb8aee.webp
+SAVED 94621 image/jpeg https://fcj6.oqogyf.com/assets/resources/native/da/daf69f68-1b69-4241-9e90-1e4c7156dfdf.jpg
+SAVED 131594 image/webp https://fcj6.oqogyf.com/assets/resources/native/37/37584520-b988-4427-9113-31a3bab26643.webp
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/eb/eb0383b7-3633-4198-85f2-53ba03b1f137.json
+SAVED 334 image/webp https://fcj6.oqogyf.com/assets/resources/native/eb/eb0383b7-3633-4198-85f2-53ba03b1f137.webp
+SAVED 158 image/png https://fcj6.oqogyf.com/assets/main/native/b7/b730527c-3233-41c2-aaf7-7cdab58f9749.png
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/c3/c3f9d28e-4e6c-4fbd-b675-737dfc76be4e.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/7b/7b88c7d9-8f09-4847-91a8-518b75fff3df.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/7d/7d28a394-2842-4865-a34a-18416df80d70.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/95/9514223e-7451-470b-9533-3b11e2647154.json
+SAVED 1187 image/png https://fcj6.oqogyf.com/assets/main/native/ff/ffb88a8f-af62-48f4-8f1d-3cb606443a43.png
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/d1/d180e912-20f0-43dc-a447-9929cb4eaa23.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/95/951249e0-9f16-456d-8b85-a6ca954da16b.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/54/544e49d6-3f05-4fa8-9a9e-091f98fc2ce8.json
+SAVED 98124 image/jpeg https://fcj6.oqogyf.com/assets/main/native/39/39536fb5-281a-4c6a-bc58-e59f0fd3660e.jpg
+SAVED 44429 image/png https://fcj6.oqogyf.com/assets/main/native/2c/2cec6308-ad72-4182-a499-0613b1ff54ab.png
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/20/20835ba4-6145-4fbc-a58a-051ce700aa3e.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/8f/8f800349-a255-4aab-82c4-25bfbc932a15.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/6d/6d2c48a1-ecd2-4a50-a709-e5a8773e356e.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/50/505146c8-3abe-4bd7-a44c-1cf71ac3d5f6.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/5d/5d7ef025-af59-4d35-9020-ca2e81aa4bda.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/3d/3d69f296-21ec-4230-a805-31d7e8e7aecd.json
+SAVED 924 image/webp https://fcj6.oqogyf.com/assets/resources/native/c3/c3f9d28e-4e6c-4fbd-b675-737dfc76be4e.webp
+SAVED 1608 image/webp https://fcj6.oqogyf.com/assets/resources/native/7b/7b88c7d9-8f09-4847-91a8-518b75fff3df.webp
+SAVED 593 image/png https://fcj6.oqogyf.com/assets/main/native/94/94f30727-dec9-4626-af5e-fd35ecf26b26.png
+SAVED 598 image/webp https://fcj6.oqogyf.com/assets/resources/native/7d/7d28a394-2842-4865-a34a-18416df80d70.webp
+SAVED 1640 image/webp https://fcj6.oqogyf.com/assets/resources/native/95/9514223e-7451-470b-9533-3b11e2647154.webp
+SAVED 2328 image/webp https://fcj6.oqogyf.com/assets/resources/native/d1/d180e912-20f0-43dc-a447-9929cb4eaa23.webp
+SAVED 1050 image/png https://fcj6.oqogyf.com/assets/resources/native/95/951249e0-9f16-456d-8b85-a6ca954da16b.png
+SAVED 1114 image/png https://fcj6.oqogyf.com/assets/resources/native/54/544e49d6-3f05-4fa8-9a9e-091f98fc2ce8.png
+SAVED 1082 image/png https://fcj6.oqogyf.com/assets/resources/native/20/20835ba4-6145-4fbc-a58a-051ce700aa3e.png
+SAVED 238 image/webp https://fcj6.oqogyf.com/assets/resources/native/8f/8f800349-a255-4aab-82c4-25bfbc932a15.webp
+SAVED 982 image/webp https://fcj6.oqogyf.com/assets/resources/native/6d/6d2c48a1-ecd2-4a50-a709-e5a8773e356e.webp
+SAVED 2478 image/webp https://fcj6.oqogyf.com/assets/resources/native/50/505146c8-3abe-4bd7-a44c-1cf71ac3d5f6.webp
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/27/2757b480-5d04-4d8c-9a6a-2c0efe74ac20.json
+SAVED 8044 image/png https://fcj6.oqogyf.com/assets/resources/native/5d/5d7ef025-af59-4d35-9020-ca2e81aa4bda.png
+SAVED 1504 image/webp https://fcj6.oqogyf.com/assets/resources/native/3d/3d69f296-21ec-4230-a805-31d7e8e7aecd.webp
+SAVED 6876 image/webp https://fcj6.oqogyf.com/assets/resources/native/27/2757b480-5d04-4d8c-9a6a-2c0efe74ac20.webp
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/91/912f460c-67a1-400a-a1bc-262b571382e5.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/4b/4bfdebfb-130e-40f3-ab57-8ac6244f49bb.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/af/af8bcb73-0dbc-4ae0-8d0e-ee7348e10690.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/ac/acc347eb-3f90-4b6a-a27b-364c4fdc9ace.json
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/a5/a5076ce6-ad47-47a0-ba40-2529ac0f95bd.json
+SAVED 644 image/webp https://fcj6.oqogyf.com/assets/resources/native/91/912f460c-67a1-400a-a1bc-262b571382e5.webp
+SAVED 2332 image/png https://fcj6.oqogyf.com/assets/resources/native/4b/4bfdebfb-130e-40f3-ab57-8ac6244f49bb.png
+SAVED 280 image/webp https://fcj6.oqogyf.com/assets/resources/native/af/af8bcb73-0dbc-4ae0-8d0e-ee7348e10690.webp
+SAVED 2520 image/png https://fcj6.oqogyf.com/assets/main/native/f4/f4d99491-32a7-4c5e-adeb-454601190116.png
+SAVED 2580 image/png https://fcj6.oqogyf.com/assets/main/native/f9/f965def9-e52d-47a1-bd70-c05719a90ced.png
+SAVED 2834 image/png https://fcj6.oqogyf.com/assets/main/native/de/dea55bba-9958-4119-a474-fb3021c9fe5d.png
+SAVED 2991 image/png https://fcj6.oqogyf.com/assets/main/native/76/765de8af-1ba2-4775-acd7-af2e756a3040.png
+SAVED 2733 image/png https://fcj6.oqogyf.com/assets/main/native/5a/5ad06fd8-63b7-413e-84f7-6e5680128014.png
+SAVED 2746 image/png https://fcj6.oqogyf.com/assets/main/native/7a/7a9a59d6-8a12-4e06-8dad-075d6617bc6d.png
+SAVED 2483 image/png https://fcj6.oqogyf.com/assets/main/native/b2/b253ec3e-6076-4e83-8f90-46a16602032e.png
+SAVED 2767 image/png https://fcj6.oqogyf.com/assets/main/native/62/627ac303-3895-4702-9969-e19c860194b5.png
+SAVED 2395 image/png https://fcj6.oqogyf.com/assets/main/native/a6/a654f41d-b8d4-4e3c-9612-b021a1f4c5f3.png
+SAVED 2449 image/png https://fcj6.oqogyf.com/assets/main/native/70/7038c8c3-7d68-40c9-8d63-690224028062.png
+SAVED 2625 image/png https://fcj6.oqogyf.com/assets/main/native/2b/2bf04a90-7199-4445-ac32-e6a15ee4d41d.png
+SAVED 594 image/webp https://fcj6.oqogyf.com/assets/resources/native/ac/acc347eb-3f90-4b6a-a27b-364c4fdc9ace.webp
+SAVED 840 image/webp https://fcj6.oqogyf.com/assets/resources/native/a5/a5076ce6-ad47-47a0-ba40-2529ac0f95bd.webp
+SAVED 998264 image/png https://fcj6.oqogyf.com/assets/main/native/7e/7edc409b-d172-4b5a-a6db-1b06c4cbb14a.png
+SAVED 2344 image/png https://fcj6.oqogyf.com/assets/main/native/f7/f75475cf-6014-4273-8bf9-1a45e67fb675.png
+SAVED 2706 image/png https://fcj6.oqogyf.com/assets/main/native/df/df7b1d58-2b10-4e50-8f84-26edb27bea3a.png
+SAVED 72 application/json https://fcj6.oqogyf.com/assets/resources/import/ef/effdfc6a-5d47-4408-802d-ce6bdc3e554b.json
+SAVED 10090 image/webp https://fcj6.oqogyf.com/assets/resources/native/ef/effdfc6a-5d47-4408-802d-ce6bdc3e554b.webp
+SAVED 2797 image/png https://fcj6.oqogyf.com/assets/main/native/0c/0c085401-f212-41b2-a1cd-082f33634efb.png
+SAVED 2916 image/png https://fcj6.oqogyf.com/assets/main/native/ca/caa58389-4919-4ad0-9428-1a5ebf65fdcd.png
+SAVED 2658 image/png https://fcj6.oqogyf.com/assets/main/native/b6/b60b3e16-3eb9-4ab0-9a1e-ac032388e545.png
+SAVED 7789 image/png https://fcj6.oqogyf.com/assets/main/native/0f/0f49f25a-1cc0-40ae-80af-0feb90ba6a6b.png
+SAVED 7152 image/png https://fcj6.oqogyf.com/assets/main/native/00/004fdc92-ef88-4024-8564-2c2a4ac6e682.png
+SAVED 7579 image/png https://fcj6.oqogyf.com/assets/main/native/ba/baf1233a-a03e-4f70-8c72-6df9d6ac6091.png
+SAVED 7116 image/png https://fcj6.oqogyf.com/assets/main/native/1e/1e3e3b4f-3113-4826-9051-f3f8ccbac0a5.png
+SAVED 7154 image/png https://fcj6.oqogyf.com/assets/main/native/ad/adb6f3ed-fe11-4fc7-ad7f-3f9613e3a532.png
+SAVED 7574 image/png https://fcj6.oqogyf.com/assets/main/native/0c/0c149326-1f29-4a00-b69a-586c7beb4f26.png
+SAVED 7731 image/png https://fcj6.oqogyf.com/assets/main/native/9c/9c42e8b1-1d3a-4391-a467-6204496a5432.png
+SAVED 7183 image/png https://fcj6.oqogyf.com/assets/main/native/bb/bbf00ef7-d390-4098-9559-c33c66634ac4.png
+SAVED 2482 image/png https://fcj6.oqogyf.com/assets/main/native/a5/a58f25ba-5e4a-4e2a-9489-02fee015d432.png
+SAVED 2552 image/png https://fcj6.oqogyf.com/assets/main/native/e2/e2e43afa-4657-4453-a7af-6f72ffbba76b.png
+SAVED 6823 image/png https://fcj6.oqogyf.com/assets/main/native/4d/4d488a95-4c6f-4aaa-b36b-542de0999290.png
+SAVED 2438 image/png https://fcj6.oqogyf.com/assets/main/native/98/987abd2f-1beb-4b7c-8f39-8e5d29519c1f.png
+SAVED 2661 image/png https://fcj6.oqogyf.com/assets/main/native/67/67caa5b9-3e29-4da8-a6cd-cd1422a543ca.png
+SAVED 2759 image/png https://fcj6.oqogyf.com/assets/main/native/d5/d5b20848-6dee-4ae2-a9fa-220f788a8416.png
+SAVED 2879 image/png https://fcj6.oqogyf.com/assets/main/native/3c/3c5246d4-3fc2-4510-a602-e90a696e2f5d.png
+SAVED 2615 image/png https://fcj6.oqogyf.com/assets/main/native/5a/5a73d02d-1153-49b0-99da-fac1d577fa98.png
+[console] LoadScene PCScene: 6211.621826171875 ms
+[console] 牌库初始化完成，共 52 张牌
+[console] [LanguageManager] 初始化语言: en
+[console] [LanguageManager] 尝试加载语言文件: i18n/en
+[console] RoomManager start
+[console] true
+[console] [PlatformSpecificPrefabForWeb] viewport size {width: 1920, height: 1080, dpr: 1, ua: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36}
+[console] aspect 1.7777777777777777
+[console] isHorizontal true
+[console] isBrowser
+[console] [PlatformSpecificPrefabForWeb] force pc landscape on browser {m_aspectRatio: 1, aspect: 1.7777777777777777}
+[console] [LanguageManager] 语言加载完成: en, 共 106 条
+SAVED 4554 application/json https://fcj6.oqogyf.com/assets/resources/import/b3/b39c9e65-4b93-4c55-9e8a-8f0176e726db.json
+[console] [ConfigManager] Config saved to local storage
+[console] [ConfigManager] Initializing network: {api: https://xjh.liveview2024.vip/, timeout: 3000, room_id: -1}
+[console] [RoomManager] 从地址栏获取 room_id = 101
+[console] [RoomManager] getRoomURL = https://xjh.liveview2024.vip/api/pub/get_room?room_id=101
+SAVED 191 application/json https://fcj6.oqogyf.com/assets/resources/import/c4/c456c3a4-b425-45db-9efa-68218985552b.json
+[console] [RoomManager] raw response => {address: , brand_image_url: null, brand_nav_url: , domain: null, entercode: null}
+[console] [RoomManager] 房间数据已写入 {roomId: 101, gameId: 2, fillImageUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4, address: undefined}
+[console] [SysEventManager] ✅ 房间选择事件(PC) 已触发 (2 个事件)
+[console] [RoomManager] 开始轮询（issue 模式），间隔 = 1s
+[console] [MainGameRoom] roomSelectEvents 触发，准备刷新房间信息
+[console] [MainGameRoom] renderRoomInfo 触发
+[console] [MainGameRoom] setupRoomMedia {roomId: 101, gameId: 2, isBjl: true, liveUrl: (空), fillUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4}
+[console] [MainGameRoom] playBottomBjlFill {rawUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4, fullURL: https://xjh.liveview2024.vip/uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4, videoNode: video, nodePath: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video}
+[console] [MainGameRoom] 视频尺寸设为 1920 x 1080
+[console] [MainGameRoom] 无 VideoPlayer，使用 FillImagePlayer 播放 mp4
+[console] [FillImagePlayer] setFillUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4
+[console] [FillImagePlayer] 识别为视频，开始播放: https://xjh.liveview2024.vip/uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4
+[console] [MainGameRoom] renderRoomInfo 触发
+[console] [MainGameRoom] 找到 video 节点路径: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video
+[console] [MainGameRoom] setupRoomMedia {roomId: 101, gameId: 2, isBjl: true, liveUrl: (空), fillUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4}
+[console] [MainGameRoom] 找到 video 节点路径: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video
+[console] [MainGameRoom] playBottomBjlFill {rawUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4, fullURL: https://xjh.liveview2024.vip/uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4, videoNode: video, nodePath: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video}
+[console] [MainGameRoom] 视频尺寸设为 1920 x 1080
+[console] [MainGameRoom] 无 VideoPlayer，使用 FillImagePlayer 播放 mp4
+[console] [FillImagePlayer] setFillUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4
+[console] [FillImagePlayer] 识别为视频，开始播放: https://xjh.liveview2024.vip/uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4
+[console] [RoomManager] 切换到 open 模式，间隔 = 0.6s
+[console] [RoomManager] refreshRoomOpenCard -> request {mode: open, issueId: 102066, lastOpenVersion: -1, url: https://xjh.liveview2024.vip/api/pub/get_open_nums?issue_id=102066}
+[console] [RoomManager] getNewlyIssue ok {url: https://xjh.liveview2024.vip/api/pub/get_newly_issue?room_id=101, issueChanged: true, prev: Object, next: Object}
+[console] [MainGameRoom] renderRoomInfo 触发
+[console] [MainGameRoom] 找到 video 节点路径: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video
+[console] [MainGameRoom] setupRoomMedia {roomId: 101, gameId: 2, isBjl: true, liveUrl: (空), fillUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4}
+[console] [MainGameRoom] 找到 video 节点路径: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video
+[console] [MainGameRoom] playBottomBjlFill {rawUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4, fullURL: https://xjh.liveview2024.vip/uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4, videoNode: video, nodePath: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video}
+[console] [MainGameRoom] 视频尺寸设为 1920 x 1080
+[console] [MainGameRoom] 无 VideoPlayer，使用 FillImagePlayer 播放 mp4
+[console] [FillImagePlayer] setFillUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4
+[console] [FillImagePlayer] 识别为视频，开始播放: https://xjh.liveview2024.vip/uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4
+[console] [RoomManager] refreshRoomOpenCard -> request {mode: open, issueId: 102066, lastOpenVersion: -1, url: https://xjh.liveview2024.vip/api/pub/get_open_nums?issue_id=102066}
+[console] [RoomManager] getNewlyIssue ok {url: https://xjh.liveview2024.vip/api/pub/get_newly_issue?room_id=101, issueChanged: false, prev: Object, next: Object}
+[console] [RoomManager] refreshRoomOpenCard -> applied {issueId: 102066, version: 6, openNumsLen: 3, roadsLen: 3}
+[console] [MainGameRoom] renderRoomInfo 触发
+[console] [MainGameRoom] 找到 video 节点路径: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video
+[console] [MainGameRoom] setupRoomMedia {roomId: 101, gameId: 2, isBjl: true, liveUrl: (空), fillUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4}
+[console] [MainGameRoom] 找到 video 节点路径: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video
+[console] [MainGameRoom] playBottomBjlFill {rawUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4, fullURL: https://xjh.liveview2024.vip/uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4, videoNode: video, nodePath: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video}
+[console] [MainGameRoom] 视频尺寸设为 1920 x 1080
+[console] [MainGameRoom] 无 VideoPlayer，使用 FillImagePlayer 播放 mp4
+[console] [FillImagePlayer] setFillUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4
+[console] [FillImagePlayer] 识别为视频，开始播放: https://xjh.liveview2024.vip/uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4
+[console] [RoomManager] refreshRoomOpenCard -> dedupe hit {issueId: 102066, version: 6, openNumsLen: 3}
+[console] [MainGameRoom] renderRoomInfo 触发
+[console] [MainGameRoom] 找到 video 节点路径: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video
+[console] [MainGameRoom] setupRoomMedia {roomId: 101, gameId: 2, isBjl: true, liveUrl: (空), fillUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4}
+[console] [MainGameRoom] 找到 video 节点路径: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video
+[console] [MainGameRoom] playBottomBjlFill {rawUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4, fullURL: https://xjh.liveview2024.vip/uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4, videoNode: video, nodePath: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video}
+[console] [MainGameRoom] 视频尺寸设为 1920 x 1080
+[console] [MainGameRoom] 无 VideoPlayer，使用 FillImagePlayer 播放 mp4
+[console] [FillImagePlayer] setFillUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4
+[console] [FillImagePlayer] 识别为视频，开始播放: https://xjh.liveview2024.vip/uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4
+[console] [RoomManager] refreshRoomOpenCard -> request {mode: open, issueId: 102066, lastOpenVersion: 6, url: https://xjh.liveview2024.vip/api/pub/get_open_nums?issue_id=102066}
+[console] 9/3/2026 23:27:22 [INFO] NodePlayer.js init with v1.3.3-wasm 
+[console] The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+[console] LoadScene db://assets/scenes/LoadScene.scene: 2227.430908203125 ms
+[console] LoadScene PCScene: 5747.280029296875 ms
+[console] 牌库初始化完成，共 52 张牌
+[console] [LanguageManager] 初始化语言: en
+[console] [LanguageManager] 尝试加载语言文件: i18n/en
+[console] RoomManager start
+[console] true
+[console] [PlatformSpecificPrefabForWeb] viewport size {width: 1920, height: 1080, dpr: 1, ua: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36}
+[console] aspect 1.7777777777777777
+[console] isHorizontal true
+[console] isBrowser
+[console] [PlatformSpecificPrefabForWeb] force pc landscape on browser {m_aspectRatio: 1, aspect: 1.7777777777777777}
+[console] [LanguageManager] 语言加载完成: en, 共 106 条
+[console] [ConfigManager] Config saved to local storage
+[console] [ConfigManager] Initializing network: {api: https://xjh.liveview2024.vip/, timeout: 3000, room_id: -1}
+[console] [RoomManager] 从地址栏获取 room_id = 61
+[console] [RoomManager] getRoomURL = https://xjh.liveview2024.vip/api/pub/get_room?room_id=61
+[console] [RoomManager] raw response => {address: , brand_image_url: null, brand_nav_url: , domain: null, entercode: null}
+[console] [RoomManager] 房间数据已写入 {roomId: 61, gameId: 2, fillImageUrl: /uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4, address: undefined}
+[console] [SysEventManager] ✅ 房间选择事件(PC) 已触发 (2 个事件)
+[console] [RoomManager] 开始轮询（issue 模式），间隔 = 1s
+[console] [MainGameRoom] roomSelectEvents 触发，准备刷新房间信息
+[console] [MainGameRoom] renderRoomInfo 触发
+[console] [MainGameRoom] setupRoomMedia {roomId: 61, gameId: 2, isBjl: true, liveUrl: (空), fillUrl: /uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4}
+[console] [MainGameRoom] playBottomBjlFill {rawUrl: /uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4, fullURL: https://xjh.liveview2024.vip/uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4, videoNode: video, nodePath: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video}
+[console] [MainGameRoom] 视频尺寸设为 1920 x 1080
+[console] [MainGameRoom] 无 VideoPlayer，使用 FillImagePlayer 播放 mp4
+[console] [FillImagePlayer] setFillUrl: /uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4
+[console] [FillImagePlayer] 识别为视频，开始播放: https://xjh.liveview2024.vip/uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4
+[console] [MainGameRoom] renderRoomInfo 触发
+[console] [MainGameRoom] 找到 video 节点路径: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video
+[console] [MainGameRoom] setupRoomMedia {roomId: 61, gameId: 2, isBjl: true, liveUrl: (空), fillUrl: /uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4}
+[console] [MainGameRoom] 找到 video 节点路径: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video
+[console] [MainGameRoom] playBottomBjlFill {rawUrl: /uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4, fullURL: https://xjh.liveview2024.vip/uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4, videoNode: video, nodePath: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video}
+[console] [MainGameRoom] 视频尺寸设为 1920 x 1080
+[console] [MainGameRoom] 无 VideoPlayer，使用 FillImagePlayer 播放 mp4
+[console] [FillImagePlayer] setFillUrl: /uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4
+[console] [FillImagePlayer] 识别为视频，开始播放: https://xjh.liveview2024.vip/uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4
+[console] [RoomManager] 切换到 open 模式，间隔 = 0.6s
+[console] [RoomManager] refreshRoomOpenCard -> request {mode: open, issueId: 102064, lastOpenVersion: -1, url: https://xjh.liveview2024.vip/api/pub/get_open_nums?issue_id=102064}
+[console] [RoomManager] getNewlyIssue ok {url: https://xjh.liveview2024.vip/api/pub/get_newly_issue?room_id=61, issueChanged: true, prev: Object, next: Object}
+[console] [MainGameRoom] renderRoomInfo 触发
+[console] [MainGameRoom] 找到 video 节点路径: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video
+[console] [MainGameRoom] setupRoomMedia {roomId: 61, gameId: 2, isBjl: true, liveUrl: (空), fillUrl: /uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4}
+[console] [MainGameRoom] 找到 video 节点路径: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video
+[console] [MainGameRoom] playBottomBjlFill {rawUrl: /uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4, fullURL: https://xjh.liveview2024.vip/uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4, videoNode: video, nodePath: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video}
+[console] [MainGameRoom] 视频尺寸设为 1920 x 1080
+[console] [MainGameRoom] 无 VideoPlayer，使用 FillImagePlayer 播放 mp4
+[console] [FillImagePlayer] setFillUrl: /uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4
+[console] [FillImagePlayer] 识别为视频，开始播放: https://xjh.liveview2024.vip/uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4
+[console] [RoomManager] refreshRoomOpenCard -> request {mode: open, issueId: 102064, lastOpenVersion: -1, url: https://xjh.liveview2024.vip/api/pub/get_open_nums?issue_id=102064}
+[console] [RoomManager] getNewlyIssue ok {url: https://xjh.liveview2024.vip/api/pub/get_newly_issue?room_id=61, issueChanged: false, prev: Object, next: Object}
+[console] [RoomManager] refreshRoomOpenCard -> applied {issueId: 102064, version: 1, openNumsLen: 0, roadsLen: 0}
+[console] [MainGameRoom] renderRoomInfo 触发
+[console] [MainGameRoom] 找到 video 节点路径: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video
+[console] [MainGameRoom] setupRoomMedia {roomId: 61, gameId: 2, isBjl: true, liveUrl: (空), fillUrl: /uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4}
+[console] [MainGameRoom] 找到 video 节点路径: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video
+[console] [MainGameRoom] playBottomBjlFill {rawUrl: /uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4, fullURL: https://xjh.liveview2024.vip/uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4, videoNode: video, nodePath: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video}
+[console] [MainGameRoom] 视频尺寸设为 1920 x 1080
+[console] [MainGameRoom] 无 VideoPlayer，使用 FillImagePlayer 播放 mp4
+[console] [FillImagePlayer] setFillUrl: /uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4
+[console] [FillImagePlayer] 识别为视频，开始播放: https://xjh.liveview2024.vip/uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4
+[console] [RoomManager] refreshRoomOpenCard -> request {mode: open, issueId: 102064, lastOpenVersion: 1, url: https://xjh.liveview2024.vip/api/pub/get_open_nums?issue_id=102064}
+[console] [RoomManager] refreshRoomOpenCard -> dedupe hit {issueId: 102064, version: 1, openNumsLen: 0}
+[console] [MainGameRoom] renderRoomInfo 触发
+[console] [MainGameRoom] 找到 video 节点路径: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video
+[console] [MainGameRoom] setupRoomMedia {roomId: 61, gameId: 2, isBjl: true, liveUrl: (空), fillUrl: /uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4}
+[console] [MainGameRoom] 找到 video 节点路径: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video
+[console] [MainGameRoom] playBottomBjlFill {rawUrl: /uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4, fullURL: https://xjh.liveview2024.vip/uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4, videoNode: video, nodePath: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video}
+[console] [MainGameRoom] 视频尺寸设为 1920 x 1080
+[console] [MainGameRoom] 无 VideoPlayer，使用 FillImagePlayer 播放 mp4
+[console] [FillImagePlayer] setFillUrl: /uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4
+[console] [FillImagePlayer] 识别为视频，开始播放: https://xjh.liveview2024.vip/uploads/a3b10f28-8e33-11f1-a7c8-000c292d200f.mp4
+[console] [RoomManager] refreshRoomOpenCard -> dedupe hit {issueId: 102064, version: 1, openNumsLen: 0}
+[console] [RoomManager] refreshRoomOpenCard -> request {mode: open, issueId: 102064, lastOpenVersion: 1, url: https://xjh.liveview2024.vip/api/pub/get_open_nums?issue_id=102064}
+[console] 9/3/2026 23:27:51 [INFO] NodePlayer.js init with v1.3.3-wasm 
+[console] The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+[console] LoadScene db://assets/scenes/LoadScene.scene: 2325.766845703125 ms
+[console] LoadScene PCScene: 5926.60302734375 ms
+[console] 牌库初始化完成，共 52 张牌
+[console] [LanguageManager] 初始化语言: en
+[console] [LanguageManager] 尝试加载语言文件: i18n/en
+[console] RoomManager start
+[console] true
+[console] [PlatformSpecificPrefabForWeb] viewport size {width: 1080, height: 1920, dpr: 1, ua: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36}
+[console] aspect 0.5625
+[console] isHorizontal false
+[console] isBrowser
+[console] [PlatformSpecificPrefabForWeb] force pc landscape on browser {m_aspectRatio: 0.5625, aspect: 0.5625}
+[console] [LanguageManager] 语言加载完成: en, 共 106 条
+[console] [ConfigManager] Config saved to local storage
+[console] [ConfigManager] Initializing network: {api: https://xjh.liveview2024.vip/, timeout: 3000, room_id: -1}
+[console] [RoomManager] 从地址栏获取 room_id = 101
+[console] [RoomManager] getRoomURL = https://xjh.liveview2024.vip/api/pub/get_room?room_id=101
+[console] [RoomManager] raw response => {address: , brand_image_url: null, brand_nav_url: , domain: null, entercode: null}
+[console] [RoomManager] 房间数据已写入 {roomId: 101, gameId: 2, fillImageUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4, address: undefined}
+[console] [SysEventManager] ✅ 房间选择事件(PC) 已触发 (2 个事件)
+[console] [RoomManager] 开始轮询（issue 模式），间隔 = 1s
+[console] [MainGameRoom] roomSelectEvents 触发，准备刷新房间信息
+[console] [MainGameRoom] renderRoomInfo 触发
+[console] [MainGameRoom] setupRoomMedia {roomId: 101, gameId: 2, isBjl: true, liveUrl: (空), fillUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4}
+[console] [MainGameRoom] playBottomBjlFill {rawUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4, fullURL: https://xjh.liveview2024.vip/uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4, videoNode: video, nodePath: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video}
+[console] [MainGameRoom] 视频尺寸设为 1920 x 1080
+[console] [MainGameRoom] 无 VideoPlayer，使用 FillImagePlayer 播放 mp4
+[console] [FillImagePlayer] setFillUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4
+[console] [FillImagePlayer] 识别为视频，开始播放: https://xjh.liveview2024.vip/uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4
+[console] [MainGameRoom] renderRoomInfo 触发
+[console] [MainGameRoom] 找到 video 节点路径: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video
+[console] [MainGameRoom] setupRoomMedia {roomId: 101, gameId: 2, isBjl: true, liveUrl: (空), fillUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4}
+[console] [MainGameRoom] 找到 video 节点路径: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video
+[console] [MainGameRoom] playBottomBjlFill {rawUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4, fullURL: https://xjh.liveview2024.vip/uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4, videoNode: video, nodePath: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video}
+[console] [MainGameRoom] 视频尺寸设为 1920 x 1080
+[console] [MainGameRoom] 无 VideoPlayer，使用 FillImagePlayer 播放 mp4
+[console] [FillImagePlayer] setFillUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4
+[console] [FillImagePlayer] 识别为视频，开始播放: https://xjh.liveview2024.vip/uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4
+[console] [RoomManager] 切换到 open 模式，间隔 = 0.6s
+[console] [RoomManager] refreshRoomOpenCard -> request {mode: open, issueId: 102066, lastOpenVersion: -1, url: https://xjh.liveview2024.vip/api/pub/get_open_nums?issue_id=102066}
+[console] [RoomManager] getNewlyIssue ok {url: https://xjh.liveview2024.vip/api/pub/get_newly_issue?room_id=101, issueChanged: true, prev: Object, next: Object}
+[console] [MainGameRoom] renderRoomInfo 触发
+[console] [MainGameRoom] 找到 video 节点路径: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video
+[console] [MainGameRoom] setupRoomMedia {roomId: 101, gameId: 2, isBjl: true, liveUrl: (空), fillUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4}
+[console] [MainGameRoom] 找到 video 节点路径: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video
+[console] [MainGameRoom] playBottomBjlFill {rawUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4, fullURL: https://xjh.liveview2024.vip/uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4, videoNode: video, nodePath: PCScene/Canvas/MainPC/Node_Main/Node_Bottom_TheBJL/video}
+[console] [MainGameRoom] 视频尺寸设为 1920 x 1080
+[console] [MainGameRoom] 无 VideoPlayer，使用 FillImagePlayer 播放 mp4
+[console] [FillImagePlayer] setFillUrl: /uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4
+[console] [FillImagePlayer] 识别为视频，开始播放: https://xjh.liveview2024.vip/uploads/cf19e16e-9600-11f1-9115-000c292d200f.mp4
+[console] [RoomManager] refreshRoomOpenCard -> request {mode: open, issueId: 102066, lastOpenVersion: -1, url: https://xjh.liveview2024.vip/api/pub/get_open_nums?issue_id=102066}
