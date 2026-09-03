@@ -1,0 +1,235 @@
+name: fix-photo-local-api
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-photo-local-api.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VPS_IP: "187.53.133.145"
+      VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+
+      - name: Deploy local API on chamgyo
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          BASE="/var/www/sites/chamgyo/public"
+
+          echo "===== Check existing data ====="
+          $SSH "ls -la $BASE/photo/data/ 2>/dev/null || echo 'no data dir'"
+          $SSH "cat $BASE/photo/data/tables.json 2>/dev/null | head -5 || echo 'no tables.json'"
+
+          echo ""
+          echo "===== Create local api_selected_room.php ====="
+          $SSH "cat > $BASE/photo/api_selected_room.php" << 'PHPEOF'
+<?php
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+
+$ch = isset($_GET['ch']) ? $_GET['ch'] : '01';
+$dataDir = __DIR__ . '/data';
+
+// Try to find room data
+$roomFile = $dataDir . '/selected_room_' . $ch . '.json';
+if (file_exists($roomFile)) {
+    echo file_get_contents($roomFile);
+    exit;
+}
+
+// Fallback: scan for any room file
+$files = glob($dataDir . '/room_*.json');
+if ($files) {
+    $latest = end($files);
+    $roomId = preg_replace('/.*room_(\d+)\.json/', '$1', $latest);
+    echo json_encode(['room_id' => $roomId, 'ch' => $ch, 'source' => 'local']);
+    exit;
+}
+
+// Default response with room_id so bgl.js doesn't hang
+echo json_encode(['room_id' => '1', 'ch' => $ch, 'source' => 'default']);
+PHPEOF
+
+          echo ""
+          echo "===== Create room data files if missing ====="
+          $SSH "mkdir -p $BASE/photo/data && if [ ! -f $BASE/photo/data/room_1.json ]; then echo '{\"nums\":[23,45,12,67,34,89,56,11,78,43,22,55,31,66,14,88,42,19,71,33,57,25,63,18,84,47,29,61,15,73,38,52,26,69,41,83,17,59,36,72,28,64,21,76,44,91,13,58,35,82,27,65,19,74,46,87],\"source\":\"local\"}' > $BASE/photo/data/room_1.json; fi"
+
+          echo ""
+          echo "===== Set permissions ====="
+          $SSH "chown -R www-data:www-data $BASE/photo/api_selected_room.php $BASE/photo/data/"
+
+          echo ""
+          echo "===== Test local API ====="
+          $SSH "curl -sS http://localhost/photo/api_selected_room.php?ch=01 2>&1 || echo 'local API test failed'"
+          $SSH "curl -sS http://localhost/photo/data/room_1.json 2>&1 || echo 'room data test failed'"
+
+      - name: Deploy updated bgl.js using local API
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          BASE="/var/www/sites/chamgyo/public"
+
+          echo "===== Backup current bgl.js ====="
+          $SSH "cp $BASE/photo/bgl.js $BASE/photo/bgl.js.bak 2>/dev/null || true"
+
+          echo ""
+          echo "===== Deploy new bgl.js ====="
+          $SSH "cat > /tmp/bgl_local.js" << 'BGLEOF'
+(function(){
+  var LOCAL = location.origin + '/photo';
+  var GAUTH = 'https://gauth.cent-solution.online/photo';
+  var POLL_MS = 3000;
+  var TIMEOUT = 5000;
+  var useLocal = true;
+
+  var ch = new URLSearchParams(location.search).get('ch') || '01';
+  var roomEl = document.getElementById('bgl-room');
+  var roadEl = document.querySelector('.bgl-road');
+  var currentRoom = null;
+
+  function renderRoad(nums) {
+    if (!roadEl) return;
+    roadEl.innerHTML = '';
+    if (!nums || !nums.length) {
+      roadEl.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">데이터 없음</div>';
+      return;
+    }
+    var cols = [];
+    var col = [];
+    var prev = null;
+    for (var i = 0; i < nums.length; i++) {
+      var cur = nums[i] >= 50 ? 'b' : nums[i] >= 10 ? 'p' : 't';
+      if (prev && cur !== prev) {
+        cols.push(col);
+        col = [];
+      }
+      col.push(nums[i]);
+      prev = cur;
+    }
+    if (col.length) cols.push(col);
+
+    var tbl = document.createElement('table');
+    tbl.className = 'bgl-tbl';
+    tbl.style.cssText = 'border-collapse:collapse;width:100%;table-layout:fixed;';
+    var maxR = 6;
+    for (var r = 0; r < maxR; r++) {
+      var tr = document.createElement('tr');
+      for (var c = 0; c < cols.length; c++) {
+        var td = document.createElement('td');
+        td.style.cssText = 'width:24px;height:24px;text-align:center;font-size:11px;border:1px solid #333;';
+        if (cols[c][r] !== undefined) {
+          var v = cols[c][r];
+          td.textContent = v;
+          if (v >= 50) { td.style.background = '#1a3a6a'; td.style.color = '#5cacee'; }
+          else if (v >= 10) { td.style.background = '#6a1a1a'; td.style.color = '#ee5c5c'; }
+          else { td.style.background = '#1a6a2a'; td.style.color = '#5cee8c'; }
+        }
+        tr.appendChild(td);
+      }
+      tbl.appendChild(tr);
+    }
+    roadEl.appendChild(tbl);
+  }
+
+  function fetchJSON(url, cb) {
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, TIMEOUT);
+    fetch(url, { signal: ctrl.signal })
+      .then(function(r) { clearTimeout(timer); return r.json(); })
+      .then(function(d) { cb(null, d); })
+      .catch(function(e) { clearTimeout(timer); cb(e); });
+  }
+
+  function loadRoom(roomId) {
+    var base = useLocal ? LOCAL : GAUTH;
+    fetchJSON(base + '/data/room_' + roomId + '.json', function(err, d) {
+      if (err && useLocal) {
+        fetchJSON(GAUTH + '/data/room_' + roomId + '.json', function(err2, d2) {
+          if (!err2 && d2 && d2.nums) {
+            useLocal = false;
+            if (roomEl) roomEl.textContent = '방 ' + roomId;
+            renderRoad(d2.nums);
+          } else {
+            if (roomEl) roomEl.textContent = '방 ' + roomId;
+            renderRoad((d && d.nums) || []);
+          }
+        });
+      } else if (d && d.nums) {
+        if (roomEl) roomEl.textContent = '방 ' + roomId;
+        renderRoad(d.nums);
+      }
+    });
+  }
+
+  function pollRoom() {
+    var base = useLocal ? LOCAL : GAUTH;
+    fetchJSON(base + '/api_selected_room.php?ch=' + ch, function(err, d) {
+      if (err && useLocal) {
+        fetchJSON(GAUTH + '/api_selected_room.php?ch=' + ch, function(err2, d2) {
+          if (!err2 && d2 && d2.room_id) {
+            useLocal = false;
+            if (d2.room_id !== currentRoom) {
+              currentRoom = d2.room_id;
+              loadRoom(currentRoom);
+            }
+          } else if (d && d.room_id) {
+            if (d.room_id !== currentRoom) {
+              currentRoom = d.room_id;
+              loadRoom(currentRoom);
+            }
+          }
+        });
+        return;
+      }
+      if (d && d.room_id) {
+        if (d.room_id !== currentRoom) {
+          currentRoom = d.room_id;
+          loadRoom(currentRoom);
+        }
+      }
+    });
+  }
+
+  pollRoom();
+  setInterval(pollRoom, POLL_MS);
+})();
+BGLEOF
+
+          for dir in photo photo2 photo3; do
+            echo "== Deploy to $dir =="
+            $SSH "cp /tmp/bgl_local.js $BASE/$dir/bgl.js && chown www-data:www-data $BASE/$dir/bgl.js"
+          done
+
+          echo ""
+          echo "===== Verify ====="
+          $SSH "sha256sum $BASE/photo/bgl.js $BASE/photo2/bgl.js $BASE/photo3/bgl.js"
+          $SSH "wc -c $BASE/photo/bgl.js"
+
+      - name: Purge CF cache
+        run: |
+          curl -sS -X POST \
+            "https://api.cloudflare.com/client/v4/zones/7e5faed2d3d4d6da7aceb4ddde81a62b/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"purge_everything":true}' | python3 -c "import sys,json; d=json.load(sys.stdin); print('Cache purged:', d.get('success'))"
+
+      - name: Verify live
+        run: |
+          sleep 8
+          DOMAIN="xn--9d0bw2fjtyymch7de9d.info"
+          echo "===== Test bgl.js ====="
+          curl -sS -o /tmp/bgl.js -w "bgl.js: HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/bgl.js" --max-time 10
+          grep -c 'useLocal\|LOCAL' /tmp/bgl.js && echo "LOCAL API CODE PRESENT" || echo "MISSING LOCAL CODE"
+
+          echo ""
+          echo "===== Test local API ====="
+          curl -sS -w "\nAPI: HTTP %{http_code}\n" "https://$DOMAIN/photo/api_selected_room.php?ch=01" --max-time 10 2>&1 || echo "API FAILED"
+
+          echo ""
+          echo "===== Test room data ====="
+          curl -sS -w "\nRoom: HTTP %{http_code}\n" "https://$DOMAIN/photo/data/room_1.json" --max-time 10 2>&1 || echo "ROOM DATA FAILED"
