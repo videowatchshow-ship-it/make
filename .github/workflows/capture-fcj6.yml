@@ -1,0 +1,45 @@
+name: capture-fcj6
+on:
+  push:
+    paths: ['.github/workflows/capture-fcj6.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  cap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Screenshot fcj6 room 101 / 61 (real rendered design)
+        run: |
+          npm i -s playwright@1.47.2 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+          mkdir -p ref
+          cat > cap.js <<'JS'
+          const { chromium } = require('playwright');
+          (async () => {
+            const b = await chromium.launch();
+            for (const [room, w, h] of [[101,1920,1080],[61,1920,1080],[101,1080,1920]]) {
+              const p = await b.newPage({ viewport: { width: w, height: h }, userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36' });
+              const logs = [];
+              p.on('console', m => logs.push(m.text()));
+              p.on('response', r => { const u = r.url(); if (/\.(png|jpg|webp|plist|json|atlas)(\?|$)/i.test(u)) logs.push('RES ' + r.status() + ' ' + u); });
+              try { await p.goto(`https://fcj6.oqogyf.com/?room_id=${room}`, { waitUntil: 'networkidle', timeout: 90000 }); } catch (e) { logs.push('goto: ' + e.message); }
+              await p.waitForTimeout(15000);
+              await p.screenshot({ path: `ref/fcj6_${room}_${w}x${h}.png`, fullPage: false });
+              require('fs').writeFileSync(`ref/fcj6_${room}_${w}x${h}.log`, logs.join('\n'));
+              await p.close();
+            }
+            await b.close();
+          })();
+          JS
+          node cap.js
+          ls -la ref
+      - name: Commit screenshots to branch (ref/)
+        run: |
+          git config user.name "github-actions"; git config user.email "actions@github.com"
+          git add ref/*.png ref/*.log
+          git commit -m "ref: fcj6 실제 렌더 스크린샷 (세로2 디자인 기준)" || exit 0
+          git pull --rebase origin ${GITHUB_REF_NAME} || true
+          git push origin HEAD:${GITHUB_REF_NAME}
