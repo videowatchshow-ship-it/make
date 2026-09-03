@@ -15,69 +15,46 @@ jobs:
       - name: Install sshpass
         run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
 
-      - name: Check current login.html content
+      - name: Dump login.html
         run: |
           export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
           SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
           BASE="/var/www/sites/chamgyo/public"
-
-          echo "===== login.html full content ====="
+          echo "===== login.html ====="
           $SSH "cat $BASE/photo/login.html"
-
           echo ""
           echo "===== index.html ====="
           $SSH "cat $BASE/photo/index.html"
 
-          echo ""
-          echo "===== Check for CAH_1 references ====="
-          $SSH "grep -rn 'CAH_1' $BASE/photo/login.html $BASE/photo/index.html $BASE/photo/select.html 2>/dev/null || echo 'NO CAH_1 refs found'"
-
-      - name: Add no-cache headers to login.html and fix redirect
+      - name: Fix login and add no-cache
         run: |
           export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
           SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
           BASE="/var/www/sites/chamgyo/public"
 
-          echo "===== Add no-cache meta to login.html ====="
           for dir in photo photo2 photo3; do
-            $SSH "if [ -f $BASE/$dir/login.html ]; then
-              sed -i 's|<head>|<head><meta http-equiv=\"Cache-Control\" content=\"no-cache, no-store, must-revalidate\"><meta http-equiv=\"Pragma\" content=\"no-cache\"><meta http-equiv=\"Expires\" content=\"0\">|' $BASE/$dir/login.html
-              echo 'Added no-cache to $dir/login.html'
-            fi"
+            $SSH "sed -i 's|CAH_1\.html|select.html|g' $BASE/$dir/login.html 2>/dev/null; echo done-$dir"
           done
 
-          echo ""
-          echo "===== Verify login.html has select.html ====="
-          $SSH "grep -c 'select.html' $BASE/photo/login.html"
-          $SSH "grep -c 'CAH_1' $BASE/photo/login.html && echo 'STILL HAS CAH_1' || echo 'NO CAH_1 - GOOD'"
-
-          echo ""
-          echo "===== Fix index.html cache bust ====="
-          TS=$(date +%s)
+          echo "===== Add no-cache meta ====="
           for dir in photo photo2 photo3; do
-            $SSH "if [ -f $BASE/$dir/index.html ]; then
-              sed -i 's|login.html|login.html?v=$TS|g' $BASE/$dir/index.html
-              echo 'Cache-busted $dir/index.html'
-            fi"
+            $SSH "grep -q 'no-cache' $BASE/$dir/login.html 2>/dev/null || sed -i 's|<head>|<head><meta http-equiv=\"Cache-Control\" content=\"no-cache\"><meta http-equiv=\"Pragma\" content=\"no-cache\">|' $BASE/$dir/login.html 2>/dev/null; echo nocache-$dir"
           done
 
-          echo ""
-          echo "===== Add .htaccess no-cache for html ====="
-          $SSH "cat > $BASE/photo/.htaccess << 'HTEOF'
-<FilesMatch \"\.(html|htm|js|json)$\">
-  Header set Cache-Control \"no-cache, no-store, must-revalidate\"
-  Header set Pragma \"no-cache\"
-  Header set Expires \"0\"
-</FilesMatch>
-HTEOF
-          chown www-data:www-data $BASE/photo/.htaccess
-          echo 'Created .htaccess'"
+          echo "===== Create .htaccess via python3 ====="
+          $SSH "python3 -c \"
+          ht = '<FilesMatch \\\"\\\\.(html|js|json)\\$\\\">\\nHeader set Cache-Control \\\"no-cache, no-store, must-revalidate\\\"\\nHeader set Pragma \\\"no-cache\\\"\\n</FilesMatch>\\n'
+          for d in ['photo','photo2','photo3']:
+              p = '$BASE/' + d + '/.htaccess'
+              open(p,'w').write(ht)
+              print('Created ' + p)
+          \""
 
-          echo ""
-          echo "===== Final login.html content ====="
-          $SSH "cat $BASE/photo/login.html"
+          echo "===== Verify ====="
+          $SSH "grep -o 'select\.html\|CAH_1\.html' $BASE/photo/login.html | head -5"
+          $SSH "grep -c 'CAH_1' $BASE/photo/login.html && echo 'STILL HAS CAH_1' || echo 'CAH_1 GONE'"
 
-      - name: Purge CF cache
+      - name: Purge CF
         run: |
           curl -sS -X POST \
             "https://api.cloudflare.com/client/v4/zones/7e5faed2d3d4d6da7aceb4ddde81a62b/purge_cache" \
@@ -89,12 +66,7 @@ HTEOF
         run: |
           sleep 5
           DOMAIN="xn--9d0bw2fjtyymch7de9d.info"
-
-          echo "===== login.html content check ====="
+          echo "===== login.html redirect ====="
           curl -sS "https://$DOMAIN/photo/login.html?v=$(date +%s)" --max-time 10 | grep -o 'select\.html\|CAH_1\.html' | head -5
-
-          echo "===== login.html has no-cache? ====="
-          curl -sI "https://$DOMAIN/photo/login.html?v=$(date +%s)" --max-time 10 | grep -i 'cache'
-
-          echo "===== select.html loads? ====="
+          echo "===== select.html ====="
           curl -sS -o /dev/null -w "select.html: HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/select.html?v=$(date +%s)" --max-time 10
