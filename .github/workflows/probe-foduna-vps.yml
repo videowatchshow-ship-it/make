@@ -7,7 +7,7 @@ on:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     env:
       VPS_IP: "187.53.133.145"
       VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
@@ -15,11 +15,11 @@ jobs:
       - name: Install sshpass
         run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
       - name: runner direct (dns + tcp)
+        continue-on-error: true
         run: |
-          set +e
-          getent hosts foduna.halokh.com; getent hosts halokh.com
+          getent hosts foduna.halokh.com || echo "no dns"
           timeout 8 bash -c 'cat < /dev/null > /dev/tcp/foduna.halokh.com/443' && echo "443 open from runner" || echo "443 closed/timeout from runner"
-          curl -sS -o /dev/null -w "http HTTP %{http_code}\n" --max-time 10 "http://foduna.halokh.com/de_foduna/1"
+          curl -sS -o /dev/null -w "http HTTP %{http_code}\n" --max-time 10 "http://foduna.halokh.com/de_foduna/1" || true
       - name: from VPS
         run: |
           export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
@@ -60,4 +60,5 @@ jobs:
                 [ "$C" = "200" ] && OK="$OK $n:$S"
               done
               echo "$k OK(n:size): $OK"
-            done'
+            done
+            true'
