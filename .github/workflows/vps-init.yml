@@ -1,0 +1,66 @@
+name: vps-init
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/vps-init.yml']
+
+jobs:
+  init-vps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
+
+      - name: Setup VPS
+        run: |
+          VPS_IP="187.53.133.145"
+          VPS_PASS=$(echo 'LWFhMGNLMDtibzJRNkxnMg==' | base64 -d)
+          echo "::add-mask::$VPS_PASS"
+          export SSHPASS="$VPS_PASS"
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+
+          echo "== Test connection =="
+          $SSH "hostname && uname -a && df -h / && free -h"
+
+          echo "== Install packages =="
+          $SSH "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nginx certbot python3-certbot-nginx curl jq git"
+
+          echo "== Create site directories =="
+          $SSH "mkdir -p /var/www/sites/chamgyo/public/{photo,photo2,photo3}"
+
+          echo "== Setup symlinks (photo3/data -> photo2/data -> photo/data) =="
+          $SSH "mkdir -p /var/www/sites/chamgyo/public/photo/data && \
+                ln -sfn /var/www/sites/chamgyo/public/photo/data /var/www/sites/chamgyo/public/photo2/data && \
+                ln -sfn /var/www/sites/chamgyo/public/photo2/data /var/www/sites/chamgyo/public/photo3/data"
+
+          echo "== Configure nginx =="
+          $SSH 'cat > /etc/nginx/sites-available/chamgyo <<NGINX
+          server {
+              listen 80;
+              server_name _;
+              root /var/www/sites/chamgyo/public;
+              index index.html;
+
+              location / {
+                  try_files \$uri \$uri/ =404;
+              }
+
+              location ~* \.(jpg|jpeg|png|gif|ico|css|js|json)$ {
+                  expires 7d;
+                  add_header Cache-Control "public, no-transform";
+              }
+          }
+          NGINX'
+
+          $SSH "ln -sfn /etc/nginx/sites-available/chamgyo /etc/nginx/sites-enabled/chamgyo && \
+                rm -f /etc/nginx/sites-enabled/default && \
+                nginx -t && systemctl restart nginx && systemctl enable nginx"
+
+          echo "== Verify nginx =="
+          $SSH "curl -sS -o /dev/null -w 'HTTP %{http_code}\n' http://localhost/"
+
+          echo "== Server ready =="
+          $SSH "echo 'IP: 187.53.133.145'; systemctl is-active nginx; ls -la /var/www/sites/chamgyo/public/"
