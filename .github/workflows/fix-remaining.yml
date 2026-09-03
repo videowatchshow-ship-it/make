@@ -1,0 +1,103 @@
+name: fix-remaining
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-remaining.yml'
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      VPS_IP: "187.53.133.145"
+      VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+
+      - name: Fix images and search for originals
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          BASE="/var/www/sites/chamgyo/public"
+
+          echo "===== Search for banner images anywhere ====="
+          $SSH "find /var/www -name 'Live_height_kakao*' -o -name 'Live_width*' 2>/dev/null | head -20"
+          $SSH "find /tmp /root -name 'Live_height*' -o -name 'Live_width*' -mmin -10080 2>/dev/null | head -10"
+
+          echo ""
+          echo "===== Check photo2/photo3 images dirs ====="
+          $SSH "ls -la $BASE/photo2/images/ 2>/dev/null || echo 'photo2/images NOT FOUND'"
+          $SSH "ls -la $BASE/photo3/images/ 2>/dev/null || echo 'photo3/images NOT FOUND'"
+
+          echo ""
+          echo "===== Create images dirs ====="
+          $SSH "mkdir -p $BASE/photo/images $BASE/photo2/images $BASE/photo3/images"
+          $SSH "chown www-data:www-data $BASE/photo/images $BASE/photo2/images $BASE/photo3/images"
+
+          echo ""
+          echo "===== Create 1x1 transparent placeholder GIFs ====="
+          $SSH "python3 -c \"
+          import base64
+          gif = base64.b64decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7')
+          for d in ['photo','photo2','photo3']:
+            for f in ['Live_height_kakao.gif','Live_width_01_banner_kakao.gif']:
+              path = '$BASE/' + d + '/images/' + f
+              open(path,'wb').write(gif)
+              print('Created: ' + path)
+          \""
+          $SSH "chown -R www-data:www-data $BASE/photo/images $BASE/photo2/images $BASE/photo3/images"
+          $SSH "ls -la $BASE/photo/images/"
+
+      - name: Fix select.html - remove gauth references
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          BASE="/var/www/sites/chamgyo/public"
+
+          echo "===== Fix select.html in all 3 folders ====="
+          for dir in photo photo2 photo3; do
+            echo "--- $dir/select.html ---"
+            $SSH "if [ -f $BASE/$dir/select.html ]; then sed -i \"s|https://gauth.cent-solution.online/photo|' + location.origin + '/' + location.pathname.split('/')[1] + '|g\" $BASE/$dir/select.html && echo 'Fixed gauth ref'; else echo 'no select.html'; fi"
+          done
+
+      - name: Remove gauth references from select.html properly
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          BASE="/var/www/sites/chamgyo/public"
+
+          for dir in photo photo2 photo3; do
+            $SSH "if [ -f $BASE/$dir/select.html ]; then sed -i 's|https://gauth\.cent-solution\.online/photo|.|g' $BASE/$dir/select.html; echo 'Patched $dir'; fi"
+          done
+
+          echo "===== Verify no gauth left ====="
+          $SSH "grep -rl 'gauth' $BASE/photo/ $BASE/photo2/ $BASE/photo3/ 2>/dev/null || echo 'NO GAUTH REFERENCES FOUND - CLEAN'"
+
+      - name: Purge CF cache
+        run: |
+          curl -sS -X POST \
+            "https://api.cloudflare.com/client/v4/zones/7e5faed2d3d4d6da7aceb4ddde81a62b/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"purge_everything":true}' | python3 -c "import sys,json;d=json.load(sys.stdin);print('CF Purge:', 'OK' if d.get('success') else d)"
+
+      - name: Verify
+        run: |
+          sleep 5
+          DOMAIN="xn--9d0bw2fjtyymch7de9d.info"
+
+          echo "===== Banner image ====="
+          curl -sS -o /dev/null -w "Live_height_kakao.gif: HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/images/Live_height_kakao.gif" --max-time 10
+
+          echo "===== CAH_1.html ====="
+          curl -sS -o /dev/null -w "CAH_1.html: HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/CAH_1.html?ch=01" --max-time 10
+
+          echo "===== bgl.js ====="
+          curl -sS -o /dev/null -w "bgl.js: HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/bgl.js?t=$(date +%s)" --max-time 10
+
+          echo "===== room_1.json ====="
+          curl -sS -o /dev/null -w "room_1.json: HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/data/room_1.json?t=$(date +%s)" --max-time 10
+
+          echo "===== gauth check in select.html ====="
+          curl -sS "https://$DOMAIN/photo/select.html" --max-time 10 | grep -c 'gauth' && echo "GAUTH STILL PRESENT" || echo "GAUTH CLEAN"
