@@ -578,8 +578,9 @@ updateUploadStatus();
 <!-- 계정 정보 조회 -->
 <div style="padding:14px 20px;background:#0f1620;border-bottom:1px solid #22282f;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
   <span style="font-size:14px;color:#7dabff;font-weight:700">🔎 계정 정보 확인</span>
-  <input id="lookup" placeholder="이메일 입력 후 Enter (예: gtayerai78@gmail.com)" style="flex:1;min-width:300px">
+  <input id="lookup" placeholder="이메일 · 유튜브 URL · 스트림키 입력 후 Enter" style="flex:1;min-width:300px">
   <button id="lookup-btn">조회</button>
+  <button id="harvest-btn" title="연결된 모든 계정의 스트림키를 미리 수집해 색인에 저장 (이후 스트림키 붙여넣기만으로 즉시 조회)" style="background:#1c5a2a;color:#3ddc84;font-weight:700">🗝 스트림키 색인 수집</button>
   <div id="lookup-result" style="width:100%;display:none;background:#161a20;border:1px solid #2a323c;border-radius:8px;padding:16px;font-size:14px;margin-top:6px"></div>
 </div>
 
@@ -890,19 +891,33 @@ async function lookup(){
   const rawEmail = document.getElementById('lookup').value.trim()
   const box = document.getElementById('lookup-result')
   if(!rawEmail){box.style.display='none';localStorage.removeItem('gauth_last_lookup');return}
-  const email = rawEmail.toLowerCase()
+  // 입력 유형 판별: 스트림키(4자리 그룹 대시) · 유튜브 URL · 이메일
+  const isStreamKey = /^[a-z0-9]{4}(-[a-z0-9]{4}){3,4}$/i.test(rawEmail)
+  const isUrl = /^https?:\/\//i.test(rawEmail) || /youtu\.?be|youtube\.com|^@/i.test(rawEmail)
+  const email = (isStreamKey || isUrl) ? rawEmail : rawEmail.toLowerCase()
   document.getElementById('lookup').value = email
   localStorage.setItem('gauth_last_lookup', email)
   box.style.display='block'
-  box.innerHTML = '<span style="color:#8a95a5">조회 중…</span>'
+  box.innerHTML = '<span style="color:#8a95a5">'+(isStreamKey?'스트림키로 조회 중… (연결된 계정 스캔)':'조회 중…')+'</span>'
+  let apiUrl
+  if(isStreamKey) apiUrl = '/api/lookup-by-streamkey?key='+encodeURIComponent(email)
+  else if(isUrl) apiUrl = '/api/lookup-by-url?url='+encodeURIComponent(email)
+  else apiUrl = '/api/lookup/'+encodeURIComponent(email)
   let r, j
   try {
-    r = await fetch(authQuery('/api/lookup/'+encodeURIComponent(email)), {headers:authHeaders()})
+    r = await fetch(authQuery(apiUrl), {headers:authHeaders()})
     j = await r.json()
   } catch(e) {
     j = {error: '서버 연결 실패: ' + (e.message||'네트워크 오류')}
   }
   if(j.error){
+    // 스트림키/URL 조회 실패는 이메일 기반 폴백을 하지 않고 백엔드 안내를 그대로 표시
+    if(isStreamKey || isUrl){
+      const hint = j.hint ? '<div style="color:#8a95a5;font-size:12px;margin-top:6px">'+escapeHtml(j.hint)+'</div>' : ''
+      const meta = (typeof j.scanned==='number') ? '<div style="color:#8a95a5;font-size:12px;margin-top:4px">스캔 '+j.scanned+'/'+ (j.connected||0) +'개 계정, API 오류 '+(j.api_errors||0)+'건</div>' : ''
+      box.innerHTML = '<span style="color:#f47070">❌ '+escapeHtml(email)+' — '+escapeHtml(j.error)+'</span>'+hint+meta
+      return
+    }
     // API 실패 시 로컬 ALL에서 부분 검색 시도
     const local = (window.ALL||[]).find(a=>a.email.toLowerCase()===email
       || a.email.toLowerCase().includes(email))
@@ -1023,6 +1038,26 @@ var _lookupBtn = document.getElementById('lookup-btn')
 var _lookupInput = document.getElementById('lookup')
 if(_lookupBtn) _lookupBtn.addEventListener('click', lookup)
 if(_lookupInput) _lookupInput.addEventListener('keydown', e=>{if(e.key==='Enter')lookup()})
+async function harvestStreamKeys(){
+  const btn = document.getElementById('harvest-btn')
+  const box = document.getElementById('lookup-result')
+  if(btn){btn.disabled=true;btn.textContent='🗝 수집 중…'}
+  box.style.display='block'
+  box.innerHTML='<span style="color:#8a95a5">연결된 계정의 스트림키를 수집하는 중… (계정 수에 따라 시간이 걸릴 수 있습니다)</span>'
+  let j
+  try{
+    const r = await fetch(authQuery('/api/youtube/harvest-streamkeys'), {method:'POST', headers:authHeaders()})
+    j = await r.json()
+  }catch(e){ j = {ok:false, error:'서버 연결 실패: '+(e.message||'네트워크 오류')} }
+  if(btn){btn.disabled=false;btn.textContent='🗝 스트림키 색인 수집'}
+  if(!j.ok){ box.innerHTML='<span style="color:#f47070">❌ 수집 실패 — '+escapeHtml(j.error||'알 수 없는 오류')+'</span>'; return }
+  box.innerHTML='<div style="color:#3ddc84">✅ 스트림키 색인 수집 완료</div>'
+    +'<div style="color:#8a95a5;font-size:13px;margin-top:6px">연결 계정 '+(j.connected||0)+'개 중 '+(j.harvested||0)+'개 수집 · 스트림키 '+(j.keys||0)+'건 · 총 색인 '+(j.total_indexed||0)+'건'
+    +(j.api_errors?(' · API 오류 '+j.api_errors+'건'):'')+'</div>'
+    +'<div style="color:#8a95a5;font-size:12px;margin-top:6px">이제 위 입력창에 스트림키를 붙여넣으면 즉시 계정이 조회됩니다.</div>'
+}
+var _harvestBtn = document.getElementById('harvest-btn')
+if(_harvestBtn) _harvestBtn.addEventListener('click', harvestStreamKeys)
 ;(function(){var ll=localStorage.getItem('gauth_last_lookup');if(ll){document.getElementById('lookup').value=ll;lookup()}})()
 
 async function lookupRefreshCode(secret, btn){
