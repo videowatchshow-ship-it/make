@@ -35,8 +35,8 @@ for p, c in UNITS.items():
     print('unit written', p)
 
 LOC = r"""
-    # 원본(캄보디아빈)과 동일한 루트 경로: /CAW_1.php /CAH_1.php /CAH_2.php /CAH_3.php /write.php /select.php
-    location ~ ^/(CAW_[1-4]|CAH_[1-3]|SNW_1)\.php$ {
+    # 원본(캄보디아빈)과 동일한 루트 경로: /CAW_1.php /CAH_1.php /CAH_2.php /write.php /select.php
+    location ~ ^/(CAW_[1-4]|CAH_[1-2]|SNW_1)\.php$ {
         rewrite ^/([A-Z]+_[0-9])\.php$ /photo/$1.html last;
     }
     location = /write.php  { return 302 /photo/admin.html$is_args$args; }

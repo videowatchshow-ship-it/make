@@ -59,7 +59,6 @@ html,body{width:100%;min-height:100%;background:#0a0a0a;color:#eee;font-family:'
     <a class="url-btn caw" id="btn-caw" target="_blank">가로</a>
     <a class="url-btn cah" id="btn-cah" target="_blank">세로1</a>
     <a class="url-btn snw" id="btn-snw" target="_blank">세로2</a>
-    <a class="url-btn fd" id="btn-fd" target="_blank">세로3</a>
     <a class="url-btn adm" id="btn-adm">그림장 설정</a>
     <a class="url-btn out" href="login.html">로그아웃</a>
   </div>
@@ -68,7 +67,6 @@ html,body{width:100%;min-height:100%;background:#0a0a0a;color:#eee;font-family:'
   <div class="url-row"><span class="url-lbl cah">세로1</span><input class="url-txt" id="url-cah" readonly><button class="copy" data-for="url-cah">복사</button></div>
   <div class="url-row"><span class="url-lbl caw">가로</span><input class="url-txt" id="url-caw" readonly><button class="copy" data-for="url-caw">복사</button></div>
   <div class="url-row"><span class="url-lbl snw">세로2</span><input class="url-txt" id="url-snw" readonly><button class="copy" data-for="url-snw">복사</button></div>
-  <div class="url-row"><span class="url-lbl fd">세로3</span><input class="url-txt" id="url-fd" readonly><button class="copy" data-for="url-fd">복사</button></div>
 </div>
 <div class="venue-tabs" id="venue-tabs"></div>
 <div class="status-bar">계정 <b id="cur-ch">-</b> · 선택 중: <span id="cur-label">-</span></div>
@@ -85,14 +83,12 @@ html,body{width:100%;min-height:100%;background:#0a0a0a;color:#eee;font-family:'
   document.getElementById('btn-cah').href = BASE + 'CAH_1.html?ch=' + ch;
   document.getElementById('btn-caw').href = BASE + 'CAW_1.html?ch=' + ch;
   document.getElementById('btn-snw').href = BASE + 'CAH_2.html?ch=' + ch;
-  document.getElementById('btn-fd').href  = BASE + 'CAH_3.html?ch=' + ch;
   document.getElementById('btn-adm').href = BASE + 'admin.html?ch=' + ch;
   // 원본(캄보디아빈)과 같은 루트 .php 주소 (nginx 가 /photo/*.html 로 연결)
   const ROOT = location.origin + '/';
   document.getElementById('url-caw').value = ROOT + 'CAW_1.php?ch=' + ch;
   document.getElementById('url-cah').value = ROOT + 'CAH_1.php?ch=' + ch;
   document.getElementById('url-snw').value = ROOT + 'CAH_2.php?ch=' + ch;
-  document.getElementById('url-fd').value  = ROOT + 'CAH_3.php?ch=' + ch;
   document.querySelectorAll('.copy').forEach(b => b.addEventListener('click', async () => {
     const inp = document.getElementById(b.dataset.for);
     try { await navigator.clipboard.writeText(inp.value); }
