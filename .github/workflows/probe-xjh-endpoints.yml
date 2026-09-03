@@ -1,0 +1,73 @@
+name: probe-xjh-endpoints
+on:
+  push:
+    paths:
+      - '.github/workflows/probe-xjh-endpoints.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: endpoints inside fcj6 bundles
+        run: |
+          set +e
+          UA="Mozilla/5.0"
+          for p in src/chunks/bundle.js application.js index.js src/settings.json; do
+            curl -sS --max-time 20 -A "$UA" -o "b_$(basename $p)" "https://fcj6.oqogyf.com/$p"
+          done
+          echo "--- settings.json ---"; cat b_settings.json | head -c 2500; echo
+          echo "--- api paths in bundle ---"
+          grep -oE '(/api/[A-Za-z0-9_/]+|api/pub/[A-Za-z0-9_]+|get_[a-z_]+|https?://[a-z0-9.-]+\.(vip|com|net|top|xyz)[^"'"'"' ]{0,40})' b_bundle.js b_application.js b_index.js | sort | uniq -c | sort -rn | head -80
+          echo "--- context around get_newly_issue ---"
+          grep -oE '.{0,200}get_newly_issue.{0,300}' b_bundle.js | head -5
+          echo "--- context around get_open_nums ---"
+          grep -oE '.{0,200}get_open_nums.{0,300}' b_bundle.js | head -5
+          echo "--- context around liveview / baseUrl / host ---"
+          grep -oiE '.{0,80}(baseurl|apihost|api_host|serverurl|liveview2024|xjh\.).{0,120}' b_bundle.js b_application.js b_settings.json | head -20
+          echo "--- assets list (cocos main bundle) ---"
+          for p in assets/main/config.json assets/main/index.js assets/resources/config.json src/chunks/bundle.js; do :; done
+          curl -sS --max-time 10 -A "$UA" "https://fcj6.oqogyf.com/assets/main/config.json" | head -c 600; echo
+          echo "--- main index.js api strings ---"
+          for f in $(curl -sS --max-time 10 -A "$UA" "https://fcj6.oqogyf.com/assets/main/config.json" | grep -oE '"[a-f0-9-]{8,}"' | head -0); do :; done
+          curl -sS --max-time 20 -A "$UA" -o b_main.js "https://fcj6.oqogyf.com/assets/main/index.js"
+          ls -la b_main.js; grep -oE '(/api/[A-Za-z0-9_/]+|api/pub/[A-Za-z0-9_]+|get_[a-z_]+|https?://[a-z0-9.-]+\.(vip|com|net|top|xyz)[^"'"'"' ]{0,40})' b_main.js | sort | uniq -c | sort -rn | head -60
+          grep -oE '.{0,150}get_newly_issue.{0,250}' b_main.js | head -3
+          grep -oE '.{0,150}get_open_nums.{0,250}' b_main.js | head -3
+
+      - name: xjh alternative calls for room 110
+        run: |
+          set +e
+          A="https://xjh.liveview2024.vip/api/pub"; H1="Origin: https://fcj6.oqogyf.com"; H2="Referer: https://fcj6.oqogyf.com/"
+          for U in "get_newly_issue?room_id=110&game_id=2" "get_newly_issue?roomId=110" "get_newly_issue?room_id=110&t=1" "get_open_nums?room_id=110" "get_issue?room_id=110" "get_issues?room_id=110" "get_issue_list?room_id=110" "get_history?room_id=110" "get_room_issues?room_id=110" "get_last_issue?room_id=110" "get_newly?room_id=110" "get_open_nums_by_room?room_id=110" "get_road?room_id=110" "get_luzhu?room_id=110" "get_result?room_id=110" "get_results?room_id=110" "issue/newly?room_id=110"; do
+            printf "%-45s → " "$U"; curl -sS -o /tmp/x -w "%{http_code} " --max-time 8 -H "$H1" -H "$H2" "$A/$U"; head -c 200 /tmp/x | tr '\n' ' '; echo
+          done
+          echo "--- POST get_newly_issue ---"
+          curl -sS --max-time 8 -H "$H1" -H "$H2" -X POST -d "room_id=110" "$A/get_newly_issue" | head -c 300; echo
+          curl -sS --max-time 8 -H "$H1" -H "$H2" -X POST -H "Content-Type: application/json" -d '{"room_id":110}' "$A/get_newly_issue" | head -c 300; echo
+          echo "--- get_room full for 110 ---"
+          curl -sS --max-time 8 -H "$H1" -H "$H2" "$A/get_room?room_id=110"; echo
+
+      - name: get_room enumeration (which rooms exist)
+        run: |
+          python3 - <<'PY'
+          import json, urllib.request, concurrent.futures
+          H={'User-Agent':'Mozilla/5.0','Origin':'https://fcj6.oqogyf.com','Referer':'https://fcj6.oqogyf.com/'}
+          def probe(rid):
+              try:
+                  req=urllib.request.Request(f'https://xjh.liveview2024.vip/api/pub/get_room?room_id={rid}',headers=H)
+                  raw=urllib.request.urlopen(req,timeout=8).read().decode('utf-8','replace')
+                  d=json.loads(raw)
+                  if isinstance(d,dict) and d.get('room_name') is not None:
+                      return rid, d.get('room_name'), d.get('game_id'), d.get('is_bet_room'), {k:v for k,v in d.items() if k in ('id','room_id','status','is_open','open','state','title','name','game_name','issue_id','newly_issue','current_issue')}
+              except Exception as e:
+                  pass
+              return None
+          ids=list(range(1,400))+list(range(1000,1100))+list(range(20000,20200))
+          found=[]
+          with concurrent.futures.ThreadPoolExecutor(24) as ex:
+              for r in ex.map(probe, ids):
+                  if r: found.append(r); print('ROOM', r)
+          print('COUNT', len(found))
+          print('IDS', [r[0] for r in found])
+          PY
