@@ -1,0 +1,98 @@
+name: deploy-main-login
+
+on:
+  push:
+    paths:
+      - '.github/workflows/deploy-main-login.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install sshpass
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+
+      - name: Deploy login form as main index.html
+        env:
+          VPS_IP: "187.53.133.145"
+          VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          SCP="sshpass -e scp -o StrictHostKeyChecking=no"
+          BASE="/var/www/sites/chamgyo/public"
+
+          python3 -c "
+import textwrap, pathlib
+html = textwrap.dedent('''\
+<!DOCTYPE html>
+<html lang=\"ko\">
+<head>
+<meta charset=\"UTF-8\">
+<meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no\">
+<title>로그인</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;background:#0a0a0a;display:flex;align-items:center;justify-content:center;font-family:'Malgun Gothic',sans-serif}
+.box{width:300px;background:#141414;border:1px solid #2a2a2a;border-radius:10px;padding:32px 24px;text-align:center}
+.logo{color:#ffd54f;font-size:22px;font-weight:bold;margin-bottom:28px;letter-spacing:2px}
+input{width:100%;padding:11px 14px;background:#1e1e1e;border:1px solid #333;border-radius:6px;color:#eee;font-size:14px;margin-bottom:12px;outline:none}
+input:focus{border-color:#ffd54f}
+button{width:100%;padding:12px;background:#ffd54f;border:none;border-radius:6px;color:#000;font-size:15px;font-weight:bold;cursor:pointer;margin-top:4px}
+button:hover{background:#ffe57f}
+.err{color:#ef5350;font-size:12px;margin-top:10px;min-height:16px}
+</style>
+</head>
+<body>
+<div class=\"box\">
+  <div class=\"logo\">출목표</div>
+  <input id=\"uid\" type=\"text\" placeholder=\"아이디 (01~20)\" maxlength=\"2\" inputmode=\"numeric\">
+  <input id=\"pw\"  type=\"password\" placeholder=\"비밀번호\">
+  <button onclick=\"doLogin()\">로그인</button>
+  <div class=\"err\" id=\"err\"></div>
+</div>
+<script>
+(function(){
+  var VALID_PW = 'QWE123!@';
+  var saved = sessionStorage.getItem('bgl_ch');
+  if(saved) redirect(saved);
+  document.getElementById('pw').addEventListener('keydown', function(e){
+    if(e.key==='Enter') doLogin();
+  });
+  window.doLogin = function(){
+    var uid = document.getElementById('uid').value.trim().padStart(2,'0');
+    var pw  = document.getElementById('pw').value;
+    var num = parseInt(uid,10);
+    var err = document.getElementById('err');
+    if(isNaN(num)||num<1||num>20){
+      err.textContent='아이디는 01~20 사이로 입력하세요.'; return;
+    }
+    if(pw !== VALID_PW){
+      err.textContent='비밀번호가 올바르지 않습니다.'; return;
+    }
+    err.textContent='';
+    sessionStorage.setItem('bgl_ch', uid);
+    redirect(uid);
+  };
+  function redirect(ch){
+    location.href = '/photo/CAH_1.html?ch=' + ch;
+  }
+})();
+</script>
+</body>
+</html>
+''')
+pathlib.Path('/tmp/main_index.html').write_text(html.strip())
+"
+
+          $SCP /tmp/main_index.html "root@$VPS_IP:$BASE/index.html"
+          $SSH "chown www-data:www-data $BASE/index.html && chmod 644 $BASE/index.html"
+
+          echo "== Verify =="
+          DOMAIN="xn--9d0bw2fjtyymch7de9d.info"
+          curl -sS -o /dev/null -w 'HTTP Root: %{http_code} size=%{size_download}\n' "http://$VPS_IP/"
+          curl -sS -o /dev/null -w 'HTTPS Root: %{http_code} size=%{size_download}\n' --max-time 30 "https://$DOMAIN/"
+          curl -sS -o /dev/null -w 'HTTPS Login: %{http_code} size=%{size_download}\n' --max-time 30 "https://$DOMAIN/photo/login.html"
+          echo "== DONE =="
