@@ -373,6 +373,145 @@ module.exports = function(app) {
     }
   });
 
+  /* 계정 상세 응답 빌더 — /api/lookup, /api/lookup-by-url, /api/lookup-by-streamkey 공용 */
+  function buildAccountResponse(account) {
+    const folder = emailToFolder(account.email);
+    const profileDir = folder ? safePath(PROFILES_DIR, folder) : null;
+    const hasSession = profileDir ? fs.existsSync(profileDir) : false;
+    return {
+      email: account.email,
+      password: account.password || '',
+      password_alts: account.password_alts || [],
+      totp_secret: account.totp_secret || '',
+      recovery_email: account.recovery_email || '',
+      source_file: account.source_file || '',
+      source_mtime: account.source_mtime || 0,
+      youtube_url: account.youtube_url || '',
+      has_session: hasSession,
+      extra: account.extra || []
+    };
+  }
+
+  /* YouTube URL 정규화 — 핸들(@name) · 채널ID(UC...) · 커스텀(/c/name) · 사용자(/user/name) 추출 */
+  function normalizeYoutubeUrl(raw) {
+    let s = String(raw || '').trim().toLowerCase();
+    if (!s) return { key: '', kind: '' };
+    s = s.replace(/^https?:\/\//, '').replace(/^www\./, '');
+    if (s.startsWith('m.youtube.com') || s.startsWith('youtube.com') || s.startsWith('youtu.be')) {
+      s = s.replace(/^m\./, '');
+    }
+    // 핸들: youtube.com/@handle  또는  단독 @handle
+    let m = s.match(/@([a-z0-9._-]+)/);
+    if (m) return { key: '@' + m[1], kind: 'handle' };
+    m = s.match(/youtube\.com\/channel\/(uc[a-z0-9_-]{20,})/i);
+    if (m) return { key: m[1], kind: 'channel' };
+    m = s.match(/youtube\.com\/(?:c|user)\/([a-z0-9._-]+)/);
+    if (m) return { key: m[1], kind: 'custom' };
+    m = s.match(/^uc[a-z0-9_-]{20,}$/i);
+    if (m) return { key: s, kind: 'channel' };
+    return { key: s.replace(/\/+$/, ''), kind: 'raw' };
+  }
+
+  /* 유알엘로 계정 조회 — 저장된 youtube_url 필드와 대조 */
+  app.get('/api/lookup-by-url', (req, res) => {
+    try {
+      const raw = (req.query.url || '').trim();
+      if (!raw) return res.status(400).json({ error: 'url required' });
+      const target = normalizeYoutubeUrl(raw);
+      if (!target.key) return res.status(400).json({ error: 'invalid url' });
+      const accounts = safeReadJSON(DATA_FILE);
+      let hit = null;
+      for (const a of accounts) {
+        const yt = normalizeYoutubeUrl(a.youtube_url || '');
+        if (!yt.key) continue;
+        if (yt.key === target.key) { hit = a; break; }
+      }
+      // 정확 일치 실패 시 부분 포함 매칭 (raw 문자열 대조)
+      if (!hit) {
+        const needle = target.key.replace(/^@/, '');
+        if (needle.length >= 3) {
+          for (const a of accounts) {
+            const y = String(a.youtube_url || '').toLowerCase();
+            if (y && y.includes(needle)) { hit = a; break; }
+          }
+        }
+      }
+      if (!hit) return res.status(404).json({ error: 'not found', matched: target.key });
+      const out = buildAccountResponse(hit);
+      out.matched_by = 'url';
+      out.matched_key = target.key;
+      res.json(out);
+    } catch (e) {
+      console.error('[gauth-api] error:', e.message); res.status(500).json({ error: 'internal error' });
+    }
+  });
+
+  /* 단일 계정 스트림키 조회 — liveStreams.list(part=cdn, mine=true) 로 streamName 획득
+   * ref: https://developers.google.com/youtube/v3/live/docs/liveStreams/list */
+  function fetchStreamNames(accessToken) {
+    return new Promise((resolve) => {
+      const https = require('https');
+      const r = https.request({
+        hostname: 'www.googleapis.com',
+        path: '/youtube/v3/liveStreams?part=cdn,snippet&mine=true&maxResults=50',
+        method: 'GET', timeout: 20000,
+        headers: { 'Authorization': 'Bearer ' + accessToken }
+      }, (resp) => {
+        let d = ''; resp.on('data', c => d += c); resp.on('end', () => {
+          try {
+            const j = JSON.parse(d);
+            if (j.error) return resolve({ ok: false, error: j.error });
+            const keys = (j.items || []).map(it => ({
+              streamName: ((it.cdn || {}).ingestionInfo || {}).streamName || '',
+              title: (it.snippet || {}).title || ''
+            })).filter(x => x.streamName);
+            resolve({ ok: true, keys });
+          } catch { resolve({ ok: false, error: 'parse error' }); }
+        });
+      });
+      r.on('timeout', () => { r.destroy(); resolve({ ok: false, error: 'timeout' }); });
+      r.on('error', e => resolve({ ok: false, error: e.message }));
+      r.end();
+    });
+  }
+
+  /* 스트림키로 계정 조회 — OAuth 토큰 보유 계정들을 순회하며 streamName 대조 */
+  app.get('/api/lookup-by-streamkey', authMiddleware, async (req, res) => {
+    try {
+      const key = String(req.query.key || '').trim().toLowerCase();
+      if (!key) return res.status(400).json({ error: 'key required' });
+      const tokens = readYtTokens();
+      const accounts = safeReadJSON(DATA_FILE);
+      const now = Date.now();
+      const entries = Object.entries(tokens).filter(([, t]) => t && t.access_token && (!t.expires_at || t.expires_at > now));
+      if (!entries.length) {
+        return res.status(404).json({ error: 'no connected accounts', hint: 'YouTube API 연결된 계정이 없습니다. 계정별 📡 API 연결 필요.' });
+      }
+      let scanned = 0, connected = entries.length, apiErrors = 0;
+      for (const [emKey, t] of entries) {
+        scanned++;
+        const r = await fetchStreamNames(t.access_token);
+        if (!r.ok) { apiErrors++; continue; }
+        const match = r.keys.find(k => k.streamName.toLowerCase() === key);
+        if (match) {
+          const acc = accounts.find(a => normalizeEmail(a.email) === emKey);
+          if (acc) {
+            const out = buildAccountResponse(acc);
+            out.matched_by = 'streamkey';
+            out.matched_key = match.streamName;
+            out.stream_title = match.title;
+            return res.json(out);
+          }
+          // 토큰만 있고 마스터에 계정 없음
+          return res.json({ email: emKey, matched_by: 'streamkey', matched_key: match.streamName, stream_title: match.title, note: 'master 미등록 계정' });
+        }
+      }
+      res.status(404).json({ error: 'not found', scanned, connected, api_errors: apiErrors, hint: '이 스트림키를 가진 연결된 계정을 찾지 못함' });
+    } catch (e) {
+      console.error('[gauth-api] error:', e.message); res.status(500).json({ error: 'internal error' });
+    }
+  });
+
   app.get('/api/search-account', (req, res) => {
     try {
       const q = (req.query.q || '').trim().toLowerCase();
