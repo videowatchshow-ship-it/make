@@ -31,10 +31,10 @@ jobs:
           H={'User-Agent':UA,'Origin':'https://fcj6.oqogyf.com','Referer':'https://fcj6.oqogyf.com/'}
           def probe(rid):
               try:
-                  req=urllib.request.Request(f'https://xjh.liveview2024.vip/api/pub/get_newly_issue?room_id={rid}',headers=H)
+                  req=urllib.request.Request(f'https://xjh.liveview2024.vip/api/pub/get_room?room_id={rid}',headers=H)
                   d=json.loads(urllib.request.urlopen(req,timeout=8).read())
-                  x=d.get('data') or {}
-                  if x.get('id'): return rid, x
+                  if isinstance(d,dict) and d.get('room_name') is not None:
+                      return rid, {'room_name': str(d.get('room_name')).replace('桌','').strip(), 'bet': d.get('is_bet_room')}
               except Exception: pass
               return None
           live=[]
@@ -44,7 +44,7 @@ jobs:
           live.sort()
           print('성천지 live rooms:', [r for r,_ in live], 'count', len(live))
           for r,x in live[:3]: print(' sample', r, json.dumps(x, ensure_ascii=False)[:300])
-          sc_rooms=[{'id':r,'name':str(x.get('room_name') or x.get('name') or r)} for r,x in live]
+          sc_rooms=[{'id':r,'name':x['room_name'] or str(r)} for r,x in live]
           xtd_map={"10":10,"11":11,"12":12,"15":15,"16":16,"17":87,"18":18,"19":89,"20":20,"21":21,"22":22,"23":23,"25":25,"26":26,"27":27,"55":31,"66":32,"77":33,"88":34,"99":35}
           xtd_kind={"10":"21점","16":"용호"}
           xtd_rooms=[{'id':int(k),'api':v,'name':k,'kind':xtd_kind.get(k,'')} for k,v in xtd_map.items()]
