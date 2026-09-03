@@ -18,103 +18,103 @@ jobs:
       - name: Deploy bgl.js (gauth removed, local only)
         run: |
           cat > /tmp/bgl.js << 'JSEOF'
-(function(){
-  var BASE = location.origin + '/photo';
-  var POLL_MS = 3000;
-  var TIMEOUT = 5000;
-  var roomEl = document.getElementById('bgl-room');
-  var roadEl = document.querySelector('.bgl-road');
-  var failCount = 0;
-  var MAX_ROWS = 6;
+          (function(){
+            var BASE = location.origin + '/photo';
+            var POLL_MS = 3000;
+            var TIMEOUT = 5000;
+            var roomEl = document.getElementById('bgl-room');
+            var roadEl = document.querySelector('.bgl-road');
+            var failCount = 0;
+            var MAX_ROWS = 6;
 
-  function showOffline(){
-    if(roomEl) roomEl.textContent='서버 점검중';
-    if(roadEl) roadEl.innerHTML='<div style="text-align:center;padding:40px;color:#999;font-size:14px;">데이터 서버 점검중입니다.<br>잠시 후 자동 재연결됩니다.</div>';
-  }
+            function showOffline(){
+              if(roomEl) roomEl.textContent='서버 점검중';
+              if(roadEl) roadEl.innerHTML='<div style="text-align:center;padding:40px;color:#999;font-size:14px;">데이터 서버 점검중입니다.<br>잠시 후 자동 재연결됩니다.</div>';
+            }
 
-  function renderRoad(results){
-    if(!roadEl) return;
-    roadEl.innerHTML='';
-    if(!results||!results.length){
-      roadEl.innerHTML='<div style="text-align:center;padding:20px;color:#999;">데이터 없음</div>';
-      return;
-    }
-    var cols=[];
-    var col=[];
-    var prev=null;
-    for(var i=0;i<results.length;i++){
-      var r=results[i];
-      var w=r.winner||r.w||'p';
-      if(prev&&w!==prev){cols.push(col);col=[];}
-      col.push(r);
-      prev=w;
-    }
-    if(col.length) cols.push(col);
+            function renderRoad(results){
+              if(!roadEl) return;
+              roadEl.innerHTML='';
+              if(!results||!results.length){
+                roadEl.innerHTML='<div style="text-align:center;padding:20px;color:#999;">데이터 없음</div>';
+                return;
+              }
+              var cols=[];
+              var col=[];
+              var prev=null;
+              for(var i=0;i<results.length;i++){
+                var r=results[i];
+                var w=r.winner||r.w||'p';
+                if(prev&&w!==prev){cols.push(col);col=[];}
+                col.push(r);
+                prev=w;
+              }
+              if(col.length) cols.push(col);
 
-    var tbl=document.createElement('table');
-    tbl.className='bgl-table';
-    for(var row=0;row<MAX_ROWS;row++){
-      var tr=document.createElement('tr');
-      for(var c=0;c<cols.length;c++){
-        var td=document.createElement('td');
-        if(cols[c][row]){
-          var d=cols[c][row];
-          var w2=d.winner||d.w||'p';
-          var div=document.createElement('div');
-          div.className=w2==='b'?'bgl-b':'bgl-p';
-          if(d.pp){var pp=document.createElement('i');pp.className='pp';div.appendChild(pp);}
-          if(d.bp){var bp=document.createElement('i');bp.className='bp';div.appendChild(bp);}
-          if(d.tie||d.t){var s=document.createElement('s');s.textContent=d.tie||d.t||'';div.appendChild(s);}
-          td.appendChild(div);
-        }
-        tr.appendChild(td);
-      }
-      tbl.appendChild(tr);
-    }
-    roadEl.appendChild(tbl);
-  }
+              var tbl=document.createElement('table');
+              tbl.className='bgl-table';
+              for(var row=0;row<MAX_ROWS;row++){
+                var tr=document.createElement('tr');
+                for(var c=0;c<cols.length;c++){
+                  var td=document.createElement('td');
+                  if(cols[c][row]){
+                    var d=cols[c][row];
+                    var w2=d.winner||d.w||'p';
+                    var div=document.createElement('div');
+                    div.className=w2==='b'?'bgl-b':'bgl-p';
+                    if(d.pp){var pp=document.createElement('i');pp.className='pp';div.appendChild(pp);}
+                    if(d.bp){var bp=document.createElement('i');bp.className='bp';div.appendChild(bp);}
+                    if(d.tie||d.t){var s=document.createElement('s');s.textContent=d.tie||d.t||'';div.appendChild(s);}
+                    td.appendChild(div);
+                  }
+                  tr.appendChild(td);
+                }
+                tbl.appendChild(tr);
+              }
+              roadEl.appendChild(tbl);
+            }
 
-  function numsToResults(nums){
-    if(!nums||!nums.length) return [];
-    var results=[];
-    for(var i=0;i<nums.length;i++){
-      var n=nums[i];
-      var w,pp=false,bp=false,tie=0;
-      if(n>=50){w='b';var rem=n-50;if(rem>=20){bp=true;rem-=20;}if(rem>=10){pp=true;rem-=10;}tie=rem;}
-      else if(n>=10){w='p';var rem=n-10;if(rem>=20){bp=true;rem-=20;}if(rem>=10){pp=true;}tie=0;}
-      else{w='p';tie=n;}
-      var r={w:w};
-      if(pp) r.pp=true;
-      if(bp) r.bp=true;
-      if(tie>0) r.t=tie;
-      results.push(r);
-    }
-    return results;
-  }
+            function numsToResults(nums){
+              if(!nums||!nums.length) return [];
+              var results=[];
+              for(var i=0;i<nums.length;i++){
+                var n=nums[i];
+                var w,pp=false,bp=false,tie=0;
+                if(n>=50){w='b';var rem=n-50;if(rem>=20){bp=true;rem-=20;}if(rem>=10){pp=true;rem-=10;}tie=rem;}
+                else if(n>=10){w='p';var rem=n-10;if(rem>=20){bp=true;rem-=20;}if(rem>=10){pp=true;}tie=0;}
+                else{w='p';tie=n;}
+                var r={w:w};
+                if(pp) r.pp=true;
+                if(bp) r.bp=true;
+                if(tie>0) r.t=tie;
+                results.push(r);
+              }
+              return results;
+            }
 
-  function loadData(){
-    var ctrl=new AbortController();
-    var timer=setTimeout(function(){ctrl.abort();},TIMEOUT);
-    fetch(BASE+'/data/room_1.json?t='+Date.now(),{signal:ctrl.signal})
-      .then(function(r){clearTimeout(timer);return r.json();})
-      .then(function(d){
-        failCount=0;
-        if(roomEl) roomEl.textContent='방 1';
-        if(d&&d.results) renderRoad(d.results);
-        else if(d&&d.nums) renderRoad(numsToResults(d.nums));
-        else renderRoad([]);
-      })
-      .catch(function(){
-        clearTimeout(timer);
-        failCount++;
-        if(failCount>=3) showOffline();
-      });
-  }
+            function loadData(){
+              var ctrl=new AbortController();
+              var timer=setTimeout(function(){ctrl.abort();},TIMEOUT);
+              fetch(BASE+'/data/room_1.json?t='+Date.now(),{signal:ctrl.signal})
+                .then(function(r){clearTimeout(timer);return r.json();})
+                .then(function(d){
+                  failCount=0;
+                  if(roomEl) roomEl.textContent='방 1';
+                  if(d&&d.results) renderRoad(d.results);
+                  else if(d&&d.nums) renderRoad(numsToResults(d.nums));
+                  else renderRoad([]);
+                })
+                .catch(function(){
+                  clearTimeout(timer);
+                  failCount++;
+                  if(failCount>=3) showOffline();
+                });
+            }
 
-  loadData();
-  setInterval(loadData,POLL_MS);
-})();
-JSEOF
+            loadData();
+            setInterval(loadData,POLL_MS);
+          })();
+          JSEOF
 
           sha256sum /tmp/bgl.js
           wc -c /tmp/bgl.js
@@ -129,14 +129,17 @@ JSEOF
           done
           $SSH "chown www-data:www-data $BASE/photo/bgl.js $BASE/photo2/bgl.js $BASE/photo3/bgl.js"
 
-          echo "===== Add cache busting to all HTML files ====="
+      - name: Add cache busting to HTML files
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          BASE="/var/www/sites/chamgyo/public"
           STAMP=$(date +%s)
-          $SSH "for f in $BASE/photo/CAH_1.html $BASE/photo/CAW_1.html $BASE/photo/SNW_1.html $BASE/photo2/CAH_1.html $BASE/photo2/CAW_1.html $BASE/photo2/SNW_1.html $BASE/photo3/CAH_1.html $BASE/photo3/CAW_1.html $BASE/photo3/SNW_1.html; do if [ -f \"\$f\" ]; then sed -i 's|bgl\.js[^\"]*|bgl.js?v=$STAMP|g' \"\$f\"; echo \"Updated: \$f\"; fi; done"
 
-          echo "===== Verify bgl.js SHA ====="
-          $SSH "sha256sum $BASE/photo/bgl.js $BASE/photo2/bgl.js $BASE/photo3/bgl.js"
+          echo "===== Add cache busting ====="
+          $SSH "for f in $BASE/photo/CAH_1.html $BASE/photo/CAW_1.html $BASE/photo/SNW_1.html $BASE/photo2/CAH_1.html $BASE/photo2/CAW_1.html $BASE/photo2/SNW_1.html $BASE/photo3/CAH_1.html $BASE/photo3/CAW_1.html $BASE/photo3/SNW_1.html; do if [ -f \"\\\$f\" ]; then sed -i \"s|bgl\\.js[^\\\"]*|bgl.js?v=$STAMP|g\" \"\\\$f\"; echo \"Updated: \\\$f\"; fi; done"
 
-          echo "===== Verify cache busting in CAH_1.html ====="
+          echo "===== Verify cache busting ====="
           $SSH "grep 'bgl.js' $BASE/photo/CAH_1.html"
 
       - name: Deploy room_1.json
@@ -146,8 +149,8 @@ JSEOF
           BASE="/var/www/sites/chamgyo/public"
 
           cat > /tmp/room_1.json << 'JSONEOF'
-{"results":[{"w":"p"},{"w":"b"},{"w":"p"},{"w":"p","pp":true},{"w":"b"},{"w":"b","bp":true},{"w":"p"},{"w":"b"},{"w":"p","t":1},{"w":"b"},{"w":"b"},{"w":"p"},{"w":"p"},{"w":"b","pp":true},{"w":"b"},{"w":"p"},{"w":"b"},{"w":"p"},{"w":"p"},{"w":"b"},{"w":"b"},{"w":"b"},{"w":"p"},{"w":"p","bp":true},{"w":"b"},{"w":"p"},{"w":"b"},{"w":"b"},{"w":"p"},{"w":"p"},{"w":"b","t":1},{"w":"p"},{"w":"b"},{"w":"b"},{"w":"p"},{"w":"p"},{"w":"b"},{"w":"p"},{"w":"b"},{"w":"b"},{"w":"p"},{"w":"p"},{"w":"b"},{"w":"b"},{"w":"p"},{"w":"b"},{"w":"p"},{"w":"p"},{"w":"b"},{"w":"p"},{"w":"b"},{"w":"b"},{"w":"p"},{"w":"b"},{"w":"p"},{"w":"p"}],"source":"local"}
-JSONEOF
+          {"results":[{"w":"p"},{"w":"b"},{"w":"p"},{"w":"p","pp":true},{"w":"b"},{"w":"b","bp":true},{"w":"p"},{"w":"b"},{"w":"p","t":1},{"w":"b"},{"w":"b"},{"w":"p"},{"w":"p"},{"w":"b","pp":true},{"w":"b"},{"w":"p"},{"w":"b"},{"w":"p"},{"w":"p"},{"w":"b"},{"w":"b"},{"w":"b"},{"w":"p"},{"w":"p","bp":true},{"w":"b"},{"w":"p"},{"w":"b"},{"w":"b"},{"w":"p"},{"w":"p"},{"w":"b","t":1},{"w":"p"},{"w":"b"},{"w":"b"},{"w":"p"},{"w":"p"},{"w":"b"},{"w":"p"},{"w":"b"},{"w":"b"},{"w":"p"},{"w":"p"},{"w":"b"},{"w":"b"},{"w":"p"},{"w":"b"},{"w":"p"},{"w":"p"},{"w":"b"},{"w":"p"},{"w":"b"},{"w":"b"},{"w":"p"},{"w":"b"},{"w":"p"},{"w":"p"}],"source":"local"}
+          JSONEOF
           sshpass -e scp -o StrictHostKeyChecking=no /tmp/room_1.json root@$VPS_IP:$BASE/photo/data/room_1.json
           $SSH "chown www-data:www-data $BASE/photo/data/room_1.json"
 
