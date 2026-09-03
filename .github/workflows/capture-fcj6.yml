@@ -8,38 +8,47 @@ permissions:
 jobs:
   cap:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Screenshot fcj6 room 101 / 61 (real rendered design)
+      - name: Render fcj6 (real design) + save every image/atlas asset it loads
         run: |
           npm i -s playwright@1.47.2 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-          mkdir -p ref
+          mkdir -p ref/fcj6_assets
           cat > cap.js <<'JS'
-          const { chromium } = require('playwright');
+          const { chromium } = require('playwright'); const fs = require('fs'); const path = require('path');
           (async () => {
             const b = await chromium.launch();
+            const seen = new Set(); const logs = [];
             for (const [room, w, h] of [[101,1920,1080],[61,1920,1080],[101,1080,1920]]) {
               const p = await b.newPage({ viewport: { width: w, height: h }, userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36' });
-              const logs = [];
-              p.on('console', m => logs.push(m.text()));
-              p.on('response', r => { const u = r.url(); if (/\.(png|jpg|webp|plist|json|atlas)(\?|$)/i.test(u)) logs.push('RES ' + r.status() + ' ' + u); });
+              p.on('console', m => logs.push('[console] ' + m.text()));
+              p.on('response', async r => {
+                const u = r.url(); const ct = (r.headers()['content-type'] || '');
+                const isImg = /image\//.test(ct) || /\.(png|jpg|jpeg|webp|astc|pkm|plist|atlas)(\?|$)/i.test(u);
+                const isMeta = /\/assets\/.*\.(json|cconb|bin)(\?|$)/i.test(u);
+                if (!(isImg || isMeta) || seen.has(u)) return; seen.add(u);
+                try { const buf = await r.body(); const name = u.replace(/^https?:\/\/[^/]+\//, '').replace(/[?#].*$/, '').replace(/[^A-Za-z0-9._-]+/g, '_').slice(-180);
+                      fs.writeFileSync(path.join('ref/fcj6_assets', name), buf); logs.push('SAVED ' + buf.length + ' ' + ct + ' ' + u); } catch (e) { logs.push('ERR ' + u + ' ' + e.message); }
+              });
               try { await p.goto(`https://fcj6.oqogyf.com/?room_id=${room}`, { waitUntil: 'networkidle', timeout: 90000 }); } catch (e) { logs.push('goto: ' + e.message); }
-              await p.waitForTimeout(15000);
+              await p.waitForTimeout(20000);
               await p.screenshot({ path: `ref/fcj6_${room}_${w}x${h}.png`, fullPage: false });
-              require('fs').writeFileSync(`ref/fcj6_${room}_${w}x${h}.log`, logs.join('\n'));
               await p.close();
             }
+            fs.writeFileSync('ref/fcj6_capture.log', logs.join('\n'));
             await b.close();
           })();
           JS
           node cap.js
-          ls -la ref
-      - name: Commit screenshots to branch (ref/)
+          ls -la ref ref/fcj6_assets | head -120
+          du -sh ref/fcj6_assets
+      - name: Commit screenshots + assets to branch (ref/)
         run: |
           git config user.name "github-actions"; git config user.email "actions@github.com"
-          git add ref/*.png ref/*.log
-          git commit -m "ref: fcj6 실제 렌더 스크린샷 (세로2 디자인 기준)" || exit 0
+          find ref/fcj6_assets -type f -size +8M -delete
+          git add ref
+          git commit -m "ref: fcj6 실제 렌더 스크린샷 + 로드된 이미지/아틀라스 자산 (용8·용7·2장6·3장6·타이·페어 원본 이미지 확인용)" || exit 0
           git pull --rebase origin ${GITHUB_REF_NAME} || true
           git push origin HEAD:${GITHUB_REF_NAME}
