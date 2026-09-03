@@ -1,0 +1,25 @@
+name: probe-xjh-regex
+on:
+  push:
+    paths:
+      - '.github/workflows/probe-xjh-regex.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: regex + special handling in bundle
+        run: |
+          curl -sS --max-time 30 -A "Mozilla/5.0" -o m.js "https://fcj6.oqogyf.com/assets/main/index.js"
+          python3 - <<'PY'
+          s=open('m.js',encoding='utf-8',errors='replace').read()
+          def ctx(key,b=200,a=1500,n=2):
+              i=0;c=0
+              while c<n:
+                  i=s.find(key,i)
+                  if i<0: break
+                  print(f'\n===== {key} @{i} =====\n'+s[max(0,i-b):i+a]); i+=len(key); c+=1
+          for k in ['/^[BPTbpt](','addRoadFromString','showSpecialB62','applySpecialZhuziSprite','Z_WIN_ZD=','Z_WIN:','H_WIN','X_WIN_ZXD','B62','B63','B7','P8','SUPER','super6','lucky']:
+              ctx(k)
+          PY
