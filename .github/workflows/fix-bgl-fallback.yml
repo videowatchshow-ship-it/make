@@ -1,0 +1,173 @@
+name: fix-bgl-fallback
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-bgl-fallback.yml'
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    env:
+      VPS_IP: "187.53.133.145"
+      VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+
+      - name: Read current bgl.js
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          BASE="/var/www/sites/chamgyo/public"
+
+          echo "===== Current bgl.js ====="
+          $SSH "cat $BASE/photo/bgl.js"
+
+          echo ""
+          echo "===== Current data files ====="
+          $SSH "ls -la $BASE/photo/data/"
+          $SSH "cat $BASE/photo/data/tables.json 2>/dev/null || echo 'no tables.json'"
+
+      - name: Deploy bgl.js with offline fallback
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          BASE="/var/www/sites/chamgyo/public"
+
+          $SSH "cat > /tmp/bgl_new.js" << 'BGLEOF'
+          (function(){
+            const API = 'https://gauth.cent-solution.online/photo';
+            const POLL_MS = 3000;
+            const FALLBACK_TIMEOUT = 5000;
+
+            const ch = new URLSearchParams(location.search).get('ch') || '01';
+            const roomEl = document.getElementById('bgl-room');
+            const roadEl = document.querySelector('.bgl-road');
+
+            let currentRoom = null;
+            let failCount = 0;
+            const MAX_FAIL = 3;
+
+            function showOffline() {
+              if (roomEl) roomEl.textContent = '서버 점검중';
+              if (roadEl) {
+                roadEl.innerHTML = '<div style="text-align:center;padding:40px;color:#999;font-size:14px;">데이터 서버 점검중입니다.<br>잠시 후 자동 재연결됩니다.</div>';
+              }
+            }
+
+            function renderRoad(nums) {
+              if (!roadEl) return;
+              roadEl.innerHTML = '';
+              if (!nums || !nums.length) {
+                roadEl.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">데이터 없음</div>';
+                return;
+              }
+              var cols = [];
+              var col = [];
+              var prev = null;
+              for (var i = 0; i < nums.length; i++) {
+                var cur = nums[i] >= 50 ? 'b' : nums[i] >= 10 ? 'p' : 't';
+                if (prev && cur !== prev) {
+                  cols.push(col);
+                  col = [];
+                }
+                col.push(nums[i]);
+                prev = cur;
+              }
+              if (col.length) cols.push(col);
+
+              var tbl = document.createElement('table');
+              tbl.className = 'bgl-tbl';
+              tbl.style.cssText = 'border-collapse:collapse;width:100%;table-layout:fixed;';
+              var maxR = 6;
+              for (var r = 0; r < maxR; r++) {
+                var tr = document.createElement('tr');
+                for (var c = 0; c < cols.length; c++) {
+                  var td = document.createElement('td');
+                  td.style.cssText = 'width:24px;height:24px;text-align:center;font-size:11px;border:1px solid #333;';
+                  if (cols[c][r] !== undefined) {
+                    var v = cols[c][r];
+                    td.textContent = v;
+                    if (v >= 50) { td.style.background = '#1a3a6a'; td.style.color = '#5cacee'; }
+                    else if (v >= 10) { td.style.background = '#6a1a1a'; td.style.color = '#ee5c5c'; }
+                    else { td.style.background = '#1a6a2a'; td.style.color = '#5cee8c'; }
+                  }
+                  tr.appendChild(td);
+                }
+                tbl.appendChild(tr);
+              }
+              roadEl.appendChild(tbl);
+            }
+
+            function loadRoom(roomId) {
+              var ctrl = new AbortController();
+              var timer = setTimeout(function(){ ctrl.abort(); }, FALLBACK_TIMEOUT);
+
+              fetch(API + '/data/room_' + roomId + '.json', { signal: ctrl.signal })
+                .then(function(r) { clearTimeout(timer); return r.json(); })
+                .then(function(d) {
+                  failCount = 0;
+                  if (roomEl) roomEl.textContent = '방 ' + roomId;
+                  if (d && d.nums) renderRoad(d.nums);
+                  else renderRoad([]);
+                })
+                .catch(function() {
+                  clearTimeout(timer);
+                  failCount++;
+                  if (failCount >= MAX_FAIL) showOffline();
+                });
+            }
+
+            function pollRoom() {
+              var ctrl = new AbortController();
+              var timer = setTimeout(function(){ ctrl.abort(); }, FALLBACK_TIMEOUT);
+
+              fetch(API + '/api_selected_room.php?ch=' + ch, { signal: ctrl.signal })
+                .then(function(r) { clearTimeout(timer); return r.json(); })
+                .then(function(d) {
+                  failCount = 0;
+                  if (d && d.room_id) {
+                    if (d.room_id !== currentRoom) {
+                      currentRoom = d.room_id;
+                      loadRoom(currentRoom);
+                    }
+                  }
+                })
+                .catch(function() {
+                  clearTimeout(timer);
+                  failCount++;
+                  if (failCount >= MAX_FAIL) showOffline();
+                });
+            }
+
+            pollRoom();
+            setInterval(pollRoom, POLL_MS);
+          })();
+          BGLEOF
+
+          for dir in photo photo2 photo3; do
+            echo "== Deploy to $dir =="
+            $SSH "cp /tmp/bgl_new.js $BASE/$dir/bgl.js && chown www-data:www-data $BASE/$dir/bgl.js"
+          done
+
+          echo "== Verify =="
+          $SSH "sha256sum $BASE/photo/bgl.js $BASE/photo2/bgl.js $BASE/photo3/bgl.js"
+          $SSH "wc -c $BASE/photo/bgl.js"
+
+      - name: Purge CF cache
+        env:
+          CF_ZONE: "7e5faed2d3d4d6da7aceb4ddde81a62b"
+        run: |
+          curl -sS -X POST \
+            "https://api.cloudflare.com/client/v4/zones/$CF_ZONE/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"purge_everything":true}' | jq .
+
+      - name: Verify live
+        run: |
+          sleep 5
+          DOMAIN="xn--9d0bw2fjtyymch7de9d.info"
+          curl -sS -o /tmp/bgl.js -w "bgl.js → HTTP %{http_code} | size %{size_download} | cf-cache: %{header.cf-cache-status}\n" "https://$DOMAIN/photo/bgl.js"
+          grep -c 'showOffline\|서버 점검중' /tmp/bgl.js && echo "FALLBACK CODE PRESENT" || echo "MISSING FALLBACK"
+          sha256sum /tmp/bgl.js
