@@ -121,9 +121,9 @@
        大眼/小路/小强 : 테두리 원 / 채운 원 / 빗금 (원본 BigEye·SmallRoad·YueYou) */
   var SJ = document.body.classList.contains('gold');
   function vec(path, v) {
-    if (path === 'zhuzi') {
+    if (path === 'zhuzi') {   // 글자(B/P/T) 없이 원 + 페어 점만
       var c = v <= 4 ? 'B' : v <= 8 ? 'P' : 'T', e = (v - 1) % 4;
-      return "<i class='vz v" + c + "'><b>" + (c === 'T' ? 'T' : c) + "</b>" + (e & 1 ? "<u class='zd'></u>" : '') + (e & 2 ? "<u class='xd'></u>" : '') + "</i>";
+      return "<i class='vz v" + c + "'>" + (e & 1 ? "<u class='zd'></u>" : '') + (e & 2 ? "<u class='xd'></u>" : '') + "</i>";
     }
     if (path === 'dalu') return "<i class='vd " + (v <= 4 ? 'r' : 'b') + "'>" + ((v - 1) % 4 & 1 ? "<u class='zd'></u>" : '') + ((v - 1) % 4 & 2 ? "<u class='xd'></u>" : '') + "</i>";
     if (path === 'dayan') return "<i class='vy " + (v === 'red' ? 'r' : 'b') + "'></i>";
@@ -138,7 +138,7 @@
       var v = src[i][j]; if (v === NO || v === 'no_find' || typeof v === 'undefined') continue;
       var s = sp && sp[i] && sp[i][j] && sp[i][j] !== NO ? sp[i][j] : '';
       h += "<div class='content' style='left:" + (step * i) + "px;top:" + (step * j) + "px;width:" + step + "px;height:" + step + "px'>" +
-           (SJ ? vec(path, v) : "<img src='luzhu_img/" + path + "/" + v + ".png'>") +
+           ((SJ || path === 'zhuzi') ? vec(path, v) : "<img src='luzhu_img/" + path + "/" + v + ".png'>") +   // 珠子는 항상 글자 없는 원
            (s ? "<span class='sp sp" + s.charAt(0) + "'>" + s + "</span>" : '') + "</div>";
     }
     return h;

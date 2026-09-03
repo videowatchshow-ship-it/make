@@ -32,9 +32,16 @@
   }
 
   function applyBanners(s) {
-    const w = document.getElementById('banner_w'); if (w && s.banner_width) w.src = BASE + s.banner_width;
-    const h = document.getElementById('banner_h'); if (h && s.banner_height) h.src = BASE + s.banner_height;
-    const kb = document.getElementById('kakao_banner'); if (kb) kb.style.display = s.kakao === 'Y' ? '' : 'none';
+    // 원본: 카톡배너 N → "배너 기본"(images/Live_*_banner*.gif) 항상 표시, Y → 계정 업로드 배너(메신저) 표시. 배너 영역은 항상 보임.
+    function pick(el, custom) {
+      if (!el) return;
+      if (!el.dataset.def) el.dataset.def = el.getAttribute('src');
+      const want = (s.kakao === 'Y' && custom) ? BASE + custom : el.dataset.def;
+      if (el.getAttribute('src') !== want) el.src = want;
+    }
+    pick(document.getElementById('banner_w'), s.banner_width);
+    pick(document.getElementById('banner_h'), s.banner_height);
+    const kb = document.getElementById('kakao_banner'); if (kb) kb.style.display = '';
   }
 
   function tickClock() {
