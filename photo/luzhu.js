@@ -115,12 +115,30 @@
 
   /* ---- 렌더 (원본 show_pulic_img_html / show_pulic_num_html 그대로) ---- */
   var STEP = { zhuzi: 39.9, dalu: 20.05, xiaolu: 10.05, dayan: 10.05, xiaoqiang: 10.05, sanxing: 20.05 };
+  /* 뉴싱지(fcj6) 디자인: 원본 클라이언트가 이미지 대신 VectorCircle 로 그림
+       珠子 BtnZhuzi : 채운 원 COLOR_Z rgb(156,0,0) / COLOR_X rgb(0,3,160) / COLOR_H rgb(0,94,0) + 글자 B/P/tie + 庄对·闲对 점
+       大路 Btn_BigRoad : 테두리 원 color_zhuang rgb(255,0,0) / color_xian rgb(13,118,224)
+       大眼/小路/小强 : 테두리 원 / 채운 원 / 빗금 (원본 BigEye·SmallRoad·YueYou) */
+  var SJ = document.body.classList.contains('gold');
+  function vec(path, v) {
+    if (path === 'zhuzi') {
+      var c = v <= 4 ? 'B' : v <= 8 ? 'P' : 'T', e = (v - 1) % 4;
+      return "<i class='vz v" + c + "'><b>" + (c === 'T' ? 'T' : c) + "</b>" + (e & 1 ? "<u class='zd'></u>" : '') + (e & 2 ? "<u class='xd'></u>" : '') + "</i>";
+    }
+    if (path === 'dalu') return "<i class='vd " + (v <= 4 ? 'r' : 'b') + "'>" + ((v - 1) % 4 & 1 ? "<u class='zd'></u>" : '') + ((v - 1) % 4 & 2 ? "<u class='xd'></u>" : '') + "</i>";
+    if (path === 'dayan') return "<i class='vy " + (v === 'red' ? 'r' : 'b') + "'></i>";
+    if (path === 'xiaolu') return "<i class='vx " + (v === 'red' ? 'r' : 'b') + "'></i>";
+    if (path === 'xiaoqiang') return "<i class='vq " + (v === 'red' ? 'r' : 'b') + "'></i>";
+    if (path === 'sanxing') return "<i class='vs " + (v === 'red' ? 'r' : 'b') + "'></i>";
+    return '';
+  }
   function imgHtml(src, cls, step, rows, path, sp) {
     var h = '';
     for (var i = 0; i < src.length; i++) for (var j = 0; j < rows; j++) {
       var v = src[i][j]; if (v === NO || v === 'no_find' || typeof v === 'undefined') continue;
       var s = sp && sp[i] && sp[i][j] && sp[i][j] !== NO ? sp[i][j] : '';
-      h += "<div class='content' style='left:" + (step * i) + "px;top:" + (step * j) + "px;width:" + step + "px;height:" + step + "px'><img src='luzhu_img/" + path + "/" + v + ".png'>" +
+      h += "<div class='content' style='left:" + (step * i) + "px;top:" + (step * j) + "px;width:" + step + "px;height:" + step + "px'>" +
+           (SJ ? vec(path, v) : "<img src='luzhu_img/" + path + "/" + v + ".png'>") +
            (s ? "<span class='sp sp" + s.charAt(0) + "'>" + s + "</span>" : '') + "</div>";
     }
     return h;
