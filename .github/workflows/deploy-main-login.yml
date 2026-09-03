@@ -18,74 +18,16 @@ jobs:
         env:
           VPS_IP: "187.53.133.145"
           VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
+          HTML_B64: "PCFET0NUWVBFIGh0bWw+CjxodG1sIGxhbmc9ImtvIj4KPGhlYWQ+CjxtZXRhIGNoYXJzZXQ9IlVURi04Ij4KPG1ldGEgbmFtZT0idmlld3BvcnQiIGNvbnRlbnQ9IndpZHRoPWRldmljZS13aWR0aCxpbml0aWFsLXNjYWxlPTEuMCxtYXhpbXVtLXNjYWxlPTEuMCx1c2VyLXNjYWxhYmxlPW5vIj4KPHRpdGxlPuuhnOq3uOyduDwvdGl0bGU+CjxzdHlsZT4KKntib3gtc2l6aW5nOmJvcmRlci1ib3g7bWFyZ2luOjA7cGFkZGluZzowfQpodG1sLGJvZHl7d2lkdGg6MTAwJTtoZWlnaHQ6MTAwJTtiYWNrZ3JvdW5kOiMwYTBhMGE7ZGlzcGxheTpmbGV4O2FsaWduLWl0ZW1zOmNlbnRlcjtqdXN0aWZ5LWNvbnRlbnQ6Y2VudGVyO2ZvbnQtZmFtaWx5OidNYWxndW4gR290aGljJyxzYW5zLXNlcmlmfQouYm94e3dpZHRoOjMwMHB4O2JhY2tncm91bmQ6IzE0MTQxNDtib3JkZXI6MXB4IHNvbGlkICMyYTJhMmE7Ym9yZGVyLXJhZGl1czoxMHB4O3BhZGRpbmc6MzJweCAyNHB4O3RleHQtYWxpZ246Y2VudGVyfQoubG9nb3tjb2xvcjojZmZkNTRmO2ZvbnQtc2l6ZToyMnB4O2ZvbnQtd2VpZ2h0OmJvbGQ7bWFyZ2luLWJvdHRvbToyOHB4O2xldHRlci1zcGFjaW5nOjJweH0KaW5wdXR7d2lkdGg6MTAwJTtwYWRkaW5nOjExcHggMTRweDtiYWNrZ3JvdW5kOiMxZTFlMWU7Ym9yZGVyOjFweCBzb2xpZCAjMzMzO2JvcmRlci1yYWRpdXM6NnB4O2NvbG9yOiNlZWU7Zm9udC1zaXplOjE0cHg7bWFyZ2luLWJvdHRvbToxMnB4O291dGxpbmU6bm9uZX0KaW5wdXQ6Zm9jdXN7Ym9yZGVyLWNvbG9yOiNmZmQ1NGZ9CmJ1dHRvbnt3aWR0aDoxMDAlO3BhZGRpbmc6MTJweDtiYWNrZ3JvdW5kOiNmZmQ1NGY7Ym9yZGVyOm5vbmU7Ym9yZGVyLXJhZGl1czo2cHg7Y29sb3I6IzAwMDtmb250LXNpemU6MTVweDtmb250LXdlaWdodDpib2xkO2N1cnNvcjpwb2ludGVyO21hcmdpbi10b3A6NHB4fQpidXR0b246aG92ZXJ7YmFja2dyb3VuZDojZmZlNTdmfQouZXJye2NvbG9yOiNlZjUzNTA7Zm9udC1zaXplOjEycHg7bWFyZ2luLXRvcDoxMHB4O21pbi1oZWlnaHQ6MTZweH0KPC9zdHlsZT4KPC9oZWFkPgo8Ym9keT4KPGRpdiBjbGFzcz0iYm94Ij4KICA8ZGl2IGNsYXNzPSJsb2dvIj7stpzrqqntkZw8L2Rpdj4KICA8aW5wdXQgaWQ9InVpZCIgdHlwZT0idGV4dCIgcGxhY2Vob2xkZXI9IuyVhOydtOuUlCAoMDF+MjApIiBtYXhsZW5ndGg9IjIiIGlucHV0bW9kZT0ibnVtZXJpYyI+CiAgPGlucHV0IGlkPSJwdyIgdHlwZT0icGFzc3dvcmQiIHBsYWNlaG9sZGVyPSLruYTrsIDrsojtmLgiPgogIDxidXR0b24gb25jbGljaz0iZG9Mb2dpbigpIj7roZzqt7jsnbg8L2J1dHRvbj4KICA8ZGl2IGNsYXNzPSJlcnIiIGlkPSJlcnIiPjwvZGl2Pgo8L2Rpdj4KPHNjcmlwdD4KKGZ1bmN0aW9uKCl7CiAgdmFyIFZBTElEX1BXPSdRV0UxMjMhQCc7CiAgdmFyIHNhdmVkPXNlc3Npb25TdG9yYWdlLmdldEl0ZW0oJ2JnbF9jaCcpOwogIGlmKHNhdmVkKSByZWRpcmVjdChzYXZlZCk7CiAgZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoJ3B3JykuYWRkRXZlbnRMaXN0ZW5lcigna2V5ZG93bicsZnVuY3Rpb24oZSl7CiAgICBpZihlLmtleT09PSdFbnRlcicpIGRvTG9naW4oKTsKICB9KTsKICB3aW5kb3cuZG9Mb2dpbj1mdW5jdGlvbigpewogICAgdmFyIHVpZD1kb2N1bWVudC5nZXRFbGVtZW50QnlJZCgndWlkJykudmFsdWUudHJpbSgpLnBhZFN0YXJ0KDIsJzAnKTsKICAgIHZhciBwdz1kb2N1bWVudC5nZXRFbGVtZW50QnlJZCgncHcnKS52YWx1ZTsKICAgIHZhciBudW09cGFyc2VJbnQodWlkLDEwKTsKICAgIHZhciBlcnI9ZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoJ2VycicpOwogICAgaWYoaXNOYU4obnVtKXx8bnVtPDF8fG51bT4yMCl7CiAgICAgIGVyci50ZXh0Q29udGVudD0n7JWE7J2065SU64qUIDAxfjIwIOyCrOydtOuhnCDsnoXroKXtlZjshLjsmpQuJzsgcmV0dXJuOwogICAgfQogICAgaWYocHchPT1WQUxJRF9QVyl7CiAgICAgIGVyci50ZXh0Q29udGVudD0n67mE67CA67KI7Zi46rCAIOyYrOuwlOultOyngCDslYrsirXri4jri6QuJzsgcmV0dXJuOwogICAgfQogICAgZXJyLnRleHRDb250ZW50PScnOwogICAgc2Vzc2lvblN0b3JhZ2Uuc2V0SXRlbSgnYmdsX2NoJyx1aWQpOwogICAgcmVkaXJlY3QodWlkKTsKICB9OwogIGZ1bmN0aW9uIHJlZGlyZWN0KGNoKXsKICAgIGxvY2F0aW9uLmhyZWY9Jy9waG90by9DQUhfMS5odG1sP2NoPScrY2g7CiAgfQp9KSgpOwo8L3NjcmlwdD4KPC9ib2R5Pgo8L2h0bWw+"
         run: |
           export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
           SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
           SCP="sshpass -e scp -o StrictHostKeyChecking=no"
           BASE="/var/www/sites/chamgyo/public"
 
-          python3 -c "
-import textwrap, pathlib
-html = textwrap.dedent('''\
-<!DOCTYPE html>
-<html lang=\"ko\">
-<head>
-<meta charset=\"UTF-8\">
-<meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no\">
-<title>로그인</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{width:100%;height:100%;background:#0a0a0a;display:flex;align-items:center;justify-content:center;font-family:'Malgun Gothic',sans-serif}
-.box{width:300px;background:#141414;border:1px solid #2a2a2a;border-radius:10px;padding:32px 24px;text-align:center}
-.logo{color:#ffd54f;font-size:22px;font-weight:bold;margin-bottom:28px;letter-spacing:2px}
-input{width:100%;padding:11px 14px;background:#1e1e1e;border:1px solid #333;border-radius:6px;color:#eee;font-size:14px;margin-bottom:12px;outline:none}
-input:focus{border-color:#ffd54f}
-button{width:100%;padding:12px;background:#ffd54f;border:none;border-radius:6px;color:#000;font-size:15px;font-weight:bold;cursor:pointer;margin-top:4px}
-button:hover{background:#ffe57f}
-.err{color:#ef5350;font-size:12px;margin-top:10px;min-height:16px}
-</style>
-</head>
-<body>
-<div class=\"box\">
-  <div class=\"logo\">출목표</div>
-  <input id=\"uid\" type=\"text\" placeholder=\"아이디 (01~20)\" maxlength=\"2\" inputmode=\"numeric\">
-  <input id=\"pw\"  type=\"password\" placeholder=\"비밀번호\">
-  <button onclick=\"doLogin()\">로그인</button>
-  <div class=\"err\" id=\"err\"></div>
-</div>
-<script>
-(function(){
-  var VALID_PW = 'QWE123!@';
-  var saved = sessionStorage.getItem('bgl_ch');
-  if(saved) redirect(saved);
-  document.getElementById('pw').addEventListener('keydown', function(e){
-    if(e.key==='Enter') doLogin();
-  });
-  window.doLogin = function(){
-    var uid = document.getElementById('uid').value.trim().padStart(2,'0');
-    var pw  = document.getElementById('pw').value;
-    var num = parseInt(uid,10);
-    var err = document.getElementById('err');
-    if(isNaN(num)||num<1||num>20){
-      err.textContent='아이디는 01~20 사이로 입력하세요.'; return;
-    }
-    if(pw !== VALID_PW){
-      err.textContent='비밀번호가 올바르지 않습니다.'; return;
-    }
-    err.textContent='';
-    sessionStorage.setItem('bgl_ch', uid);
-    redirect(uid);
-  };
-  function redirect(ch){
-    location.href = '/photo/CAH_1.html?ch=' + ch;
-  }
-})();
-</script>
-</body>
-</html>
-''')
-pathlib.Path('/tmp/main_index.html').write_text(html.strip())
-"
+          echo "$HTML_B64" | base64 -d > /tmp/main_index.html
+          echo "== Generated HTML size =="
+          wc -c /tmp/main_index.html
 
           $SCP /tmp/main_index.html "root@$VPS_IP:$BASE/index.html"
           $SSH "chown www-data:www-data $BASE/index.html && chmod 644 $BASE/index.html"
