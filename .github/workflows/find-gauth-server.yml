@@ -1,0 +1,41 @@
+name: find-gauth-server
+on:
+  push:
+    paths:
+      - '.github/workflows/find-gauth-server.yml'
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    env:
+      VPS_IP: "187.53.133.145"
+      VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+
+      - name: Find gauth server info
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+
+          echo "===== DNS lookup gauth.cent-solution.online ====="
+          dig +short gauth.cent-solution.online || nslookup gauth.cent-solution.online || true
+
+          echo ""
+          echo "===== Check /etc/hosts ====="
+          $SSH "grep -i gauth /etc/hosts 2>/dev/null || echo 'not in hosts'"
+
+          echo ""
+          echo "===== Check known_hosts / ssh config ====="
+          $SSH "cat ~/.ssh/config 2>/dev/null || echo 'no ssh config'"
+          $SSH "cat ~/.ssh/known_hosts 2>/dev/null | head -20 || echo 'no known_hosts'"
+
+          echo ""
+          echo "===== Check bash history for gauth IPs ====="
+          $SSH "grep -i 'gauth\|cent-solution\|gucci' ~/.bash_history 2>/dev/null | tail -30 || echo 'nothing'"
+
+          echo ""
+          echo "===== Resolve gauth IP from runner ====="
+          host gauth.cent-solution.online || true
+          dig gauth.cent-solution.online || true
