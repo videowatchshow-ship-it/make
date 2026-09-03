@@ -46,9 +46,11 @@ def crawl_xtd(room):
     label = room['id']
     api_id = room.get('api', label)
     j = get(f'https://api.xtd6688.com/api/diantou/table/getData/gameType/3/tableId/{api_id}/xue/null', XTD_H)
-    if j.get('code') != 1 or not j.get('data'):
+    if j.get('code') != 1:
         return None
-    items = j['data']
+    items = j.get('data') or {}
+    if not isinstance(items, dict):
+        items = {}
     keys = sorted(items.keys(), key=lambda k: int(''.join(c for c in k if c.isdigit()) or 0))
     nums = []
     for k in keys:
@@ -58,8 +60,6 @@ def crawl_xtd(room):
         r = int(o.get('result', 0)); e = int(o.get('ext', 0))
         letter = 'P' if r == 2 else ('T' if r == 3 else 'B')
         nums.append(letter + ('1' if e & 1 else '0') + ('1' if e & 2 else '0'))
-    if not nums:
-        return None
     return {'id': f'xtd_{label}', 'venue': 'xtd', 'label': room.get('name') or str(label), 'room_id': label,
             'apiId': api_id, 'kind': room.get('kind', ''), 'ver': len(nums), 'nums': nums,
             't': int(time.time()), 'server_time': now(), 'source': 'xtd6688'}

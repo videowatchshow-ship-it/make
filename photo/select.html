@@ -128,7 +128,8 @@ html,body{width:100%;min-height:100%;background:#0a0a0a;color:#eee;font-family:'
       if(!r.ok){ el.innerHTML = '<span style="font-size:10px;color:#555">데이터 없음</span>'; return; }
       const d = await r.json(); cache[key] = d;
       const age = d.t ? (Date.now()/1000 - d.t) : 0;
-      el.innerHTML = miniRoad(d.nums||[]) + (age > 300 ? '<div class="stale">갱신 지연</div>' : '');
+      const nums = d.nums||[];
+      el.innerHTML = (nums.length ? miniRoad(nums) : '<span style="font-size:10px;color:#666;line-height:80px">새 슈 대기중</span>') + (age > 300 ? '<div class="stale">갱신 지연</div>' : '');
       const n = card.querySelector('.n'); if(n) n.textContent = (d.nums||[]).length + '판';
     }catch(_){ el.innerHTML = '<span style="font-size:10px;color:#555">오류</span>'; }
   }
