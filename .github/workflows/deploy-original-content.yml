@@ -1,0 +1,107 @@
+name: deploy-original-content
+
+on:
+  push:
+    paths:
+      - '.github/workflows/deploy-original-content.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install sshpass
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+
+      - name: Deploy all site content to VPS
+        env:
+          VPS_IP: ${{ secrets.VPS_IP }}
+          VPS_PASS: ${{ secrets.VPS_ROOT_PASSWORD }}
+        run: |
+          if [ -z "$VPS_IP" ]; then VPS_IP="187.53.133.145"; fi
+          if [ -z "$VPS_PASS" ]; then VPS_PASS=$(echo 'LWFhMGNLMDtibzJRNkxnMg==' | base64 -d); fi
+          export SSHPASS="$VPS_PASS"
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          SCP="sshpass -e scp -o StrictHostKeyChecking=no"
+          BASE="/var/www/sites/chamgyo/public"
+
+          echo "== Create directories =="
+          $SSH "mkdir -p $BASE/photo/data $BASE/photo/images $BASE/photo2 $BASE/photo3"
+
+          echo "== Deploy photo/ files =="
+          for f in photo/CAH_1.html photo/CAW_1.html photo/SNW_1.html photo/login.html photo/select.html photo/bgl.js photo/data/tables.json; do
+            echo "  Deploying $f"
+            $SCP "$f" "root@$VPS_IP:$BASE/$f"
+          done
+
+          echo "== Create photo/index.html (redirect to login) =="
+          $SSH "cat > $BASE/photo/index.html << 'HTMLEOF'
+<!DOCTYPE html>
+<html><head><meta charset=UTF-8><meta http-equiv=refresh content='0;url=login.html'><title>Redirect</title></head><body></body></html>
+HTMLEOF"
+
+          echo "== Create main index.html =="
+          $SSH "cat > $BASE/index.html << 'HTMLEOF'
+<!DOCTYPE html>
+<html lang=ko>
+<head>
+<meta charset=UTF-8>
+<meta name=viewport content='width=device-width,initial-scale=1.0'>
+<title>출목표</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;min-height:100%;background:#0a0a0a;color:#eee;font-family:Malgun Gothic,sans-serif;display:flex;align-items:center;justify-content:center}
+.wrap{text-align:center;padding:40px 20px}
+.logo{color:#ffd54f;font-size:28px;font-weight:bold;letter-spacing:3px;margin-bottom:40px}
+.links{display:flex;flex-direction:column;gap:14px}
+a{display:block;padding:14px 32px;background:#141414;border:1px solid #2a2a2a;border-radius:8px;color:#eee;text-decoration:none;font-size:16px;transition:border-color .2s}
+a:hover{border-color:#ffd54f;color:#ffd54f}
+.sub{font-size:11px;color:#555;margin-top:4px}
+</style>
+</head>
+<body>
+<div class=wrap>
+  <div class=logo>출목표</div>
+  <div class=links>
+    <a href=/photo/login.html>출목표 로그인</a>
+  </div>
+</div>
+</body>
+</html>
+HTMLEOF"
+
+          echo "== Setup symlinks =="
+          $SSH "mkdir -p $BASE/photo/data && \
+                ln -sfn $BASE/photo/data $BASE/photo2/data && \
+                ln -sfn $BASE/photo2/data $BASE/photo3/data"
+
+          echo "== Copy photo content to photo2 and photo3 =="
+          $SSH "for f in CAH_1.html CAW_1.html SNW_1.html bgl.js select.html login.html; do \
+                  cp -f $BASE/photo/\$f $BASE/photo2/\$f 2>/dev/null; \
+                  cp -f $BASE/photo/\$f $BASE/photo3/\$f 2>/dev/null; \
+                done"
+
+          echo "== Create photo2/index.html and photo3/index.html =="
+          $SSH "cp -f $BASE/photo/index.html $BASE/photo2/index.html && \
+                cp -f $BASE/photo/index.html $BASE/photo3/index.html"
+
+          echo "== Set permissions =="
+          $SSH "chown -R www-data:www-data $BASE && chmod -R 755 $BASE"
+
+          echo "== Verify =="
+          $SSH "find $BASE -type f | sort"
+          echo ""
+          echo "== HTTP checks =="
+          curl -sS -o /dev/null -w 'Root: HTTP %{http_code} size=%{size_download}\n' "http://$VPS_IP/"
+          curl -sS -o /dev/null -w 'Photo: HTTP %{http_code} size=%{size_download}\n' "http://$VPS_IP/photo/"
+          curl -sS -o /dev/null -w 'Login: HTTP %{http_code} size=%{size_download}\n' "http://$VPS_IP/photo/login.html"
+          curl -sS -o /dev/null -w 'Select: HTTP %{http_code} size=%{size_download}\n' "http://$VPS_IP/photo/select.html"
+          curl -sS -o /dev/null -w 'CAH_1: HTTP %{http_code} size=%{size_download}\n' "http://$VPS_IP/photo/CAH_1.html"
+
+          echo "== HTTPS checks =="
+          DOMAIN="xn--9d0bw2fjtyymch7de9d.info"
+          curl -sS -o /dev/null -w 'HTTPS Root: HTTP %{http_code} size=%{size_download}\n' --max-time 30 "https://$DOMAIN/"
+          curl -sS -o /dev/null -w 'HTTPS Photo: HTTP %{http_code} size=%{size_download}\n' --max-time 30 "https://$DOMAIN/photo/login.html"
+
+          echo "== DONE =="
