@@ -1,0 +1,27 @@
+name: probe-cambin-views2
+on:
+  push:
+    paths:
+      - '.github/workflows/probe-cambin-views2.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: fetch
+        run: |
+          set +e
+          B="https://xn--2z1b92mg3alyphom.com"; UA="Mozilla/5.0"
+          mkdir -p out
+          for p in CAW_1.php CAW_2.php CAW_3.php CAW_4.php CAH_1.php; do curl -sS --max-time 20 -A "$UA" -o "out/$p.html" "$B/$p"; done
+          curl -sS --max-time 20 -A "$UA" -o out/live_style.css "$B/include/live_style.css"
+          echo "=== live_style.css"; cat out/live_style.css; echo
+          echo "=== CAW_2 vs CAW_1 diff"; diff out/CAW_1.php.html out/CAW_2.php.html
+          echo "=== CAW_3 body"; python3 -c "s=open('out/CAW_3.php.html',encoding='utf-8',errors='replace').read();i=s.find('<style');print(s[i:])"
+          echo "=== CAW_4 body"; python3 -c "s=open('out/CAW_4.php.html',encoding='utf-8',errors='replace').read();i=s.find('<style');print(s[i:])"
+          echo "=== images HEAD"
+          for i in Live_width_01_banner.gif board_nextPB_2023_4.png nextPB_A4.png muback_h_title.png Live_height_banner_scj.gif live03_next_PB.png h_side_banner_sedol.png h_side_banner.png boardA3_nextPB.png Live_height_kakao.gif Live_width_01_banner_kakao.gif Live_width_04_kakao.gif clock_cambodia.png; do
+            printf "%-34s " "$i"; curl -sS -o /dev/null -w "HTTP %{http_code} size %{size_download} type %{content_type}\n" --max-time 15 -A "$UA" "$B/images/$i"
+          done
+          true
