@@ -1,0 +1,40 @@
+name: probe-xjh-headers2
+on:
+  push:
+    paths:
+      - '.github/workflows/probe-xjh-headers2.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: scan main bundle with python
+        run: |
+          curl -sS --max-time 30 -A "Mozilla/5.0" -o m.js "https://fcj6.oqogyf.com/assets/main/index.js"
+          python3 - <<'PY'
+          s=open('m.js',encoding='utf-8',errors='replace').read()
+          print('size',len(s))
+          def ctx(key,before=300,after=700,maxn=3):
+              i=0;n=0
+              while n<maxn:
+                  i=s.find(key,i)
+                  if i<0: break
+                  print(f'\n===== {key} @{i} =====\n'+s[max(0,i-before):i+after]); i+=len(key); n+=1
+          for k in ['getRequest','get_newly_issue','get_open_nums','apibaseURL','baseURL=','"000000"','room_id=','xjh.','liveview','headers:','"token"','Authorization']:
+              ctx(k)
+          PY
+
+      - name: newly_issue over 21 rooms + variants
+        run: |
+          set +e
+          A="https://xjh.liveview2024.vip/api/pub"
+          for RID in 23 25 26 27 28 29 30 31 51 61 62 100 101 102 103 105 106 107 108 109 110; do
+            printf "room %-4s → " "$RID"; curl -sS -o /tmp/x -w "%{http_code} " --max-time 8 -H "Origin: https://fcj6.oqogyf.com" -H "Referer: https://fcj6.oqogyf.com/?room_id=$RID" -H "Accept: application/json" "$A/get_newly_issue?room_id=$RID"; head -c 250 /tmp/x | tr '\n' ' '; echo
+          done
+          for U in "get_newly_issue?room_id=110&issue_id=0" "get_newly_issue?room_id=110&version=0" "get_newly_issue?room_id=110&user_id=0" "get_newly_issue?room_id=110&token=" "get_newly_issue?room_id=110&idxToday=0"; do
+            printf "%-50s → " "$U"; curl -sS -o /tmp/x -w "%{http_code} " --max-time 8 -H "Origin: https://fcj6.oqogyf.com" -H "Referer: https://fcj6.oqogyf.com/" "$A/$U"; head -c 200 /tmp/x | tr '\n' ' '; echo
+          done
+          for IID in 1 1000 100000 300000 600000 900000 1200000; do
+            printf "issue %-8s → " "$IID"; curl -sS -o /tmp/x -w "%{http_code} " --max-time 8 -H "Origin: https://fcj6.oqogyf.com" -H "Referer: https://fcj6.oqogyf.com/" "$A/get_open_nums?issue_id=$IID"; head -c 200 /tmp/x | tr '\n' ' '; echo
+          done
