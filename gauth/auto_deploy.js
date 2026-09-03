@@ -480,8 +480,23 @@ module.exports = function(app) {
     try {
       const key = String(req.query.key || '').trim().toLowerCase();
       if (!key) return res.status(400).json({ error: 'key required' });
-      const tokens = readYtTokens();
       const accounts = safeReadJSON(DATA_FILE);
+      // 1) 저장된 색인에서 즉시 조회 (수집 완료된 경우 토큰/네트워크 불필요)
+      const idxHit = readStreamKeyIndex()[key];
+      if (idxHit && idxHit.email) {
+        const acc = accounts.find(a => normalizeEmail(a.email) === normalizeEmail(idxHit.email));
+        if (acc) {
+          const out = buildAccountResponse(acc);
+          out.matched_by = 'streamkey-index';
+          out.matched_key = key;
+          out.stream_title = idxHit.title || '';
+          out.indexed_at = idxHit.updated_at || 0;
+          return res.json(out);
+        }
+        return res.json({ email: idxHit.email, matched_by: 'streamkey-index', matched_key: key, stream_title: idxHit.title || '', note: 'master 미등록 계정' });
+      }
+      // 2) 색인에 없으면 연결된 계정 실시간 스캔 (그리고 발견 시 색인에 캐시)
+      const tokens = readYtTokens();
       const now = Date.now();
       const entries = Object.entries(tokens).filter(([, t]) => t && t.access_token && (!t.expires_at || t.expires_at > now));
       if (!entries.length) {
@@ -492,6 +507,8 @@ module.exports = function(app) {
         scanned++;
         const r = await fetchStreamNames(t.access_token);
         if (!r.ok) { apiErrors++; continue; }
+        // 스캔한 모든 키를 색인에 저장 (다음 조회부터 즉시 매칭)
+        for (const k of r.keys) indexStreamKey(k.streamName, emKey, k.title);
         const match = r.keys.find(k => k.streamName.toLowerCase() === key);
         if (match) {
           const acc = accounts.find(a => normalizeEmail(a.email) === emKey);
@@ -624,6 +641,46 @@ module.exports = function(app) {
     fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
     fs.renameSync(tmp, YT_TOKENS_FILE);
   }
+
+  /* 스트림키 색인: { streamNameLower: { email, title, updated_at } }
+   * 역조회 불가한 유튜브 API를 우회하기 위해 연결 계정의 streamName을 미리 수집해 저장 */
+  const STREAMKEY_INDEX_FILE = path.join(DATA_DIR, 'streamkey_index.json');
+  function readStreamKeyIndex() {
+    try { return JSON.parse(fs.readFileSync(STREAMKEY_INDEX_FILE, 'utf8')); } catch { return {}; }
+  }
+  function writeStreamKeyIndex(data) {
+    const tmp = STREAMKEY_INDEX_FILE + '.tmp.' + process.pid + '.' + Date.now();
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+    fs.renameSync(tmp, STREAMKEY_INDEX_FILE);
+  }
+  function indexStreamKey(streamName, email, title) {
+    if (!streamName || !email) return;
+    const idx = readStreamKeyIndex();
+    idx[streamName.toLowerCase()] = { email, title: title || '', updated_at: Date.now() };
+    writeStreamKeyIndex(idx);
+  }
+
+  /* 연결된 모든 계정의 스트림키를 수집해 색인에 저장 (한 번 실행 후 즉시 조회 가능) */
+  app.post('/api/youtube/harvest-streamkeys', authMiddleware, async (req, res) => {
+    try {
+      const tokens = readYtTokens();
+      const now = Date.now();
+      const entries = Object.entries(tokens).filter(([, t]) => t && t.access_token && (!t.expires_at || t.expires_at > now));
+      if (!entries.length) return res.json({ ok: true, harvested: 0, keys: 0, connected: 0, hint: '연결된 계정이 없습니다.' });
+      const idx = readStreamKeyIndex();
+      let harvested = 0, keyCount = 0, apiErrors = 0;
+      for (const [emKey, t] of entries) {
+        const r = await fetchStreamNames(t.access_token);
+        if (!r.ok) { apiErrors++; continue; }
+        harvested++;
+        for (const k of r.keys) { idx[k.streamName.toLowerCase()] = { email: emKey, title: k.title || '', updated_at: Date.now() }; keyCount++; }
+      }
+      writeStreamKeyIndex(idx);
+      res.json({ ok: true, harvested, keys: keyCount, connected: entries.length, api_errors: apiErrors, total_indexed: Object.keys(idx).length });
+    } catch (e) {
+      console.error('[gauth-api] error:', e.message); res.status(500).json({ ok: false, error: 'internal error' });
+    }
+  });
 
   app.get('/api/youtube/client-id', (req, res) => {
     const clientId = process.env.YOUTUBE_OAUTH_CLIENT_ID || '';
