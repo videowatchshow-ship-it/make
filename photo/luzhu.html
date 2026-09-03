@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PC</title>
+<style>
+/* === gs.xtd6688.com/luzhu/en/static/css/table_for_pc.css 그대로 (html 11px 기준) === */
+html{font-size: 11px;}
+*{ margin: 0 auto; padding: 0 auto; list-style: none;}
+body{background-color: #070f29; margin: 0 auto; padding: 0 auto; position: relative;}
+div{overflow: hidden;}
+.top{width: 100%; height: 7.375rem;  background-image: url(luzhu_img/top_bg.png); background-repeat: repeat-x;}
+.top_main{width: 118.1875rem; height: 100%; background-repeat: no-repeat; position: relative; text-align: center;}
+.top_title{color: #7efafc; font-size: 2.25rem; padding-top: 1.2rem; cursor: pointer; }
+.top_set{color: #7efafc; font-size:1.125rem; bottom: 0.5rem; right: 0.5rem; position: absolute; cursor: pointer;}
+.main{width: 118.375rem;}
+.main_top{width: 100%; height: 22.5rem; position: relative;margin-bottom: 0.5rem;}
+.main_top_left{ position: relative; float: left; width:40.5rem; height: 100%; background-color: white}
+.table_zhuzi_bg{position: absolute; left: 0rem; top: 0rem;  width: 100%; height: 100%; z-index: 1; border-top: 1px solid var(--line); border-left: 1px solid var(--line);}
+.table_zhuzi_bg_td{float: left; width:3.54rem; height: 3.54rem; border-bottom: 0.09rem solid var(--line); border-right: 0.09rem solid var(--line);}
+.jingshan_zhuzi{position: relative; width:118.1875rem; height: 100%;border-left: 0.0625rem solid var(--line2); background-color: transparent; z-index: 2;}
+.jingshan_zhuzi > .content {width: 3.63rem; height: 3.63rem;}
+.jingshan_zhuzi > .content > img{width: 3.63rem; height: 3.63rem;}
+.main_top_right{float: left; width:118.75rem; height:56.1875rem; margin-left: 0.125rem;  background-color: #011049; border: 0.0625rem solid var(--line2); position: relative;}
+.main_top_right div{position: absolute;}
+.main_bottom{width: 65.5%; height: 11rem; background-color: white; position: relative; margin-bottom: 0.5rem;}
+.table_bg{position: absolute; width: 100%; height: 100%; left: 0rem; top: 0rem; z-index: 1; border-top: 1px solid var(--line); border-left: 1px solid var(--line);}
+.table_bg_td{float: left; width: 1.733rem; height: 1.733rem; border-bottom: 0.09rem solid var(--line); border-right: 0.09rem solid var(--line);}
+.jingshan_right{ position: absolute; left: 0rem; top: 0rem; width: 100%; height: 100%; z-index: 2; }
+.jingshan_dalu{position: relative; width: 100%; height: 100%; }
+.content{ position: absolute; clear: both; z-index: 1;}
+.content_num{ text-align: left; position: absolute; clear: both; z-index: 2; margin-top: 2px; margin-left: 7px; font-size: 10px; color: #1c9a2a; font-weight: bold;}
+.jingshan_dalu >.content img{ border: none; position: absolute; left: 0px; top: 0px; width: 1.823rem; height: 1.823rem; }
+.jingshan_down{ position: relative; width: 100%; height: 50%; }
+.jingshan_dayan{ position: relative; width: 49%; height: 100%; float: left; }
+.jingshan_dayan >.content img{ border: none; position: absolute; left: 0px; top: 0px; width:0.9115rem; height:0.9115rem; }
+.jingshan_xiaoqiang{ position: relative; width: 50.5%; height: 100%; float:right; }
+.jingshan_xiaoqiang >.content img{ border: none; position: absolute; left: 0px; top: 0px; width:0.9115rem; height:0.9115rem; }
+.jingshan_xiaolu{ position: relative; width: 49%; height: 100%; float: left; }
+.jingshan_xiaolu >.content img{ border: none; position: absolute; left: 0px; top: 0px; width:0.9115rem; height:0.9115rem; }
+.jingshan_sanxing{ position: relative; width: 50.5%; height: 100%; float: right; }
+.jingshan_sanxing >.content img{ border: none; position: absolute; left: 0px; top: 0px; width:1.823rem; height:1.823rem; }
+.wenlu_content{ width: 25%; float: left; cursor: pointer; text-align: left; height: 1.875rem; line-height: 1.875rem; color:#fff; font-size:1.1rem;}
+.wenlu_content img{ width: 1rem; height: 1rem; line-height: 1.875rem; vertical-align: middle; margin-top: 0.5rem; display: inline-block; float: left; margin-left:0.5rem; }
+.wenlu_button{ width: 80px; background-color: #e64340; text-align: center; }
+#wenlu_show_red,#wenlu_show_blue{ width: 80px;}
+/* 격자 색: 기본(성천지 파랑) / gold(싱지) */
+:root{--line:#1c2bea;--line2:#2773e6}
+body.gold{--line:#b8a06a;--line2:#b8a06a}
+</style>
+</head>
+<body>
+	<div class="top">
+		<div class="top_main">
+			<div class="top_title"></div>
+		</div>
+	</div>
+	<div class="main">
+			<div class="main_top_right">
+				<div style="height: 92%;position: relative;"></div>
+				<div style="width: 100%; height: 1.875rem; background-color: #009E94; text-align: right; margin-top: 0.5rem; position: relative;">
+					<div style="position: relative;" class="wenlu_content wenlu_button">BANKER</div>
+					<div style="position: relative;" class="wenlu_content" id="wenlu_show_red"></div>
+					<div style="position: relative;" class="wenlu_content wenlu_button">PLAYER</div>
+					<div style="position: relative;" class="wenlu_content" id="wenlu_show_blue"></div>
+				</div>
+			</div>
+		<div class="main_top">
+			<div class="main_top_left">
+				<div class="table_zhuzi_bg"></div>
+				<div class="jingshan_zhuzi"></div>
+			</div>
+		<div class="main_bottom">
+			<div class="table_bg"></div>
+			<div class="jingshan_right">
+			    <div class="jingshan_dalu"></div>
+			</div>
+		</div>
+		<div class="main_bottom">
+			<div class="table_bg"></div>
+			<div class="jingshan_right">
+			    <div class="jingshan_down">
+			        <div class="jingshan_dayan"></div>
+			        <div class="jingshan_xiaoqiang"></div>
+			    </div>
+			    <div class="jingshan_down">
+			        <div class="jingshan_xiaolu"></div>
+			        <div class="jingshan_sanxing"></div>
+			    </div>
+			</div>
+		</div>
+		</div>
+	</div>
+<script>if (new URLSearchParams(location.search).get('theme') === 'gold') document.body.classList.add('gold');</script>
+<script src="luzhu.js?v=1"></script>
+</body>
+</html>

@@ -12,6 +12,9 @@ on:
       - 'photo/login.html'
       - 'photo/CAW_1.html'
       - 'photo/CAH_1.html'
+      - 'photo/CAH_2.html'
+      - 'photo/luzhu.html'
+      - 'photo/luzhu.js'
 
 jobs:
   deploy:
@@ -73,6 +76,17 @@ jobs:
             [ -s "orig/images/$i" ] && head -c 4 "orig/images/$i" | grep -q '<' && { echo "  not image → drop"; rm -f "orig/images/$i"; }
           done
           ls -la orig/images orig/include; sha256sum orig/images/* | head -20
+          # 원본 그림장(gs.xtd6688 luzhu) 이미지 세트 그대로 복사
+          L="https://gs.xtd6688.com/luzhu/en/static/img"
+          mkdir -p orig/luzhu_img/zhuzi orig/luzhu_img/dalu orig/luzhu_img/xiaolu orig/luzhu_img/dayan orig/luzhu_img/xiaoqiang orig/luzhu_img/sanxing orig/luzhu_img/wenlu_static
+          curl -sS --max-time 20 -A "$UA" -o orig/luzhu_img/top_bg.png "$L/top_bg.png"
+          for i in $(seq 1 16); do curl -sS --max-time 20 -A "$UA" -o "orig/luzhu_img/zhuzi/$i.png" "$L/zhuzi/$i.png"; done
+          for i in $(seq 1 8); do curl -sS --max-time 20 -A "$UA" -o "orig/luzhu_img/dalu/$i.png" "$L/dalu/$i.png"; done
+          for d in xiaolu dayan xiaoqiang sanxing; do for c in red blue; do curl -sS --max-time 20 -A "$UA" -o "orig/luzhu_img/$d/$c.png" "$L/$d/$c.png"; done; done
+          for d in dayan xiaolu xiaoqiang; do for c in red blue no_find; do curl -sS --max-time 20 -A "$UA" -o "orig/luzhu_img/wenlu_static/${c}_$d.png" "$L/wenlu_static/${c}_$d.png"; done; done
+          # 이미지가 아닌(404 html) 파일 제거 + 결과 목록
+          for f in $(find orig/luzhu_img -type f); do head -c 4 "$f" | grep -q 'PNG' || { echo "NOT PNG → drop: $f ($(head -c 60 $f | tr '\n' ' '))"; rm -f "$f"; }; done
+          echo "--- luzhu images fetched ---"; find orig/luzhu_img -type f | sort | xargs -I{} sh -c 'printf "%-45s %s\n" {} $(stat -c%s {})'
 
       - name: Upload files
         run: |
@@ -86,11 +100,12 @@ jobs:
           $SCP tables.json root@$VPS_IP:$BASE/photo/data/tables.json
           $SCP -r orig/images/. root@$VPS_IP:$BASE/photo/images/
           $SCP orig/include/live_style.css root@$VPS_IP:$BASE/photo/include/
+          $SSH "mkdir -p $BASE/photo/luzhu_img" && $SCP -r orig/luzhu_img/. root@$VPS_IP:$BASE/photo/luzhu_img/
           for d in photo photo2 photo3; do
             $SSH "mkdir -p $BASE/$d/include"
-            $SCP photo/select.html photo/bgl.js photo/view.js photo/admin.html photo/login.html photo/CAW_1.html photo/CAH_1.html photo/CAH_2.html root@$VPS_IP:$BASE/$d/
-            $SSH "rm -f $BASE/$d/CAH_3.html"
-            [ "$d" != photo ] && $SSH "cp -f $BASE/photo/include/live_style.css $BASE/$d/include/ && cp -n $BASE/photo/images/* $BASE/$d/images/ 2>/dev/null; true"
+            $SCP photo/select.html photo/bgl.js photo/view.js photo/admin.html photo/login.html photo/CAW_1.html photo/CAH_1.html photo/CAH_2.html photo/luzhu.html photo/luzhu.js root@$VPS_IP:$BASE/$d/
+            $SSH "rm -f $BASE/$d/CAH_3.html $BASE/$d/roads.js"
+            [ "$d" != photo ] && $SSH "cp -f $BASE/photo/include/live_style.css $BASE/$d/include/ && cp -n $BASE/photo/images/* $BASE/$d/images/ 2>/dev/null; rm -rf $BASE/$d/luzhu_img && cp -r $BASE/photo/luzhu_img $BASE/$d/luzhu_img; true"
           done
           $SSH "chown -R www-data:www-data $BASE/photo $BASE/photo2 $BASE/photo3; chmod 755 /opt/chulmok/*.py; rm -f $BASE/photo/api_selected_room.php $BASE/photo/data/room_1.json $BASE/photo/data/room_sn_*.json $BASE/photo/data/room_sc_*.json $BASE/photo/data/room_fd_*.json $BASE/photo/select.html.bak.*"
           echo "--- server sha256 (images) ---"; $SSH "sha256sum $BASE/photo/images/* | head -20"

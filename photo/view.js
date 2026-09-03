@@ -53,6 +53,14 @@
     const r = document.getElementById('bgl-room'); if (r) r.textContent = '';
   }
 
+  function showLuzhu(key, theme) {
+    const src = `${BASE}luzhu.html?room=${key}${theme ? '&theme=' + theme : ''}`;
+    if (src !== lastSrc) { document.querySelectorAll('iframe.lz').forEach(f => { f.src = src; }); lastSrc = src; }
+    document.querySelectorAll('[data-xtd]').forEach(e => { e.style.display = ''; });
+    const w = document.getElementById('bgl-wrap'); if (w) w.style.display = 'none';
+    const r = document.getElementById('bgl-room'); if (r) r.textContent = '';
+  }
+
   async function showBgl(key) {
     document.querySelectorAll('[data-xtd]').forEach(e => { e.style.display = 'none'; });
     const w = document.getElementById('bgl-wrap');
@@ -79,29 +87,22 @@
       applyBanners(settings);
       tickClock();
       const fixed = channel === 'B' ? settings.table2_num : settings.table_num;
-      if (fixed) { showXtd(XTD_MAP[String(+fixed)] || +fixed, settings.url); return; }
-      roomKey = sel.room_id || null;
+      const force = document.body.dataset.force;           // 'luzhu' = 항상 자체 그림장(luzhu.html) 사용 (세로2)
+      const theme = document.body.dataset.theme || '';
+      if (fixed && !force) { showXtd(XTD_MAP[String(+fixed)] || +fixed, settings.url); return; }
+      roomKey = sel.room_id || (fixed ? 'xtd_' + fixed : null);
       if (!roomKey) { const nm = document.getElementById('bgl-room'); if (nm) nm.textContent = '테이블을 선택하세요 (select.html)'; return; }
-      if (roomKey.startsWith('xtd_')) showXtd(XTD_MAP[roomKey.slice(4)] || +roomKey.slice(4), settings.url);
-      else if (roomKey.startsWith('fd_')) {   // 포추나: 외부 크롤 불가 → 원본 페이지 임베드
-        document.querySelectorAll('[data-xtd]').forEach(e => { e.style.display = 'none'; });
-        const w = document.getElementById('bgl-wrap'); if (w) { w.style.display = 'flex'; }
-        const v = (window.__tables && window.__tables.venues || []).find(v => v.key === 'fd');
-        if (!window.__tables) { fetch(`${BASE}data/tables.json`, { cache: 'no-store' }).then(r => r.json()).then(t => { window.__tables = t; }); return; }
-        const room = v && (v.rooms || []).find(r => String(r.id) === roomKey.slice(3));
-        if (room && w && w.dataset.url !== room.url) { w.dataset.url = room.url; w.innerHTML = `<iframe src="${room.url}" style="width:100%;height:100%;border:0"></iframe>`; }
-        const nm = document.getElementById('bgl-room'); if (nm && room) nm.textContent = `포추나 ${room.name}`;
-      }
-      else showBgl(roomKey);
+      if (roomKey.startsWith('xtd_') && !force) showXtd(XTD_MAP[roomKey.slice(4)] || +roomKey.slice(4), settings.url);
+      else showLuzhu(roomKey, theme);   // 싱지(sj_) 및 세로2: 원본 zou_base 알고리즘 포팅 그림장 (같은 1300px 규격 → 같은 크롭)
     } catch (_) {}
   }
 
   window.__view = function (opt) {
     const channel = (opt && opt.ch) || 'A';
-    poll(channel); setInterval(() => poll(channel), 3000); setInterval(tickClock, 1000);
+    poll(channel); setInterval(() => poll(channel), 500); setInterval(tickClock, 1000);
   };
 
-  /* 세로2(fcj6 싱지 원본) · 세로3(포추나 원본) — 선택 테이블의 원본 페이지를 그대로 임베드 */
+  /* (구) 원본 페이지 임베드 모드 — 현재 미사용 */
   let tables = null, lastEmbed = null;
   async function pollEmbed(mode) {
     try {
