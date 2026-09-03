@@ -54,7 +54,7 @@ html,body{width:100%;min-height:100%;background:#0a0a0a;color:#eee;font-family:'
 </head>
 <body>
 <div class="top-bar">
-  <h1>출목표 선택 하기</h1>
+  <h1>출목표 선택 하기 <select id="ch-sel" title="계정 (01~20) — 계정별 가로/세로1/세로2 URL 이 다릅니다" style="display:none;margin-left:10px;font-size:14px;padding:3px 6px;border-radius:6px;border:1px solid #888;background:#fff;color:#000"></select></h1>
   <div class="url-btns" id="url-btns">
     <a class="url-btn caw" id="btn-caw" target="_blank">가로</a>
     <a class="url-btn cah" id="btn-cah" target="_blank">세로1</a>
@@ -80,6 +80,15 @@ html,body{width:100%;min-height:100%;background:#0a0a0a;color:#eee;font-family:'
   const ch   = new URLSearchParams(location.search).get('ch') || '01';
   const BASE = location.pathname.replace(/select\.html.*$/, '');
   document.getElementById('cur-ch').textContent = ch;
+  // 마스터(aass0707) 는 01~20 계정을 골라 계정별 테이블 선택·URL(가로/세로1/세로2 ?ch=XX) 을 관리
+  (function(){
+    let auth = null; try { auth = JSON.parse(sessionStorage.getItem('adminAuth') || 'null'); } catch(_) {}
+    if (!auth || auth.role !== 'master') return;
+    const sel = document.getElementById('ch-sel'); sel.style.display = '';
+    for (let i = 1; i <= 20; i++) { const v = String(i).padStart(2,'0'); const o = document.createElement('option'); o.value = v; o.textContent = '계정 ' + v; sel.appendChild(o); }
+    sel.value = ch;
+    sel.addEventListener('change', () => { location.href = BASE + 'select.html?ch=' + sel.value; });
+  })();
   document.getElementById('btn-cah').href = BASE + 'CAH_1.html?ch=' + ch;
   document.getElementById('btn-caw').href = BASE + 'CAW_1.html?ch=' + ch;
   document.getElementById('btn-snw').href = BASE + 'CAH_2.html?ch=' + ch;
