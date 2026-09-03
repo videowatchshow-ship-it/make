@@ -1,0 +1,74 @@
+name: probe-foduna
+on:
+  push:
+    paths:
+      - '.github/workflows/probe-foduna.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: page structure de_foduna/1 + br_foduna/1
+        run: |
+          set +e
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36"
+          for p in de_foduna/1 br_foduna/1; do
+            echo "=================== $p"
+            curl -sS --max-time 20 -A "$UA" -D h.txt -o p.html -w "HTTP %{http_code} size %{size_download} final %{url_effective}\n" -L "https://foduna.halokh.com/$p"
+            grep -i 'content-type\|server\|location' h.txt
+            python3 - <<'PY'
+          import re
+          s=open('p.html',encoding='utf-8',errors='replace').read()
+          print('--- title ---', re.findall(r'<title>([^<]*)',s))
+          print('--- scripts src ---'); [print(' ',m) for m in re.findall(r'<script[^>]*src="([^"]+)"',s)]
+          print('--- iframes ---'); [print(' ',m) for m in re.findall(r'<iframe[^>]*>',s)]
+          print('--- urls ---'); [print(' ',m) for m in sorted(set(re.findall(r'https?://[A-Za-z0-9.\-]+[^"\'\s<>)]{0,80}',s)))[:40]]
+          print('--- api/ws/room/table strings ---'); [print(' ',m) for m in sorted(set(re.findall(r'[^"\'\s<>]*(?:api|ws|socket|room|table|result|history|road)[^"\'\s<>]{0,60}',s,re.I)))[:60]]
+          print('--- inline scripts ---')
+          for m in re.findall(r'<script(?![^>]*src)[^>]*>([\s\S]*?)</script>',s): print(m[:4000]); print('-----')
+          b=s[s.find('<body'):]; b=re.sub(r'<style[\s\S]*?</style>|<script[\s\S]*?</script>','',b)
+          print('--- body ---'); print(b[:6000])
+          PY
+          done
+      - name: fetch referenced js and find endpoints
+        run: |
+          set +e
+          UA="Mozilla/5.0"
+          curl -sS --max-time 20 -A "$UA" -o p.html -L "https://foduna.halokh.com/de_foduna/1"
+          for s in $(grep -oE 'src="[^"]+\.js[^"]*"' p.html | sed 's/src="//;s/"$//' | head -8); do
+            case "$s" in http*) U="$s";; /*) U="https://foduna.halokh.com$s";; *) U="https://foduna.halokh.com/de_foduna/$s";; esac
+            echo "== $U"; curl -sS --max-time 20 -A "$UA" -o j.js -w "HTTP %{http_code} size %{size_download}\n" "$U"
+            python3 - <<'PY'
+          import re
+          s=open('j.js',encoding='utf-8',errors='replace').read()
+          for m in sorted(set(re.findall(r'https?://[A-Za-z0-9.\-]+[^"\'\s<>)]{0,80}|wss?://[^"\'\s]{0,80}|["\'][/A-Za-z0-9_\-]*(?:api|room|table|result|history|road|issue|game)[/A-Za-z0-9_\-?=&]*["\']',s,re.I)))[:80]: print(' ',m)
+          PY
+          done
+      - name: enumerate de/br 1..100
+        run: |
+          python3 - <<'PY'
+          import urllib.request, concurrent.futures, re
+          UA='Mozilla/5.0'
+          def probe(arg):
+              kind,n=arg
+              try:
+                  req=urllib.request.Request(f'https://foduna.halokh.com/{kind}_foduna/{n}',headers={'User-Agent':UA})
+                  r=urllib.request.urlopen(req,timeout=10); body=r.read().decode('utf-8','replace')
+                  t=re.findall(r'<title>([^<]*)',body)
+                  return kind,n,r.status,len(body),(t[0] if t else '')[:60]
+              except urllib.error.HTTPError as e: return kind,n,e.code,0,''
+              except Exception as e: return kind,n,'err',0,str(e)[:40]
+          jobs=[(k,n) for k in ('de','br') for n in range(1,101)]
+          res={}
+          with concurrent.futures.ThreadPoolExecutor(16) as ex:
+              for kind,n,st,ln,t in ex.map(probe,jobs): res[(kind,n)]=(st,ln,t)
+          for k in ('de','br'):
+              ok=[n for n in range(1,101) if res[(k,n)][0]==200]
+              print(k,'HTTP200:',ok,'count',len(ok))
+              sizes={}
+              for n in ok: sizes.setdefault(res[(k,n)][1],[]).append(n)
+              print(k,'size groups:',{s:v[:12] for s,v in sizes.items()})
+              print(k,'sample titles:',[(n,res[(k,n)][2]) for n in ok[:5]])
+              print(k,'non-200 codes:',sorted(set(res[(k,n)][0] for n in range(1,101) if res[(k,n)][0]!=200)))
+          PY
