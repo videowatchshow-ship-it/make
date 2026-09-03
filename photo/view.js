@@ -94,14 +94,12 @@
       applyTexts(settings, document.body.dataset.texts ? +document.body.dataset.texts : 4);
       applyBanners(settings);
       tickClock();
-      const fixed = channel === 'B' ? settings.table2_num : settings.table_num;
-      const force = document.body.dataset.force;           // 'luzhu' = 항상 자체 그림장(luzhu.html) 사용 (세로2)
+      const fixed = channel === 'B' ? settings.table2_num : settings.table_num;   // 그림장 설정의 채널A/B 번호(성천지 테이블 라벨)
       const theme = document.body.dataset.theme || '';
-      if (fixed && !force) { showXtd(XTD_MAP[String(+fixed)] || +fixed, settings.url); return; }
-      roomKey = sel.room_id || (fixed ? 'xtd_' + fixed : null);
+      // 성천지·싱지 모두 자체 그림장(luzhu.html): 원본 zou_base 알고리즘 + 원본 PNG(글자 없음), 같은 1300px 규격 → 같은 크롭
+      roomKey = (fixed ? 'xtd_' + String(+fixed) : null) || sel.room_id || null;
       if (!roomKey) { const nm = document.getElementById('bgl-room'); if (nm) nm.textContent = '테이블을 선택하세요 (select.html)'; return; }
-      if (roomKey.startsWith('xtd_') && !force) showXtd(XTD_MAP[roomKey.slice(4)] || +roomKey.slice(4), settings.url);
-      else showLuzhu(roomKey, theme);   // 싱지(sj_) 및 세로2: 원본 zou_base 알고리즘 포팅 그림장 (같은 1300px 규격 → 같은 크롭)
+      showLuzhu(roomKey, theme);
     } catch (_) {}
   }
 

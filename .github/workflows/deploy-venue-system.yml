@@ -120,7 +120,7 @@ jobs:
           $SSH "sudo -u www-data python3 /opt/chulmok/collector.py once 2>&1 | tail -20"
           $SSH "systemctl is-active chulmok-selapi chulmok-collector; ls -la $BASE/photo/data | head -60; ls $BASE/photo/data | wc -l"
           echo "--- local api test ---"
-          $SSH "curl -sS 'http://127.0.0.1:4002/photo/api_selected_room.php?ch=01'; echo; curl -sS -X POST -H 'Content-Type: application/json' -d '{\"ch\":\"01\",\"room_id\":\"xtd_10\"}' http://127.0.0.1:4002/photo/write_select_room.php; echo; curl -sS 'http://127.0.0.1/photo/api_selected_room.php?ch=01' -H 'Host: xn--9d0bw2fjtyymch7de9d.info'; echo"
+          $SSH "curl -sS 'http://127.0.0.1:4002/photo/api_selected_room.php?ch=01'; echo; curl -sS 'http://127.0.0.1/photo/api_selected_room.php?ch=01' -H 'Host: xn--9d0bw2fjtyymch7de9d.info'; echo"   # 읽기만 (사용자 선택 덮어쓰기 금지)
 
       - name: Purge CF cache
         run: |
