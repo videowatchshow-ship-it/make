@@ -1,0 +1,48 @@
+name: probe-xjh-headers
+on:
+  push:
+    paths:
+      - '.github/workflows/probe-xjh-headers.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: getRequest implementation in main bundle
+        run: |
+          set +e
+          curl -sS --max-time 30 -A "Mozilla/5.0" -o m.js "https://fcj6.oqogyf.com/assets/main/index.js"
+          echo "--- getRequest def ---"
+          grep -oE '.{0,100}getRequest\s*=\s*function.{0,900}' m.js | head -2
+          grep -oE 'getRequest\([a-z],[a-z]\)\{.{0,900}' m.js | head -2
+          echo "--- headers / token / fetch options ---"
+          grep -oiE '.{0,120}(headers\s*[:=]|"token"|x-token|authorization|withCredentials|credentials:).{0,200}' m.js | head -12
+          echo "--- baseURL assignment ---"
+          grep -oiE '.{0,150}(baseURL\s*=|apibaseURL|apiBase).{0,200}' m.js | head -8
+          echo "--- room list / config source (how the game knows rooms) ---"
+          grep -oiE '.{0,120}(get_room\?|room_id=|roomId\s*=|getQueryString|location\.search).{0,160}' m.js | head -10
+          echo "--- 000000 success code handling ---"
+          grep -oE '.{0,200}"000000".{0,200}' m.js | head -3
+
+      - name: get_newly_issue across the 21 rooms + header variants
+        run: |
+          set +e
+          A="https://xjh.liveview2024.vip/api/pub"
+          for RID in 23 25 26 27 28 29 30 31 51 61 62 100 101 102 103 105 106 107 108 109 110; do
+            printf "room %-4s → " "$RID"
+            curl -sS -o /tmp/x -w "%{http_code} " --max-time 8 -H "Origin: https://fcj6.oqogyf.com" -H "Referer: https://fcj6.oqogyf.com/?room_id=$RID" -H "Accept: application/json, text/plain, */*" -A "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1" "$A/get_newly_issue?room_id=$RID"
+            head -c 250 /tmp/x | tr '\n' ' '; echo
+          done
+          echo "--- variants on room 110 ---"
+          for H in "X-Requested-With: XMLHttpRequest" "Content-Type: application/json" "Accept-Language: zh-CN,zh;q=0.9" "Cookie: session=x" "token: " ; do
+            printf "%-40s → " "$H"; curl -sS -o /tmp/x -w "%{http_code} " --max-time 8 -H "Origin: https://fcj6.oqogyf.com" -H "Referer: https://fcj6.oqogyf.com/" -H "$H" "$A/get_newly_issue?room_id=110"; head -c 120 /tmp/x | tr '\n' ' '; echo
+          done
+          echo "--- http (not https) + other hosts ---"
+          for U in "http://xjh.liveview2024.vip/api/pub/get_newly_issue?room_id=110" "https://xjh.liveview2024.vip/api/pub/get_newly_issue/?room_id=110" "https://xjh.liveview2024.vip/api/pub/get_newly_issue?room_id=110&issue_id=0"; do
+            printf "%s → " "$U"; curl -sS -o /tmp/x -w "%{http_code} " --max-time 8 -H "Origin: https://fcj6.oqogyf.com" -H "Referer: https://fcj6.oqogyf.com/" "$U"; head -c 120 /tmp/x | tr '\n' ' '; echo
+          done
+          echo "--- get_open_nums with guessed recent issue ids ---"
+          for IID in 1 100 1000 10000 100000 500000 1000000; do
+            printf "issue %-8s → " "$IID"; curl -sS -o /tmp/x -w "%{http_code} " --max-time 8 -H "Origin: https://fcj6.oqogyf.com" -H "Referer: https://fcj6.oqogyf.com/" "$A/get_open_nums?issue_id=$IID"; head -c 200 /tmp/x | tr '\n' ' '; echo
+          done
