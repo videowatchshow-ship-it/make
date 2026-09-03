@@ -11,11 +11,13 @@ jobs:
     env:
       VPS_IP: "187.53.133.145"
       VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
+      PHP_B64: "PD9waHAKaGVhZGVyKCdDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL2pzb24nKTsKaGVhZGVyKCdBY2Nlc3MtQ29udHJvbC1BbGxvdy1PcmlnaW46IConKTsKJGNoID0gaXNzZXQoJF9HRVRbJ2NoJ10pID8gJF9HRVRbJ2NoJ10gOiAnMDEnOwokZGF0YURpciA9IF9fRElSX18gLiAnL2RhdGEnOwokcm9vbUZpbGUgPSAkZGF0YURpciAuICcvc2VsZWN0ZWRfcm9vbV8nIC4gJGNoIC4gJy5qc29uJzsKaWYgKGZpbGVfZXhpc3RzKCRyb29tRmlsZSkpIHsgZWNobyBmaWxlX2dldF9jb250ZW50cygkcm9vbUZpbGUpOyBleGl0OyB9CiRmaWxlcyA9IGdsb2IoJGRhdGFEaXIgLiAnL3Jvb21fKi5qc29uJyk7CmlmICgkZmlsZXMpIHsgJGxhdGVzdCA9IGVuZCgkZmlsZXMpOyAkcm9vbUlkID0gcHJlZ19yZXBsYWNlKCcvLipyb29tXyhcZCspXC5qc29uLycsICckMScsICRsYXRlc3QpOyBlY2hvIGpzb25fZW5jb2RlKFsncm9vbV9pZCcgPT4gJHJvb21JZCwgJ2NoJyA9PiAkY2gsICdzb3VyY2UnID0+ICdsb2NhbCddKTsgZXhpdDsgfQplY2hvIGpzb25fZW5jb2RlKFsncm9vbV9pZCcgPT4gJzEnLCAnY2gnID0+ICRjaCwgJ3NvdXJjZScgPT4gJ2RlZmF1bHQnXSk7Cg=="
+      BGL_B64: "KGZ1bmN0aW9uKCl7CiAgdmFyIExPQ0FMID0gbG9jYXRpb24ub3JpZ2luICsgJy9waG90byc7CiAgdmFyIEdBVVRIID0gJ2h0dHBzOi8vZ2F1dGguY2VudC1zb2x1dGlvbi5vbmxpbmUvcGhvdG8nOwogIHZhciBQT0xMX01TID0gMzAwMDsKICB2YXIgVElNRU9VVCA9IDUwMDA7CiAgdmFyIHVzZUxvY2FsID0gdHJ1ZTsKICB2YXIgY2ggPSBuZXcgVVJMU2VhcmNoUGFyYW1zKGxvY2F0aW9uLnNlYXJjaCkuZ2V0KCdjaCcpIHx8ICcwMSc7CiAgdmFyIHJvb21FbCA9IGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCdiZ2wtcm9vbScpOwogIHZhciByb2FkRWwgPSBkb2N1bWVudC5xdWVyeVNlbGVjdG9yKCcuYmdsLXJvYWQnKTsKICB2YXIgY3VycmVudFJvb20gPSBudWxsOwogIGZ1bmN0aW9uIHJlbmRlclJvYWQobnVtcykgewogICAgaWYgKCFyb2FkRWwpIHJldHVybjsKICAgIHJvYWRFbC5pbm5lckhUTUwgPSAnJzsKICAgIGlmICghbnVtcyB8fCAhbnVtcy5sZW5ndGgpIHsgcm9hZEVsLmlubmVySFRNTCA9ICc8ZGl2IHN0eWxlPSJ0ZXh0LWFsaWduOmNlbnRlcjtwYWRkaW5nOjIwcHg7Y29sb3I6Izk5OTsiPuuNsOydtO2EsCDsl4bsnYw8L2Rpdj4nOyByZXR1cm47IH0KICAgIHZhciBjb2xzPVtdLGNvbD1bXSxwcmV2PW51bGw7CiAgICBmb3IodmFyIGk9MDtpPG51bXMubGVuZ3RoO2krKyl7dmFyIGN1cj1udW1zW2ldPj01MD8nYic6bnVtc1tpXT49MTA/J3AnOid0JztpZihwcmV2JiZjdXIhPT1wcmV2KXtjb2xzLnB1c2goY29sKTtjb2w9W107fWNvbC5wdXNoKG51bXNbaV0pO3ByZXY9Y3VyO30KICAgIGlmKGNvbC5sZW5ndGgpY29scy5wdXNoKGNvbCk7CiAgICB2YXIgdGJsPWRvY3VtZW50LmNyZWF0ZUVsZW1lbnQoJ3RhYmxlJyk7dGJsLmNsYXNzTmFtZT0nYmdsLXRibCc7dGJsLnN0eWxlLmNzc1RleHQ9J2JvcmRlci1jb2xsYXBzZTpjb2xsYXBzZTt3aWR0aDoxMDAlO3RhYmxlLWxheW91dDpmaXhlZDsnOwogICAgdmFyIG1heFI9NjsKICAgIGZvcih2YXIgcj0wO3I8bWF4UjtyKyspe3ZhciB0cj1kb2N1bWVudC5jcmVhdGVFbGVtZW50KCd0cicpO2Zvcih2YXIgYz0wO2M8Y29scy5sZW5ndGg7YysrKXt2YXIgdGQ9ZG9jdW1lbnQuY3JlYXRlRWxlbWVudCgndGQnKTt0ZC5zdHlsZS5jc3NUZXh0PSd3aWR0aDoyNHB4O2hlaWdodDoyNHB4O3RleHQtYWxpZ246Y2VudGVyO2ZvbnQtc2l6ZToxMXB4O2JvcmRlcjoxcHggc29saWQgIzMzMzsnO2lmKGNvbHNbY11bcl0hPT11bmRlZmluZWQpe3ZhciB2PWNvbHNbY11bcl07dGQudGV4dENvbnRlbnQ9djtpZih2Pj01MCl7dGQuc3R5bGUuYmFja2dyb3VuZD0nIzFhM2E2YSc7dGQuc3R5bGUuY29sb3I9JyM1Y2FjZWUnO31lbHNlIGlmKHY+PTEwKXt0ZC5zdHlsZS5iYWNrZ3JvdW5kPScjNmExYTFhJzt0ZC5zdHlsZS5jb2xvcj0nI2VlNWM1Yyc7fWVsc2V7dGQuc3R5bGUuYmFja2dyb3VuZD0nIzFhNmEyYSc7dGQuc3R5bGUuY29sb3I9JyM1Y2VlOGMnO319dHIuYXBwZW5kQ2hpbGQodGQpO310YmwuYXBwZW5kQ2hpbGQodHIpO30KICAgIHJvYWRFbC5hcHBlbmRDaGlsZCh0YmwpOwogIH0KICBmdW5jdGlvbiBmZXRjaEpTT04odXJsLGNiKXt2YXIgY3RybD1uZXcgQWJvcnRDb250cm9sbGVyKCk7dmFyIHRpbWVyPXNldFRpbWVvdXQoZnVuY3Rpb24oKXtjdHJsLmFib3J0KCk7fSxUSU1FT1VUKTtmZXRjaCh1cmwse3NpZ25hbDpjdHJsLnNpZ25hbH0pLnRoZW4oZnVuY3Rpb24ocil7Y2xlYXJUaW1lb3V0KHRpbWVyKTtyZXR1cm4gci5qc29uKCk7fSkudGhlbihmdW5jdGlvbihkKXtjYihudWxsLGQpO30pLmNhdGNoKGZ1bmN0aW9uKGUpe2NsZWFyVGltZW91dCh0aW1lcik7Y2IoZSk7fSk7fQogIGZ1bmN0aW9uIGxvYWRSb29tKHJvb21JZCl7CiAgICB2YXIgYmFzZT11c2VMb2NhbD9MT0NBTDpHQVVUSDsKICAgIGZldGNoSlNPTihiYXNlKycvZGF0YS9yb29tXycrcm9vbUlkKycuanNvbicsZnVuY3Rpb24oZXJyLGQpewogICAgICBpZihlcnImJnVzZUxvY2FsKXtmZXRjaEpTT04oR0FVVEgrJy9kYXRhL3Jvb21fJytyb29tSWQrJy5qc29uJyxmdW5jdGlvbihlcnIyLGQyKXtpZighZXJyMiYmZDImJmQyLm51bXMpe3VzZUxvY2FsPWZhbHNlO2lmKHJvb21FbClyb29tRWwudGV4dENvbnRlbnQ9J+uwqSAnK3Jvb21JZDtyZW5kZXJSb2FkKGQyLm51bXMpO31lbHNle2lmKHJvb21FbClyb29tRWwudGV4dENvbnRlbnQ9J+uwqSAnK3Jvb21JZDtyZW5kZXJSb2FkKChkJiZkLm51bXMpfHxbXSk7fX0pO3JldHVybjt9CiAgICAgIGlmKGQmJmQubnVtcyl7aWYocm9vbUVsKXJvb21FbC50ZXh0Q29udGVudD0n67CpICcrcm9vbUlkO3JlbmRlclJvYWQoZC5udW1zKTt9CiAgICB9KTsKICB9CiAgZnVuY3Rpb24gcG9sbFJvb20oKXsKICAgIHZhciBiYXNlPXVzZUxvY2FsP0xPQ0FMOkdBVVRIOwogICAgZmV0Y2hKU09OKGJhc2UrJy9hcGlfc2VsZWN0ZWRfcm9vbS5waHA/Y2g9JytjaCxmdW5jdGlvbihlcnIsZCl7CiAgICAgIGlmKGVyciYmdXNlTG9jYWwpe2ZldGNoSlNPTihHQVVUSCsnL2FwaV9zZWxlY3RlZF9yb29tLnBocD9jaD0nK2NoLGZ1bmN0aW9uKGVycjIsZDIpe2lmKCFlcnIyJiZkMiYmZDIucm9vbV9pZCl7dXNlTG9jYWw9ZmFsc2U7aWYoZDIucm9vbV9pZCE9PWN1cnJlbnRSb29tKXtjdXJyZW50Um9vbT1kMi5yb29tX2lkO2xvYWRSb29tKGN1cnJlbnRSb29tKTt9fWVsc2UgaWYoZCYmZC5yb29tX2lkKXtpZihkLnJvb21faWQhPT1jdXJyZW50Um9vbSl7Y3VycmVudFJvb209ZC5yb29tX2lkO2xvYWRSb29tKGN1cnJlbnRSb29tKTt9fX0pO3JldHVybjt9CiAgICAgIGlmKGQmJmQucm9vbV9pZCl7aWYoZC5yb29tX2lkIT09Y3VycmVudFJvb20pe2N1cnJlbnRSb29tPWQucm9vbV9pZDtsb2FkUm9vbShjdXJyZW50Um9vbSk7fX0KICAgIH0pOwogIH0KICBwb2xsUm9vbSgpOwogIHNldEludGVydmFsKHBvbGxSb29tLFBPTExfTVMpOwp9KSgpOwo="
     steps:
       - name: Install sshpass
         run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
 
-      - name: Deploy local API on chamgyo
+      - name: Deploy PHP API and bgl.js
         run: |
           export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
           SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
@@ -23,192 +25,35 @@ jobs:
 
           echo "===== Check existing data ====="
           $SSH "ls -la $BASE/photo/data/ 2>/dev/null || echo 'no data dir'"
-          $SSH "cat $BASE/photo/data/tables.json 2>/dev/null | head -5 || echo 'no tables.json'"
 
           echo ""
-          echo "===== Create local api_selected_room.php ====="
-          $SSH "cat > $BASE/photo/api_selected_room.php" << 'PHPEOF'
-<?php
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-
-$ch = isset($_GET['ch']) ? $_GET['ch'] : '01';
-$dataDir = __DIR__ . '/data';
-
-// Try to find room data
-$roomFile = $dataDir . '/selected_room_' . $ch . '.json';
-if (file_exists($roomFile)) {
-    echo file_get_contents($roomFile);
-    exit;
-}
-
-// Fallback: scan for any room file
-$files = glob($dataDir . '/room_*.json');
-if ($files) {
-    $latest = end($files);
-    $roomId = preg_replace('/.*room_(\d+)\.json/', '$1', $latest);
-    echo json_encode(['room_id' => $roomId, 'ch' => $ch, 'source' => 'local']);
-    exit;
-}
-
-// Default response with room_id so bgl.js doesn't hang
-echo json_encode(['room_id' => '1', 'ch' => $ch, 'source' => 'default']);
-PHPEOF
+          echo "===== Deploy api_selected_room.php ====="
+          echo "$PHP_B64" | base64 -d > /tmp/api_selected_room.php
+          cat /tmp/api_selected_room.php
+          sshpass -e scp -o StrictHostKeyChecking=no /tmp/api_selected_room.php root@$VPS_IP:$BASE/photo/api_selected_room.php
 
           echo ""
-          echo "===== Create room data files if missing ====="
+          echo "===== Deploy bgl.js ====="
+          echo "$BGL_B64" | base64 -d > /tmp/bgl_local.js
+          wc -c /tmp/bgl_local.js
+          for dir in photo photo2 photo3; do
+            echo "== Deploy to $dir =="
+            sshpass -e scp -o StrictHostKeyChecking=no /tmp/bgl_local.js root@$VPS_IP:$BASE/$dir/bgl.js
+          done
+
+          echo ""
+          echo "===== Create room data ====="
           $SSH "mkdir -p $BASE/photo/data && if [ ! -f $BASE/photo/data/room_1.json ]; then echo '{\"nums\":[23,45,12,67,34,89,56,11,78,43,22,55,31,66,14,88,42,19,71,33,57,25,63,18,84,47,29,61,15,73,38,52,26,69,41,83,17,59,36,72,28,64,21,76,44,91,13,58,35,82,27,65,19,74,46,87],\"source\":\"local\"}' > $BASE/photo/data/room_1.json; fi"
 
           echo ""
           echo "===== Set permissions ====="
-          $SSH "chown -R www-data:www-data $BASE/photo/api_selected_room.php $BASE/photo/data/"
+          $SSH "chown -R www-data:www-data $BASE/photo/api_selected_room.php $BASE/photo/data/ $BASE/photo/bgl.js $BASE/photo2/bgl.js $BASE/photo3/bgl.js"
 
           echo ""
-          echo "===== Test local API ====="
-          $SSH "curl -sS http://localhost/photo/api_selected_room.php?ch=01 2>&1 || echo 'local API test failed'"
-          $SSH "curl -sS http://localhost/photo/data/room_1.json 2>&1 || echo 'room data test failed'"
-
-      - name: Deploy updated bgl.js using local API
-        run: |
-          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
-          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
-          BASE="/var/www/sites/chamgyo/public"
-
-          echo "===== Backup current bgl.js ====="
-          $SSH "cp $BASE/photo/bgl.js $BASE/photo/bgl.js.bak 2>/dev/null || true"
-
-          echo ""
-          echo "===== Deploy new bgl.js ====="
-          $SSH "cat > /tmp/bgl_local.js" << 'BGLEOF'
-(function(){
-  var LOCAL = location.origin + '/photo';
-  var GAUTH = 'https://gauth.cent-solution.online/photo';
-  var POLL_MS = 3000;
-  var TIMEOUT = 5000;
-  var useLocal = true;
-
-  var ch = new URLSearchParams(location.search).get('ch') || '01';
-  var roomEl = document.getElementById('bgl-room');
-  var roadEl = document.querySelector('.bgl-road');
-  var currentRoom = null;
-
-  function renderRoad(nums) {
-    if (!roadEl) return;
-    roadEl.innerHTML = '';
-    if (!nums || !nums.length) {
-      roadEl.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">데이터 없음</div>';
-      return;
-    }
-    var cols = [];
-    var col = [];
-    var prev = null;
-    for (var i = 0; i < nums.length; i++) {
-      var cur = nums[i] >= 50 ? 'b' : nums[i] >= 10 ? 'p' : 't';
-      if (prev && cur !== prev) {
-        cols.push(col);
-        col = [];
-      }
-      col.push(nums[i]);
-      prev = cur;
-    }
-    if (col.length) cols.push(col);
-
-    var tbl = document.createElement('table');
-    tbl.className = 'bgl-tbl';
-    tbl.style.cssText = 'border-collapse:collapse;width:100%;table-layout:fixed;';
-    var maxR = 6;
-    for (var r = 0; r < maxR; r++) {
-      var tr = document.createElement('tr');
-      for (var c = 0; c < cols.length; c++) {
-        var td = document.createElement('td');
-        td.style.cssText = 'width:24px;height:24px;text-align:center;font-size:11px;border:1px solid #333;';
-        if (cols[c][r] !== undefined) {
-          var v = cols[c][r];
-          td.textContent = v;
-          if (v >= 50) { td.style.background = '#1a3a6a'; td.style.color = '#5cacee'; }
-          else if (v >= 10) { td.style.background = '#6a1a1a'; td.style.color = '#ee5c5c'; }
-          else { td.style.background = '#1a6a2a'; td.style.color = '#5cee8c'; }
-        }
-        tr.appendChild(td);
-      }
-      tbl.appendChild(tr);
-    }
-    roadEl.appendChild(tbl);
-  }
-
-  function fetchJSON(url, cb) {
-    var ctrl = new AbortController();
-    var timer = setTimeout(function(){ ctrl.abort(); }, TIMEOUT);
-    fetch(url, { signal: ctrl.signal })
-      .then(function(r) { clearTimeout(timer); return r.json(); })
-      .then(function(d) { cb(null, d); })
-      .catch(function(e) { clearTimeout(timer); cb(e); });
-  }
-
-  function loadRoom(roomId) {
-    var base = useLocal ? LOCAL : GAUTH;
-    fetchJSON(base + '/data/room_' + roomId + '.json', function(err, d) {
-      if (err && useLocal) {
-        fetchJSON(GAUTH + '/data/room_' + roomId + '.json', function(err2, d2) {
-          if (!err2 && d2 && d2.nums) {
-            useLocal = false;
-            if (roomEl) roomEl.textContent = '방 ' + roomId;
-            renderRoad(d2.nums);
-          } else {
-            if (roomEl) roomEl.textContent = '방 ' + roomId;
-            renderRoad((d && d.nums) || []);
-          }
-        });
-      } else if (d && d.nums) {
-        if (roomEl) roomEl.textContent = '방 ' + roomId;
-        renderRoad(d.nums);
-      }
-    });
-  }
-
-  function pollRoom() {
-    var base = useLocal ? LOCAL : GAUTH;
-    fetchJSON(base + '/api_selected_room.php?ch=' + ch, function(err, d) {
-      if (err && useLocal) {
-        fetchJSON(GAUTH + '/api_selected_room.php?ch=' + ch, function(err2, d2) {
-          if (!err2 && d2 && d2.room_id) {
-            useLocal = false;
-            if (d2.room_id !== currentRoom) {
-              currentRoom = d2.room_id;
-              loadRoom(currentRoom);
-            }
-          } else if (d && d.room_id) {
-            if (d.room_id !== currentRoom) {
-              currentRoom = d.room_id;
-              loadRoom(currentRoom);
-            }
-          }
-        });
-        return;
-      }
-      if (d && d.room_id) {
-        if (d.room_id !== currentRoom) {
-          currentRoom = d.room_id;
-          loadRoom(currentRoom);
-        }
-      }
-    });
-  }
-
-  pollRoom();
-  setInterval(pollRoom, POLL_MS);
-})();
-BGLEOF
-
-          for dir in photo photo2 photo3; do
-            echo "== Deploy to $dir =="
-            $SSH "cp /tmp/bgl_local.js $BASE/$dir/bgl.js && chown www-data:www-data $BASE/$dir/bgl.js"
-          done
-
-          echo ""
-          echo "===== Verify ====="
+          echo "===== Verify on server ====="
           $SSH "sha256sum $BASE/photo/bgl.js $BASE/photo2/bgl.js $BASE/photo3/bgl.js"
           $SSH "wc -c $BASE/photo/bgl.js"
+          $SSH "curl -sS http://localhost/photo/api_selected_room.php?ch=01 2>&1 || echo 'local API failed'"
 
       - name: Purge CF cache
         run: |
