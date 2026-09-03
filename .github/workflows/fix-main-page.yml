@@ -1,0 +1,40 @@
+name: fix-main-page
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-main-page.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install sshpass
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+
+      - name: Fix main index.html — redirect to login
+        env:
+          VPS_IP: "187.53.133.145"
+          VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          SCP="sshpass -e scp -o StrictHostKeyChecking=no"
+          BASE="/var/www/sites/chamgyo/public"
+
+          echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta http-equiv="refresh" content="0;url=/photo/login.html"><title>Redirect</title></head><body></body></html>' > /tmp/main_index.html
+          $SCP /tmp/main_index.html "root@$VPS_IP:$BASE/index.html"
+
+          $SSH "chown www-data:www-data $BASE/index.html && chmod 644 $BASE/index.html"
+
+          echo "== Verify =="
+          curl -sS -o /dev/null -w 'Root HTTP: %{http_code} size=%{size_download} redirect=%{redirect_url}\n' "http://$VPS_IP/"
+          curl -sS -L -o /dev/null -w 'Root follow: %{http_code} size=%{size_download}\n' "http://$VPS_IP/"
+
+          DOMAIN="xn--9d0bw2fjtyymch7de9d.info"
+          curl -sS -o /dev/null -w 'HTTPS Root: %{http_code} size=%{size_download}\n' --max-time 30 "https://$DOMAIN/"
+          curl -sS -L -o /dev/null -w 'HTTPS follow: %{http_code} size=%{size_download}\n' --max-time 30 "https://$DOMAIN/"
+
+          echo "== DONE =="
