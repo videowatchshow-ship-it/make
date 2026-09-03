@@ -1,0 +1,90 @@
+name: diagnose-html
+on:
+  push:
+    paths:
+      - '.github/workflows/diagnose-html.yml'
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      VPS_IP: "187.53.133.145"
+      VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+
+      - name: Read HTML files
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          BASE="/var/www/sites/chamgyo/public"
+
+          echo "========== DIRECTORY LISTING =========="
+          $SSH "ls -la $BASE/photo/"
+          echo ""
+          $SSH "ls -la $BASE/photo/*.html $BASE/photo/*.php 2>/dev/null"
+
+          echo ""
+          echo "========== index.html (photo/) =========="
+          $SSH "cat $BASE/photo/index.html 2>/dev/null || echo 'NO index.html'"
+
+          echo ""
+          echo "========== index.php (photo/) =========="
+          $SSH "cat $BASE/photo/index.php 2>/dev/null || echo 'NO index.php'"
+
+          echo ""
+          echo "========== CAH_1.html =========="
+          $SSH "cat $BASE/photo/CAH_1.html 2>/dev/null || echo 'NO CAH_1.html'"
+
+          echo ""
+          echo "========== .htaccess =========="
+          $SSH "cat $BASE/photo/.htaccess 2>/dev/null || echo 'NO .htaccess'"
+
+          echo ""
+          echo "========== bgl.js first 5 lines =========="
+          $SSH "head -5 $BASE/photo/bgl.js 2>/dev/null || echo 'NO bgl.js'"
+
+          echo ""
+          echo "========== data/ contents =========="
+          $SSH "ls -la $BASE/photo/data/ 2>/dev/null || echo 'NO data dir'"
+          $SSH "cat $BASE/photo/data/room_1.json 2>/dev/null | head -1 || echo 'NO room_1.json'"
+
+          echo ""
+          echo "========== photo2/ HTML =========="
+          $SSH "ls -la $BASE/photo2/*.html $BASE/photo2/*.php 2>/dev/null || echo 'no html/php in photo2'"
+          $SSH "cat $BASE/photo2/index.html 2>/dev/null | head -50 || echo 'NO photo2/index.html'"
+
+          echo ""
+          echo "========== photo3/ HTML =========="
+          $SSH "ls -la $BASE/photo3/*.html $BASE/photo3/*.php 2>/dev/null || echo 'no html/php in photo3'"
+
+          echo ""
+          echo "========== Apache config for photo =========="
+          $SSH "grep -r 'photo' /etc/apache2/sites-enabled/ 2>/dev/null | head -20 || echo 'no apache config'"
+          $SSH "cat /etc/apache2/sites-enabled/chamgyo.conf 2>/dev/null || cat /etc/apache2/sites-enabled/000-default.conf 2>/dev/null | head -40"
+
+          echo ""
+          echo "========== Check symlinks =========="
+          $SSH "ls -la $BASE/photo/data $BASE/photo2/data $BASE/photo3/data 2>/dev/null"
+
+          echo ""
+          echo "========== JS files in photo/ =========="
+          $SSH "ls -la $BASE/photo/*.js 2>/dev/null"
+
+          echo ""
+          echo "========== CSS files in photo/ =========="
+          $SSH "ls -la $BASE/photo/*.css 2>/dev/null"
+
+      - name: Check live URLs
+        run: |
+          DOMAIN="xn--9d0bw2fjtyymch7de9d.info"
+          echo "===== /photo/ ====="
+          curl -sS -o /tmp/photo_index.html -w "HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/" --max-time 10
+          head -100 /tmp/photo_index.html
+
+          echo ""
+          echo "===== /photo/CAH_1.html ====="
+          curl -sS -o /tmp/cah1.html -w "HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/CAH_1.html" --max-time 10
+          head -100 /tmp/cah1.html
