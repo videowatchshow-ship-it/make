@@ -1,0 +1,38 @@
+name: hostinger-mcp-verify
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Hostinger API token and MCP handshake
+        env:
+          HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
+        run: |
+          if [ -z "$HOSTINGER_API_TOKEN" ]; then echo "HOSTINGER_API_TOKEN secret not set"; exit 1; fi
+
+          echo "== VPS list =="
+          code=$(curl -sS -o /tmp/vps.json -w '%{http_code}' \
+            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+            https://developers.hostinger.com/api/vps/v1/virtual-machines)
+          echo "HTTP $code"
+          head -c 800 /tmp/vps.json; echo
+
+          echo "== Domains portfolio =="
+          code2=$(curl -sS -o /tmp/domains.json -w '%{http_code}' \
+            -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+            https://developers.hostinger.com/api/domains/v1/portfolio)
+          echo "HTTP $code2"
+          head -c 800 /tmp/domains.json; echo
+
+          echo "== MCP stdio handshake =="
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1.0"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
+            | timeout 90 npx -y hostinger-api-mcp 2>/dev/null \
+            | head -c 300; echo
+
+          [ "$code" = "200" ] && [ "$code2" = "200" ]
