@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<meta http-equiv="Cache-Control" content="no-cache,no-store,must-revalidate">
+<title>출목표 룸 선택</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;min-height:100%;background:#0a0a0a;color:#eee;font-family:'Malgun Gothic',sans-serif}
+.top-bar{padding:10px 12px;background:#111;border-bottom:1px solid #222;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.top-bar h1{font-size:14px;color:#ffd54f;font-weight:bold;white-space:nowrap}
+.url-btns{display:flex;gap:6px;flex-wrap:wrap}
+.url-btn{padding:5px 11px;border-radius:4px;font-size:12px;font-weight:bold;text-decoration:none;border:1px solid;cursor:pointer;white-space:nowrap}
+.url-btn.cah{background:#1a237e22;border-color:#5c6bc0;color:#9fa8da}
+.url-btn.caw{background:#1b5e2022;border-color:#43a047;color:#a5d6a7}
+.url-btn.snw{background:#4a148c22;border-color:#ab47bc;color:#ce93d8}
+.url-btn.out{background:#222;border-color:#444;color:#aaa;margin-left:auto}
+.url-btn:hover{opacity:.8}
+.venue-tabs{display:flex;gap:4px;padding:8px 10px 0;border-bottom:1px solid #1e1e1e;background:#0f0f0f;overflow-x:auto}
+.venue-tab{padding:9px 18px;font-size:14px;font-weight:bold;color:#888;background:#161616;border:1px solid #262626;border-bottom:none;border-radius:6px 6px 0 0;cursor:pointer;white-space:nowrap}
+.venue-tab .cnt{font-size:11px;color:#666;margin-left:4px}
+.venue-tab.active{color:#ffd54f;background:#1a1800;border-color:#5a4a00}
+.status-bar{padding:6px 12px;background:#181818;font-size:12px;color:#888;border-bottom:1px solid #1e1e1e}
+#cur-label{color:#ffd54f;font-weight:bold}
+.room-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;padding:10px}
+.room-card{background:#141414;border:2px solid #2a2a2a;border-radius:6px;padding:6px;cursor:pointer;transition:border-color .15s}
+.room-card:hover{border-color:#555}
+.room-card.selected{border-color:#ffd54f !important;background:#1a1800}
+.room-card .room-name{font-size:11px;color:#aaa;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center}
+.room-card.selected .room-name{color:#ffd54f}
+.sel-mark{font-size:10px;color:#ffd54f;display:none}
+.room-card.selected .sel-mark{display:inline}
+.mini-road{overflow:hidden;max-width:100%;line-height:0;min-height:80px}
+.m-tbl{border-collapse:collapse;table-layout:fixed}
+.m-tbl td{width:13px;height:13px;border:1px solid #1e1e1e;padding:0;vertical-align:middle;text-align:center}
+.m-p,.m-b{width:11px;height:11px;border-radius:50%;display:inline-block;position:relative}
+.m-p{background:#1565c0;border:1px solid #42a5f5}
+.m-b{background:#b71c1c;border:1px solid #ef5350}
+.m-p .mp,.m-b .bp-dot{position:absolute;width:4px;height:4px;border-radius:50%;top:0;right:0;background:#ef5350}
+.m-b .bp-dot{background:#42a5f5}
+.empty{padding:30px 20px;color:#555;font-size:13px;text-align:center;grid-column:1/-1}
+.stale{color:#e57373;font-size:10px}
+</style>
+</head>
+<body>
+<div class="top-bar">
+  <h1>출목표</h1>
+  <div class="url-btns" id="url-btns">
+    <a class="url-btn cah" id="btn-cah" target="_blank">세로형</a>
+    <a class="url-btn caw" id="btn-caw" target="_blank">가로형</a>
+    <a class="url-btn snw" id="btn-snw" target="_blank">싱지뉴</a>
+    <a class="url-btn out" href="login.html">로그아웃</a>
+  </div>
+</div>
+<div class="venue-tabs" id="venue-tabs"></div>
+<div class="status-bar">계정 <b id="cur-ch">-</b> · 선택 중: <span id="cur-label">-</span></div>
+<div class="room-grid" id="room-grid"></div>
+
+<script src="bgl.js?v=3"></script>
+<script>
+(function(){
+  'use strict';
+  const ROWS = 6;
+  const ch   = new URLSearchParams(location.search).get('ch') || '01';
+  const BASE = location.pathname.replace(/select\.html.*$/, '');
+  document.getElementById('cur-ch').textContent = ch;
+  document.getElementById('btn-cah').href = BASE + 'CAH_1.html?ch=' + ch;
+  document.getElementById('btn-caw').href = BASE + 'CAW_1.html?ch=' + ch;
+  document.getElementById('btn-snw').href = BASE + 'SNW_1.html?ch=' + ch;
+
+  let tables = null, selRoomId = null, curVenue = null;
+  const cache = {};
+
+  function miniRoad(nums){
+    const bld = window.BGL && window.BGL.buildBigRoad;
+    const grid = bld ? bld(nums) : [];
+    const cols = Math.min(Math.max(grid.length + 2, 8), 12);
+    const start = Math.max(0, grid.length - cols + 1);
+    let h = '<table class="m-tbl"><tbody>';
+    for(let r=0;r<ROWS;r++){
+      h += '<tr>';
+      for(let c=start;c<start+cols;c++){
+        const cell = grid[c] && grid[c][r];
+        if(cell){
+          const cls = cell.type==='P'?'m-p':'m-b';
+          const dot = cell.bp?'<span class="bp-dot"></span>':(cell.pp?'<span class="mp"></span>':'');
+          h += `<td><div class="${cls}">${dot}</div></td>`;
+        } else h += '<td></td>';
+      }
+      h += '</tr>';
+    }
+    return h + '</tbody></table>';
+  }
+
+  async function selectRoom(key, label){
+    selRoomId = key; updateSelected();
+    document.getElementById('cur-label').textContent = label || key;
+    try{
+      await fetch(BASE + 'write_select_room.php', {method:'POST',
+        headers:{'Content-Type':'application/json'}, body: JSON.stringify({ch, room_id: key})});
+    }catch(_){}
+  }
+
+  function updateSelected(){
+    document.querySelectorAll('.room-card').forEach(c=>{
+      c.classList.toggle('selected', c.dataset.roomId === String(selRoomId));
+    });
+  }
+
+  async function pollSelected(){
+    try{
+      const r = await fetch(`${BASE}api_selected_room.php?ch=${ch}&_=${Date.now()}`,{cache:'no-store'});
+      if(!r.ok) return;
+      const d = await r.json();
+      if(d.room_id && d.room_id !== selRoomId){
+        selRoomId = d.room_id; updateSelected();
+        const card = document.querySelector(`.room-card[data-room-id="${selRoomId}"]`);
+        document.getElementById('cur-label').textContent = card ? card.dataset.label : selRoomId;
+      }
+    }catch(_){}
+  }
+
+  async function loadMini(card){
+    const key = card.dataset.roomId, el = card.querySelector('.mini-road');
+    try{
+      const r = await fetch(`${BASE}data/room_${key}.json?_=${Date.now()}`,{cache:'no-store'});
+      if(!r.ok){ el.innerHTML = '<span style="font-size:10px;color:#555">데이터 없음</span>'; return; }
+      const d = await r.json(); cache[key] = d;
+      const age = d.t ? (Date.now()/1000 - d.t) : 0;
+      el.innerHTML = miniRoad(d.nums||[]) + (age > 300 ? '<div class="stale">갱신 지연</div>' : '');
+      const n = card.querySelector('.n'); if(n) n.textContent = (d.nums||[]).length + '판';
+    }catch(_){ el.innerHTML = '<span style="font-size:10px;color:#555">오류</span>'; }
+  }
+
+  function buildCard(venue, room){
+    const key = `${venue.key}_${room.id}`;
+    const label = `${venue.name} ${room.name || room.id}${room.kind ? ' ('+room.kind+')' : ''}`;
+    const card = document.createElement('div');
+    card.className = 'room-card'; card.dataset.roomId = key; card.dataset.label = label;
+    card.innerHTML = `<div class="room-name"><span>${room.name || room.id}${room.kind ? ' <small>'+room.kind+'</small>' : ''}</span><span><span class="n" style="color:#555;font-size:10px"></span> <span class="sel-mark">✔</span></span></div><div class="mini-road">로딩중…</div>`;
+    card.addEventListener('click', ()=> selectRoom(key, label));
+    loadMini(card);
+    return card;
+  }
+
+  function showVenue(vkey){
+    curVenue = vkey;
+    document.querySelectorAll('.venue-tab').forEach(t=> t.classList.toggle('active', t.dataset.venue===vkey));
+    const grid = document.getElementById('room-grid'); grid.innerHTML = '';
+    const venue = (tables.venues||[]).find(v=>v.key===vkey);
+    if(!venue || !(venue.rooms||[]).length){
+      grid.innerHTML = '<div class="empty">이 장소는 아직 연결된 테이블이 없습니다.</div>'; return;
+    }
+    venue.rooms.forEach(room => grid.appendChild(buildCard(venue, room)));
+    updateSelected();
+    try{ localStorage.setItem('venue', vkey); }catch(_){}
+  }
+
+  async function init(){
+    try{
+      const r = await fetch(`${BASE}data/tables.json?_=${Date.now()}`,{cache:'no-store'});
+      tables = r.ok ? await r.json() : null;
+    }catch(_){}
+    if(!tables || !tables.venues){
+      document.getElementById('room-grid').innerHTML = '<div class="empty">룸 정보를 불러올 수 없습니다.</div>'; return;
+    }
+    const tabs = document.getElementById('venue-tabs');
+    tables.venues.forEach(v=>{
+      const t = document.createElement('div');
+      t.className = 'venue-tab'; t.dataset.venue = v.key;
+      t.innerHTML = `${v.name}<span class="cnt">${(v.rooms||[]).length}</span>`;
+      t.addEventListener('click', ()=> showVenue(v.key));
+      tabs.appendChild(t);
+    });
+    await pollSelected();
+    let first = tables.venues[0].key;
+    try{ const s = localStorage.getItem('venue'); if(s && tables.venues.some(v=>v.key===s)) first = s; }catch(_){}
+    if(selRoomId){ const v = tables.venues.find(v=> String(selRoomId).startsWith(v.key+'_')); if(v) first = v.key; }
+    showVenue(first);
+    setInterval(pollSelected, 3000);
+    setInterval(()=> document.querySelectorAll('.room-card').forEach(loadMini), 20000);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+</script>
+</body>
+</html>

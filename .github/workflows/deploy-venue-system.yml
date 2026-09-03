@@ -1,0 +1,103 @@
+name: deploy-venue-system
+on:
+  push:
+    paths:
+      - '.github/workflows/deploy-venue-system.yml'
+      - 'photo/select.html'
+      - 'photo/bgl.js'
+      - 'photo/collector.py'
+      - 'photo/selapi.py'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VPS_IP: "187.53.133.145"
+      VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
+      BASE: "/var/www/sites/chamgyo/public"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install sshpass
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+
+      - name: Build tables.json (성천지 live rooms 1..300 + 싱지 20)
+        run: |
+          set +e
+          python3 - <<'PY'
+          import json, urllib.request, concurrent.futures
+          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36'
+          H={'User-Agent':UA,'Origin':'https://fcj6.oqogyf.com','Referer':'https://fcj6.oqogyf.com/'}
+          def probe(rid):
+              try:
+                  req=urllib.request.Request(f'https://xjh.liveview2024.vip/api/pub/get_newly_issue?room_id={rid}',headers=H)
+                  d=json.loads(urllib.request.urlopen(req,timeout=8).read())
+                  x=d.get('data') or {}
+                  if x.get('id'): return rid, x
+              except Exception: pass
+              return None
+          live=[]
+          with concurrent.futures.ThreadPoolExecutor(16) as ex:
+              for r in ex.map(probe, range(1,301)):
+                  if r: live.append(r)
+          live.sort()
+          print('성천지 live rooms:', [r for r,_ in live], 'count', len(live))
+          for r,x in live[:3]: print(' sample', r, json.dumps(x, ensure_ascii=False)[:300])
+          sc_rooms=[{'id':r,'name':str(x.get('room_name') or x.get('name') or r)} for r,x in live]
+          xtd_map={"10":10,"11":11,"12":12,"15":15,"16":16,"17":87,"18":18,"19":89,"20":20,"21":21,"22":22,"23":23,"25":25,"26":26,"27":27,"55":31,"66":32,"77":33,"88":34,"99":35}
+          xtd_kind={"10":"21점","16":"용호"}
+          xtd_rooms=[{'id':int(k),'api':v,'name':k,'kind':xtd_kind.get(k,'')} for k,v in xtd_map.items()]
+          tables={'venues':[
+            {'key':'sc','name':'성천지','source':'sc','rooms':sc_rooms},
+            {'key':'xtd','name':'싱지','source':'xtd','rooms':xtd_rooms},
+            {'key':'sn','name':'뉴싱지','source':'','rooms':[]},
+            {'key':'gr','name':'그림장','source':'','rooms':[]}]}
+          json.dump(tables, open('tables.json','w'), ensure_ascii=False, indent=1)
+          PY
+          echo "--- tables.json ---"; head -c 1500 tables.json; echo
+
+      - name: Upload files
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SCP="sshpass -e scp -o StrictHostKeyChecking=no"
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          $SSH "mkdir -p /opt/chulmok $BASE/photo/data"
+          $SCP photo/collector.py photo/selapi.py photo/install_services.py root@$VPS_IP:/opt/chulmok/
+          $SCP tables.json root@$VPS_IP:$BASE/photo/data/tables.json
+          for d in photo photo2 photo3; do
+            $SCP photo/select.html photo/bgl.js root@$VPS_IP:$BASE/$d/
+          done
+          $SSH "chown -R www-data:www-data $BASE/photo $BASE/photo2 $BASE/photo3; chmod 755 /opt/chulmok/*.py; rm -f $BASE/photo/api_selected_room.php $BASE/photo/data/room_1.json"
+
+      - name: Install services (systemd) + nginx proxy
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          $SSH "python3 /opt/chulmok/install_services.py"
+          $SSH "systemctl daemon-reload && systemctl enable --now chulmok-selapi chulmok-collector && systemctl restart chulmok-selapi chulmok-collector && nginx -t && systemctl reload nginx"
+          echo "--- run collector once (foreground) ---"
+          $SSH "sudo -u www-data python3 /opt/chulmok/collector.py once 2>&1 | tail -20"
+          $SSH "systemctl is-active chulmok-selapi chulmok-collector; ls -la $BASE/photo/data | head -60; ls $BASE/photo/data | wc -l"
+          echo "--- local api test ---"
+          $SSH "curl -sS 'http://127.0.0.1:4002/photo/api_selected_room.php?ch=01'; echo; curl -sS -X POST -H 'Content-Type: application/json' -d '{\"ch\":\"01\",\"room_id\":\"xtd_10\"}' http://127.0.0.1:4002/photo/write_select_room.php; echo; curl -sS 'http://127.0.0.1/photo/api_selected_room.php?ch=01' -H 'Host: xn--9d0bw2fjtyymch7de9d.info'; echo"
+
+      - name: Purge CF cache
+        run: |
+          curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/7e5faed2d3d4d6da7aceb4ddde81a62b/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" -H "Content-Type: application/json" \
+            -d '{"purge_everything":true}' | python3 -c "import sys,json; print('Purge success:', json.load(sys.stdin).get('success'))"
+
+      - name: Verify live
+        run: |
+          sleep 4
+          D="https://xn--9d0bw2fjtyymch7de9d.info/photo"
+          for p in select.html bgl.js data/tables.json "api_selected_room.php?ch=01" CAH_1.html; do
+            curl -sS -o /tmp/o -D /tmp/h "$D/$p"; printf "%-32s HTTP %s size %s cf=%s\n" "$p" "$(head -1 /tmp/h | cut -d' ' -f2)" "$(stat -c%s /tmp/o)" "$(grep -i cf-cache-status /tmp/h | awk '{print $2}' | tr -d '\r')"
+          done
+          echo "--- tables.json venues ---"; curl -sS "$D/data/tables.json" | python3 -c "import sys,json; [print(v['name'], len(v['rooms'])) for v in json.load(sys.stdin)['venues']]"
+          echo "--- sample room jsons ---"
+          for k in $(curl -sS "$D/data/tables.json" | python3 -c "import sys,json; t=json.load(sys.stdin); print(' '.join(f\"{v['key']}_{r['id']}\" for v in t['venues'] for r in v['rooms'][:2]))"); do
+            printf "%s → " "$k"; curl -sS -o /tmp/r -w "HTTP %{http_code} " "$D/data/room_$k.json"; python3 -c "import json;d=json.load(open('/tmp/r'));print('nums',len(d.get('nums',[])),d.get('server_time'))" 2>/dev/null || echo
+          done
+          echo "--- select.html venues ---"; curl -sS "$D/select.html" | grep -c 'venue-tab'
