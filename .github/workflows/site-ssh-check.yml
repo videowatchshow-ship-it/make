@@ -1,0 +1,22 @@
+name: site-ssh-check
+on:
+  push:
+    paths:
+      - '.github/workflows/site-ssh-check.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: live site + ssh port
+        run: |
+          set +e
+          D="https://xn--9d0bw2fjtyymch7de9d.info/photo"
+          for p in select.html data/tables.json "api_selected_room.php?ch=01" data/room_xtd_10.json; do
+            curl -sS -o /tmp/o -w "%-32s HTTP %{http_code} size %{size_download}\n" --max-time 15 "$D/$p" | sed "s|^|$p |"
+          done
+          echo "--- tables.json venues ---"; curl -sS --max-time 15 "$D/data/tables.json" | python3 -c "import sys,json; [print(v['name'], len(v['rooms'])) for v in json.load(sys.stdin)['venues']]"
+          echo "--- direct http ---"; curl -sS -o /dev/null -w "direct HTTP %{http_code}\n" --max-time 10 "http://187.53.133.145/photo/select.html"
+          echo "--- ssh port 22 ---"; for i in 1 2 3; do timeout 10 bash -c 'cat < /dev/null > /dev/tcp/187.53.133.145/22' && echo "port 22 OPEN" || echo "port 22 closed/timeout"; sleep 5; done
+          echo "--- ping ---"; ping -c 3 -W 3 187.53.133.145 2>&1 | tail -2
