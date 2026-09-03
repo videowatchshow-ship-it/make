@@ -5,12 +5,26 @@
   'use strict';
   var NO = 'no_color';
   function arr2(x, y) { var a = new Array(x); for (var i = 0; i < x; i++) { a[i] = new Array(y); for (var j = 0; j < y; j++) a[i][j] = NO; } return a; }
+  /* 싱지(fcj6) 원본 파서 그대로: /^[BPTbpt](\d{2,4})([A-Z]*)$/
+       [0]   B 庄 / P 闲 / T 和               → FormatConvertor (앞 3자)
+       [1]   1 = 庄对(뱅커 페어)
+       [2]   1 = 闲对(플레이어 페어)
+       [3..] 특수(OtherFormatConvertor: 첫글자+접미) 62 = 幸运六 2장, 63 = 幸运六 3장, 7 = 龙七(용7), 8 = 熊八(판다8)
+     성천지(xtd) 는 collector 가 같은 문자열로 변환 (result 4 幸运6 → 'B..6') */
+  var RX = /^([BPT])(\d{2,4})([A-Z]*)$/;
+  function special(letter, suf) {
+    if (!suf) return '';
+    var k = letter + suf;
+    if (k === 'B62') return '6²'; if (k === 'B63') return '6³'; if (k === 'B6') return '6';
+    if (k === 'B7') return '7'; if (k === 'P8') return '8';
+    return '';
+  }
   function toOrg(nums) {
     var o = {}, i = 0;
     (nums || []).forEach(function (n) {
-      if (!n || n.length < 3 || 'PBT'.indexOf(n[0]) < 0) return;
-      var r = n[0] === 'B' ? 1 : n[0] === 'P' ? 2 : 3, e = (n[1] === '1' ? 1 : 0) + (n[2] === '1' ? 2 : 0);
-      o['k' + (i++)] = { result: r, ext: e };
+      var m = RX.exec(String(n || '').toUpperCase()); if (!m) return;
+      var d = m[2], r = m[1] === 'B' ? 1 : m[1] === 'P' ? 2 : 3, e = (d[0] === '1' ? 1 : 0) + (d[1] === '1' ? 2 : 0);
+      o['k' + (i++)] = { result: r, ext: e, sp: special(m[1], d.slice(2)) };
     });
     return o;
   }
@@ -77,7 +91,8 @@
       }
       return { img: img, num: nm, cp: cp };
     }
-    var showZ = arr2(11, 6), zi = 0; for (var p in zhuzi) { if (Math.floor(zi / 6) < 11) showZ[Math.floor(zi / 6)][zi % 6] = zhuzi[p]; zi++; }
+    var showZ = arr2(11, 6), showZS = arr2(11, 6), zi = 0;
+    for (var p in zhuzi) { if (Math.floor(zi / 6) < 11) { showZ[Math.floor(zi / 6)][zi % 6] = zhuzi[p]; showZS[Math.floor(zi / 6)][zi % 6] = org[p].sp || ''; } zi++; }
     var showSX = arr2(66, 3), showSXN = arr2(66, 3), si = 0; for (var p in sx) { showSX[Math.floor(si / 3)][si % 3] = sx[p]; if (typeof cNum[p] === 'number') showSXN[Math.floor(si / 3)][si % 3] = cNum[p]; si++; }
     var tDY = objToArr(dayan), tXL = objToArr(xiaolu), tXQ = objToArr(xiaoqiang);
     var D = showArr(T, TN), DY = showArr(tDY), XL = showArr(tXL), XQ = showArr(tXQ);
@@ -95,16 +110,18 @@
       red:  { dayan: nextXia(last(tDY), 'red', 1), xiaolu: nextXia(last(tXL), 'red', 2), xiaoqiang: nextXia(last(tXQ), 'red', 3) },
       blue: { dayan: nextXia(last(tDY), 'blue', 1), xiaolu: nextXia(last(tXL), 'blue', 2), xiaoqiang: nextXia(last(tXQ), 'blue', 3) }
     };
-    return { zhuzi: showZ, dalu: D.img, daluNum: D.num, dayan: DY.img, xiaolu: XL.img, xiaoqiang: XQ.img, sanxing: showSX, sanxingNum: showSXN, wenlu: wen, count: pos };
+    return { zhuzi: showZ, zhuziSp: showZS, dalu: D.img, daluNum: D.num, dayan: DY.img, xiaolu: XL.img, xiaoqiang: XQ.img, sanxing: showSX, sanxingNum: showSXN, wenlu: wen, count: pos };
   }
 
   /* ---- 렌더 (원본 show_pulic_img_html / show_pulic_num_html 그대로) ---- */
   var STEP = { zhuzi: 39.9, dalu: 20.05, xiaolu: 10.05, dayan: 10.05, xiaoqiang: 10.05, sanxing: 20.05 };
-  function imgHtml(src, cls, step, rows, path) {
+  function imgHtml(src, cls, step, rows, path, sp) {
     var h = '';
     for (var i = 0; i < src.length; i++) for (var j = 0; j < rows; j++) {
       var v = src[i][j]; if (v === NO || v === 'no_find' || typeof v === 'undefined') continue;
-      h += "<div class='content' style='left:" + (step * i) + "px;top:" + (step * j) + "px;width:" + step + "px;height:" + step + "px'><img src='luzhu_img/" + path + "/" + v + ".png'></div>";
+      var s = sp && sp[i] && sp[i][j] && sp[i][j] !== NO ? sp[i][j] : '';
+      h += "<div class='content' style='left:" + (step * i) + "px;top:" + (step * j) + "px;width:" + step + "px;height:" + step + "px'><img src='luzhu_img/" + path + "/" + v + ".png'>" +
+           (s ? "<span class='sp sp" + s.charAt(0) + "'>" + s + "</span>" : '') + "</div>";
     }
     return h;
   }
@@ -118,7 +135,7 @@
   }
   function render(R) {
     var q = function (c) { return document.querySelector('.' + c); };
-    q('jingshan_zhuzi').innerHTML = imgHtml(R.zhuzi, 'jingshan_zhuzi', STEP.zhuzi, 6, 'zhuzi');
+    q('jingshan_zhuzi').innerHTML = imgHtml(R.zhuzi, 'jingshan_zhuzi', STEP.zhuzi, 6, 'zhuzi', R.zhuziSp);
     q('jingshan_dalu').innerHTML = imgHtml(R.dalu, 'jingshan_dalu', STEP.dalu, 66, 'dalu') + numHtml(R.daluNum, STEP.dalu, 66);
     q('jingshan_xiaolu').innerHTML = imgHtml(R.xiaolu, '', STEP.xiaolu, 66, 'xiaolu');
     q('jingshan_dayan').innerHTML = imgHtml(R.dayan, '', STEP.dayan, 66, 'dayan');

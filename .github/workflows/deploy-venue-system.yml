@@ -107,7 +107,7 @@ jobs:
             $SSH "rm -f $BASE/$d/CAH_3.html $BASE/$d/roads.js"
             [ "$d" != photo ] && $SSH "cp -f $BASE/photo/include/live_style.css $BASE/$d/include/ && cp -n $BASE/photo/images/* $BASE/$d/images/ 2>/dev/null; rm -rf $BASE/$d/luzhu_img && cp -r $BASE/photo/luzhu_img $BASE/$d/luzhu_img; true"
           done
-          $SSH "chown -R www-data:www-data $BASE/photo $BASE/photo2 $BASE/photo3; chmod 755 /opt/chulmok/*.py; rm -f $BASE/photo/api_selected_room.php $BASE/photo/data/room_1.json $BASE/photo/data/room_sn_*.json $BASE/photo/data/room_sc_*.json $BASE/photo/data/room_fd_*.json $BASE/photo/select.html.bak.*"
+          $SSH "chown -R www-data:www-data $BASE/photo $BASE/photo2 $BASE/photo3; chmod 755 /opt/chulmok/*.py; rm -f $BASE/photo/api_selected_room.php $BASE/photo/data/room_1.json $BASE/photo/data/room_sn_*.json $BASE/photo/data/room_sc_*.json $BASE/photo/data/room_nsj_*.json $BASE/photo/data/room_fd_*.json $BASE/photo/select.html.bak.*"
           echo "--- server sha256 (images) ---"; $SSH "sha256sum $BASE/photo/images/* | head -20"
 
       - name: Install services (systemd) + nginx proxy

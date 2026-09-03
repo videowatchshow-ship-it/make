@@ -34,8 +34,9 @@ def crawl_xjh(room):
         return None
     n = get(f'{XJH}/api/pub/get_open_nums?issue_id={iid}', XJH_H)
     nums = n.get('nums') or []
-    nums = [x for x in nums if isinstance(x, str) and len(x) >= 3 and x[0] in 'PBT']
-    return {'id': f'sc_{rid}', 'venue': 'sc', 'label': room.get('name') or str(rid), 'room_id': rid,
+    # 원본 클라이언트 regex /^[BPTbpt](\d{2,4})([A-Z]*)$/ : [승자][庄对][闲对][특수: 62=럭키6 2장, 63=럭키6 3장, 7=용7, 8=판다8]
+    nums = [x.upper() for x in nums if isinstance(x, str) and len(x) >= 3 and x[0] in 'PBTpbt' and x[1:].rstrip('ABCDEFGHIJKLMNOPQRSTUVWXYZ').isdigit()]
+    return {'id': f'sj_{rid}', 'venue': 'sj', 'label': room.get('name') or str(rid), 'room_id': rid,
             'issue_id': iid, 'ver': d.get('version', len(nums)), 'nums': nums,
             't': int(time.time()), 'server_time': now(), 'source': 'xjh.liveview2024.vip'}
 
@@ -58,8 +59,9 @@ def crawl_xtd(room):
         if not isinstance(o, dict):
             continue
         r = int(o.get('result', 0)); e = int(o.get('ext', 0))
+        # xtd result: 1 庄 2 闲 3 和 4 幸运6(庄 6점)  ext: bit1 庄对 bit2 闲对  → 싱지와 같은 문자열 형식으로 통일
         letter = 'P' if r == 2 else ('T' if r == 3 else 'B')
-        nums.append(letter + ('1' if e & 1 else '0') + ('1' if e & 2 else '0'))
+        nums.append(letter + ('1' if e & 1 else '0') + ('1' if e & 2 else '0') + ('6' if r == 4 else ''))
     return {'id': f'xtd_{label}', 'venue': 'xtd', 'label': room.get('name') or str(label), 'room_id': label,
             'apiId': api_id, 'kind': room.get('kind', ''), 'ver': len(nums), 'nums': nums,
             't': int(time.time()), 'server_time': now(), 'source': 'xtd6688'}
