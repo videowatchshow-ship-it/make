@@ -157,8 +157,10 @@
     q('jingshan_dalu').innerHTML = imgHtml(R.dalu, 'jingshan_dalu', STEP.dalu, 66, 'dalu') + numHtml(R.daluNum, STEP.dalu, 66);
     q('jingshan_xiaolu').innerHTML = imgHtml(R.xiaolu, '', STEP.xiaolu, 66, 'xiaolu');
     q('jingshan_dayan').innerHTML = imgHtml(R.dayan, '', STEP.dayan, 66, 'dayan');
-    q('jingshan_xiaoqiang').innerHTML = imgHtml(R.xiaoqiang, '', STEP.xiaoqiang, 66, 'xiaoqiang');
-    q('jingshan_sanxing').innerHTML = imgHtml(R.sanxing, '', STEP.sanxing, 3, 'sanxing') + numHtml(R.sanxingNum, STEP.sanxing, 3);
+    // 뉴싱지(fcj6) 실화면: 오른쪽 위 = 三星(테두리 원+타이 숫자), 오른쪽 아래 = 小强(대각선) — 성천지(xtd)는 반대
+    var xqBox = SJ ? 'jingshan_sanxing' : 'jingshan_xiaoqiang', sxBox = SJ ? 'jingshan_xiaoqiang' : 'jingshan_sanxing';
+    q(xqBox).innerHTML = imgHtml(R.xiaoqiang, '', STEP.xiaoqiang, 66, 'xiaoqiang');
+    q(sxBox).innerHTML = imgHtml(R.sanxing, '', STEP.sanxing, 3, 'sanxing') + numHtml(R.sanxingNum, STEP.sanxing, 3);
     function wl(o) { return ['dayan', 'xiaolu', 'xiaoqiang'].map(function (k) { return "<img src='luzhu_img/wenlu_static/" + o[k].color + "_" + k + ".png' />"; }).join(''); }
     document.getElementById('wenlu_show_red').innerHTML = wl(R.wenlu.red);
     document.getElementById('wenlu_show_blue').innerHTML = wl(R.wenlu.blue);

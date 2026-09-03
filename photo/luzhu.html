@@ -53,9 +53,16 @@ div{overflow: hidden;}
 #wenlu_show_red,#wenlu_show_blue{ width: 80px;}
 /* 격자 색: 기본(성천지 파랑) / gold(싱지) */
 :root{--line:#1c2bea;--line2:#2773e6}
-body.gold{--line:#b8a06a;--line2:#b8a06a;background-color:#1a1206}
-body.gold .main_top_right{background-color:#2b1d0e}
-body.gold .main_top_left,body.gold .main_bottom{background-color:#f7f1e3}
+/* 뉴싱지(fcj6) 실화면 기준: 흰 바탕 + 연한 회금색 격자, 큰길·삼성 진한 테두리 원 */
+body.gold{--line:#c9c2a8;--line2:#b8a06a;background-color:#1a1206}
+body.gold .main_top_right{background-color:#111}
+body.gold .main_top_left,body.gold .main_bottom{background-color:#ffffff}
+body.gold .content i.vd{border-width:0.26rem} body.gold .content i.vd.r{border-color:rgb(160,0,0)} body.gold .content i.vd.b{border-color:rgb(0,0,170)}
+body.gold .content i.vs{background:none;border:0.26rem solid} body.gold .content i.vs.r{border-color:rgb(160,0,0);background:none} body.gold .content i.vs.b{border-color:rgb(0,0,170);background:none}
+body.gold .content i.vy.r{border-color:rgb(160,0,0)} body.gold .content i.vy.b{border-color:rgb(0,0,170)}
+body.gold .content i.vx.r{background:rgb(160,0,0)} body.gold .content i.vx.b{background:rgb(0,0,170)}
+body.gold .content i.vq.r{background:rgb(160,0,0)} body.gold .content i.vq.b{background:rgb(0,0,170)}
+body.gold .content_num{color:#1c9a2a}
 /* 뉴싱지(fcj6) 벡터 그림장 — 원본 BtnZhuzi / Btn_BigRoad / Btn_BigEye / Btn_SmallRoad / Btn_YueYou 색·형태 */
 .content i{position:absolute;left:9%;top:9%;width:82%;height:82%;border-radius:50%;box-sizing:border-box;display:block}
 /* 珠子: 글자 없음. 기본(성천지) = 원본 이미지와 같은 테두리 원 (빨강/파랑/초록), gold(뉴싱지) = 원본 색 채운 원 */
@@ -117,6 +124,6 @@ body.gold .content i.vB{background:rgb(156,0,0)} body.gold .content i.vP{backgro
 		</div>
 	</div>
 <script>if (new URLSearchParams(location.search).get('theme') === 'gold') document.body.classList.add('gold');</script>
-<script src="luzhu.js?v=6"></script>
+<script src="luzhu.js?v=7"></script>
 </body>
 </html>

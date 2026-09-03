@@ -61,9 +61,26 @@
     const r = document.getElementById('bgl-room'); if (r) r.textContent = '';
   }
 
+  // Next.P / Next.B 신호: 원본 zou_base 问路 결과(대안·소로·소강 다음 색)를 페이지 안에서 직접 렌더 (확대 크롭 → 흐림·칸 어긋남 제거)
+  let lastNx = null;
+  async function renderNext(key) {
+    const P = document.getElementById('nx-p'), B = document.getElementById('nx-b');
+    if (!P || !B || !window.LUZHU) return;
+    try {
+      const r = await fetch(`${BASE}data/room_${key}.json?_=${Date.now()}`, { cache: 'no-store' });
+      if (!r.ok) return;
+      const d = await r.json(); const sig = key + ':' + (d.nums || []).join('');
+      if (sig === lastNx) return; lastNx = sig;
+      const W = window.LUZHU.compute(window.LUZHU.toOrg(d.nums || [])).wenlu;
+      const ic = side => ['dayan', 'xiaolu', 'xiaoqiang'].map(k => `<i class="${k} ${W[side][k].color}"></i>`).join('');
+      B.innerHTML = ic('red'); P.innerHTML = ic('blue');
+    } catch (_) {}
+  }
+
   function showLuzhu(key, theme) {
     const src = `${BASE}luzhu.html?room=${key}${theme ? '&theme=' + theme : ''}`;
-    if (src !== lastSrc) { document.querySelectorAll('iframe.lz').forEach(f => { f.src = src; }); lastSrc = src; }
+    if (src !== lastSrc) { document.querySelectorAll('iframe.lz').forEach(f => { f.src = src; }); lastSrc = src; lastNx = null; }
+    renderNext(key);
     document.querySelectorAll('[data-xtd]').forEach(e => { e.style.display = ''; });
     const w = document.getElementById('bgl-wrap'); if (w) w.style.display = 'none';
     const r = document.getElementById('bgl-room'); if (r) r.textContent = '';
