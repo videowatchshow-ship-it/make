@@ -141,6 +141,10 @@ jobs:
             printf "%s → " "$k"; curl -sS -o /tmp/r -w "HTTP %{http_code} " "$D/data/room_$k.json"; python3 -c "import json;d=json.load(open('/tmp/r'));print('nums',len(d.get('nums',[])),d.get('server_time'))" 2>/dev/null || echo
           done
           echo "--- select.html venues ---"; curl -sS "$D/select.html" | grep -c 'venue-tab'
+          echo "--- 특수 결과(용8/용7/2장6/3장6) 데이터 존재 확인: 접미어 있는 nums ---"
+          for k in $(curl -sS "$D/data/tables.json" | python3 -c "import sys,json; t=json.load(sys.stdin); print(' '.join(f\"{v['key']}_{r['id']}\" for v in t['venues'] for r in v['rooms']))"); do
+            curl -sS -o /tmp/r "$D/data/room_$k.json" && python3 -c "import json,sys;d=json.load(open('/tmp/r'));sp=[x for x in d.get('nums',[]) if len(x)>3];print('$k', len(d.get('nums',[])), 'special', sp) if sp else None" 2>/dev/null
+          done
           echo "--- root alias pages: <base href> + assets the browser will actually request ---"
           R="https://xn--9d0bw2fjtyymch7de9d.info"
           for p in CAW_1.php CAH_1.php CAH_2.php; do printf "%-10s HTTP %s base=%s\n" "$p" "$(curl -sS -o /tmp/o -w '%{http_code}' "$R/$p")" "$(grep -o '<base[^>]*>' /tmp/o)"; done
