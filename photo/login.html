@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache,no-store,must-revalidate">
+<title>로그인</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;background:#0a0a0a;display:flex;align-items:center;justify-content:center;font-family:'Malgun Gothic',sans-serif}
+.box{width:300px;background:#141414;border:1px solid #2a2a2a;border-radius:10px;padding:32px 24px;text-align:center}
+.logo{color:#ffd54f;font-size:22px;font-weight:bold;margin-bottom:28px;letter-spacing:2px}
+input{width:100%;padding:11px 14px;background:#1e1e1e;border:1px solid #333;border-radius:6px;color:#eee;font-size:14px;margin-bottom:12px;outline:none;-webkit-appearance:none;appearance:none}
+input:focus{border-color:#ffd54f}
+button{width:100%;padding:12px;background:#ffd54f;border:none;border-radius:6px;color:#000;font-size:15px;font-weight:bold;cursor:pointer;margin-top:4px}
+button:hover{background:#ffe57f}
+.err{color:#ef5350;font-size:12px;margin-top:10px;min-height:16px}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="logo">출목표</div>
+  <input id="uid" type="text" placeholder="아이디" autocomplete="off" maxlength="12">
+  <input id="pw"  type="password" placeholder="비밀번호" autocomplete="off" maxlength="20">
+  <button onclick="doLogin()">로그인</button>
+  <div class="err" id="err"></div>
+</div>
+<script>
+(function(){
+  var base = location.pathname.replace(/[^\/]*$/, '');
+  document.getElementById('uid').addEventListener('keydown', function(e){ if(e.key==='Enter') document.getElementById('pw').focus(); });
+  document.getElementById('pw').addEventListener('keydown', function(e){ if(e.key==='Enter') doLogin(); });
+  window.doLogin = async function(){
+    var uid = document.getElementById('uid').value.trim();
+    var pw  = document.getElementById('pw').value;
+    var err = document.getElementById('err');
+    if(/^\d{1,2}$/.test(uid)) uid = uid.padStart(2,'0');
+    if(!uid || !pw){ err.textContent='아이디와 비밀번호를 입력하세요.'; return; }
+    err.textContent='';
+    try{
+      var r = await fetch(base + 'login_check.php', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: uid, passwd: pw})});
+      var d = await r.json();
+      if(!d.ok){ err.textContent = d.error || '로그인 실패'; return; }
+      if(d.role === 'master'){
+        sessionStorage.setItem('adminAuth', JSON.stringify({id: uid, pw: pw, role: 'master'}));
+        location.href = base + 'admin.html?ch=01';          // 마스터 → 그림장 정보 수정 (원본 write.php)
+      } else {
+        location.href = base + 'select.html?ch=' + uid;     // 일반 계정 → 테이블 선택
+      }
+    }catch(_){ err.textContent='서버 오류'; }
+  };
+})();
+</script>
+</body>
+</html>

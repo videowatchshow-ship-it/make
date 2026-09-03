@@ -15,12 +15,14 @@ html,body{width:100%;min-height:100%;background:#0a0a0a;color:#eee;font-family:'
 .url-btn.cah{background:#1a237e22;border-color:#5c6bc0;color:#9fa8da}
 .url-btn.caw{background:#1b5e2022;border-color:#43a047;color:#a5d6a7}
 .url-btn.snw{background:#4a148c22;border-color:#ab47bc;color:#ce93d8}
-.url-btn.out{background:#222;border-color:#444;color:#aaa;margin-left:auto}
+.url-btn.adm{background:#3e2723;border-color:#ff8f00;color:#ffcc80;margin-left:auto}
+.url-btn.out{background:#222;border-color:#444;color:#aaa}
 .url-btn:hover{opacity:.8}
 .url-panel{padding:8px 12px;background:#0f0f0f;border-bottom:1px solid #1e1e1e;display:flex;flex-direction:column;gap:6px}
 .url-row{display:flex;align-items:center;gap:6px}
 .url-lbl{font-size:12px;font-weight:bold;width:78px;flex:none;padding:4px 6px;border-radius:4px;border:1px solid;text-align:center}
-.url-lbl.cah{border-color:#5c6bc0;color:#9fa8da}.url-lbl.caw{border-color:#43a047;color:#a5d6a7}.url-lbl.snw{border-color:#ab47bc;color:#ce93d8}
+.url-lbl.cah{border-color:#5c6bc0;color:#9fa8da}.url-lbl.caw{border-color:#43a047;color:#a5d6a7}.url-lbl.snw{border-color:#ab47bc;color:#ce93d8}.url-lbl.fd{border-color:#ff8f00;color:#ffcc80}
+.url-btn.fd{background:#3e270022;border-color:#ff8f00;color:#ffcc80}
 .url-txt{flex:1;min-width:0;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:4px;color:#ddd;font-size:12px;padding:6px 8px;font-family:monospace}
 .copy{flex:none;padding:6px 12px;background:#ffd54f;border:none;border-radius:4px;color:#000;font-size:12px;font-weight:bold;cursor:pointer}
 .copy.ok{background:#66bb6a;color:#fff}
@@ -54,16 +56,19 @@ html,body{width:100%;min-height:100%;background:#0a0a0a;color:#eee;font-family:'
 <div class="top-bar">
   <h1>출목표</h1>
   <div class="url-btns" id="url-btns">
-    <a class="url-btn cah" id="btn-cah" target="_blank">세로형</a>
-    <a class="url-btn caw" id="btn-caw" target="_blank">가로형</a>
-    <a class="url-btn snw" id="btn-snw" target="_blank">싱지뉴</a>
+    <a class="url-btn caw" id="btn-caw" target="_blank">가로</a>
+    <a class="url-btn cah" id="btn-cah" target="_blank">세로1</a>
+    <a class="url-btn snw" id="btn-snw" target="_blank">세로2</a>
+    <a class="url-btn fd" id="btn-fd" target="_blank">세로3</a>
+    <a class="url-btn adm" id="btn-adm">그림장 설정</a>
     <a class="url-btn out" href="login.html">로그아웃</a>
   </div>
 </div>
 <div class="url-panel">
-  <div class="url-row"><span class="url-lbl cah">세로</span><input class="url-txt" id="url-cah" readonly><button class="copy" data-for="url-cah">복사</button></div>
+  <div class="url-row"><span class="url-lbl cah">세로1</span><input class="url-txt" id="url-cah" readonly><button class="copy" data-for="url-cah">복사</button></div>
   <div class="url-row"><span class="url-lbl caw">가로</span><input class="url-txt" id="url-caw" readonly><button class="copy" data-for="url-caw">복사</button></div>
-  <div class="url-row"><span class="url-lbl snw">뉴싱지 세로</span><input class="url-txt" id="url-snw" readonly><button class="copy" data-for="url-snw">복사</button></div>
+  <div class="url-row"><span class="url-lbl snw">세로2</span><input class="url-txt" id="url-snw" readonly><button class="copy" data-for="url-snw">복사</button></div>
+  <div class="url-row"><span class="url-lbl fd">세로3</span><input class="url-txt" id="url-fd" readonly><button class="copy" data-for="url-fd">복사</button></div>
 </div>
 <div class="venue-tabs" id="venue-tabs"></div>
 <div class="status-bar">계정 <b id="cur-ch">-</b> · 선택 중: <span id="cur-label">-</span></div>
@@ -79,11 +84,15 @@ html,body{width:100%;min-height:100%;background:#0a0a0a;color:#eee;font-family:'
   document.getElementById('cur-ch').textContent = ch;
   document.getElementById('btn-cah').href = BASE + 'CAH_1.html?ch=' + ch;
   document.getElementById('btn-caw').href = BASE + 'CAW_1.html?ch=' + ch;
-  document.getElementById('btn-snw').href = BASE + 'SNW_1.html?ch=' + ch;
-  const ABS = location.origin + BASE;
-  document.getElementById('url-cah').value = ABS + 'CAH_1.html?ch=' + ch;
-  document.getElementById('url-caw').value = ABS + 'CAW_1.html?ch=' + ch;
-  document.getElementById('url-snw').value = ABS + 'SNW_1.html?ch=' + ch;
+  document.getElementById('btn-snw').href = BASE + 'CAH_2.html?ch=' + ch;
+  document.getElementById('btn-fd').href  = BASE + 'CAH_3.html?ch=' + ch;
+  document.getElementById('btn-adm').href = BASE + 'admin.html?ch=' + ch;
+  // 원본(캄보디아빈)과 같은 루트 .php 주소 (nginx 가 /photo/*.html 로 연결)
+  const ROOT = location.origin + '/';
+  document.getElementById('url-caw').value = ROOT + 'CAW_1.php?ch=' + ch;
+  document.getElementById('url-cah').value = ROOT + 'CAH_1.php?ch=' + ch;
+  document.getElementById('url-snw').value = ROOT + 'CAH_2.php?ch=' + ch;
+  document.getElementById('url-fd').value  = ROOT + 'CAH_3.php?ch=' + ch;
   document.querySelectorAll('.copy').forEach(b => b.addEventListener('click', async () => {
     const inp = document.getElementById(b.dataset.for);
     try { await navigator.clipboard.writeText(inp.value); }

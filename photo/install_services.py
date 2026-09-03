@@ -35,9 +35,17 @@ for p, c in UNITS.items():
     print('unit written', p)
 
 LOC = r"""
-    location ~ ^/photo[23]?/(api_selected_room|write_select_room)\.php$ {
+    # 원본(캄보디아빈)과 동일한 루트 경로: /CAW_1.php /CAH_1.php /CAH_2.php /CAH_3.php /write.php /select.php
+    location ~ ^/(CAW_[1-4]|CAH_[1-3]|SNW_1)\.php$ {
+        rewrite ^/([A-Z]+_[0-9])\.php$ /photo/$1.html last;
+    }
+    location = /write.php  { return 302 /photo/admin.html$is_args$args; }
+    location = /select.php { return 302 /photo/select.html$is_args$args; }
+    location = /login.php  { return 302 /photo/login.html$is_args$args; }
+    location ~ ^/photo[23]?/(api_selected_room|write_select_room|api_settings|write_up|login_check)\.php$ {
         proxy_pass http://127.0.0.1:4002;
         proxy_set_header Host $host;
+        client_max_body_size 64m;
     }
     location ~ ^/photo[23]?/data/.*\.json$ {
         add_header Cache-Control "no-store";
@@ -54,7 +62,10 @@ for f in glob.glob('/etc/nginx/sites-enabled/*') + glob.glob('/etc/nginx/conf.d/
 print('nginx files:', files)
 for f in files:
     s = open(f).read()
-    if 'write_select_room' in s:
+    if 'write_select_room' in s and 'api_settings' not in s:
+        # v1 블록 제거 후 재삽입
+        s = re.sub(r'\n\s*location ~ \^/photo\[23\]\?/\(api_selected_room\|write_select_room\)\\\.php\$ \{[^}]*\}\n\s*location ~ \^/photo\[23\]\?/data/\.\*\\\.json\$ \{[^}]*\}\n', '\n', s)
+    if 'api_settings' in s:
         print('already patched', f)
         continue
     s2 = re.sub(r'(server\s*\{)', lambda m: m.group(1) + LOC, s, count=1)
