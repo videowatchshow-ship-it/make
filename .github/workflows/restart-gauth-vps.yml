@@ -1,0 +1,97 @@
+name: restart-gauth-vps
+on:
+  push:
+    paths:
+      - '.github/workflows/restart-gauth-vps.yml'
+
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
+    steps:
+      - name: List all VPS instances
+        run: |
+          echo "===== List VPS ====="
+          curl -sS -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+            https://developers.hostinger.com/api/vps/v1/virtual-machines | python3 -c "
+          import sys,json
+          data = json.load(sys.stdin)
+          if isinstance(data, list):
+            for vm in data:
+              print(f\"ID: {vm.get('id')} | hostname: {vm.get('hostname')} | state: {vm.get('state')} | IP: {vm.get('ip_address',{}).get('address','?')} | plan: {vm.get('plan',{}).get('name','?')}\")
+          else:
+            print(json.dumps(data, indent=2))
+          "
+
+      - name: Find and restart gauth VPS
+        run: |
+          echo "===== Find gauth VPS ====="
+          VPS_JSON=$(curl -sS -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+            https://developers.hostinger.com/api/vps/v1/virtual-machines)
+
+          GAUTH_ID=$(echo "$VPS_JSON" | python3 -c "
+          import sys,json
+          data = json.load(sys.stdin)
+          if isinstance(data, list):
+            for vm in data:
+              h = vm.get('hostname','').lower()
+              if 'gauth' in h or 'gucci' in h or 'cent-solution' in h:
+                print(vm['id'])
+                break
+          ")
+
+          if [ -z "$GAUTH_ID" ]; then
+            echo "gauth VPS not found by hostname, trying all VPS IPs..."
+            echo "$VPS_JSON" | python3 -c "
+          import sys,json
+          data = json.load(sys.stdin)
+          if isinstance(data, list):
+            for vm in data:
+              print(f\"  {vm.get('id')}: {vm.get('hostname')} → {vm.get('ip_address',{}).get('address','?')} state={vm.get('state')}\")
+          "
+            echo "Will try to restart each stopped VPS..."
+            GAUTH_ID=$(echo "$VPS_JSON" | python3 -c "
+          import sys,json
+          data = json.load(sys.stdin)
+          if isinstance(data, list):
+            for vm in data:
+              if vm.get('state') != 'running':
+                print(vm['id'])
+                break
+          ")
+          fi
+
+          if [ -z "$GAUTH_ID" ]; then
+            echo "No stopped VPS found. Restarting all VPS instances..."
+            for VID in $(echo "$VPS_JSON" | python3 -c "
+          import sys,json
+          for vm in json.load(sys.stdin):
+            print(vm['id'])
+          "); do
+              echo "Restarting VPS $VID..."
+              curl -sS -X POST \
+                -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+                "https://developers.hostinger.com/api/vps/v1/virtual-machines/$VID/restart" | python3 -m json.tool || true
+            done
+          else
+            echo "Restarting VPS ID: $GAUTH_ID"
+            curl -sS -X POST \
+              -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+              "https://developers.hostinger.com/api/vps/v1/virtual-machines/$GAUTH_ID/restart" | python3 -m json.tool || true
+
+            echo ""
+            echo "If stopped, try start instead..."
+            curl -sS -X POST \
+              -H "Authorization: Bearer $HOSTINGER_API_TOKEN" \
+              "https://developers.hostinger.com/api/vps/v1/virtual-machines/$GAUTH_ID/start" | python3 -m json.tool || true
+          fi
+
+      - name: Wait and verify
+        run: |
+          echo "Waiting 30s for VPS to boot..."
+          sleep 30
+          echo "===== Test gauth ====="
+          curl -sS -o /dev/null -w "gauth → HTTP %{http_code} | size %{size_download}\n" "https://gauth.cent-solution.online/" --max-time 15 2>&1 || echo "STILL DOWN"
+          curl -sS -o /dev/null -w "API → HTTP %{http_code}\n" "https://gauth.cent-solution.online/photo/api_selected_room.php?ch=01" --max-time 15 2>&1 || echo "API STILL DOWN"
