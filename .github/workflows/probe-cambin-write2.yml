@@ -1,0 +1,49 @@
+name: probe-cambin-write2
+on:
+  push:
+    paths:
+      - '.github/workflows/probe-cambin-write2.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: login + dump admin pages and index.php
+        run: |
+          set +e
+          B="https://xn--2z1b92mg3alyphom.com"
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36"
+          curl -sS -A "$UA" -c cj -b cj -o /dev/null "$B/login.php"
+          curl -sS -A "$UA" -c cj -b cj -o /dev/null -e "$B/login.php" -d "id=aass0707&passwd=aass0707" "$B/login_check.php"
+          for p in write_url.php write_info.php; do
+            echo "=================== $p"
+            curl -sS -A "$UA" -b cj -o p.html -w "HTTP %{http_code} size %{size_download}\n" "$B/$p"
+            python3 - <<'PY'
+          import re
+          s=open('p.html',encoding='utf-8',errors='replace').read()
+          s=re.sub(r'<link[^>]+>|<script src=[^>]+></script>','',s)
+          i=s.find('<body'); print(s[i:i+12000])
+          PY
+          done
+          echo "=================== index.php (public display)"
+          curl -sS -A "$UA" -o idx.html -w "HTTP %{http_code} size %{size_download}\n" "$B/index.php"
+          python3 - <<'PY'
+          import re
+          s=open('idx.html',encoding='utf-8',errors='replace').read()
+          print('--- iframes ---'); [print(' ',m) for m in re.findall(r'<iframe[^>]*>',s)]
+          print('--- imgs ---'); [print(' ',m) for m in sorted(set(re.findall(r'<img[^>]*>',s)))[:40]]
+          print('--- scripts src ---'); [print(' ',m) for m in re.findall(r'<script[^>]*src="([^"]+)"',s)]
+          print('--- links ---'); [print(' ',m) for m in sorted(set(re.findall(r'href="([^"]+)"',s)))[:60]]
+          print('--- korean ---'); print(sorted(set(re.findall(r'[가-힣]{2,}',s)))[:150])
+          print('--- inline scripts (first 6000) ---')
+          for m in re.findall(r'<script(?![^>]*src)[^>]*>([\s\S]*?)</script>',s): print(m[:6000]); print('-----')
+          print('--- body structure ---')
+          b=s[s.find('<body'):]
+          b=re.sub(r'<style[\s\S]*?</style>|<script[\s\S]*?</script>','',b)
+          print(b[:15000])
+          PY
+          echo "=================== other view pages guesses"
+          for p in view.php live.php h.php w.php kakao.php Live_height.php Live_width.php index.php?type=h index.php?ch=A; do
+            printf "%-24s → " "$p"; curl -sS -A "$UA" -o /tmp/x -w "HTTP %{http_code} size %{size_download}\n" --max-time 10 "$B/$p"
+          done
