@@ -1,0 +1,53 @@
+name: check-vps-originals
+
+on:
+  push:
+    paths:
+      - '.github/workflows/check-vps-originals.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+
+      - name: Search VPS for original files
+        env:
+          VPS_IP: "187.53.133.145"
+          VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+
+          echo "== Current main index.html =="
+          $SSH "cat /var/www/sites/chamgyo/public/index.html" || true
+
+          echo ""
+          echo "== Search for backup index files =="
+          $SSH "find / -maxdepth 4 -name 'index.html*' -path '*/chamgyo*' 2>/dev/null" || true
+          $SSH "find /var/www -name 'index.html.bak*' -o -name 'index.html.orig*' -o -name 'index.html.old*' 2>/dev/null" || true
+          $SSH "find /root -name 'index*' -type f 2>/dev/null" || true
+          $SSH "find /tmp -name 'index*' -type f -mtime -30 2>/dev/null" || true
+
+          echo ""
+          echo "== Check nginx configs for other sites =="
+          $SSH "ls -la /etc/nginx/sites-available/ /etc/nginx/sites-enabled/" || true
+
+          echo ""
+          echo "== Check /var/www structure =="
+          $SSH "find /var/www -maxdepth 3 -type f -name '*.html' | sort" || true
+
+          echo ""
+          echo "== Check for any backups =="
+          $SSH "find /root /opt /var/backups -maxdepth 2 -name '*.tar*' -o -name '*.zip' -o -name '*.bak' 2>/dev/null | head -20" || true
+
+          echo ""
+          echo "== Apt/dpkg history (was there a previous web setup?) =="
+          $SSH "tail -30 /var/log/dpkg.log 2>/dev/null" || true
+
+          echo ""
+          echo "== Git repos on server =="
+          $SSH "find / -maxdepth 4 -name '.git' -type d 2>/dev/null | head -10" || true
+
+          echo "== DONE =="
