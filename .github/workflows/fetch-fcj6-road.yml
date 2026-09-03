@@ -1,0 +1,43 @@
+name: fetch-fcj6-road
+on:
+  push:
+    paths: ['.github/workflows/fetch-fcj6-road.yml', 'ref/fcj6_road_list.txt']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Textures/Road + TextureImgs natives (png/webp/jpg) by uuid
+        run: |
+          mkdir -p ref/fcj6_road
+          B="https://fcj6.oqogyf.com/assets/resources/native"
+          while read -r name uuid ext; do
+            d="${uuid:0:2}"; ok=0
+            for e in png webp jpg jpeg; do
+              code=$(curl -sS --max-time 20 -A "Mozilla/5.0" -o "ref/fcj6_road/$name.$e" -w '%{http_code}' "$B/$d/$uuid.$e")
+              if [ "$code" = "200" ] && [ -s "ref/fcj6_road/$name.$e" ] && ! head -c 20 "ref/fcj6_road/$name.$e" | grep -q '<'; then echo "OK  $name.$e $(stat -c%s ref/fcj6_road/$name.$e)"; ok=1; break; fi
+              rm -f "ref/fcj6_road/$name.$e"
+            done
+            [ $ok = 1 ] || echo "MISS $name $uuid"
+          done < ref/fcj6_road_list.txt
+          # sprite-frame import json (rect/atlas) for the same uuids
+          mkdir -p ref/fcj6_road/import
+          while read -r name uuid ext; do
+            d="${uuid:0:2}"
+            for suf in "" "@f9941" "@6c48a"; do
+              curl -sS --max-time 20 -A "Mozilla/5.0" -o "ref/fcj6_road/import/$name$suf.json" -w "IMPORT $name$suf %{http_code}\n" "https://fcj6.oqogyf.com/assets/resources/import/$d/$uuid$suf.json"
+              head -c 1 "ref/fcj6_road/import/$name$suf.json" | grep -q '\[' || rm -f "ref/fcj6_road/import/$name$suf.json"
+            done
+          done < ref/fcj6_road_list.txt
+          ls -la ref/fcj6_road | head -80
+      - name: Commit
+        run: |
+          git config user.name "github-actions"; git config user.email "actions@github.com"
+          git add -f ref/fcj6_road
+          git commit -m "ref: fcj6 Textures/Road 원본 스프라이트(珠子base/路格子/Road_Round/Pair*/下三路路子/1009x) + import 메타" || exit 0
+          git pull --rebase origin ${GITHUB_REF_NAME} || true
+          git push origin HEAD:${GITHUB_REF_NAME}
