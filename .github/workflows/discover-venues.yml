@@ -1,0 +1,76 @@
+name: discover-venues
+on:
+  push:
+    paths:
+      - '.github/workflows/discover-venues.yml'
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      VPS_IP: "187.53.133.145"
+      VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+
+      - name: Upstream 성천지 site table count
+        run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+          echo "===== fetch root ====="
+          curl -sSL --max-time 20 -A "$UA" -c cj.txt -o sc.html -w "HTTP %{http_code} size %{size_download} final %{url_effective}\n" "https://xn--2z1b92mg3alyphom.com/" || true
+          echo "--- head ---"; head -c 4000 sc.html; echo
+          echo "--- script srcs ---"; grep -oE 'src="[^"]+"' sc.html | head -40
+          echo "--- links ---"; grep -oE 'href="[^"]+"' sc.html | head -40
+          echo "--- api/fetch/room/table keywords ---"; grep -oiE '(room|table|api|ws|socket)[^"'"'"' <>]{0,80}' sc.html | sort -u | head -60
+          echo "--- korean text ---"; grep -oE '[가-힣]{2,}' sc.html | sort | uniq -c | sort -rn | head -60
+          echo "--- 테이블 관련 카운트 ---"
+          for k in room_id table_id 'class="table' 'class="room' data-room data-table; do echo "  $k: $(grep -o "$k" sc.html | wc -l)"; done
+          echo "===== fetch scripts ====="
+          for s in $(grep -oE 'src="[^"]+\.js[^"]*"' sc.html | sed 's/src="//;s/"$//' | head -8); do
+            case "$s" in http*) U="$s";; /*) U="https://xn--2z1b92mg3alyphom.com$s";; *) U="https://xn--2z1b92mg3alyphom.com/$s";; esac
+            echo "--- $U ---"
+            curl -sSL --max-time 15 -A "$UA" -o js.txt -w "HTTP %{http_code} size %{size_download}\n" "$U" || true
+            grep -oiE '(https?:)?//[a-z0-9.-]+\.[a-z]{2,}[^"'"'"' ]{0,60}' js.txt | sort -u | head -20
+            grep -oiE '(room|table)[_a-z]*[^;]{0,80}' js.txt | sort -u | head -30
+          done
+
+      - name: Server side inventory
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          BASE="/var/www/sites/chamgyo/public"
+
+          echo "===== php available? ====="
+          $SSH "which php; php -v 2>&1 | head -1; apache2ctl -M 2>/dev/null | grep -i php; ls /etc/apache2/mods-enabled | grep -i php; nginx -v 2>&1"
+
+          echo "===== photo/ full listing ====="
+          $SSH "ls -la $BASE/photo/ | head -120"
+          echo "===== photo2/ listing (원본) ====="
+          $SSH "ls -la $BASE/photo2/ | head -120"
+          echo "===== data/ listing ====="
+          $SSH "ls -la $BASE/photo/data/ | head -80; echo; ls $BASE/photo/data | wc -l"
+
+          echo "===== ORIGINAL select.html backup (full) ====="
+          $SSH "ls -la $BASE/photo/select.html.bak.* 2>/dev/null; B=\$(ls -t $BASE/photo/select.html.bak.* 2>/dev/null | head -1); echo FILE=\$B; cat \"\$B\""
+
+          echo ""
+          echo "===== any other select/write backups anywhere ====="
+          $SSH "find / -xdev \( -name 'select*.html*' -o -name 'write*.php*' -o -name 'api_*rooms*.php*' -o -name 'collector*.php*' \) 2>/dev/null | grep -v proc | head -60"
+
+          echo "===== tables.json (data/) ====="
+          $SSH "cat $BASE/photo/data/tables.json 2>/dev/null | head -c 4000; echo; echo ---photo/tables.json---; cat $BASE/photo/tables.json 2>/dev/null | head -c 600"
+
+          echo "===== grep venue names in all photo files ====="
+          $SSH "grep -rl '성천지\|신천지\|싱지\|그림장\|sinji\|sn_rooms\|xtd' $BASE/photo $BASE/photo2 $BASE/photo3 2>/dev/null | grep -v '/data/' | head -40"
+          $SSH "grep -rn '성천지\|신천지\|싱지\|그림장' $BASE/photo/*.php $BASE/photo/*.html $BASE/photo2/*.php $BASE/photo2/*.html 2>/dev/null | head -60"
+
+          echo "===== write.php head (if exists) ====="
+          $SSH "ls -la $BASE/photo/write.php $BASE/photo2/write.php 2>&1; head -c 6000 $BASE/photo2/write.php 2>/dev/null || head -c 6000 $BASE/photo/write.php 2>/dev/null"
+
+          echo "===== cron / collectors ====="
+          $SSH "cat /etc/cron.d/chamgyo* 2>/dev/null; ls -la $BASE/photo/collector* 2>/dev/null"
+
+          echo "===== api php files list + heads ====="
+          $SSH "for f in $BASE/photo/api_*.php $BASE/photo/write_select_room.php $BASE/photo/login_check.php; do [ -f \"\$f\" ] && { echo \"--- \$f ---\"; head -c 1500 \"\$f\"; echo; }; done"
