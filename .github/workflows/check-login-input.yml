@@ -1,0 +1,47 @@
+name: check-login-input
+on:
+  push:
+    paths:
+      - '.github/workflows/check-login-input.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      VPS_IP: "187.53.133.145"
+      VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+
+      - name: Check login.html on VPS
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          BASE="/var/www/sites/chamgyo/public"
+
+          echo "===== /photo/login.html full content ====="
+          $SSH "cat $BASE/photo/login.html"
+
+          echo ""
+          echo "===== file size and hash ====="
+          $SSH "wc -c $BASE/photo/login.html"
+          $SSH "sha256sum $BASE/photo/login.html"
+
+          echo ""
+          echo "===== HTTP response via curl ====="
+          curl -sS -o /tmp/login.html -w "HTTP %{http_code} | size %{size_download} | content-type: %{content_type}\n" "http://$VPS_IP/photo/login.html"
+          cat /tmp/login.html
+
+          echo ""
+          echo "===== Check input tags ====="
+          grep -i '<input' /tmp/login.html || echo "NO INPUT TAGS FOUND"
+
+          echo ""
+          echo "===== Check meta viewport ====="
+          grep -i 'viewport' /tmp/login.html || echo "NO VIEWPORT"
+
+          echo ""
+          echo "===== Nginx mime types check ====="
+          $SSH "grep -i 'html' /etc/nginx/mime.types 2>/dev/null | head -5 || echo 'no mime.types'"
+          $SSH "grep -i 'content-type\|default_type' /etc/nginx/nginx.conf 2>/dev/null | head -5"
