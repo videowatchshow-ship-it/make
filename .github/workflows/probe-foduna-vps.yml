@@ -1,0 +1,63 @@
+name: probe-foduna-vps
+on:
+  push:
+    paths:
+      - '.github/workflows/probe-foduna-vps.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VPS_IP: "187.53.133.145"
+      VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+      - name: runner direct (dns + tcp)
+        run: |
+          set +e
+          getent hosts foduna.halokh.com; getent hosts halokh.com
+          timeout 8 bash -c 'cat < /dev/null > /dev/tcp/foduna.halokh.com/443' && echo "443 open from runner" || echo "443 closed/timeout from runner"
+          curl -sS -o /dev/null -w "http HTTP %{http_code}\n" --max-time 10 "http://foduna.halokh.com/de_foduna/1"
+      - name: from VPS
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          $SSH 'set +e; UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36"
+            getent hosts foduna.halokh.com
+            for p in de_foduna/1 br_foduna/1; do
+              echo "=================== $p"
+              curl -sS --max-time 20 -A "$UA" -D /tmp/h.txt -o /tmp/p_$(basename $(dirname $p)).html -w "HTTP %{http_code} size %{size_download} final %{url_effective}\n" -L "https://foduna.halokh.com/$p"
+              grep -i "content-type\|server:\|location" /tmp/h.txt
+            done
+            python3 - <<'"'"'PY'"'"'
+          import re
+          for k in ("de_foduna","br_foduna"):
+              try: s=open(f"/tmp/p_{k}.html",encoding="utf-8",errors="replace").read()
+              except Exception as e: print(k,"no file",e); continue
+              print("=====",k,"len",len(s))
+              print("--- title ---", re.findall(r"<title>([^<]*)",s))
+              print("--- scripts src ---"); [print(" ",m) for m in re.findall(r"<script[^>]*src=\"([^\"]+)\"",s)]
+              print("--- iframes ---"); [print(" ",m) for m in re.findall(r"<iframe[^>]*>",s)]
+              print("--- urls ---"); [print(" ",m) for m in sorted(set(re.findall(r"https?://[A-Za-z0-9.\-]+[^\"\x27\s<>)]{0,80}|wss?://[^\"\x27\s]{0,80}",s)))[:40]]
+              print("--- api-ish ---"); [print(" ",m) for m in sorted(set(re.findall(r"[^\"\x27\s<>]*(?:api|socket|room|table|result|history|road|issue)[^\"\x27\s<>]{0,60}",s,re.I)))[:60]]
+              print("--- inline scripts ---")
+              for m in re.findall(r"<script(?![^>]*src)[^>]*>([\s\S]*?)</script>",s): print(m[:4000]); print("-----")
+              b=s[s.find("<body"):]; b=re.sub(r"<style[\s\S]*?</style>|<script[\s\S]*?</script>","",b)
+              print("--- body ---"); print(b[:5000])
+          PY
+            echo "=================== js files"
+            for s in $(grep -oE "src=\"[^\"]+\.js[^\"]*\"" /tmp/p_de_foduna.html | sed "s/src=\"//;s/\"$//" | head -8); do
+              case "$s" in http*) U="$s";; /*) U="https://foduna.halokh.com$s";; *) U="https://foduna.halokh.com/de_foduna/$s";; esac
+              echo "== $U"; curl -sS --max-time 20 -A "$UA" -o /tmp/j.js -w "HTTP %{http_code} size %{size_download}\n" "$U"
+              grep -oE "https?://[A-Za-z0-9.-]+[^\"\x27 <>)]{0,80}|wss?://[^\"\x27 ]{0,80}|[\"\x27][/A-Za-z0-9_-]*(api|room|table|result|history|road|issue|game)[/A-Za-z0-9_?=&-]*[\"\x27]" /tmp/j.js | sort -u | head -60
+            done
+            echo "=================== enumerate 1..100"
+            for k in de br; do
+              OK=""; for n in $(seq 1 100); do
+                C=$(curl -sS -o /tmp/e -w "%{http_code}" --max-time 8 -A "$UA" "https://foduna.halokh.com/${k}_foduna/$n"); S=$(stat -c%s /tmp/e)
+                [ "$C" = "200" ] && OK="$OK $n:$S"
+              done
+              echo "$k OK(n:size): $OK"
+            done'
