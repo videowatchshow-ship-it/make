@@ -18,19 +18,16 @@ jobs:
           for a in $(grep -oE '(src|href)="[^"]+"' out/pc.html | sed -E 's/^[a-z]+="//;s/"$//' | grep -v '^http' | sort -u); do
             n=$(echo "$a" | tr '/?' '__'); curl -sS --max-time 20 -A "$UA" -o "out/$n" -w "$a HTTP %{http_code} size %{size_download}\n" "$B/$a"
           done
+          # css 안 이미지 목록
+          grep -ohE 'url\([^)]+\)' out/* 2>/dev/null | sort -u | head -60
           ls -la out
-      - name: pc.html
-        run: cat out/pc.html
-      - name: css
-        run: for f in out/*css*; do echo "=== $f"; cat "$f"; echo; done
-      - name: config + make_bg
-        run: for f in out/*config* out/*make_bg*; do echo "=== $f"; cat "$f"; echo; done
-      - name: zou_base.js
-        run: for f in out/*zou_base*; do echo "=== $f"; cat "$f"; echo; done
-      - name: zou_pc.js + ajax_base + set_video
-        run: for f in out/*zou_pc* out/*ajax_base* out/*set_video*; do echo "=== $f"; cat "$f"; echo; done
-      - name: sample data for table 18 (api)
+      - name: dump all
+        run: |
+          for f in out/*; do
+            echo; echo "==================== $f ($(stat -c%s "$f") bytes)"
+            case "$f" in *.png|*.jpg|*.gif|*.ico|*.woff*|*.ttf) echo "(binary)";; *) head -c 60000 "$f"; echo;; esac
+          done
+      - name: sample api data table 18
         run: |
           curl -sS --max-time 10 -H "Origin: https://gs.xtd6688.com" -H "Referer: https://gs.xtd6688.com/luzhu/zh/pc.html" -A "Mozilla/5.0" "https://api.xtd6688.com/api/diantou/table/getData/gameType/3/tableId/18/xue/null"; echo
-          echo "--- other endpoints used by page (from js) ---"
-          grep -ohE 'https?://[a-z0-9.]+xtd6688[^"'"'"' )]*|/api/[A-Za-z0-9/_${}]+' out/*.js out/pc.html | sort -u
+          grep -ohE 'https?://[a-z0-9.]+xtd6688[^"'"'"' )]*|/api/[A-Za-z0-9/_${}+]+' out/* | sort -u
