@@ -1,0 +1,58 @@
+name: probe-xjh-wide
+on:
+  push:
+    paths:
+      - '.github/workflows/probe-xjh-wide.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: raw responses for known ids
+        run: |
+          set +e
+          H1="Origin: https://fcj6.oqogyf.com"; H2="Referer: https://fcj6.oqogyf.com/"
+          for RID in 1 10 100 101 105 110 20001 20101 20110 1001; do
+            printf "room_id=%s → " "$RID"; curl -sS --max-time 8 -H "$H1" -H "$H2" "https://xjh.liveview2024.vip/api/pub/get_newly_issue?room_id=$RID" | head -c 400; echo
+          done
+          echo "--- without headers ---"
+          curl -sS --max-time 8 "https://xjh.liveview2024.vip/api/pub/get_newly_issue?room_id=110" | head -c 300; echo
+          echo "--- get_room?room_id=110 ---"
+          curl -sS --max-time 8 -H "$H1" -H "$H2" "https://xjh.liveview2024.vip/api/pub/get_room?room_id=110" | head -c 400; echo
+          echo "--- fcj6 ?room_id=110 page ---"
+          curl -sS --max-time 8 -A "Mozilla/5.0" "https://fcj6.oqogyf.com/?room_id=110" | head -c 1500; echo
+          echo "--- fcj6 src/import-map.json + settings ---"
+          curl -sS --max-time 8 "https://fcj6.oqogyf.com/src/import-map.json"; echo
+          for p in src/settings.json src/settings.js settings.json src/application.js application.js index.js main.js src/chunks/bundle.js; do
+            printf "%s → " "$p"; curl -sS -o /tmp/x -w "%{http_code} %{size_download}\n" --max-time 8 "https://fcj6.oqogyf.com/$p"
+            [ -s /tmp/x ] && grep -oiE '(https?://[a-z0-9.-]+\.[a-z]{2,}[^"'"'"' ]{0,60}|room_?id[^,;]{0,60}|/api/[a-z_/]+)' /tmp/x | sort -u | head -30
+          done
+
+      - name: wide scan (parallel) 1..30000 step ranges
+        run: |
+          python3 - <<'PY'
+          import json, urllib.request, concurrent.futures, collections
+          H={'User-Agent':'Mozilla/5.0','Origin':'https://fcj6.oqogyf.com','Referer':'https://fcj6.oqogyf.com/'}
+          codes=collections.Counter(); live=[]
+          def probe(rid):
+              try:
+                  req=urllib.request.Request(f'https://xjh.liveview2024.vip/api/pub/get_newly_issue?room_id={rid}',headers=H)
+                  raw=urllib.request.urlopen(req,timeout=8).read().decode('utf-8','replace')
+                  try: d=json.loads(raw)
+                  except Exception: return rid,'nonjson',raw[:120]
+                  x=d.get('data')
+                  if isinstance(x,dict) and x.get('id'): return rid,'LIVE',raw[:300]
+                  return rid,str(d.get('code')),raw[:100]
+              except Exception as e:
+                  return rid,'err',str(e)[:80]
+          ids=list(range(1,400))+list(range(1000,1100))+list(range(10000,10100))+list(range(20000,20200))+list(range(30000,30050))
+          with concurrent.futures.ThreadPoolExecutor(24) as ex:
+              for rid,c,raw in ex.map(probe, ids):
+                  codes[c]+=1
+                  if c=='LIVE': live.append(rid); print('LIVE',rid,raw)
+                  elif c not in ('100000',): 
+                      if codes[c]<=5: print('other',rid,c,raw)
+          print('code counts', dict(codes))
+          print('LIVE ROOMS', live, 'COUNT', len(live))
+          PY
