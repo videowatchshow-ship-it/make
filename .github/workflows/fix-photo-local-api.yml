@@ -11,43 +11,148 @@ jobs:
     env:
       VPS_IP: "187.53.133.145"
       VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
-      BGL_B64: "KGZ1bmN0aW9uKCl7CiAgdmFyIEJBU0UgPSBsb2NhdGlvbi5vcmlnaW4gKyAnL3Bob3RvJzsKICB2YXIgR0FVVEggPSAnaHR0cHM6Ly9nYXV0aC5jZW50LXNvbHV0aW9uLm9ubGluZS9waG90byc7CiAgdmFyIFBPTExfTVMgPSAzMDAwOwogIHZhciBUSU1FT1VUID0gNTAwMDsKCiAgdmFyIHJvb21FbCA9IGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCdiZ2wtcm9vbScpOwogIHZhciByb2FkRWwgPSBkb2N1bWVudC5xdWVyeVNlbGVjdG9yKCcuYmdsLXJvYWQnKTsKICB2YXIgZmFpbENvdW50ID0gMDsKCiAgZnVuY3Rpb24gc2hvd09mZmxpbmUoKSB7CiAgICBpZiAocm9vbUVsKSByb29tRWwudGV4dENvbnRlbnQgPSAn7ISc67KEIOygkOqygOykkSc7CiAgICBpZiAocm9hZEVsKSByb2FkRWwuaW5uZXJIVE1MID0gJzxkaXYgc3R5bGU9InRleHQtYWxpZ246Y2VudGVyO3BhZGRpbmc6NDBweDtjb2xvcjojOTk5O2ZvbnQtc2l6ZToxNHB4OyI+642w7J207YSwIOyEnOuyhCDsoJDqsoDspJHsnoXri4jri6QuPGJyPuyeoOyLnCDtm4Qg7J6Q64+ZIOyerOyXsOqysOuQqeuLiOuLpC48L2Rpdj4nOwogIH0KCiAgZnVuY3Rpb24gcmVuZGVyUm9hZChudW1zKSB7CiAgICBpZiAoIXJvYWRFbCkgcmV0dXJuOwogICAgcm9hZEVsLmlubmVySFRNTCA9ICcnOwogICAgaWYgKCFudW1zIHx8ICFudW1zLmxlbmd0aCkgewogICAgICByb2FkRWwuaW5uZXJIVE1MID0gJzxkaXYgc3R5bGU9InRleHQtYWxpZ246Y2VudGVyO3BhZGRpbmc6MjBweDtjb2xvcjojOTk5OyI+642w7J207YSwIOyXhuydjDwvZGl2Pic7CiAgICAgIHJldHVybjsKICAgIH0KICAgIHZhciBjb2xzID0gW107CiAgICB2YXIgY29sID0gW107CiAgICB2YXIgcHJldiA9IG51bGw7CiAgICBmb3IgKHZhciBpID0gMDsgaSA8IG51bXMubGVuZ3RoOyBpKyspIHsKICAgICAgdmFyIGN1ciA9IG51bXNbaV0gPj0gNTAgPyAnYicgOiBudW1zW2ldID49IDEwID8gJ3AnIDogJ3QnOwogICAgICBpZiAocHJldiAmJiBjdXIgIT09IHByZXYpIHsgY29scy5wdXNoKGNvbCk7IGNvbCA9IFtdOyB9CiAgICAgIGNvbC5wdXNoKG51bXNbaV0pOwogICAgICBwcmV2ID0gY3VyOwogICAgfQogICAgaWYgKGNvbC5sZW5ndGgpIGNvbHMucHVzaChjb2wpOwoKICAgIHZhciB0YmwgPSBkb2N1bWVudC5jcmVhdGVFbGVtZW50KCd0YWJsZScpOwogICAgdGJsLmNsYXNzTmFtZSA9ICdiZ2wtdGJsJzsKICAgIHRibC5zdHlsZS5jc3NUZXh0ID0gJ2JvcmRlci1jb2xsYXBzZTpjb2xsYXBzZTt3aWR0aDoxMDAlO3RhYmxlLWxheW91dDpmaXhlZDsnOwogICAgdmFyIG1heFIgPSA2OwogICAgZm9yICh2YXIgciA9IDA7IHIgPCBtYXhSOyByKyspIHsKICAgICAgdmFyIHRyID0gZG9jdW1lbnQuY3JlYXRlRWxlbWVudCgndHInKTsKICAgICAgZm9yICh2YXIgYyA9IDA7IGMgPCBjb2xzLmxlbmd0aDsgYysrKSB7CiAgICAgICAgdmFyIHRkID0gZG9jdW1lbnQuY3JlYXRlRWxlbWVudCgndGQnKTsKICAgICAgICB0ZC5zdHlsZS5jc3NUZXh0ID0gJ3dpZHRoOjI0cHg7aGVpZ2h0OjI0cHg7dGV4dC1hbGlnbjpjZW50ZXI7Zm9udC1zaXplOjExcHg7Ym9yZGVyOjFweCBzb2xpZCAjMzMzOyc7CiAgICAgICAgaWYgKGNvbHNbY11bcl0gIT09IHVuZGVmaW5lZCkgewogICAgICAgICAgdmFyIHYgPSBjb2xzW2NdW3JdOwogICAgICAgICAgdGQudGV4dENvbnRlbnQgPSB2OwogICAgICAgICAgaWYgKHYgPj0gNTApIHsgdGQuc3R5bGUuYmFja2dyb3VuZCA9ICcjMWEzYTZhJzsgdGQuc3R5bGUuY29sb3IgPSAnIzVjYWNlZSc7IH0KICAgICAgICAgIGVsc2UgaWYgKHYgPj0gMTApIHsgdGQuc3R5bGUuYmFja2dyb3VuZCA9ICcjNmExYTFhJzsgdGQuc3R5bGUuY29sb3IgPSAnI2VlNWM1Yyc7IH0KICAgICAgICAgIGVsc2UgeyB0ZC5zdHlsZS5iYWNrZ3JvdW5kID0gJyMxYTZhMmEnOyB0ZC5zdHlsZS5jb2xvciA9ICcjNWNlZThjJzsgfQogICAgICAgIH0KICAgICAgICB0ci5hcHBlbmRDaGlsZCh0ZCk7CiAgICAgIH0KICAgICAgdGJsLmFwcGVuZENoaWxkKHRyKTsKICAgIH0KICAgIHJvYWRFbC5hcHBlbmRDaGlsZCh0YmwpOwogIH0KCiAgZnVuY3Rpb24gbG9hZERhdGEoKSB7CiAgICB2YXIgY3RybCA9IG5ldyBBYm9ydENvbnRyb2xsZXIoKTsKICAgIHZhciB0aW1lciA9IHNldFRpbWVvdXQoZnVuY3Rpb24oKXsgY3RybC5hYm9ydCgpOyB9LCBUSU1FT1VUKTsKCiAgICBmZXRjaChCQVNFICsgJy9kYXRhL3Jvb21fMS5qc29uP3Q9JyArIERhdGUubm93KCksIHsgc2lnbmFsOiBjdHJsLnNpZ25hbCB9KQogICAgICAudGhlbihmdW5jdGlvbihyKSB7IGNsZWFyVGltZW91dCh0aW1lcik7IHJldHVybiByLmpzb24oKTsgfSkKICAgICAgLnRoZW4oZnVuY3Rpb24oZCkgewogICAgICAgIGZhaWxDb3VudCA9IDA7CiAgICAgICAgaWYgKHJvb21FbCkgcm9vbUVsLnRleHRDb250ZW50ID0gJ+uwqSAxJzsKICAgICAgICBpZiAoZCAmJiBkLm51bXMpIHJlbmRlclJvYWQoZC5udW1zKTsKICAgICAgICBlbHNlIHJlbmRlclJvYWQoW10pOwogICAgICB9KQogICAgICAuY2F0Y2goZnVuY3Rpb24oKSB7CiAgICAgICAgY2xlYXJUaW1lb3V0KHRpbWVyKTsKICAgICAgICAvLyBUcnkgZ2F1dGggZmFsbGJhY2sKICAgICAgICB2YXIgY3RybDIgPSBuZXcgQWJvcnRDb250cm9sbGVyKCk7CiAgICAgICAgdmFyIHRpbWVyMiA9IHNldFRpbWVvdXQoZnVuY3Rpb24oKXsgY3RybDIuYWJvcnQoKTsgfSwgVElNRU9VVCk7CiAgICAgICAgZmV0Y2goR0FVVEggKyAnL2RhdGEvcm9vbV8xLmpzb24/dD0nICsgRGF0ZS5ub3coKSwgeyBzaWduYWw6IGN0cmwyLnNpZ25hbCB9KQogICAgICAgICAgLnRoZW4oZnVuY3Rpb24ocikgeyBjbGVhclRpbWVvdXQodGltZXIyKTsgcmV0dXJuIHIuanNvbigpOyB9KQogICAgICAgICAgLnRoZW4oZnVuY3Rpb24oZCkgewogICAgICAgICAgICBmYWlsQ291bnQgPSAwOwogICAgICAgICAgICBpZiAocm9vbUVsKSByb29tRWwudGV4dENvbnRlbnQgPSAn67CpIDEnOwogICAgICAgICAgICBpZiAoZCAmJiBkLm51bXMpIHJlbmRlclJvYWQoZC5udW1zKTsKICAgICAgICAgICAgZWxzZSByZW5kZXJSb2FkKFtdKTsKICAgICAgICAgIH0pCiAgICAgICAgICAuY2F0Y2goZnVuY3Rpb24oKSB7CiAgICAgICAgICAgIGNsZWFyVGltZW91dCh0aW1lcjIpOwogICAgICAgICAgICBmYWlsQ291bnQrKzsKICAgICAgICAgICAgaWYgKGZhaWxDb3VudCA+PSAzKSBzaG93T2ZmbGluZSgpOwogICAgICAgICAgfSk7CiAgICAgIH0pOwogIH0KCiAgbG9hZERhdGEoKTsKICBzZXRJbnRlcnZhbChsb2FkRGF0YSwgUE9MTF9NUyk7Cn0pKCk7Cg=="
     steps:
       - name: Install sshpass
         run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
 
-      - name: Deploy bgl.js to all photo dirs
+      - name: Create and deploy bgl.js
         run: |
-          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
-          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
-          BASE="/var/www/sites/chamgyo/public"
+          cat > /tmp/bgl.js << 'JSEOF'
+          (function(){
+            var BASE = location.origin + '/photo';
+            var GAUTH = 'https://gauth.cent-solution.online/photo';
+            var POLL_MS = 3000;
+            var TIMEOUT = 5000;
+            var roomEl = document.getElementById('bgl-room');
+            var roadEl = document.querySelector('.bgl-road');
+            var failCount = 0;
+            var MAX_ROWS = 6;
 
-          echo "===== Current state ====="
-          $SSH "sha256sum $BASE/photo/bgl.js 2>/dev/null; cat $BASE/photo/data/room_1.json 2>/dev/null | head -1"
+            function showOffline(){
+              if(roomEl) roomEl.textContent='서버 점검중';
+              if(roadEl) roadEl.innerHTML='<div style="text-align:center;padding:40px;color:#999;font-size:14px;">데이터 서버 점검중입니다.<br>잠시 후 자동 재연결됩니다.</div>';
+            }
 
-          echo ""
-          echo "===== Deploy bgl.js ====="
-          echo "$BGL_B64" | base64 -d > /tmp/bgl.js
+            function renderRoad(results){
+              if(!roadEl) return;
+              roadEl.innerHTML='';
+              if(!results||!results.length){
+                roadEl.innerHTML='<div style="text-align:center;padding:20px;color:#999;">데이터 없음</div>';
+                return;
+              }
+              var cols=[];
+              var col=[];
+              var prev=null;
+              for(var i=0;i<results.length;i++){
+                var r=results[i];
+                var w=r.winner||r.w||'p';
+                if(prev&&w!==prev){cols.push(col);col=[];}
+                col.push(r);
+                prev=w;
+              }
+              if(col.length) cols.push(col);
+
+              var tbl=document.createElement('table');
+              tbl.className='bgl-table';
+              for(var row=0;row<MAX_ROWS;row++){
+                var tr=document.createElement('tr');
+                for(var c=0;c<cols.length;c++){
+                  var td=document.createElement('td');
+                  if(cols[c][row]){
+                    var d=cols[c][row];
+                    var w=d.winner||d.w||'p';
+                    var div=document.createElement('div');
+                    div.className=w==='b'?'bgl-b':'bgl-p';
+                    if(d.pp){var pp=document.createElement('i');pp.className='pp';div.appendChild(pp);}
+                    if(d.bp){var bp=document.createElement('i');bp.className='bp';div.appendChild(bp);}
+                    if(d.tie||d.t){var s=document.createElement('s');s.textContent=d.tie||d.t||'';div.appendChild(s);}
+                    td.appendChild(div);
+                  }
+                  tr.appendChild(td);
+                }
+                tbl.appendChild(tr);
+              }
+              roadEl.appendChild(tbl);
+            }
+
+            function numsToResults(nums){
+              if(!nums||!nums.length) return [];
+              var results=[];
+              for(var i=0;i<nums.length;i++){
+                var n=nums[i];
+                var w,pp=false,bp=false,tie=0;
+                if(n>=50){w='b';var rem=n-50;if(rem>=20){bp=true;rem-=20;}if(rem>=10){pp=true;rem-=10;}tie=rem;}
+                else if(n>=10){w='p';var rem=n-10;if(rem>=20){bp=true;rem-=20;}if(rem>=10){pp=true;}tie=0;}
+                else{w='p';tie=n;}
+                var r={w:w};
+                if(pp) r.pp=true;
+                if(bp) r.bp=true;
+                if(tie>0) r.t=tie;
+                results.push(r);
+              }
+              return results;
+            }
+
+            function loadData(){
+              var ctrl=new AbortController();
+              var timer=setTimeout(function(){ctrl.abort();},TIMEOUT);
+              fetch(BASE+'/data/room_1.json?t='+Date.now(),{signal:ctrl.signal})
+                .then(function(r){clearTimeout(timer);return r.json();})
+                .then(function(d){
+                  failCount=0;
+                  if(roomEl) roomEl.textContent='방 1';
+                  if(d&&d.results) renderRoad(d.results);
+                  else if(d&&d.nums) renderRoad(numsToResults(d.nums));
+                  else renderRoad([]);
+                })
+                .catch(function(){
+                  clearTimeout(timer);
+                  var ctrl2=new AbortController();
+                  var timer2=setTimeout(function(){ctrl2.abort();},TIMEOUT);
+                  fetch(GAUTH+'/data/room_1.json?t='+Date.now(),{signal:ctrl2.signal})
+                    .then(function(r){clearTimeout(timer2);return r.json();})
+                    .then(function(d){
+                      failCount=0;
+                      if(roomEl) roomEl.textContent='방 1';
+                      if(d&&d.results) renderRoad(d.results);
+                      else if(d&&d.nums) renderRoad(numsToResults(d.nums));
+                      else renderRoad([]);
+                    })
+                    .catch(function(){
+                      clearTimeout(timer2);
+                      failCount++;
+                      if(failCount>=3) showOffline();
+                    });
+                });
+            }
+
+            loadData();
+            setInterval(loadData,POLL_MS);
+          })();
+          JSEOF
+
           sha256sum /tmp/bgl.js
           wc -c /tmp/bgl.js
 
-          sshpass -e scp -o StrictHostKeyChecking=no /tmp/bgl.js root@$VPS_IP:$BASE/photo/bgl.js
-          sshpass -e scp -o StrictHostKeyChecking=no /tmp/bgl.js root@$VPS_IP:$BASE/photo2/bgl.js
-          sshpass -e scp -o StrictHostKeyChecking=no /tmp/bgl.js root@$VPS_IP:$BASE/photo3/bgl.js
-
-          $SSH "chown www-data:www-data $BASE/photo/bgl.js $BASE/photo2/bgl.js $BASE/photo3/bgl.js"
-
-          echo ""
-          echo "===== Deployed SHA ====="
-          $SSH "sha256sum $BASE/photo/bgl.js $BASE/photo2/bgl.js $BASE/photo3/bgl.js"
-
-      - name: Ensure room_1.json exists
-        run: |
           export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
           SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
           BASE="/var/www/sites/chamgyo/public"
 
-          $SSH "mkdir -p $BASE/photo/data && test -f $BASE/photo/data/room_1.json && echo 'room_1.json exists' || (echo '{\"nums\":[23,45,12,67,34,89,56,11,78,43,22,55,31,66,14,88,42,19,71,33,57,25,63,18,84,47,29,61,15,73,38,52,26,69,41,83,17,59,36,72,28,64,21,76,44,91,13,58,35,82,27,65,19,74,46,87],\"source\":\"local\"}' > $BASE/photo/data/room_1.json && chown www-data:www-data $BASE/photo/data/room_1.json && echo 'room_1.json created')"
+          echo "===== Deploy bgl.js ====="
+          sshpass -e scp -o StrictHostKeyChecking=no /tmp/bgl.js root@$VPS_IP:$BASE/photo/bgl.js
+          sshpass -e scp -o StrictHostKeyChecking=no /tmp/bgl.js root@$VPS_IP:$BASE/photo2/bgl.js
+          sshpass -e scp -o StrictHostKeyChecking=no /tmp/bgl.js root@$VPS_IP:$BASE/photo3/bgl.js
+          $SSH "chown www-data:www-data $BASE/photo/bgl.js $BASE/photo2/bgl.js $BASE/photo3/bgl.js"
+
+          echo "===== Deploy room_1.json with proper results format ====="
+          cat > /tmp/room_1.json << 'JSONEOF'
+          {"results":[{"w":"p"},{"w":"b"},{"w":"p"},{"w":"p","pp":true},{"w":"b"},{"w":"b","bp":true},{"w":"p"},{"w":"b"},{"w":"p","t":1},{"w":"b"},{"w":"b"},{"w":"p"},{"w":"p"},{"w":"b","pp":true},{"w":"b"},{"w":"p"},{"w":"b"},{"w":"p"},{"w":"p"},{"w":"b"},{"w":"b"},{"w":"b"},{"w":"p"},{"w":"p","bp":true},{"w":"b"},{"w":"p"},{"w":"b"},{"w":"b"},{"w":"p"},{"w":"p"},{"w":"b","t":1},{"w":"p"},{"w":"b"},{"w":"b"},{"w":"p"},{"w":"p"},{"w":"b"},{"w":"p"},{"w":"b"},{"w":"b"},{"w":"p"},{"w":"p"},{"w":"b"},{"w":"b"},{"w":"p"},{"w":"b"},{"w":"p"},{"w":"p"},{"w":"b"},{"w":"p"},{"w":"b"},{"w":"b"},{"w":"p"},{"w":"b"},{"w":"p"},{"w":"p"}],"source":"local"}
+          JSONEOF
+          sshpass -e scp -o StrictHostKeyChecking=no /tmp/room_1.json root@$VPS_IP:$BASE/photo/data/room_1.json
+          $SSH "chown www-data:www-data $BASE/photo/data/room_1.json"
+
+          echo "===== Verify ====="
+          $SSH "sha256sum $BASE/photo/bgl.js $BASE/photo2/bgl.js $BASE/photo3/bgl.js"
 
       - name: Purge CF cache
         run: |
@@ -64,9 +169,17 @@ jobs:
           echo "===== bgl.js ====="
           curl -sS -o /tmp/bgl.js -w "HTTP %{http_code} | size %{size_download} | cf-cache: %{header.cf-cache-status}\n" "https://$DOMAIN/photo/bgl.js?t=$(date +%s)"
           sha256sum /tmp/bgl.js
-          grep -c 'room_1.json' /tmp/bgl.js && echo "DIRECT JSON LOAD OK" || echo "MISSING"
+          grep -c 'bgl-p\|bgl-b\|bgl-table' /tmp/bgl.js && echo "PROPER CSS CLASSES OK" || echo "MISSING CSS CLASSES"
 
           echo ""
           echo "===== room_1.json ====="
           curl -sS -o /tmp/room.json -w "HTTP %{http_code} | size %{size_download} | cf-cache: %{header.cf-cache-status}\n" "https://$DOMAIN/photo/data/room_1.json?t=$(date +%s)"
-          python3 -c "import json;d=json.load(open('/tmp/room.json'));print('nums count:', len(d.get('nums',[])))" 2>/dev/null || cat /tmp/room.json
+          python3 -c "import json;d=json.load(open('/tmp/room.json'));print('results count:', len(d.get('results',d.get('nums',[]))))" 2>/dev/null || cat /tmp/room.json
+
+          echo ""
+          echo "===== CAH_1.html ====="
+          curl -sS -o /dev/null -w "HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/CAH_1.html"
+
+          echo ""
+          echo "===== login.html ====="
+          curl -sS -o /dev/null -w "HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/login.html"
