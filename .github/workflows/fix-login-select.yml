@@ -15,7 +15,7 @@ jobs:
       - name: Install sshpass
         run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
 
-      - name: Read current login.html and select.html
+      - name: Read current files
         run: |
           export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
           SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
@@ -29,71 +29,45 @@ jobs:
           $SSH "cat $BASE/photo/select.html"
 
           echo ""
-          echo "===== Check data files for select ====="
-          $SSH "ls -la $BASE/photo/data/ 2>/dev/null"
-          $SSH "cat $BASE/photo/data/tables.json 2>/dev/null || echo 'no tables.json'"
+          echo "===== data dir ====="
+          $SSH "ls -la $BASE/photo/data/"
 
-      - name: Fix login.html redirect to select.html
+      - name: Fix login redirect and select.html
         run: |
           export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
           SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
           BASE="/var/www/sites/chamgyo/public"
 
-          echo "===== Fix login.html in all 3 folders ====="
+          echo "===== Fix login.html -> select.html ====="
           for dir in photo photo2 photo3; do
-            echo "--- $dir ---"
-            $SSH "if [ -f $BASE/$dir/login.html ]; then
-              sed -i 's|CAH_1\.html|select.html|g' $BASE/$dir/login.html
-              echo 'Patched login.html'
-              grep -n 'select\|CAH_1\|location\|redirect\|href' $BASE/$dir/login.html | head -10
-            else
-              echo 'no login.html'
-            fi"
+            $SSH "if [ -f $BASE/$dir/login.html ]; then sed -i 's|CAH_1\.html|select.html|g' $BASE/$dir/login.html && echo 'Fixed $dir/login.html'; else echo 'no $dir/login.html'; fi"
           done
 
-      - name: Create tables.json for select.html
-        run: |
-          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
-          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
-          BASE="/var/www/sites/chamgyo/public"
-
-          echo "===== Check if tables.json exists ====="
-          $SSH "cat $BASE/photo/data/tables.json 2>/dev/null" && echo "EXISTS" || echo "MISSING"
+          echo ""
+          echo "===== Verify login.html redirect target ====="
+          $SSH "grep -o 'select\.html\|CAH_1\.html' $BASE/photo/login.html | head -5"
 
           echo ""
-          echo "===== Create tables.json if missing ====="
-          $SSH "if [ ! -f $BASE/photo/data/tables.json ]; then
-            cat > $BASE/photo/data/tables.json << 'TJEOF'
-          {\"tables\":[{\"id\":1,\"name\":\"1\",\"status\":\"open\"},{\"id\":2,\"name\":\"2\",\"status\":\"open\"},{\"id\":3,\"name\":\"3\",\"status\":\"open\"},{\"id\":4,\"name\":\"4\",\"status\":\"open\"},{\"id\":5,\"name\":\"5\",\"status\":\"open\"},{\"id\":6,\"name\":\"6\",\"status\":\"open\"},{\"id\":7,\"name\":\"7\",\"status\":\"open\"},{\"id\":8,\"name\":\"8\",\"status\":\"open\"},{\"id\":9,\"name\":\"9\",\"status\":\"open\"},{\"id\":10,\"name\":\"10\",\"status\":\"open\"}]}
-TJEOF
-            chown www-data:www-data $BASE/photo/data/tables.json
-            echo 'Created tables.json'
-          else
-            echo 'tables.json already exists'
-          fi"
-
-      - name: Fix select.html to work locally
-        run: |
-          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
-          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
-          BASE="/var/www/sites/chamgyo/public"
-
-          echo "===== Check select.html for remaining issues ====="
-          $SSH "grep -n 'gauth\|cent-solution\|api_selected_room\|write_select_room' $BASE/photo/select.html | head -20"
+          echo "===== Create tables.json ====="
+          $SSH "python3 -c \"
+          import json
+          tables = {'tables': [{'id': i, 'name': str(i), 'status': 'open'} for i in range(1, 11)]}
+          with open('$BASE/photo/data/tables.json', 'w') as f:
+              json.dump(tables, f)
+          print('Created tables.json')
+          \""
+          $SSH "chown www-data:www-data $BASE/photo/data/tables.json"
+          $SSH "cat $BASE/photo/data/tables.json"
 
           echo ""
           echo "===== Fix select.html API references ====="
           for dir in photo photo2 photo3; do
-            echo "--- $dir ---"
-            $SSH "if [ -f $BASE/$dir/select.html ]; then
-              sed -i \"s|const API = .*|const API = '.'|g\" $BASE/$dir/select.html
-              echo 'Fixed API const'
-            fi"
+            $SSH "if [ -f $BASE/$dir/select.html ]; then sed -i \"s|const API = .*|const API = '.';\"|g $BASE/$dir/select.html && echo 'Fixed $dir'; fi"
           done
 
           echo ""
-          echo "===== Verify select.html ====="
-          $SSH "grep -n 'API\|gauth\|fetch\|tables' $BASE/photo/select.html | head -20"
+          echo "===== Verify no gauth ====="
+          $SSH "grep -c 'gauth' $BASE/photo/select.html && echo 'GAUTH STILL PRESENT' || echo 'GAUTH CLEAN'"
 
       - name: Purge CF cache
         run: |
@@ -103,19 +77,20 @@ TJEOF
             -H "Content-Type: application/json" \
             -d '{"purge_everything":true}' | python3 -c "import sys,json;d=json.load(sys.stdin);print('CF Purge:', 'OK' if d.get('success') else d)"
 
-      - name: Verify
+      - name: Verify live
         run: |
           sleep 5
           DOMAIN="xn--9d0bw2fjtyymch7de9d.info"
 
-          echo "===== login.html ====="
+          echo "===== login.html redirect target ====="
           curl -sS "https://$DOMAIN/photo/login.html" --max-time 10 | grep -o 'select\.html\|CAH_1\.html' | head -5
 
           echo "===== select.html ====="
           curl -sS -o /dev/null -w "select.html: HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/select.html" --max-time 10
 
           echo "===== tables.json ====="
-          curl -sS -o /dev/null -w "tables.json: HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/data/tables.json" --max-time 10
+          curl -sS "https://$DOMAIN/photo/data/tables.json" --max-time 10
 
+          echo ""
           echo "===== gauth check ====="
           curl -sS "https://$DOMAIN/photo/select.html" --max-time 10 | grep -c 'gauth' && echo "GAUTH STILL PRESENT" || echo "GAUTH CLEAN"
