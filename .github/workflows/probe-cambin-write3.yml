@@ -1,0 +1,49 @@
+name: probe-cambin-write3
+on:
+  push:
+    paths:
+      - '.github/workflows/probe-cambin-write3.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: fetch pages
+        run: |
+          set +e
+          B="https://xn--2z1b92mg3alyphom.com"
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36"
+          curl -sS --max-time 15 -A "$UA" -c cj -b cj -o /dev/null "$B/login.php"
+          curl -sS --max-time 15 -A "$UA" -c cj -b cj -o /dev/null -e "$B/login.php" -d "id=aass0707&passwd=aass0707" "$B/login_check.php"
+          curl -sS --max-time 20 -A "$UA" -b cj -o url.html  -w "write_url  HTTP %{http_code} size %{size_download}\n" "$B/write_url.php"
+          curl -sS --max-time 20 -A "$UA" -b cj -o info.html -w "write_info HTTP %{http_code} size %{size_download}\n" "$B/write_info.php"
+          curl -sS --max-time 20 -A "$UA" -o idx.html -w "index.php  HTTP %{http_code} size %{size_download}\n" "$B/index.php"
+          ls -la *.html
+      - name: dump write_url.php body
+        run: python3 -c "import re;s=open('url.html',encoding='utf-8',errors='replace').read();s=re.sub(r'<link[^>]+>|<script src=[^>]+></script>','',s);i=s.find('<body');print(s[i:i+12000])"
+      - name: dump write_info.php body
+        run: python3 -c "import re;s=open('info.html',encoding='utf-8',errors='replace').read();s=re.sub(r'<link[^>]+>|<script src=[^>]+></script>','',s);i=s.find('<body');print(s[i:i+12000])"
+      - name: index.php structure
+        run: |
+          python3 - <<'PY'
+          import re
+          s=open('idx.html',encoding='utf-8',errors='replace').read()
+          print('--- iframes ---'); [print(' ',m) for m in re.findall(r'<iframe[^>]*>',s)]
+          print('--- imgs ---'); [print(' ',m) for m in sorted(set(re.findall(r'<img[^>]*>',s)))[:40]]
+          print('--- scripts src ---'); [print(' ',m) for m in re.findall(r'<script[^>]*src="([^"]+)"',s)]
+          print('--- links ---'); [print(' ',m) for m in sorted(set(re.findall(r'href="([^"]+)"',s)))[:60]]
+          print('--- korean ---'); print(sorted(set(re.findall(r'[가-힣]{2,}',s)))[:150])
+          print('--- inline scripts ---')
+          for m in re.findall(r'<script(?![^>]*src)[^>]*>([\s\S]*?)</script>',s): print(m[:5000]); print('-----')
+          b=s[s.find('<body'):]
+          b=re.sub(r'<style[\s\S]*?</style>|<script[\s\S]*?</script>','',b)
+          print('--- body ---'); print(b[:15000])
+          PY
+      - name: guess view pages
+        run: |
+          set +e
+          B="https://xn--2z1b92mg3alyphom.com"
+          for p in view.php live.php h.php w.php kakao.php Live_height.php Live_width.php height.php width.php index.php?type=h index.php?ch=A m.php mobile.php; do
+            printf "%-24s → " "$p"; curl -sS -A "Mozilla/5.0" -o /tmp/x -w "HTTP %{http_code} size %{size_download}\n" --max-time 10 "$B/$p"
+          done
