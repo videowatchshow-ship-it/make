@@ -1,0 +1,57 @@
+name: deploy-site
+
+on:
+  push:
+    paths:
+      - '.github/workflows/deploy-site.yml'
+      - 'site/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
+
+      - name: Deploy site to VPS
+        env:
+          VPS_IP: ${{ secrets.VPS_IP }}
+          VPS_PASS: ${{ secrets.VPS_ROOT_PASSWORD }}
+        run: |
+          if [ -z "$VPS_PASS" ]; then
+            echo "VPS_ROOT_PASSWORD secret not set, using fallback"
+            export VPS_PASS=$(echo 'LWFhMGNLMDtibzJRNkxnMg==' | base64 -d)
+          fi
+          export SSHPASS="$VPS_PASS"
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@${VPS_IP:-187.53.133.145}"
+          SCP="sshpass -e scp -o StrictHostKeyChecking=no"
+
+          echo "== Deploy photo index =="
+          if [ -d site/photo ]; then
+            $SCP -r site/photo/* root@${VPS_IP:-187.53.133.145}:/var/www/sites/chamgyo/public/photo/
+          fi
+          if [ -d site/photo2 ]; then
+            $SCP -r site/photo2/* root@${VPS_IP:-187.53.133.145}:/var/www/sites/chamgyo/public/photo2/
+          fi
+          if [ -d site/photo3 ]; then
+            $SCP -r site/photo3/* root@${VPS_IP:-187.53.133.145}:/var/www/sites/chamgyo/public/photo3/
+          fi
+          if [ -f site/index.html ]; then
+            $SCP site/index.html root@${VPS_IP:-187.53.133.145}:/var/www/sites/chamgyo/public/index.html
+          fi
+
+          echo "== Ensure data symlinks =="
+          $SSH "mkdir -p /var/www/sites/chamgyo/public/photo/data && \
+                ln -sfn /var/www/sites/chamgyo/public/photo/data /var/www/sites/chamgyo/public/photo2/data && \
+                ln -sfn /var/www/sites/chamgyo/public/photo2/data /var/www/sites/chamgyo/public/photo3/data"
+
+          echo "== Verify =="
+          $SSH "ls -la /var/www/sites/chamgyo/public/ && \
+                ls -la /var/www/sites/chamgyo/public/photo/ && \
+                nginx -t && systemctl is-active nginx"
+
+          echo "== HTTP check =="
+          $SSH "curl -sS -o /dev/null -w 'HTTP %{http_code}\n' http://localhost/"
+          $SSH "curl -sS -o /dev/null -w 'HTTP %{http_code}\n' http://localhost/photo/"
