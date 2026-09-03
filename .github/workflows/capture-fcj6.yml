@@ -19,7 +19,7 @@ jobs:
           cat > cap.js <<'JS'
           const { chromium } = require('playwright'); const fs = require('fs'); const path = require('path');
           (async () => {
-            const b = await chromium.launch();
+            const b = await chromium.launch({ args: ['--use-gl=swiftshader','--enable-webgl','--ignore-gpu-blocklist'] });
             const seen = new Set(); const logs = [];
             for (const [room, w, h] of [[101,1920,1080],[61,1920,1080],[101,1080,1920]]) {
               const p = await b.newPage({ viewport: { width: w, height: h }, userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36' });
@@ -48,7 +48,7 @@ jobs:
         run: |
           git config user.name "github-actions"; git config user.email "actions@github.com"
           find ref/fcj6_assets -type f -size +8M -delete
-          git add ref
+          git add -f ref
           git commit -m "ref: fcj6 실제 렌더 스크린샷 + 로드된 이미지/아틀라스 자산 (용8·용7·2장6·3장6·타이·페어 원본 이미지 확인용)" || exit 0
           git pull --rebase origin ${GITHUB_REF_NAME} || true
           git push origin HEAD:${GITHUB_REF_NAME}
