@@ -1,0 +1,39 @@
+name: probe-xjh-format
+on:
+  push:
+    paths:
+      - '.github/workflows/probe-xjh-format.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: raw xjh responses for all live rooms
+        run: |
+          set +e
+          A="https://xjh.liveview2024.vip/api/pub"; H1="Origin: https://fcj6.oqogyf.com"; H2="Referer: https://fcj6.oqogyf.com/"
+          for RID in 23 25 26 27 28 29 30 31 51 61 62 100 101 102 103 105 106 107 108 109 110; do
+            R=$(curl -sS --max-time 8 -H "$H1" -H "$H2" "$A/get_newly_issue?room_id=$RID")
+            IID=$(echo "$R" | python3 -c "import sys,json;d=json.load(sys.stdin);print((d.get('data') or {}).get('id',''))" 2>/dev/null)
+            echo "=== room $RID newly_issue: $(echo "$R" | head -c 700)"
+            [ -n "$IID" ] && { echo "--- open_nums issue=$IID:"; curl -sS --max-time 8 -H "$H1" -H "$H2" "$A/get_open_nums?issue_id=$IID" | head -c 2500; echo; }
+          done
+      - name: how the fcj6 client interprets nums (bundle search)
+        run: |
+          curl -sS --max-time 30 -A "Mozilla/5.0" -o m.js "https://fcj6.oqogyf.com/assets/main/index.js"
+          python3 - <<'PY'
+          s=open('m.js',encoding='utf-8',errors='replace').read()
+          def ctx(key,b=300,a=600,n=3):
+              i=0;c=0
+              while c<n:
+                  i=s.find(key,i)
+                  if i<0: break
+                  print(f'\n===== {key} @{i} =====\n'+s[max(0,i-b):i+a]); i+=len(key); c+=1
+          for k in ['updateFromOpenNum','open_nums','cachedRoadMap','charAt(0)','"P"','"B"','"T"','banker','player','pair','nums_with_detail','detail']:
+              ctx(k)
+          PY
+      - name: compare with our server files
+        run: |
+          D="https://xn--9d0bw2fjtyymch7de9d.info/photo/data"
+          for k in sj_25 sj_61 sj_110 xtd_10 xtd_15; do echo "--- $k"; curl -sS "$D/room_$k.json"; echo; done
