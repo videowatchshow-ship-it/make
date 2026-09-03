@@ -1,0 +1,67 @@
+name: find-original-main
+on:
+  push:
+    paths:
+      - '.github/workflows/find-original-main.yml'
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    env:
+      VPS_IP: "187.53.133.145"
+      VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+
+      - name: Search VPS for original content
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+
+          echo "===== Current main index.html ====="
+          $SSH "cat /var/www/sites/chamgyo/public/index.html" || true
+
+          echo ""
+          echo "===== All index.html files on server ====="
+          $SSH "find / -name 'index.html' -not -path '/proc/*' -not -path '/sys/*' 2>/dev/null | head -50" || true
+
+          echo ""
+          echo "===== Backup files ====="
+          $SSH "find / -name '*.bak' -o -name '*.orig' -o -name '*.old' -o -name '*.backup' 2>/dev/null | grep -v proc | grep -v sys | head -30" || true
+
+          echo ""
+          echo "===== /var/www full tree ====="
+          $SSH "find /var/www -type f 2>/dev/null | sort" || true
+
+          echo ""
+          echo "===== /root and /home HTML files ====="
+          $SSH "find /root /home -name '*.html' 2>/dev/null | head -20" || true
+
+          echo ""
+          echo "===== Nginx configs ====="
+          $SSH "cat /etc/nginx/sites-enabled/* 2>/dev/null || cat /etc/nginx/conf.d/* 2>/dev/null || echo 'no nginx configs'" || true
+
+          echo ""
+          echo "===== Apache configs ====="
+          $SSH "cat /etc/apache2/sites-enabled/* 2>/dev/null || echo 'no apache configs'" || true
+
+          echo ""
+          echo "===== Git repos on server ====="
+          $SSH "find / -name '.git' -type d -not -path '/proc/*' -not -path '/sys/*' 2>/dev/null | head -10" || true
+
+          echo ""
+          echo "===== Archive files ====="
+          $SSH "find / -name '*.tar*' -o -name '*.zip' -o -name '*.gz' 2>/dev/null | grep -v proc | grep -v sys | grep -v cache | head -20" || true
+
+          echo ""
+          echo "===== /tmp HTML files ====="
+          $SSH "find /tmp -name '*.html' 2>/dev/null | head -10" || true
+
+          echo ""
+          echo "===== Docker containers ====="
+          $SSH "docker ps -a 2>/dev/null || echo 'no docker'" || true
+
+          echo ""
+          echo "===== Recently modified files ====="
+          $SSH "find /var/www -type f -mtime -7 -ls 2>/dev/null | head -30" || true
