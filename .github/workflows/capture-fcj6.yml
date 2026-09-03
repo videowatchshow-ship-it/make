@@ -59,5 +59,5 @@ jobs:
           find ref/fcj6_assets -type f -size +8M -delete
           git add -f ref
           git commit -m "ref: fcj6 실제 렌더 스크린샷 + 로드된 이미지/아틀라스 자산 (용8·용7·2장6·3장6·타이·페어 원본 이미지 확인용)" || exit 0
-          git pull --rebase origin ${GITHUB_REF_NAME} || true
+          git stash -u -q || true; git pull --rebase origin ${GITHUB_REF_NAME} || true
           git push origin HEAD:${GITHUB_REF_NAME}

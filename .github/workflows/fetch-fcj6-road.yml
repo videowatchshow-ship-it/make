@@ -39,5 +39,5 @@ jobs:
           git config user.name "github-actions"; git config user.email "actions@github.com"
           git add -f ref/fcj6_road
           git commit -m "ref: fcj6 Textures/Road 원본 스프라이트(珠子base/路格子/Road_Round/Pair*/下三路路子/1009x) + import 메타" || exit 0
-          git pull --rebase origin ${GITHUB_REF_NAME} || true
+          git stash -u -q || true; git pull --rebase origin ${GITHUB_REF_NAME} || true
           git push origin HEAD:${GITHUB_REF_NAME}
