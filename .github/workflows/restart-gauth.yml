@@ -1,0 +1,81 @@
+name: restart-gauth
+on:
+  push:
+    paths:
+      - '.github/workflows/restart-gauth.yml'
+
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Restart gauth server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GAUTH_HOST }}
+          username: ${{ secrets.GAUTH_USER }}
+          key: ${{ secrets.GAUTH_SSH_KEY }}
+          script_stop: false
+          command_timeout: 3m
+          script: |
+            echo "===== Server info ====="
+            hostname
+            ip addr show | grep 'inet ' | head -5
+            uptime
+            free -h
+
+            echo ""
+            echo "===== gauth systemd service ====="
+            sudo systemctl status gauth --no-pager 2>&1 || echo "service not found or stopped"
+
+            echo ""
+            echo "===== Check processes ====="
+            ps aux | grep -E 'node|gauth|rebrowser' | grep -v grep || echo "no node/gauth processes"
+
+            echo ""
+            echo "===== Check port 4000 ====="
+            sudo ss -tlnp | grep 4000 || echo "port 4000 not listening"
+
+            echo ""
+            echo "===== Restart gauth service ====="
+            sudo systemctl restart gauth 2>&1 || echo "restart failed, trying manual start"
+            sleep 3
+
+            echo ""
+            echo "===== Post-restart status ====="
+            sudo systemctl status gauth --no-pager 2>&1 || true
+            sudo ss -tlnp | grep 4000 || echo "port 4000 still not listening"
+
+            echo ""
+            echo "===== Check Xvfb ====="
+            pgrep -f "Xvfb :99" || echo "Xvfb not running, starting..."
+            if ! pgrep -f "Xvfb :99" >/dev/null 2>&1; then
+              Xvfb :99 -screen 0 1920x1080x24 -ac &
+              sleep 1
+              echo "Xvfb started"
+            fi
+
+            echo ""
+            echo "===== Retry restart with display ====="
+            export DISPLAY=:99
+            sudo systemctl restart gauth 2>&1 || true
+            sleep 5
+            sudo systemctl status gauth --no-pager 2>&1 || true
+            sudo ss -tlnp | grep 4000 || echo "port 4000 still not listening after retry"
+
+            echo ""
+            echo "===== Check nginx ====="
+            sudo systemctl status nginx --no-pager 2>&1 | head -10 || true
+            sudo nginx -t 2>&1 || true
+
+            echo ""
+            echo "===== Test local endpoint ====="
+            curl -sS -o /dev/null -w "localhost:4000 → HTTP %{http_code}\n" http://localhost:4000/ --max-time 5 2>&1 || echo "localhost:4000 unreachable"
+
+      - name: Test gauth externally
+        run: |
+          sleep 5
+          echo "===== External test ====="
+          curl -sS -o /dev/null -w "gauth main → HTTP %{http_code} | size %{size_download}\n" "https://gauth.cent-solution.online/" --max-time 15 2>&1 || echo "STILL DOWN"
+          curl -sS -o /tmp/room.json -w "api_selected_room → HTTP %{http_code}\n" "https://gauth.cent-solution.online/photo/api_selected_room.php?ch=01" --max-time 15 2>&1 || echo "API STILL DOWN"
+          cat /tmp/room.json 2>/dev/null || true
