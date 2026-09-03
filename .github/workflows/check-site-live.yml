@@ -1,0 +1,58 @@
+name: check-site-live
+
+on:
+  push:
+    paths:
+      - '.github/workflows/check-site-live.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check site accessibility
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+        run: |
+          DOMAIN="xn--9d0bw2fjtyymch7de9d.info"
+          VPS_IP="187.53.133.145"
+
+          echo "== Direct VPS HTTP =="
+          curl -sS -o /dev/null -w "HTTP %{http_code} size=%{size_download} time=%{time_total}s\n" \
+            --connect-timeout 15 "http://$VPS_IP/"
+
+          echo "== Direct VPS /photo/ =="
+          curl -sS -o /dev/null -w "HTTP %{http_code} size=%{size_download} time=%{time_total}s\n" \
+            --connect-timeout 15 "http://$VPS_IP/photo/"
+
+          echo "== HTTPS domain root =="
+          curl -sS -o /dev/null -D /tmp/h1.txt -w "HTTP %{http_code} size=%{size_download} time=%{time_total}s\n" \
+            --connect-timeout 30 --max-time 60 "https://$DOMAIN/" || echo "FAILED"
+          cat /tmp/h1.txt 2>/dev/null | grep -iE "^HTTP|cf-cache|server|location" || true
+
+          echo "== HTTPS /photo/ =="
+          curl -sS -o /dev/null -D /tmp/h2.txt -w "HTTP %{http_code} size=%{size_download} time=%{time_total}s\n" \
+            --connect-timeout 30 --max-time 60 "https://$DOMAIN/photo/" || echo "FAILED"
+          cat /tmp/h2.txt 2>/dev/null | grep -iE "^HTTP|cf-cache|server|location" || true
+
+          echo "== HTTPS /photo2/ =="
+          curl -sS -o /dev/null -D /tmp/h3.txt -w "HTTP %{http_code} size=%{size_download} time=%{time_total}s\n" \
+            --connect-timeout 30 --max-time 60 "https://$DOMAIN/photo2/" || echo "FAILED"
+          cat /tmp/h3.txt 2>/dev/null | grep -iE "^HTTP|cf-cache|server|location" || true
+
+          echo "== HTTP domain (should redirect to HTTPS) =="
+          curl -sS -o /dev/null -D /tmp/h4.txt -w "HTTP %{http_code} size=%{size_download} time=%{time_total}s\n" \
+            --connect-timeout 30 --max-time 60 "http://$DOMAIN/" || echo "FAILED"
+          cat /tmp/h4.txt 2>/dev/null | grep -iE "^HTTP|cf-cache|server|location" || true
+
+          echo "== DNS resolution =="
+          dig +short "$DOMAIN" A || nslookup "$DOMAIN" || true
+
+          echo "== CF SSL setting check =="
+          ZONE_ID="7e5faed2d3d4d6da7aceb4ddde81a62b"
+          curl -sS "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/settings/ssl" \
+            -H "Authorization: Bearer $CF_TOKEN" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+r=d.get('result',{})
+print(f\"SSL mode: {r.get('value','?')}, cert: {r.get('certificate_status','?')}\")
+" || true
