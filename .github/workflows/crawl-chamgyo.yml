@@ -1,0 +1,62 @@
+name: crawl-chamgyo
+
+on:
+  push:
+    paths:
+      - '.github/workflows/crawl-chamgyo.yml'
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check what content exists on old site via CF cache
+        run: |
+          echo "== Check main domain =="
+          for path in / /photo/ /photo2/ /photo3/ /photo/index.html /photo2/index.html /photo3/index.html /photo/data/ /photo2/data/ /photo/CAH_1.html /photo2/CAH_1.html; do
+            code=$(curl -sS -o /tmp/resp.html -w '%{http_code}|%{size_download}' \
+              -H 'User-Agent: Mozilla/5.0' \
+              --max-time 10 \
+              "https://xn--9d0bw2fjtyymch7de9d.info${path}" 2>/dev/null || echo 'ERR')
+            echo "$path -> $code"
+            if echo "$code" | grep -q '^200'; then
+              echo "  Content preview:"
+              head -c 500 /tmp/resp.html
+              echo
+            fi
+          done
+
+          echo ""
+          echo "== Check via direct VPS IP =="
+          for path in / /photo/ /photo2/; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' \
+              --max-time 10 \
+              "http://187.53.133.145${path}" 2>/dev/null || echo 'ERR')
+            echo "VPS $path -> HTTP $code"
+          done
+
+      - name: Try wget mirror of accessible content
+        run: |
+          mkdir -p /tmp/mirror
+          cd /tmp/mirror
+          wget --mirror --no-parent --convert-links --adjust-extension \
+            --reject '*.zip,*.tar,*.gz,*.mp4,*.avi' \
+            --max-size=5m --timeout=15 --tries=2 \
+            -e robots=off \
+            --header='User-Agent: Mozilla/5.0' \
+            "https://xn--9d0bw2fjtyymch7de9d.info/photo/" 2>&1 | tail -50 || true
+          wget --mirror --no-parent --convert-links --adjust-extension \
+            --reject '*.zip,*.tar,*.gz,*.mp4,*.avi' \
+            --max-size=5m --timeout=15 --tries=2 \
+            -e robots=off \
+            --header='User-Agent: Mozilla/5.0' \
+            "https://xn--9d0bw2fjtyymch7de9d.info/photo2/" 2>&1 | tail -50 || true
+          echo "== Mirror result =="
+          find . -type f | head -100
+          du -sh . || true
+
+      - name: Check gauth server for chamgyo files
+        run: |
+          echo "== Check if gauth server has chamgyo content =="
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+            "https://gauth.cent-solution.online/" 2>/dev/null || echo 'ERR')
+          echo "gauth server: HTTP $code"
