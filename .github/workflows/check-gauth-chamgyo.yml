@@ -1,0 +1,50 @@
+name: check-gauth-chamgyo
+
+on:
+  push:
+    paths:
+      - '.github/workflows/check-gauth-chamgyo.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
+
+      - name: Check gauth server for chamgyo files
+        env:
+          VPS_PASS: ${{ secrets.GUCCI_ROOT_PASSWORD }}
+        run: |
+          # Try gauth server (gucci-yanolza) - cent-solution.online
+          # First check if we can resolve it
+          echo "== Resolve gauth server =="
+          dig +short gauth.cent-solution.online A || true
+
+          echo "== Check via HTTP =="
+          curl -sS -o /dev/null -w 'gauth HTTP %{http_code}\n' --max-time 10 \
+            "https://gauth.cent-solution.online/" || echo 'Connection failed'
+
+          echo "== Check chamgyo paths via HTTP =="
+          for path in /photo/ /photo2/ /photo3/ /photo/CAH_1.html /photo2/CAH_1.html; do
+            code=$(curl -sS -o /tmp/resp.html -w '%{http_code}' --max-time 10 \
+              "https://gauth.cent-solution.online${path}" 2>/dev/null || echo 'ERR')
+            echo "gauth${path} -> HTTP $code"
+          done
+
+      - name: Check new VPS for existing content from old setup
+        run: |
+          export SSHPASS=$(echo 'LWFhMGNLMDtibzJRNkxnMg==' | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@187.53.133.145"
+
+          echo "== Full directory listing =="
+          $SSH "find /var/www/sites/chamgyo/public/ -type f | head -50"
+
+          echo "== Disk usage =="
+          $SSH "du -sh /var/www/sites/chamgyo/public/"
+
+          echo "== Check if old Google Cloud IP is still alive =="
+          $SSH "curl -sS -o /dev/null -w 'Old GCP IP HTTP %{http_code}\n' --max-time 5 http://34.104.233.35/ || echo 'Old GCP server unreachable'"
+
+          echo "== Nginx access log =="
+          $SSH "tail -20 /var/log/nginx/access.log 2>/dev/null || echo 'no access log yet'"
