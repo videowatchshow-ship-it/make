@@ -42,19 +42,19 @@ jobs:
               for r in ex.map(probe, range(1,301)):
                   if r: live.append(r)
           live.sort()
-          print('성천지 live rooms:', [r for r,_ in live], 'count', len(live))
+          print('fcj6/xjh live rooms:', [r for r,_ in live], 'count', len(live))
           for r,x in live[:3]: print(' sample', r, json.dumps(x, ensure_ascii=False)[:300])
-          # 100번대 = 성천지, 그 외(20~60번대) = 뉴싱지  (둘 다 xjh 원본)
-          sc_rooms=[{'id':r,'name':x['room_name'] or str(r)} for r,x in live if r>=100]
-          sn_rooms=[{'id':r,'name':x['room_name'] or str(r)} for r,x in live if r<100]
+          # fcj6.oqogyf.com/?room_id=N (xjh API) = 싱지(1~99) · 뉴싱지(100번대)
+          sj_rooms=[{'id':r,'name':x['room_name'] or str(r)} for r,x in live if r<100]
+          nsj_rooms=[{'id':r,'name':x['room_name'] or str(r)} for r,x in live if r>=100]
+          # 캄보디아빈.com 그림장 = gs.xtd6688.com luzhu tableId  → 성천지
           xtd_map={"10":10,"11":11,"12":12,"15":15,"16":16,"17":87,"18":18,"19":89,"20":20,"21":21,"22":22,"23":23,"25":25,"26":26,"27":27,"55":31,"66":32,"77":33,"88":34,"99":35}
           xtd_kind={"10":"21점","16":"용호"}
           xtd_rooms=[{'id':int(k),'api':v,'name':k,'kind':xtd_kind.get(k,'')} for k,v in xtd_map.items()]
           tables={'venues':[
-            {'key':'sc','name':'성천지','source':'sc','rooms':sc_rooms},
-            {'key':'xtd','name':'싱지','source':'xtd','rooms':xtd_rooms},
-            {'key':'sn','name':'뉴싱지','source':'sc','rooms':sn_rooms},
-            {'key':'gr','name':'그림장','source':'','rooms':[]}]}
+            {'key':'xtd','name':'성천지','source':'xtd','rooms':xtd_rooms},
+            {'key':'sj','name':'싱지','source':'sc','rooms':sj_rooms},
+            {'key':'nsj','name':'뉴싱지','source':'sc','rooms':nsj_rooms}]}
           json.dump(tables, open('tables.json','w'), ensure_ascii=False, indent=1)
           PY
           echo "--- tables.json ---"; head -c 1500 tables.json; echo
