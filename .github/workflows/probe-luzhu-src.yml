@@ -9,25 +9,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: fetch luzhu pc.html + assets
+      - name: fetch
         run: |
           set +e
           B="https://gs.xtd6688.com/luzhu/en"; UA="Mozilla/5.0"
           mkdir -p out
-          curl -sS --max-time 20 -A "$UA" -o out/pc.html -w "pc.html HTTP %{http_code} size %{size_download}\n" "$B/pc.html?tableId=18"
-          for a in $(grep -oE '(src|href)="[^"]+"' out/pc.html | sed -E 's/^[a-z]+="//;s/"$//' | grep -v '^http' | sort -u); do
-            n=$(echo "$a" | tr '/?' '__'); curl -sS --max-time 20 -A "$UA" -o "out/$n" -w "$a HTTP %{http_code} size %{size_download}\n" "$B/$a"
+          for a in static/css/table_for_pc.css static/js/config_for_pc.js static/js/make_bg_for_pc.js static/js/zou_pc.js static/js/ajax_base.js static/js/set_video.js static/js/zou_base.js; do
+            n=$(basename "$a"); curl -sS --max-time 20 -A "$UA" -o "out/$n" -w "$a HTTP %{http_code} size %{size_download}\n" "$B/$a"
           done
-          # css 안 이미지 목록
-          grep -ohE 'url\([^)]+\)' out/* 2>/dev/null | sort -u | head -60
-          ls -la out
-      - name: dump all
-        run: |
-          for f in out/*; do
-            echo; echo "==================== $f ($(stat -c%s "$f") bytes)"
-            case "$f" in *.png|*.jpg|*.gif|*.ico|*.woff*|*.ttf) echo "(binary)";; *) head -c 60000 "$f"; echo;; esac
+          echo "--- css url() refs ---"; grep -ohE 'url\([^)]+\)' out/*.css | sort -u
+          for u in $(grep -ohE 'url\(["'"'"']?[^)"'"'"']+' out/*.css | sed -E 's/url\(["'"'"']?//' | sort -u | head -30); do
+            case "$u" in http*) U="$u";; /*) U="https://gs.xtd6688.com$u";; *) U="$B/static/css/$u";; esac
+            printf "%-70s " "$U"; curl -sS -o /dev/null -w "HTTP %{http_code} size %{size_download} %{content_type}\n" --max-time 15 -A "$UA" "$U"
           done
-      - name: sample api data table 18
-        run: |
-          curl -sS --max-time 10 -H "Origin: https://gs.xtd6688.com" -H "Referer: https://gs.xtd6688.com/luzhu/zh/pc.html" -A "Mozilla/5.0" "https://api.xtd6688.com/api/diantou/table/getData/gameType/3/tableId/18/xue/null"; echo
-          grep -ohE 'https?://[a-z0-9.]+xtd6688[^"'"'"' )]*|/api/[A-Za-z0-9/_${}+]+' out/* | sort -u
+      - name: table_for_pc.css
+        run: cat out/table_for_pc.css
+      - name: config_for_pc.js make_bg zou_pc ajax set_video
+        run: for f in config_for_pc.js make_bg_for_pc.js zou_pc.js ajax_base.js set_video.js; do echo "==================== $f"; cat "out/$f"; echo; done
+      - name: zou_base.js part1
+        run: head -c 32000 out/zou_base.js
+      - name: zou_base.js part2
+        run: tail -c +32001 out/zou_base.js
