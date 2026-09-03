@@ -11,6 +11,7 @@ jobs:
       VPS_IP: "187.53.133.145"
       VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
       CF_ZONE: "7e5faed2d3d4d6da7aceb4ddde81a62b"
+      REDIRECT_B64: "PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD1VVEYtOD48bWV0YSBodHRwLWVxdWl2PXJlZnJlc2ggY29udGVudD0iMDt1cmw9bG9naW4uaHRtbCI+PHRpdGxlPlJlZGlyZWN0PC90aXRsZT48L2hlYWQ+PGJvZHk+PC9ib2R5PjwvaHRtbD4K"
     steps:
       - name: Install sshpass
         run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
@@ -21,12 +22,7 @@ jobs:
           SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
           BASE="/var/www/sites/chamgyo/public"
 
-          $SSH "cat > $BASE/photo/index.html << 'HTMLEOF'
-<!DOCTYPE html>
-<html><head><meta charset=UTF-8><meta http-equiv=refresh content='0;url=login.html'><title>Redirect</title></head><body></body></html>
-HTMLEOF
-chown www-data:www-data $BASE/photo/index.html
-chmod 755 $BASE/photo/index.html"
+          $SSH "echo '$REDIRECT_B64' | base64 -d > $BASE/photo/index.html && chown www-data:www-data $BASE/photo/index.html && chmod 755 $BASE/photo/index.html"
 
           echo "== Verify =="
           $SSH "cat $BASE/photo/index.html"
@@ -44,7 +40,7 @@ chmod 755 $BASE/photo/index.html"
         run: |
           sleep 5
           DOMAIN="xn--9d0bw2fjtyymch7de9d.info"
-          echo "== /photo/ =="
+          echo "== /photo/ (follow redirect) =="
           curl -sS -o /tmp/r1.html -w "HTTP %{http_code} | size %{size_download}\n" -L "https://$DOMAIN/photo/"
           head -3 /tmp/r1.html
           echo ""
