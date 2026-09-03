@@ -1,0 +1,35 @@
+name: probe-cambin-views
+on:
+  push:
+    paths:
+      - '.github/workflows/probe-cambin-views.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: fetch view pages
+        run: |
+          set +e
+          B="https://xn--2z1b92mg3alyphom.com"
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36"
+          mkdir -p out
+          for p in CAW_1.php CAW_2.php CAW_3.php CAW_4.php CAH_1.php CBW_1.php CBH_1.php; do
+            curl -sS --max-time 20 -A "$UA" -o "out/$p.html" -w "$p HTTP %{http_code} size %{size_download}\n" "$B/$p"
+          done
+          echo "--- css/js/img referenced ---"
+          cat out/*.html | grep -oE '(src|href)="[^"]+"' | sort | uniq -c | sort -rn | head -40
+          for a in $(cat out/*.html | grep -oE '(src|href)="[^"]+\.(css|js)[^"]*"' | sed -E 's/^[a-z]+="//;s/"$//' | grep -v '^http' | sort -u); do
+            echo "=== asset $a"; curl -sS --max-time 20 -A "$UA" -o "out/$(echo $a | tr '/?' '__')" -w "HTTP %{http_code} size %{size_download}\n" "$B/$a"
+          done
+          ls -la out
+      - name: CAW_1.php full
+        run: cat out/CAW_1.php.html
+      - name: CAH_1.php full
+        run: cat out/CAH_1.php.html
+      - name: CBW_1.php diff vs CAW_1
+        run: diff out/CAW_1.php.html out/CBW_1.php.html; diff out/CAW_1.php.html out/CAW_2.php.html; echo; diff out/CAH_1.php.html out/CBH_1.php.html
+      - name: assets content
+        run: |
+          for f in out/*css* out/*js*; do [ -f "$f" ] && case "$f" in *.php.html) ;; *) echo "=== $f"; head -c 12000 "$f"; echo;; esac; done; true
