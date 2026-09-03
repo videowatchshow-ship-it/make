@@ -1,0 +1,27 @@
+name: verify-views
+on:
+  push:
+    paths:
+      - '.github/workflows/verify-views.yml'
+  workflow_run:
+    workflows: ["deploy-venue-system"]
+    types: [completed]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: live checks
+        run: |
+          set +e
+          D="https://xn--9d0bw2fjtyymch7de9d.info"
+          for p in CAW_1.php CAH_1.php CAH_2.php write.php select.php login.php photo/admin.html photo/view.js photo/include/live_style.css photo/images/Live_width_01_banner.gif photo/images/h_side_banner.png photo/images/nextPB_A4.png "photo/api_settings.php?ch=01" "photo/api_selected_room.php?ch=01" photo/data/tables.json; do
+            curl -sS -o /tmp/o -D /tmp/h -L --max-time 20 "$D/$p"; printf "%-42s HTTP %s size %s type %s\n" "$p" "$(grep -E '^HTTP' /tmp/h | tail -1 | cut -d' ' -f2)" "$(stat -c%s /tmp/o)" "$(grep -i '^content-type' /tmp/h | tail -1 | cut -d' ' -f2 | tr -d '\r')"
+          done
+          echo "--- CAW_1.php title ---"; curl -sS "$D/CAW_1.php" | grep -o '<title>[^<]*'
+          echo "--- login_check master ---"; curl -sS -X POST -H 'Content-Type: application/json' -d '{"id":"aass0707","passwd":"aass0707"}' "$D/photo/login_check.php"; echo
+          echo "--- login_check user 01 ---"; curl -sS -X POST -H 'Content-Type: application/json' -d '{"id":"01","passwd":"QWE123!@"}' "$D/photo/login_check.php"; echo
+          echo "--- write_up (settings save, no file) ---"; curl -sS -X POST -F ch=01 -F admin_id=aass0707 -F admin_pw=aass0707 -F write_check01=Y -F write_text01=TEST -F kakao=N -F ktime=Y -F url=en -F table_num=18 -F table2_num=15 "$D/photo/write_up.php"; echo
+          echo "--- api_settings after ---"; curl -sS "$D/photo/api_settings.php?ch=01"; echo
+          echo "--- venues ---"; curl -sS "$D/photo/data/tables.json" | python3 -c "import sys,json; [print(v['name'], len(v['rooms'])) for v in json.load(sys.stdin)['venues']]"
