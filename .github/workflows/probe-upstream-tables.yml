@@ -1,0 +1,86 @@
+name: probe-upstream-tables
+on:
+  push:
+    paths:
+      - '.github/workflows/probe-upstream-tables.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: 성천지 (xjh.liveview2024.vip) live room enumeration 1..300
+        run: |
+          set +e
+          API="https://xjh.liveview2024.vip"
+          LIVE=""
+          for RID in $(seq 1 300); do
+            R=$(curl -sS --max-time 6 -H "Origin: https://fcj6.oqogyf.com" -H "Referer: https://fcj6.oqogyf.com/" "$API/api/pub/get_newly_issue?room_id=$RID" 2>/dev/null)
+            IID=$(echo "$R" | python3 -c "import sys,json;d=json.load(sys.stdin);x=d.get('data') or {};print(x.get('id',''))" 2>/dev/null)
+            if [ -n "$IID" ]; then
+              N=$(curl -sS --max-time 6 -H "Origin: https://fcj6.oqogyf.com" -H "Referer: https://fcj6.oqogyf.com/" "$API/api/pub/get_open_nums?issue_id=$IID" 2>/dev/null | python3 -c "import sys,json;d=json.load(sys.stdin);print(len(d.get('nums',[])))" 2>/dev/null)
+              echo "LIVE room_id=$RID issue_id=$IID nums=$N | $(echo "$R" | head -c 300)"
+              LIVE="$LIVE $RID"
+            fi
+          done
+          echo ""
+          echo "===== 성천지 LIVE ROOMS: $LIVE ====="
+          echo "===== 성천지 COUNT: $(echo $LIVE | wc -w) ====="
+          echo "$LIVE" > /tmp/sc_live.txt
+
+      - name: 성천지 sample full responses
+        run: |
+          set +e
+          API="https://xjh.liveview2024.vip"
+          for RID in $(cat /tmp/sc_live.txt | tr ' ' '\n' | head -3); do
+            echo "--- room $RID get_newly_issue ---"
+            curl -sS --max-time 6 -H "Origin: https://fcj6.oqogyf.com" -H "Referer: https://fcj6.oqogyf.com/" "$API/api/pub/get_newly_issue?room_id=$RID"; echo
+            IID=$(curl -sS --max-time 6 -H "Origin: https://fcj6.oqogyf.com" -H "Referer: https://fcj6.oqogyf.com/" "$API/api/pub/get_newly_issue?room_id=$RID" | python3 -c "import sys,json;print(json.load(sys.stdin)['data']['id'])")
+            echo "--- get_open_nums ---"
+            curl -sS --max-time 6 -H "Origin: https://fcj6.oqogyf.com" -H "Referer: https://fcj6.oqogyf.com/" "$API/api/pub/get_open_nums?issue_id=$IID" | head -c 1500; echo
+          done
+          echo "--- other pub endpoints guess ---"
+          for EP in get_rooms get_room_list rooms room_list get_tables get_all_rooms get_room; do
+            printf "%s → " "$EP"; curl -sS -o /tmp/x -w "%{http_code} " --max-time 6 -H "Origin: https://fcj6.oqogyf.com" -H "Referer: https://fcj6.oqogyf.com/" "$API/api/pub/$EP"; head -c 200 /tmp/x; echo
+          done
+
+      - name: 캄보디아빈.com login.php + fcj6 root
+        run: |
+          set +e
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36"
+          echo "--- login.php ---"
+          curl -sSL --max-time 15 -A "$UA" -o lp.html -w "HTTP %{http_code} size %{size_download} final %{url_effective}\n" "https://xn--2z1b92mg3alyphom.com/login.php"
+          grep -oE '[가-힣A-Za-z0-9 _-]{2,}' lp.html | sort -u | head -80
+          grep -oE '(action|href|src)="[^"]+"' lp.html | sort -u | head -40
+          echo "--- fcj6.oqogyf.com root ---"
+          curl -sSL --max-time 15 -A "$UA" -o f6.html -w "HTTP %{http_code} size %{size_download}\n" "https://fcj6.oqogyf.com/"
+          grep -oE 'src="[^"]+"' f6.html | head -20
+          grep -oiE 'room[^"'"'"'<>]{0,80}' f6.html | sort -u | head -30
+          echo "--- fcj6 settings/config js ---"
+          for s in $(grep -oE 'src="[^"]+\.js[^"]*"' f6.html | sed 's/src="//;s/"$//' | head -6); do
+            case "$s" in http*) U="$s";; /*) U="https://fcj6.oqogyf.com$s";; *) U="https://fcj6.oqogyf.com/$s";; esac
+            echo "== $U"; curl -sSL --max-time 15 -A "$UA" -o j.js -w "HTTP %{http_code} size %{size_download}\n" "$U"
+            grep -oE 'https?://[a-z0-9.-]+\.[a-z]{2,}[^"'"'"' ]{0,60}' j.js | sort -u | head -20
+            grep -oiE 'room_?(id|list|s)[^;]{0,100}' j.js | sort -u | head -20
+          done
+
+      - name: 싱지 (api.xtd6688.com) 20 tables
+        run: |
+          set +e
+          CNT=0
+          for pair in "10:10" "11:11" "12:12" "15:15" "16:16" "17:87" "18:18" "19:89" "20:20" "21:21" "22:22" "23:23" "25:25" "26:26" "27:27" "55:31" "66:32" "77:33" "88:34" "99:35"; do
+            L="${pair%:*}"; A="${pair#*:}"
+            R=$(curl -sS --max-time 6 -H "Origin: https://gs.xtd6688.com" -H "Referer: https://gs.xtd6688.com/luzhu/zh/pc.html" -H "User-Agent: Mozilla/5.0" "https://api.xtd6688.com/api/diantou/table/getData/gameType/3/tableId/${A}/xue/null")
+            S=$(echo "$R" | python3 -c "import sys,json;d=json.load(sys.stdin);print('code',d.get('code'),'items',len(d.get('data') or {}))" 2>/dev/null)
+            [ -n "$S" ] && CNT=$((CNT+1))
+            echo "label=$L api=$A → ${S:-NO RESPONSE} | $(echo "$R" | head -c 150)"
+          done
+          echo "===== 싱지 responding: $CNT / 20 ====="
+          echo "--- xtd table list endpoints ---"
+          for U in "https://api.xtd6688.com/api/diantou/table/list/gameType/3" "https://api.xtd6688.com/api/diantou/table/getList/gameType/3" "https://api.xtd6688.com/api/diantou/table/tables/gameType/3" "https://api.xtd6688.com/api/diantou/table/getData/gameType/3"; do
+            printf "%s → " "$U"; curl -sS -o /tmp/x -w "%{http_code} " --max-time 6 -H "Origin: https://gs.xtd6688.com" -H "Referer: https://gs.xtd6688.com/luzhu/zh/pc.html" -H "User-Agent: Mozilla/5.0" "$U"; head -c 300 /tmp/x; echo
+          done
+          echo "--- gs.xtd6688.com pc.html ---"
+          curl -sSL --max-time 15 -A "Mozilla/5.0" -o pc.html -w "HTTP %{http_code} size %{size_download}\n" "https://gs.xtd6688.com/luzhu/zh/pc.html"
+          grep -oE 'src="[^"]+"' pc.html | head -20
+          grep -oiE '(tableId|table_id|gameType)[^;]{0,100}' pc.html | sort -u | head -20
