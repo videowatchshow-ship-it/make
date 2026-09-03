@@ -1,0 +1,56 @@
+name: restore-photo-login
+on:
+  push:
+    paths:
+      - '.github/workflows/restore-photo-login.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VPS_IP: "187.53.133.145"
+      VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
+      CF_ZONE: "7e5faed2d3d4d6da7aceb4ddde81a62b"
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+
+      - name: Restore /photo/index.html to login redirect
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          BASE="/var/www/sites/chamgyo/public"
+
+          $SSH "cat > $BASE/photo/index.html << 'HTMLEOF'
+<!DOCTYPE html>
+<html><head><meta charset=UTF-8><meta http-equiv=refresh content='0;url=login.html'><title>Redirect</title></head><body></body></html>
+HTMLEOF
+chown www-data:www-data $BASE/photo/index.html
+chmod 755 $BASE/photo/index.html"
+
+          echo "== Verify =="
+          $SSH "cat $BASE/photo/index.html"
+          $SSH "sha256sum $BASE/photo/index.html"
+
+      - name: Purge CF cache
+        run: |
+          curl -sS -X POST \
+            "https://api.cloudflare.com/client/v4/zones/$CF_ZONE/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"purge_everything":true}' | jq .
+
+      - name: Verify live
+        run: |
+          sleep 5
+          DOMAIN="xn--9d0bw2fjtyymch7de9d.info"
+          echo "== /photo/ =="
+          curl -sS -o /tmp/r1.html -w "HTTP %{http_code} | size %{size_download}\n" -L "https://$DOMAIN/photo/"
+          head -3 /tmp/r1.html
+          echo ""
+          echo "== /photo/login.html =="
+          curl -sS -o /tmp/r2.html -w "HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/login.html"
+          head -3 /tmp/r2.html
+          echo ""
+          SHA=$(sha256sum /tmp/r1.html | cut -d' ' -f1)
+          echo "SHA256: $SHA"
