@@ -1,0 +1,56 @@
+name: check-cah-data
+on:
+  push:
+    paths:
+      - '.github/workflows/check-cah-data.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      VPS_IP: "187.53.133.145"
+      VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+
+      - name: Check CAH_1.html and data
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          BASE="/var/www/sites/chamgyo/public"
+
+          echo "===== CAH_1.html content ====="
+          $SSH "cat $BASE/photo/CAH_1.html"
+
+          echo ""
+          echo "===== bgl.js content ====="
+          $SSH "cat $BASE/photo/bgl.js"
+
+          echo ""
+          echo "===== data/ directory ====="
+          $SSH "ls -la $BASE/photo/data/"
+
+          echo ""
+          echo "===== data/tables.json (first 200 lines) ====="
+          $SSH "head -200 $BASE/photo/data/tables.json 2>/dev/null || echo 'NOT FOUND'"
+
+          echo ""
+          echo "===== images/ directory ====="
+          $SSH "ls -la $BASE/photo/images/ 2>/dev/null || echo 'EMPTY'"
+
+          echo ""
+          echo "===== symlink check ====="
+          $SSH "ls -la $BASE/photo/data $BASE/photo2/data $BASE/photo3/data 2>&1"
+          $SSH "readlink -f $BASE/photo/data 2>/dev/null"
+          $SSH "readlink -f $BASE/photo2/data 2>/dev/null"
+          $SSH "readlink -f $BASE/photo3/data 2>/dev/null"
+
+          echo ""
+          echo "===== Live CAH_1.html?ch=01 content ====="
+          curl -sS "http://$VPS_IP/photo/CAH_1.html?ch=01"
+
+          echo ""
+          echo "===== Live data/tables.json ====="
+          curl -sS -o /dev/null -w "HTTP %{http_code} | size %{size_download}\n" "http://$VPS_IP/photo/data/tables.json"
+          curl -sS "http://$VPS_IP/photo/data/tables.json" | head -20
