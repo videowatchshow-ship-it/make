@@ -1,0 +1,103 @@
+name: fix-select-venues
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-select-venues.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      VPS_IP: "187.53.133.145"
+      VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+
+      - name: Backup old select.html and deploy new
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          BASE="/var/www/sites/chamgyo/public"
+
+          echo "===== Backup current select.html ====="
+          $SSH "cp $BASE/photo/select.html $BASE/photo/select.html.bak.$(date +%s) 2>/dev/null || true"
+
+          echo "===== Deploy new select.html ====="
+          python3 -c "
+          html = '''<!DOCTYPE html>
+          <html lang=\"ko\">
+          <head>
+          <meta charset=\"UTF-8\">
+          <meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\">
+          <meta http-equiv=\"Cache-Control\" content=\"no-cache,no-store,must-revalidate\">
+          <title>장소 선택</title>
+          <style>
+          *{box-sizing:border-box;margin:0;padding:0}
+          html,body{width:100%;height:100%;background:#0a0a0a;font-family:\"Malgun Gothic\",sans-serif;color:#eee}
+          .wrap{max-width:400px;margin:0 auto;padding:40px 20px;text-align:center}
+          .title{color:#ffd54f;font-size:20px;font-weight:bold;margin-bottom:30px;letter-spacing:2px}
+          .venue-list{display:flex;flex-direction:column;gap:12px}
+          .venue-btn{display:block;width:100%;padding:16px 20px;background:#1a1a2e;border:1px solid #333;border-radius:8px;color:#eee;font-size:16px;font-weight:bold;text-align:center;cursor:pointer;text-decoration:none;transition:background .2s,border-color .2s}
+          .venue-btn:hover{background:#16213e;border-color:#ffd54f}
+          .venue-btn:active{background:#0f3460}
+          .venue-btn .sub{font-size:12px;color:#888;font-weight:normal;margin-top:4px}
+          .back{margin-top:24px;color:#888;font-size:13px;cursor:pointer;text-decoration:underline}
+          .back:hover{color:#ffd54f}
+          </style>
+          </head>
+          <body>
+          <div class=\"wrap\">
+            <div class=\"title\">장소 선택</div>
+            <div class=\"venue-list\">
+              <a class=\"venue-btn\" onclick=\"go(1)\">성천지<div class=\"sub\">Seongcheonji</div></a>
+              <a class=\"venue-btn\" onclick=\"go(2)\">싱지<div class=\"sub\">Singji</div></a>
+              <a class=\"venue-btn\" onclick=\"go(3)\">뉴싱지<div class=\"sub\">New Singji</div></a>
+              <a class=\"venue-btn\" onclick=\"go(4)\">그림장<div class=\"sub\">Geurimjang</div></a>
+            </div>
+            <div class=\"back\" onclick=\"location.href=\\x27login.html\\x27\">로그아웃</div>
+          </div>
+          <script>
+          (function(){
+            var params = new URLSearchParams(location.search);
+            var ch = params.get(\"ch\") || \"01\";
+            window.go = function(venueId){
+              var base = location.href.replace(/select\\.html.*$/, \"\");
+              location.href = base + \"CAH_1.html?ch=\" + ch + \"&venue=\" + venueId;
+            };
+          })();
+          </script>
+          </body>
+          </html>'''
+          print(html)
+          " > /tmp/select_new.html
+
+          sshpass -e scp -o StrictHostKeyChecking=no /tmp/select_new.html root@$VPS_IP:/tmp/select_new.html
+
+          for dir in photo photo2 photo3; do
+            echo "== Deploy to $dir =="
+            $SSH "cp /tmp/select_new.html $BASE/$dir/select.html && chown www-data:www-data $BASE/$dir/select.html"
+          done
+
+          echo "===== Verify ====="
+          $SSH "wc -c $BASE/photo/select.html $BASE/photo2/select.html $BASE/photo3/select.html"
+          $SSH "sha256sum $BASE/photo/select.html"
+          $SSH "head -5 $BASE/photo/select.html"
+
+      - name: Purge CF cache
+        run: |
+          curl -sS -X POST \
+            "https://api.cloudflare.com/client/v4/zones/7e5faed2d3d4d6da7aceb4ddde81a62b/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"purge_everything":true}' | python3 -c "import sys,json; d=json.load(sys.stdin); print('Purge success:', d.get('success'))"
+
+      - name: Verify live
+        run: |
+          sleep 5
+          DOMAIN="xn--9d0bw2fjtyymch7de9d.info"
+          echo "===== select.html ====="
+          curl -sS -o /tmp/select.html -w "select.html: HTTP %{http_code} | size %{size_download} | cf-cache: %{header.cf-cache-status}\n" "https://$DOMAIN/photo/select.html"
+          grep -c '성천지\|싱지\|뉴싱지\|그림장' /tmp/select.html && echo "ALL 4 VENUES PRESENT" || echo "MISSING VENUES"
+          sha256sum /tmp/select.html
