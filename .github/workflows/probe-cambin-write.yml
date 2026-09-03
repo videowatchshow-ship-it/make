@@ -1,0 +1,53 @@
+name: probe-cambin-write
+on:
+  push:
+    paths:
+      - '.github/workflows/probe-cambin-write.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: login + dump write.php
+        run: |
+          set +e
+          B="https://xn--2z1b92mg3alyphom.com"
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36"
+          echo "=== login.php form ==="
+          curl -sS -A "$UA" -c cj -b cj "$B/login.php" -o login.html; grep -oiE '<(form|input)[^>]*>' login.html
+          echo "=== POST login_check.php ==="
+          curl -sS -A "$UA" -c cj -b cj -o lc.html -w "HTTP %{http_code} redirect=%{redirect_url}\n" -e "$B/login.php" -d "id=aass0707&pw=aass0707&user_id=aass0707&userid=aass0707&password=aass0707&passwd=aass0707" "$B/login_check.php"
+          head -c 800 lc.html; echo
+          echo "=== write.php ==="
+          curl -sS -A "$UA" -c cj -b cj -o write.html -w "HTTP %{http_code} size %{size_download} final %{url_effective}\n" -L "$B/write.php"
+          echo "--- full write.php HTML (first 30000 bytes) ---"
+          head -c 30000 write.html
+          echo; echo "--- korean words ---"
+          python3 - <<'PY'
+          import re
+          s=open('write.html',encoding='utf-8',errors='replace').read()
+          print(sorted(set(re.findall(r'[가-힣]{2,}',s)))[:200])
+          print('--- src/href/action ---')
+          for m in sorted(set(re.findall(r'(?:src|href|action)="([^"]+)"',s))): print(' ',m)
+          print('--- fetch/ajax urls ---')
+          for m in sorted(set(re.findall(r'(?:fetch|open|url|\$\.get|\$\.post|\$\.ajax)\(?\s*[\'"]([^\'"]+)[\'"]',s))): print(' ',m)
+          print('--- option values ---')
+          for m in re.findall(r'<option[^>]*value="([^"]*)"[^>]*>([^<]*)',s)[:80]: print(' ',m)
+          PY
+      - name: fetch linked resources + data
+        run: |
+          set +e
+          B="https://xn--2z1b92mg3alyphom.com"
+          UA="Mozilla/5.0"
+          for p in data/tables.json api_all_rooms.php api_sn_rooms.php api_selected_room.php?ch=aass0707 api_selected_room.php?ch=cent data/selected_room.json data/sel_cent.json data/sel_aass0707.json data/room_110.json data/room_10.json include/style_admin.css; do
+            echo "=== $p"; curl -sS -A "$UA" -b cj -o /tmp/x -w "HTTP %{http_code} size %{size_download}\n" --max-time 15 "$B/$p"; head -c 1500 /tmp/x; echo
+          done
+          echo "=== js files referenced in write.php ==="
+          for s in $(grep -oE 'src="[^"]+\.js[^"]*"' write.html | sed 's/src="//;s/"$//' | grep -v '^http' | head -6); do
+            echo "--- $s"; curl -sS -A "$UA" -b cj -o /tmp/j -w "HTTP %{http_code} size %{size_download}\n" "$B/$s"; head -c 6000 /tmp/j; echo
+          done
+          echo "=== other pages ==="
+          for p in select.html CAH_1.html?ch=cent SNW_1.html?ch=cent index.php main.php; do
+            echo "--- $p"; curl -sS -A "$UA" -b cj -o /tmp/x -w "HTTP %{http_code} size %{size_download}\n" --max-time 15 "$B/$p"; grep -oE '[가-힣]{2,}' /tmp/x | sort -u | head -30 | tr '\n' ' '; echo
+          done
