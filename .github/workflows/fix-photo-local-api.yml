@@ -7,53 +7,47 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     env:
       VPS_IP: "187.53.133.145"
       VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
-      PHP_B64: "PD9waHAKaGVhZGVyKCdDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL2pzb24nKTsKaGVhZGVyKCdBY2Nlc3MtQ29udHJvbC1BbGxvdy1PcmlnaW46IConKTsKJGNoID0gaXNzZXQoJF9HRVRbJ2NoJ10pID8gJF9HRVRbJ2NoJ10gOiAnMDEnOwokZGF0YURpciA9IF9fRElSX18gLiAnL2RhdGEnOwokcm9vbUZpbGUgPSAkZGF0YURpciAuICcvc2VsZWN0ZWRfcm9vbV8nIC4gJGNoIC4gJy5qc29uJzsKaWYgKGZpbGVfZXhpc3RzKCRyb29tRmlsZSkpIHsgZWNobyBmaWxlX2dldF9jb250ZW50cygkcm9vbUZpbGUpOyBleGl0OyB9CiRmaWxlcyA9IGdsb2IoJGRhdGFEaXIgLiAnL3Jvb21fKi5qc29uJyk7CmlmICgkZmlsZXMpIHsgJGxhdGVzdCA9IGVuZCgkZmlsZXMpOyAkcm9vbUlkID0gcHJlZ19yZXBsYWNlKCcvLipyb29tXyhcZCspXC5qc29uLycsICckMScsICRsYXRlc3QpOyBlY2hvIGpzb25fZW5jb2RlKFsncm9vbV9pZCcgPT4gJHJvb21JZCwgJ2NoJyA9PiAkY2gsICdzb3VyY2UnID0+ICdsb2NhbCddKTsgZXhpdDsgfQplY2hvIGpzb25fZW5jb2RlKFsncm9vbV9pZCcgPT4gJzEnLCAnY2gnID0+ICRjaCwgJ3NvdXJjZScgPT4gJ2RlZmF1bHQnXSk7Cg=="
-      BGL_B64: "KGZ1bmN0aW9uKCl7CiAgdmFyIExPQ0FMID0gbG9jYXRpb24ub3JpZ2luICsgJy9waG90byc7CiAgdmFyIEdBVVRIID0gJ2h0dHBzOi8vZ2F1dGguY2VudC1zb2x1dGlvbi5vbmxpbmUvcGhvdG8nOwogIHZhciBQT0xMX01TID0gMzAwMDsKICB2YXIgVElNRU9VVCA9IDUwMDA7CiAgdmFyIHVzZUxvY2FsID0gdHJ1ZTsKICB2YXIgY2ggPSBuZXcgVVJMU2VhcmNoUGFyYW1zKGxvY2F0aW9uLnNlYXJjaCkuZ2V0KCdjaCcpIHx8ICcwMSc7CiAgdmFyIHJvb21FbCA9IGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCdiZ2wtcm9vbScpOwogIHZhciByb2FkRWwgPSBkb2N1bWVudC5xdWVyeVNlbGVjdG9yKCcuYmdsLXJvYWQnKTsKICB2YXIgY3VycmVudFJvb20gPSBudWxsOwogIGZ1bmN0aW9uIHJlbmRlclJvYWQobnVtcykgewogICAgaWYgKCFyb2FkRWwpIHJldHVybjsKICAgIHJvYWRFbC5pbm5lckhUTUwgPSAnJzsKICAgIGlmICghbnVtcyB8fCAhbnVtcy5sZW5ndGgpIHsgcm9hZEVsLmlubmVySFRNTCA9ICc8ZGl2IHN0eWxlPSJ0ZXh0LWFsaWduOmNlbnRlcjtwYWRkaW5nOjIwcHg7Y29sb3I6Izk5OTsiPuuNsOydtO2EsCDsl4bsnYw8L2Rpdj4nOyByZXR1cm47IH0KICAgIHZhciBjb2xzPVtdLGNvbD1bXSxwcmV2PW51bGw7CiAgICBmb3IodmFyIGk9MDtpPG51bXMubGVuZ3RoO2krKyl7dmFyIGN1cj1udW1zW2ldPj01MD8nYic6bnVtc1tpXT49MTA/J3AnOid0JztpZihwcmV2JiZjdXIhPT1wcmV2KXtjb2xzLnB1c2goY29sKTtjb2w9W107fWNvbC5wdXNoKG51bXNbaV0pO3ByZXY9Y3VyO30KICAgIGlmKGNvbC5sZW5ndGgpY29scy5wdXNoKGNvbCk7CiAgICB2YXIgdGJsPWRvY3VtZW50LmNyZWF0ZUVsZW1lbnQoJ3RhYmxlJyk7dGJsLmNsYXNzTmFtZT0nYmdsLXRibCc7dGJsLnN0eWxlLmNzc1RleHQ9J2JvcmRlci1jb2xsYXBzZTpjb2xsYXBzZTt3aWR0aDoxMDAlO3RhYmxlLWxheW91dDpmaXhlZDsnOwogICAgdmFyIG1heFI9NjsKICAgIGZvcih2YXIgcj0wO3I8bWF4UjtyKyspe3ZhciB0cj1kb2N1bWVudC5jcmVhdGVFbGVtZW50KCd0cicpO2Zvcih2YXIgYz0wO2M8Y29scy5sZW5ndGg7YysrKXt2YXIgdGQ9ZG9jdW1lbnQuY3JlYXRlRWxlbWVudCgndGQnKTt0ZC5zdHlsZS5jc3NUZXh0PSd3aWR0aDoyNHB4O2hlaWdodDoyNHB4O3RleHQtYWxpZ246Y2VudGVyO2ZvbnQtc2l6ZToxMXB4O2JvcmRlcjoxcHggc29saWQgIzMzMzsnO2lmKGNvbHNbY11bcl0hPT11bmRlZmluZWQpe3ZhciB2PWNvbHNbY11bcl07dGQudGV4dENvbnRlbnQ9djtpZih2Pj01MCl7dGQuc3R5bGUuYmFja2dyb3VuZD0nIzFhM2E2YSc7dGQuc3R5bGUuY29sb3I9JyM1Y2FjZWUnO31lbHNlIGlmKHY+PTEwKXt0ZC5zdHlsZS5iYWNrZ3JvdW5kPScjNmExYTFhJzt0ZC5zdHlsZS5jb2xvcj0nI2VlNWM1Yyc7fWVsc2V7dGQuc3R5bGUuYmFja2dyb3VuZD0nIzFhNmEyYSc7dGQuc3R5bGUuY29sb3I9JyM1Y2VlOGMnO319dHIuYXBwZW5kQ2hpbGQodGQpO310YmwuYXBwZW5kQ2hpbGQodHIpO30KICAgIHJvYWRFbC5hcHBlbmRDaGlsZCh0YmwpOwogIH0KICBmdW5jdGlvbiBmZXRjaEpTT04odXJsLGNiKXt2YXIgY3RybD1uZXcgQWJvcnRDb250cm9sbGVyKCk7dmFyIHRpbWVyPXNldFRpbWVvdXQoZnVuY3Rpb24oKXtjdHJsLmFib3J0KCk7fSxUSU1FT1VUKTtmZXRjaCh1cmwse3NpZ25hbDpjdHJsLnNpZ25hbH0pLnRoZW4oZnVuY3Rpb24ocil7Y2xlYXJUaW1lb3V0KHRpbWVyKTtyZXR1cm4gci5qc29uKCk7fSkudGhlbihmdW5jdGlvbihkKXtjYihudWxsLGQpO30pLmNhdGNoKGZ1bmN0aW9uKGUpe2NsZWFyVGltZW91dCh0aW1lcik7Y2IoZSk7fSk7fQogIGZ1bmN0aW9uIGxvYWRSb29tKHJvb21JZCl7CiAgICB2YXIgYmFzZT11c2VMb2NhbD9MT0NBTDpHQVVUSDsKICAgIGZldGNoSlNPTihiYXNlKycvZGF0YS9yb29tXycrcm9vbUlkKycuanNvbicsZnVuY3Rpb24oZXJyLGQpewogICAgICBpZihlcnImJnVzZUxvY2FsKXtmZXRjaEpTT04oR0FVVEgrJy9kYXRhL3Jvb21fJytyb29tSWQrJy5qc29uJyxmdW5jdGlvbihlcnIyLGQyKXtpZighZXJyMiYmZDImJmQyLm51bXMpe3VzZUxvY2FsPWZhbHNlO2lmKHJvb21FbClyb29tRWwudGV4dENvbnRlbnQ9J+uwqSAnK3Jvb21JZDtyZW5kZXJSb2FkKGQyLm51bXMpO31lbHNle2lmKHJvb21FbClyb29tRWwudGV4dENvbnRlbnQ9J+uwqSAnK3Jvb21JZDtyZW5kZXJSb2FkKChkJiZkLm51bXMpfHxbXSk7fX0pO3JldHVybjt9CiAgICAgIGlmKGQmJmQubnVtcyl7aWYocm9vbUVsKXJvb21FbC50ZXh0Q29udGVudD0n67CpICcrcm9vbUlkO3JlbmRlclJvYWQoZC5udW1zKTt9CiAgICB9KTsKICB9CiAgZnVuY3Rpb24gcG9sbFJvb20oKXsKICAgIHZhciBiYXNlPXVzZUxvY2FsP0xPQ0FMOkdBVVRIOwogICAgZmV0Y2hKU09OKGJhc2UrJy9hcGlfc2VsZWN0ZWRfcm9vbS5waHA/Y2g9JytjaCxmdW5jdGlvbihlcnIsZCl7CiAgICAgIGlmKGVyciYmdXNlTG9jYWwpe2ZldGNoSlNPTihHQVVUSCsnL2FwaV9zZWxlY3RlZF9yb29tLnBocD9jaD0nK2NoLGZ1bmN0aW9uKGVycjIsZDIpe2lmKCFlcnIyJiZkMiYmZDIucm9vbV9pZCl7dXNlTG9jYWw9ZmFsc2U7aWYoZDIucm9vbV9pZCE9PWN1cnJlbnRSb29tKXtjdXJyZW50Um9vbT1kMi5yb29tX2lkO2xvYWRSb29tKGN1cnJlbnRSb29tKTt9fWVsc2UgaWYoZCYmZC5yb29tX2lkKXtpZihkLnJvb21faWQhPT1jdXJyZW50Um9vbSl7Y3VycmVudFJvb209ZC5yb29tX2lkO2xvYWRSb29tKGN1cnJlbnRSb29tKTt9fX0pO3JldHVybjt9CiAgICAgIGlmKGQmJmQucm9vbV9pZCl7aWYoZC5yb29tX2lkIT09Y3VycmVudFJvb20pe2N1cnJlbnRSb29tPWQucm9vbV9pZDtsb2FkUm9vbShjdXJyZW50Um9vbSk7fX0KICAgIH0pOwogIH0KICBwb2xsUm9vbSgpOwogIHNldEludGVydmFsKHBvbGxSb29tLFBPTExfTVMpOwp9KSgpOwo="
+      BGL_B64: "KGZ1bmN0aW9uKCl7CiAgdmFyIEJBU0UgPSBsb2NhdGlvbi5vcmlnaW4gKyAnL3Bob3RvJzsKICB2YXIgR0FVVEggPSAnaHR0cHM6Ly9nYXV0aC5jZW50LXNvbHV0aW9uLm9ubGluZS9waG90byc7CiAgdmFyIFBPTExfTVMgPSAzMDAwOwogIHZhciBUSU1FT1VUID0gNTAwMDsKCiAgdmFyIHJvb21FbCA9IGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCdiZ2wtcm9vbScpOwogIHZhciByb2FkRWwgPSBkb2N1bWVudC5xdWVyeVNlbGVjdG9yKCcuYmdsLXJvYWQnKTsKICB2YXIgZmFpbENvdW50ID0gMDsKCiAgZnVuY3Rpb24gc2hvd09mZmxpbmUoKSB7CiAgICBpZiAocm9vbUVsKSByb29tRWwudGV4dENvbnRlbnQgPSAn7ISc67KEIOygkOqygOykkSc7CiAgICBpZiAocm9hZEVsKSByb2FkRWwuaW5uZXJIVE1MID0gJzxkaXYgc3R5bGU9InRleHQtYWxpZ246Y2VudGVyO3BhZGRpbmc6NDBweDtjb2xvcjojOTk5O2ZvbnQtc2l6ZToxNHB4OyI+642w7J207YSwIOyEnOuyhCDsoJDqsoDspJHsnoXri4jri6QuPGJyPuyeoOyLnCDtm4Qg7J6Q64+ZIOyerOyXsOqysOuQqeuLiOuLpC48L2Rpdj4nOwogIH0KCiAgZnVuY3Rpb24gcmVuZGVyUm9hZChudW1zKSB7CiAgICBpZiAoIXJvYWRFbCkgcmV0dXJuOwogICAgcm9hZEVsLmlubmVySFRNTCA9ICcnOwogICAgaWYgKCFudW1zIHx8ICFudW1zLmxlbmd0aCkgewogICAgICByb2FkRWwuaW5uZXJIVE1MID0gJzxkaXYgc3R5bGU9InRleHQtYWxpZ246Y2VudGVyO3BhZGRpbmc6MjBweDtjb2xvcjojOTk5OyI+642w7J207YSwIOyXhuydjDwvZGl2Pic7CiAgICAgIHJldHVybjsKICAgIH0KICAgIHZhciBjb2xzID0gW107CiAgICB2YXIgY29sID0gW107CiAgICB2YXIgcHJldiA9IG51bGw7CiAgICBmb3IgKHZhciBpID0gMDsgaSA8IG51bXMubGVuZ3RoOyBpKyspIHsKICAgICAgdmFyIGN1ciA9IG51bXNbaV0gPj0gNTAgPyAnYicgOiBudW1zW2ldID49IDEwID8gJ3AnIDogJ3QnOwogICAgICBpZiAocHJldiAmJiBjdXIgIT09IHByZXYpIHsgY29scy5wdXNoKGNvbCk7IGNvbCA9IFtdOyB9CiAgICAgIGNvbC5wdXNoKG51bXNbaV0pOwogICAgICBwcmV2ID0gY3VyOwogICAgfQogICAgaWYgKGNvbC5sZW5ndGgpIGNvbHMucHVzaChjb2wpOwoKICAgIHZhciB0YmwgPSBkb2N1bWVudC5jcmVhdGVFbGVtZW50KCd0YWJsZScpOwogICAgdGJsLmNsYXNzTmFtZSA9ICdiZ2wtdGJsJzsKICAgIHRibC5zdHlsZS5jc3NUZXh0ID0gJ2JvcmRlci1jb2xsYXBzZTpjb2xsYXBzZTt3aWR0aDoxMDAlO3RhYmxlLWxheW91dDpmaXhlZDsnOwogICAgdmFyIG1heFIgPSA2OwogICAgZm9yICh2YXIgciA9IDA7IHIgPCBtYXhSOyByKyspIHsKICAgICAgdmFyIHRyID0gZG9jdW1lbnQuY3JlYXRlRWxlbWVudCgndHInKTsKICAgICAgZm9yICh2YXIgYyA9IDA7IGMgPCBjb2xzLmxlbmd0aDsgYysrKSB7CiAgICAgICAgdmFyIHRkID0gZG9jdW1lbnQuY3JlYXRlRWxlbWVudCgndGQnKTsKICAgICAgICB0ZC5zdHlsZS5jc3NUZXh0ID0gJ3dpZHRoOjI0cHg7aGVpZ2h0OjI0cHg7dGV4dC1hbGlnbjpjZW50ZXI7Zm9udC1zaXplOjExcHg7Ym9yZGVyOjFweCBzb2xpZCAjMzMzOyc7CiAgICAgICAgaWYgKGNvbHNbY11bcl0gIT09IHVuZGVmaW5lZCkgewogICAgICAgICAgdmFyIHYgPSBjb2xzW2NdW3JdOwogICAgICAgICAgdGQudGV4dENvbnRlbnQgPSB2OwogICAgICAgICAgaWYgKHYgPj0gNTApIHsgdGQuc3R5bGUuYmFja2dyb3VuZCA9ICcjMWEzYTZhJzsgdGQuc3R5bGUuY29sb3IgPSAnIzVjYWNlZSc7IH0KICAgICAgICAgIGVsc2UgaWYgKHYgPj0gMTApIHsgdGQuc3R5bGUuYmFja2dyb3VuZCA9ICcjNmExYTFhJzsgdGQuc3R5bGUuY29sb3IgPSAnI2VlNWM1Yyc7IH0KICAgICAgICAgIGVsc2UgeyB0ZC5zdHlsZS5iYWNrZ3JvdW5kID0gJyMxYTZhMmEnOyB0ZC5zdHlsZS5jb2xvciA9ICcjNWNlZThjJzsgfQogICAgICAgIH0KICAgICAgICB0ci5hcHBlbmRDaGlsZCh0ZCk7CiAgICAgIH0KICAgICAgdGJsLmFwcGVuZENoaWxkKHRyKTsKICAgIH0KICAgIHJvYWRFbC5hcHBlbmRDaGlsZCh0YmwpOwogIH0KCiAgZnVuY3Rpb24gbG9hZERhdGEoKSB7CiAgICB2YXIgY3RybCA9IG5ldyBBYm9ydENvbnRyb2xsZXIoKTsKICAgIHZhciB0aW1lciA9IHNldFRpbWVvdXQoZnVuY3Rpb24oKXsgY3RybC5hYm9ydCgpOyB9LCBUSU1FT1VUKTsKCiAgICBmZXRjaChCQVNFICsgJy9kYXRhL3Jvb21fMS5qc29uP3Q9JyArIERhdGUubm93KCksIHsgc2lnbmFsOiBjdHJsLnNpZ25hbCB9KQogICAgICAudGhlbihmdW5jdGlvbihyKSB7IGNsZWFyVGltZW91dCh0aW1lcik7IHJldHVybiByLmpzb24oKTsgfSkKICAgICAgLnRoZW4oZnVuY3Rpb24oZCkgewogICAgICAgIGZhaWxDb3VudCA9IDA7CiAgICAgICAgaWYgKHJvb21FbCkgcm9vbUVsLnRleHRDb250ZW50ID0gJ+uwqSAxJzsKICAgICAgICBpZiAoZCAmJiBkLm51bXMpIHJlbmRlclJvYWQoZC5udW1zKTsKICAgICAgICBlbHNlIHJlbmRlclJvYWQoW10pOwogICAgICB9KQogICAgICAuY2F0Y2goZnVuY3Rpb24oKSB7CiAgICAgICAgY2xlYXJUaW1lb3V0KHRpbWVyKTsKICAgICAgICAvLyBUcnkgZ2F1dGggZmFsbGJhY2sKICAgICAgICB2YXIgY3RybDIgPSBuZXcgQWJvcnRDb250cm9sbGVyKCk7CiAgICAgICAgdmFyIHRpbWVyMiA9IHNldFRpbWVvdXQoZnVuY3Rpb24oKXsgY3RybDIuYWJvcnQoKTsgfSwgVElNRU9VVCk7CiAgICAgICAgZmV0Y2goR0FVVEggKyAnL2RhdGEvcm9vbV8xLmpzb24/dD0nICsgRGF0ZS5ub3coKSwgeyBzaWduYWw6IGN0cmwyLnNpZ25hbCB9KQogICAgICAgICAgLnRoZW4oZnVuY3Rpb24ocikgeyBjbGVhclRpbWVvdXQodGltZXIyKTsgcmV0dXJuIHIuanNvbigpOyB9KQogICAgICAgICAgLnRoZW4oZnVuY3Rpb24oZCkgewogICAgICAgICAgICBmYWlsQ291bnQgPSAwOwogICAgICAgICAgICBpZiAocm9vbUVsKSByb29tRWwudGV4dENvbnRlbnQgPSAn67CpIDEnOwogICAgICAgICAgICBpZiAoZCAmJiBkLm51bXMpIHJlbmRlclJvYWQoZC5udW1zKTsKICAgICAgICAgICAgZWxzZSByZW5kZXJSb2FkKFtdKTsKICAgICAgICAgIH0pCiAgICAgICAgICAuY2F0Y2goZnVuY3Rpb24oKSB7CiAgICAgICAgICAgIGNsZWFyVGltZW91dCh0aW1lcjIpOwogICAgICAgICAgICBmYWlsQ291bnQrKzsKICAgICAgICAgICAgaWYgKGZhaWxDb3VudCA+PSAzKSBzaG93T2ZmbGluZSgpOwogICAgICAgICAgfSk7CiAgICAgIH0pOwogIH0KCiAgbG9hZERhdGEoKTsKICBzZXRJbnRlcnZhbChsb2FkRGF0YSwgUE9MTF9NUyk7Cn0pKCk7Cg=="
     steps:
       - name: Install sshpass
         run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
 
-      - name: Deploy PHP API and bgl.js
+      - name: Deploy bgl.js to all photo dirs
         run: |
           export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
           SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
           BASE="/var/www/sites/chamgyo/public"
 
-          echo "===== Check existing data ====="
-          $SSH "ls -la $BASE/photo/data/ 2>/dev/null || echo 'no data dir'"
-
-          echo ""
-          echo "===== Deploy api_selected_room.php ====="
-          echo "$PHP_B64" | base64 -d > /tmp/api_selected_room.php
-          cat /tmp/api_selected_room.php
-          sshpass -e scp -o StrictHostKeyChecking=no /tmp/api_selected_room.php root@$VPS_IP:$BASE/photo/api_selected_room.php
+          echo "===== Current state ====="
+          $SSH "sha256sum $BASE/photo/bgl.js 2>/dev/null; cat $BASE/photo/data/room_1.json 2>/dev/null | head -1"
 
           echo ""
           echo "===== Deploy bgl.js ====="
-          echo "$BGL_B64" | base64 -d > /tmp/bgl_local.js
-          wc -c /tmp/bgl_local.js
-          for dir in photo photo2 photo3; do
-            echo "== Deploy to $dir =="
-            sshpass -e scp -o StrictHostKeyChecking=no /tmp/bgl_local.js root@$VPS_IP:$BASE/$dir/bgl.js
-          done
+          echo "$BGL_B64" | base64 -d > /tmp/bgl.js
+          sha256sum /tmp/bgl.js
+          wc -c /tmp/bgl.js
+
+          sshpass -e scp -o StrictHostKeyChecking=no /tmp/bgl.js root@$VPS_IP:$BASE/photo/bgl.js
+          sshpass -e scp -o StrictHostKeyChecking=no /tmp/bgl.js root@$VPS_IP:$BASE/photo2/bgl.js
+          sshpass -e scp -o StrictHostKeyChecking=no /tmp/bgl.js root@$VPS_IP:$BASE/photo3/bgl.js
+
+          $SSH "chown www-data:www-data $BASE/photo/bgl.js $BASE/photo2/bgl.js $BASE/photo3/bgl.js"
 
           echo ""
-          echo "===== Create room data ====="
-          $SSH "mkdir -p $BASE/photo/data && if [ ! -f $BASE/photo/data/room_1.json ]; then echo '{\"nums\":[23,45,12,67,34,89,56,11,78,43,22,55,31,66,14,88,42,19,71,33,57,25,63,18,84,47,29,61,15,73,38,52,26,69,41,83,17,59,36,72,28,64,21,76,44,91,13,58,35,82,27,65,19,74,46,87],\"source\":\"local\"}' > $BASE/photo/data/room_1.json; fi"
-
-          echo ""
-          echo "===== Set permissions ====="
-          $SSH "chown -R www-data:www-data $BASE/photo/api_selected_room.php $BASE/photo/data/ $BASE/photo/bgl.js $BASE/photo2/bgl.js $BASE/photo3/bgl.js"
-
-          echo ""
-          echo "===== Verify on server ====="
+          echo "===== Deployed SHA ====="
           $SSH "sha256sum $BASE/photo/bgl.js $BASE/photo2/bgl.js $BASE/photo3/bgl.js"
-          $SSH "wc -c $BASE/photo/bgl.js"
-          $SSH "curl -sS http://localhost/photo/api_selected_room.php?ch=01 2>&1 || echo 'local API failed'"
+
+      - name: Ensure room_1.json exists
+        run: |
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@$VPS_IP"
+          BASE="/var/www/sites/chamgyo/public"
+
+          $SSH "mkdir -p $BASE/photo/data && test -f $BASE/photo/data/room_1.json && echo 'room_1.json exists' || (echo '{\"nums\":[23,45,12,67,34,89,56,11,78,43,22,55,31,66,14,88,42,19,71,33,57,25,63,18,84,47,29,61,15,73,38,52,26,69,41,83,17,59,36,72,28,64,21,76,44,91,13,58,35,82,27,65,19,74,46,87],\"source\":\"local\"}' > $BASE/photo/data/room_1.json && chown www-data:www-data $BASE/photo/data/room_1.json && echo 'room_1.json created')"
 
       - name: Purge CF cache
         run: |
@@ -61,20 +55,18 @@ jobs:
             "https://api.cloudflare.com/client/v4/zones/7e5faed2d3d4d6da7aceb4ddde81a62b/purge_cache" \
             -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d '{"purge_everything":true}' | python3 -c "import sys,json; d=json.load(sys.stdin); print('Cache purged:', d.get('success'))"
+            -d '{"purge_everything":true}' | python3 -c "import sys,json;d=json.load(sys.stdin);print('CF Purge:', 'OK' if d.get('success') else d)"
 
       - name: Verify live
         run: |
-          sleep 8
+          sleep 5
           DOMAIN="xn--9d0bw2fjtyymch7de9d.info"
-          echo "===== Test bgl.js ====="
-          curl -sS -o /tmp/bgl.js -w "bgl.js: HTTP %{http_code} | size %{size_download}\n" "https://$DOMAIN/photo/bgl.js" --max-time 10
-          grep -c 'useLocal\|LOCAL' /tmp/bgl.js && echo "LOCAL API CODE PRESENT" || echo "MISSING LOCAL CODE"
+          echo "===== bgl.js ====="
+          curl -sS -o /tmp/bgl.js -w "HTTP %{http_code} | size %{size_download} | cf-cache: %{header.cf-cache-status}\n" "https://$DOMAIN/photo/bgl.js?t=$(date +%s)"
+          sha256sum /tmp/bgl.js
+          grep -c 'room_1.json' /tmp/bgl.js && echo "DIRECT JSON LOAD OK" || echo "MISSING"
 
           echo ""
-          echo "===== Test local API ====="
-          curl -sS -w "\nAPI: HTTP %{http_code}\n" "https://$DOMAIN/photo/api_selected_room.php?ch=01" --max-time 10 2>&1 || echo "API FAILED"
-
-          echo ""
-          echo "===== Test room data ====="
-          curl -sS -w "\nRoom: HTTP %{http_code}\n" "https://$DOMAIN/photo/data/room_1.json" --max-time 10 2>&1 || echo "ROOM DATA FAILED"
+          echo "===== room_1.json ====="
+          curl -sS -o /tmp/room.json -w "HTTP %{http_code} | size %{size_download} | cf-cache: %{header.cf-cache-status}\n" "https://$DOMAIN/photo/data/room_1.json?t=$(date +%s)"
+          python3 -c "import json;d=json.load(open('/tmp/room.json'));print('nums count:', len(d.get('nums',[])))" 2>/dev/null || cat /tmp/room.json
