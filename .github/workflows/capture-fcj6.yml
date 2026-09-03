@@ -37,6 +37,15 @@ jobs:
               await p.screenshot({ path: `ref/fcj6_${room}_${w}x${h}.png`, fullPage: false });
               await p.close();
             }
+            // 우리 사이트 실제 렌더 (배포 확인용)
+            const OURS = ['CAW_1.php?ch=01','CAH_1.php?ch=01','CAH_2.php?ch=01','photo/luzhu.html?room=sj_31&theme=gold','photo/luzhu.html?room=sj_31','photo/select.html?ch=01'];
+            for (const u of OURS) {
+              const p = await b.newPage({ viewport: { width: 1920, height: 1080 } });
+              try { await p.goto('https://xn--9d0bw2fjtyymch7de9d.info/' + u, { waitUntil: 'networkidle', timeout: 60000 }); } catch (e) { logs.push('ours goto ' + u + ': ' + e.message); }
+              await p.waitForTimeout(4000);
+              await p.screenshot({ path: 'ref/ours_' + u.replace(/[^A-Za-z0-9]+/g, '_') + '.png', fullPage: false });
+              await p.close();
+            }
             fs.writeFileSync('ref/fcj6_capture.log', logs.join('\n'));
             await b.close();
           })();

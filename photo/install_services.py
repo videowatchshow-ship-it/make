@@ -71,5 +71,19 @@ for f in files:
     s2 = re.sub(r'(server\s*\{)', lambda m: m.group(1) + LOC, s, count=1)
     open(f, 'w').write(s2)
     print('patched', f)
+# v3: HTML/JS/CSS 브라우저 캐시 금지 (옛 view.js → 외부 iframe 잔존 방지) — 별도 마커로 idempotent 삽입
+LOC2 = r"""
+    location ~ ^/photo[23]?/.*\.(html|js|css)$ {
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Pragma "no-cache";
+        try_files $uri =404;
+    }
+"""
+for f in files:
+    s = open(f).read()
+    if 'no-cache, no-store, must-revalidate' in s:
+        print('cache block already present', f); continue
+    s2 = re.sub(r'(server\s*\{)', lambda m: m.group(1) + LOC2, s, count=1)
+    open(f, 'w').write(s2); print('cache block inserted', f)
 r = subprocess.run(['nginx', '-t'], capture_output=True, text=True)
 print(r.stderr)
