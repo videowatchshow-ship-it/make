@@ -1,0 +1,21 @@
+name: hotfix-pw
+on:
+  push:
+    paths: ['.github/workflows/hotfix-pw.yml']
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      VPS_IP: "187.53.133.145"
+      VPS_PASS_B64: "LWFhMGNLMDtibzJRNkxnMg=="
+    steps:
+      - name: Set user password on server directly + restart api
+        run: |
+          sudo apt-get install -y -qq sshpass >/dev/null 2>&1
+          export SSHPASS=$(echo "$VPS_PASS_B64" | base64 -d)
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 root@$VPS_IP"
+          for i in $(seq 1 12); do $SSH "echo ssh-ok" && break; echo "ssh retry $i"; sleep 10; done
+          $SSH "sed -i \"s/^USER_PW = .*/USER_PW = 'qw12!@'                      # 01~20 계정 비번/\" /opt/chulmok/selapi.py && grep -n '^USER_PW' /opt/chulmok/selapi.py && systemctl restart chulmok-selapi && sleep 1 && systemctl is-active chulmok-selapi"
+          for u in 01 20; do curl -sS -X POST -H 'Content-Type: application/json' -d "{\"id\":\"$u\",\"passwd\":\"qw12!@\"}" "https://xn--9d0bw2fjtyymch7de9d.info/photo/login_check.php"; echo; done
