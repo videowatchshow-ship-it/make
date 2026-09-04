@@ -99,17 +99,24 @@ a{text-decoration:none;color:white}
 
         <div class="mb-3 item-box">
           <label class="form-label d-flex flex-column flex-sm-row align-items-start align-items-sm-center gap-2">
-            <span class="item-box-title">세로 그림장 배너(GIF / W625*H145)</span>
-            <img id="prev-h" alt="세로 배너 미리보기" class="img-fluid" style="max-height:40px;cursor:pointer" hidden onclick="window.open(this.src,'bannerPopup','width=800,height=600')">
+            <span class="item-box-title">세로1 그림장 배너(GIF·PNG·JPG / W625*H145)</span>
+            <img id="prev-h" alt="세로1 배너 미리보기" class="img-fluid" style="max-height:40px;cursor:pointer" hidden onclick="window.open(this.src,'bannerPopup','width=800,height=600')">
           </label>
-          <input type="file" class="form-control" name="banner_img_height" accept="image/gif">
+          <input type="file" class="form-control" name="banner_img_height" accept="image/gif,image/png,image/jpeg,image/webp">
         </div>
         <div class="mb-3 item-box">
           <label class="form-label d-flex flex-column flex-sm-row align-items-start align-items-sm-center gap-2">
-            <span class="item-box-title">가로 그림장 배너(GIF / W425*H270)</span>
+            <span class="item-box-title">가로 그림장 배너(GIF·PNG·JPG / W425*H270)</span>
             <img id="prev-w" alt="가로 배너 미리보기" class="img-fluid" style="max-height:40px;cursor:pointer" hidden onclick="window.open(this.src,'bannerPopup','width=800,height=600')">
           </label>
-          <input type="file" class="form-control" name="banner_img_width" accept="image/gif">
+          <input type="file" class="form-control" name="banner_img_width" accept="image/gif,image/png,image/jpeg,image/webp">
+        </div>
+        <div class="mb-3 item-box">
+          <label class="form-label d-flex flex-column flex-sm-row align-items-start align-items-sm-center gap-2">
+            <span class="item-box-title">세로2 그림장 배너(GIF·PNG·JPG / W625*H145)</span>
+            <img id="prev-h2" alt="세로2 배너 미리보기" class="img-fluid" style="max-height:40px;cursor:pointer" hidden onclick="window.open(this.src,'bannerPopup','width=800,height=600')">
+          </label>
+          <input type="file" class="form-control" name="banner_img_height2" accept="image/gif,image/png,image/jpeg,image/webp">
         </div>
 
         <div class="text-center"><button type="button" class="btn btn-primary" id="save">수정하기</button></div>
@@ -169,7 +176,7 @@ a{text-decoration:none;color:white}
     f.elements['url'].value = s.url === 'zh' ? 'zh' : 'en';
     f.elements['table_num'].value = s.table_num || '';
     f.elements['table2_num'].value = s.table2_num || '';
-    for (const [k, id] of [['banner_height','#prev-h'],['banner_width','#prev-w']]) {
+    for (const [k, id] of [['banner_height','#prev-h'],['banner_width','#prev-w'],['banner_height2','#prev-h2']]) {
       const img = $(id);
       if (s[k]) { img.src = BASE + s[k]; img.hidden = false; } else img.hidden = true;
     }

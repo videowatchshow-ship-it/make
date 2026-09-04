@@ -3,7 +3,7 @@
 #   GET  /photo/api_selected_room.php?ch=XX     → {"room_id": "xtd_10"}
 #   POST /photo/write_select_room.php  {ch, room_id}
 #   GET  /photo/api_settings.php?ch=XX          → 그림장 설정 (settings_<ch>.json)
-#   POST /photo/write_up.php  (multipart)       → 그림장 설정 저장 + 배너 GIF 업로드 (관리자 인증)
+#   POST /photo/write_up.php  (multipart)       → 그림장 설정 저장 + 배너(GIF/PNG/JPG/WEBP) 업로드 (관리자 인증)
 #   POST /photo/login_check.php {id, passwd}    → 관리자 로그인 확인
 import json, os, re, time, urllib.parse
 from email.parser import BytesParser
@@ -20,7 +20,7 @@ DEFAULT_SETTINGS = {
     'write_check01': 'Y', 'write_text01': '', 'write_check02': 'Y', 'write_text02': '',
     'write_check03': 'Y', 'write_text03': '', 'write_check04': 'Y', 'write_text04': '',
     'kakao': 'N', 'ktime': 'N', 'url': 'en', 'table_num': '', 'table2_num': '',
-    'banner_height': '', 'banner_width': '', 'updated': 0,
+    'banner_height': '', 'banner_height2': '', 'banner_width': '', 'updated': 0,
 }
 
 def sel_path(ch):  return os.path.join(DATA, f'sel_{ch}.json')
@@ -120,14 +120,22 @@ class H(BaseHTTPRequestHandler):
             s['table2_num'] = re.sub(r'\D', '', str(fields.get('table2_num') or ''))[:2]
             d = os.path.join(IMAGES, 'ch', ch); os.makedirs(d, exist_ok=True)
             ts = int(time.time())
-            for fkey, name, skey in (('banner_img_height', 'Live_height_kakao.gif', 'banner_height'),
-                                     ('banner_img_width', 'Live_width_01_banner_kakao.gif', 'banner_width')):
+            def img_ext(b):
+                if b.startswith(b'GIF8'): return '.gif'
+                if b.startswith(b'\x89PNG\r\n\x1a\n'): return '.png'
+                if b.startswith(b'\xff\xd8\xff'): return '.jpg'
+                if b[:4] == b'RIFF' and b[8:12] == b'WEBP': return '.webp'
+                return None
+            for fkey, name, skey in (('banner_img_height', 'Live_height_kakao', 'banner_height'),      # 세로1 (625x145)
+                                     ('banner_img_height2', 'Live_height2_kakao', 'banner_height2'),   # 세로2 (625x145)
+                                     ('banner_img_width', 'Live_width_01_banner_kakao', 'banner_width')):  # 가로 (425x270)
                 if fkey in files and files[fkey][1]:
                     blob = files[fkey][1]
-                    if not blob.startswith(b'GIF8'): return self._json(400, {'ok': False, 'error': f'{name}: GIF 파일만 가능'})
+                    ext = img_ext(blob)
+                    if not ext: return self._json(400, {'ok': False, 'error': f'{name}: GIF/PNG/JPG/WEBP 이미지만 가능'})
                     if len(blob) > 8 * 1024 * 1024: return self._json(400, {'ok': False, 'error': f'{name}: 8MB 초과'})
-                    atomic_write(os.path.join(d, name), blob)
-                    s[skey] = f'images/ch/{ch}/{name}?v={ts}'
+                    atomic_write(os.path.join(d, name + ext), blob)
+                    s[skey] = f'images/ch/{ch}/{name}{ext}?v={ts}'
             s['updated'] = ts
             atomic_write(set_path(ch), json.dumps(s, ensure_ascii=False).encode())
             return self._json(200, {'ok': True, 'settings': s})

@@ -40,7 +40,7 @@
       if (el.getAttribute('src') !== want) el.src = want;
     }
     pick(document.getElementById('banner_w'), s.banner_width);
-    pick(document.getElementById('banner_h'), s.banner_height);
+    pick(document.getElementById('banner_h'), (document.body.dataset.theme === 'gold' && s.banner_height2) ? s.banner_height2 : s.banner_height);   // 세로2 는 세로2 배너 우선
     const kb = document.getElementById('kakao_banner'); if (kb) kb.style.display = '';
   }
 

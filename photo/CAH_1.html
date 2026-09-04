@@ -65,6 +65,8 @@ body{margin:0;padding:0;background:#000}
 .nx i.red.dayan{border-color:#e02020} .nx i.blue.dayan{border-color:#1f5fbf}
 .nx i.red.xiaolu,.nx i.red.xiaoqiang{background:#e02020} .nx i.blue.xiaolu,.nx i.blue.xiaoqiang{background:#1f5fbf}
 .nx i.no_find{visibility:hidden}
+.full_box{overflow:hidden}
+.container{transform-origin:top left}
 </style>
 </head>
 <body data-texts="2">
@@ -93,7 +95,13 @@ body{margin:0;padding:0;background:#000}
 </div>
 <script src="bgl.js?v=4"></script>
 <script src="luzhu.js?v=7"></script>
-<script src="view.js?v=7"></script>
+<script src="view.js?v=8"></script>
 <script>window.__view && window.__view({ch: 'A'});</script>
+<script>
+(function fitScale(){ // 화면 폭이 1086px(1070+테두리) 보다 좁으면 그 비율로 전체 축소 → 잘림 없음
+  function fit(){ var c=document.querySelector('.container'); if(!c) return; var w=c.offsetWidth||1086; var sc=Math.min(1, window.innerWidth / w); c.style.transform='scale('+sc+')'; }
+  window.addEventListener('resize', fit); window.addEventListener('load', fit); fit();
+})();
+</script>
 </body>
 </html>
