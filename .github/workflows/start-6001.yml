@@ -8,6 +8,8 @@ jobs:
     runs-on: self-hosted
     timeout-minutes: 10
     steps:
+      - uses: actions/checkout@v4
+
       - name: Check 5000 status
         shell: powershell -ExecutionPolicy Bypass -File "{0}"
         run: |
@@ -32,15 +34,34 @@ jobs:
           Get-ChildItem -Path "C:\Python*","C:\Program Files\Python*","C:\Program Files (x86)\Python*" -Filter python.exe -Recurse -ErrorAction SilentlyContinue | ForEach-Object { $candidates += $_.FullName }
           Get-ChildItem -Path "C:\Users" -Filter python.exe -Recurse -ErrorAction SilentlyContinue -Depth 6 | ForEach-Object { $candidates += $_.FullName }
           Get-ChildItem -Path "E:\" -Filter python.exe -Recurse -ErrorAction SilentlyContinue -Depth 4 | ForEach-Object { $candidates += $_.FullName }
-          $candidates = $candidates | Sort-Object -Unique
+          $candidates = $candidates | Where-Object { $_ -notmatch 'WindowsApps' } | Sort-Object -Unique
 
           $py = $null
           foreach ($c in $candidates) {
-            & $c -c "import playwright" 2>$null
+            try { & $c -c "import playwright" 2>$null } catch { Write-Host "probe error: $c"; continue }
             if ($LASTEXITCODE -eq 0) { $py = $c; Write-Host "playwright OK -> $c"; break }
             else { Write-Host "no playwright: $c" }
           }
           if (-not $py) { Write-Host "NO PYTHON WITH PLAYWRIGHT FOUND"; exit 1 }
+
+          # 1b) psutil/flask 누락 시 저장소 wheels/ 에서 오프라인 설치 (러너는 인터넷 없음)
+          $wheels = Join-Path $env:GITHUB_WORKSPACE "wheels"
+          & $py -c "import psutil, flask" 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "psutil/flask missing in $py -> offline install from $wheels"
+            & $py -m pip install --no-index --find-links $wheels --disable-pip-version-check psutil flask 2>&1 | ForEach-Object { Write-Host $_ }
+            & $py -c "import psutil, flask" 2>$null
+            if ($LASTEXITCODE -ne 0) {
+              # site-packages 쓰기 불가 → E:\py_packages 로 설치 후 PYTHONPATH 로 주입
+              $tgt = "E:\py_packages"
+              Write-Host "site-packages install failed -> --target $tgt"
+              & $py -m pip install --no-index --find-links $wheels --disable-pip-version-check --target $tgt --upgrade psutil flask 2>&1 | ForEach-Object { Write-Host $_ }
+              $env:PYTHONPATH = $tgt
+              & $py -c "import psutil, flask" 2>$null
+              if ($LASTEXITCODE -ne 0) { Write-Host "STILL NO psutil/flask"; exit 1 }
+            }
+          }
+          & $py -c "import psutil, flask, playwright; print('deps OK psutil', psutil.__version__, 'flask', flask.__version__)" 2>&1 | ForEach-Object { Write-Host $_ }
 
           # 2) 6001 점유 프로세스 종료
           $conns = Get-NetTCPConnection -LocalPort 6001 -State Listen -ErrorAction SilentlyContinue
