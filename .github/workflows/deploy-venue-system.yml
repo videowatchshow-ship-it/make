@@ -145,6 +145,9 @@ jobs:
           for k in $(curl -sS "$D/data/tables.json" | python3 -c "import sys,json; t=json.load(sys.stdin); print(' '.join(f\"{v['key']}_{r['id']}\" for v in t['venues'] for r in v['rooms']))"); do
             curl -sS -o /tmp/r "$D/data/room_$k.json" && python3 -c "import json,sys;d=json.load(open('/tmp/r'));sp=[x for x in d.get('nums',[]) if len(x)>3];print('$k', len(d.get('nums',[])), 'special', sp) if sp else None" 2>/dev/null
           done
+          echo "--- login_check: 계정 01/20 새 비번, 마스터 ---"
+          for u in 01 20; do curl -sS -X POST -H 'Content-Type: application/json' -d "{\"id\":\"$u\",\"passwd\":\"qw12!@\"}" "$D/login_check.php"; echo; done
+          curl -sS -X POST -H 'Content-Type: application/json' -d '{"id":"01","passwd":"QWE123!@"}' "$D/login_check.php"; echo "  (구 비번 → 실패여야 정상)"
           echo "--- root alias pages: <base href> + assets the browser will actually request ---"
           R="https://xn--9d0bw2fjtyymch7de9d.info"
           for p in CAW_1.php CAH_1.php CAH_2.php; do printf "%-10s HTTP %s base=%s\n" "$p" "$(curl -sS -o /tmp/o -w '%{http_code}' "$R/$p")" "$(grep -o '<base[^>]*>' /tmp/o)"; done
