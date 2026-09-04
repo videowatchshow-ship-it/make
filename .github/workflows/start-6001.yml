@@ -8,6 +8,9 @@ jobs:
     runs-on: self-hosted
     timeout-minutes: 10
     steps:
+      # NOTE: actions/checkout 는 이 러너(NETWORK SERVICE)에서 항상
+      # "EPERM: stat C:\Users\ADMIN\.gitconfig" 로 실패 → 사용하지 않는다.
+      # wheels/ 가 필요하면 GitHub Contents API 로 직접 내려받는다.
       - name: Check 5000 status
         shell: powershell -ExecutionPolicy Bypass -File "{0}"
         run: |
@@ -21,26 +24,86 @@ jobs:
 
       - name: Restart CVAmp 6001 with a python that has playwright
         shell: powershell -ExecutionPolicy Bypass -File "{0}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $ErrorActionPreference = 'Continue'
 
-          $dir = "E:\CVAmp_6001"
-          if (-not (Test-Path $dir)) { Write-Host "NO DIR $dir"; exit 1 }
+          # 0) 앱 디렉터리 탐색 (E:\CVAmp_6001 에 app.py 가 없어진 경우 대비)
+          $dir = $null
+          foreach ($r in @("E:\CVAmp_6001", "E:\CVAmp_6001\proxy", "E:\CVAmp_6001\app", "E:\CVAmp_6001\src")) {
+            if (Test-Path (Join-Path $r "app.py")) { $dir = $r; break }
+          }
+          if (-not $dir) {
+            Write-Host "app.py not in E:\CVAmp_6001 -> scanning E:\ (depth 4) for app.py that mentions 6001 ..."
+            Get-ChildItem -Path "E:\" -Filter app.py -Recurse -Depth 4 -ErrorAction SilentlyContinue | ForEach-Object {
+              $c = Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue
+              if ($c -and $c -match '6001' -and (Test-Path (Join-Path $_.DirectoryName "cvamp"))) {
+                Write-Host "  candidate: $($_.FullName)"
+                if (-not $dir) { $dir = $_.DirectoryName }
+              }
+            }
+          }
+          if (-not $dir) {
+            Write-Host "NO CVAmp 6001 APP FOUND. E:\CVAmp_6001 tree (depth 2):"
+            if (Test-Path "E:\CVAmp_6001") { Get-ChildItem "E:\CVAmp_6001" -Recurse -Depth 2 -ErrorAction SilentlyContinue | Select-Object -First 60 | ForEach-Object { Write-Host " $($_.FullName)" } }
+            Write-Host "E:\ top-level dirs:"
+            Get-ChildItem "E:\" -Directory -ErrorAction SilentlyContinue | ForEach-Object { Write-Host " $($_.Name)" }
+            exit 1
+          }
+          Write-Host "app dir: $dir"
 
           # 1) playwright 있는 python 실행파일 탐색
           $candidates = @()
           Get-ChildItem -Path "C:\Python*","C:\Program Files\Python*","C:\Program Files (x86)\Python*" -Filter python.exe -Recurse -ErrorAction SilentlyContinue | ForEach-Object { $candidates += $_.FullName }
           Get-ChildItem -Path "C:\Users" -Filter python.exe -Recurse -ErrorAction SilentlyContinue -Depth 6 | ForEach-Object { $candidates += $_.FullName }
           Get-ChildItem -Path "E:\" -Filter python.exe -Recurse -ErrorAction SilentlyContinue -Depth 4 | ForEach-Object { $candidates += $_.FullName }
-          $candidates = $candidates | Sort-Object -Unique
+          $candidates = $candidates | Where-Object { $_ -notmatch 'WindowsApps' } | Sort-Object -Unique
 
           $py = $null
           foreach ($c in $candidates) {
-            & $c -c "import playwright" 2>$null
+            try { & $c -c "import playwright" 2>$null } catch { Write-Host "probe error: $c"; continue }
             if ($LASTEXITCODE -eq 0) { $py = $c; Write-Host "playwright OK -> $c"; break }
             else { Write-Host "no playwright: $c" }
           }
           if (-not $py) { Write-Host "NO PYTHON WITH PLAYWRIGHT FOUND"; exit 1 }
+
+          # 1b) psutil/flask 확보 (러너는 PyPI 접근 불가, actions/checkout 사용 불가)
+          #   a. 이미 import 되면 그대로
+          #   b. E:\py_packages (이전 워크플로가 조립해 둔 cp313 psutil+flask) 를 PYTHONPATH 로 주입
+          #   c. 그래도 없으면 저장소 wheels/ 를 Contents API 로 내려받아 --target E:\py_packages 오프라인 설치
+          $tgt = "E:\py_packages"
+          & $py -c "import psutil, flask" 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "psutil/flask missing in $py"
+            if (Test-Path (Join-Path $tgt "psutil")) {
+              $env:PYTHONPATH = $tgt
+              & $py -c "import psutil, flask" 2>$null
+              if ($LASTEXITCODE -eq 0) { Write-Host "using existing $tgt via PYTHONPATH" }
+            }
+          }
+          & $py -c "import psutil, flask" 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            $wheels = "E:\wheels_dl"
+            New-Item -Force -ItemType Directory $wheels | Out-Null
+            New-Item -Force -ItemType Directory $tgt | Out-Null
+            $hdr = @{ Authorization = "Bearer $env:GH_TOKEN"; "X-GitHub-Api-Version" = "2022-11-28" }
+            $api = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/contents/wheels?ref=$env:GITHUB_SHA"
+            Write-Host "downloading wheels from $api"
+            $list = Invoke-RestMethod -Uri $api -Headers $hdr -TimeoutSec 60
+            foreach ($f in $list) {
+              if ($f.name -like "*.whl") {
+                Invoke-WebRequest -Uri $f.download_url -Headers $hdr -OutFile (Join-Path $wheels $f.name) -TimeoutSec 120
+                Write-Host "  got $($f.name)"
+              }
+            }
+            & $py -m pip install --no-index --find-links $wheels --disable-pip-version-check --target $tgt --upgrade psutil flask 2>&1 | ForEach-Object { Write-Host $_ }
+            $env:PYTHONPATH = $tgt
+            & $py -c "import psutil, flask" 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Host "STILL NO psutil/flask"; exit 1 }
+          }
+          & $py -c "import psutil, flask, playwright; print('deps OK psutil', psutil.__version__, 'flask', flask.__version__)" 2>&1 | ForEach-Object { Write-Host $_ }
+          Write-Host "PYTHONPATH=$env:PYTHONPATH"
 
           # 2) 6001 점유 프로세스 종료
           $conns = Get-NetTCPConnection -LocalPort 6001 -State Listen -ErrorAction SilentlyContinue
