@@ -29,8 +29,29 @@ jobs:
         run: |
           $ErrorActionPreference = 'Continue'
 
-          $dir = "E:\CVAmp_6001"
-          if (-not (Test-Path $dir)) { Write-Host "NO DIR $dir"; exit 1 }
+          # 0) 앱 디렉터리 탐색 (E:\CVAmp_6001 에 app.py 가 없어진 경우 대비)
+          $dir = $null
+          foreach ($r in @("E:\CVAmp_6001", "E:\CVAmp_6001\proxy", "E:\CVAmp_6001\app", "E:\CVAmp_6001\src")) {
+            if (Test-Path (Join-Path $r "app.py")) { $dir = $r; break }
+          }
+          if (-not $dir) {
+            Write-Host "app.py not in E:\CVAmp_6001 -> scanning E:\ (depth 4) for app.py that mentions 6001 ..."
+            Get-ChildItem -Path "E:\" -Filter app.py -Recurse -Depth 4 -ErrorAction SilentlyContinue | ForEach-Object {
+              $c = Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue
+              if ($c -and $c -match '6001' -and (Test-Path (Join-Path $_.DirectoryName "cvamp"))) {
+                Write-Host "  candidate: $($_.FullName)"
+                if (-not $dir) { $dir = $_.DirectoryName }
+              }
+            }
+          }
+          if (-not $dir) {
+            Write-Host "NO CVAmp 6001 APP FOUND. E:\CVAmp_6001 tree (depth 2):"
+            if (Test-Path "E:\CVAmp_6001") { Get-ChildItem "E:\CVAmp_6001" -Recurse -Depth 2 -ErrorAction SilentlyContinue | Select-Object -First 60 | ForEach-Object { Write-Host " $($_.FullName)" } }
+            Write-Host "E:\ top-level dirs:"
+            Get-ChildItem "E:\" -Directory -ErrorAction SilentlyContinue | ForEach-Object { Write-Host " $($_.Name)" }
+            exit 1
+          }
+          Write-Host "app dir: $dir"
 
           # 1) playwright 있는 python 실행파일 탐색
           $candidates = @()
