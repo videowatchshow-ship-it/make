@@ -15,7 +15,7 @@ DATA = os.path.join(ROOT, 'data')
 IMAGES = os.path.join(ROOT, 'images')
 SAFE = re.compile(r'^[A-Za-z0-9_-]{1,32}$')
 ADMIN = {'aass0707': 'aass0707'}          # 마스터 (원본 캄보디아빈 write.php 와 동일)
-USER_PW = 'QWE123!@'                      # 01~20 계정 비번
+USER_PW = 'qw12!@'                      # 01~20 계정 비번
 DEFAULT_SETTINGS = {
     'write_check01': 'Y', 'write_text01': '', 'write_check02': 'Y', 'write_text02': '',
     'write_check03': 'Y', 'write_text03': '', 'write_check04': 'Y', 'write_text04': '',
